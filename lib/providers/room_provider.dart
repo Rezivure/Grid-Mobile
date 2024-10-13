@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
-import 'package:geolocator/geolocator.dart'; // Import the geolocator package
+import 'package:location/location.dart';  // Import LocationData
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:http/http.dart' as http;
@@ -567,26 +567,36 @@ class RoomProvider with ChangeNotifier {
     return decryptedContents;
   }
 
-  void sendLocationEvent(String roomId, Position position) async {
+
+  void sendLocationEvent(String roomId, LocationData locationData) async {
     final room = client.getRoomById(roomId);
     if (room != null) {
-      final eventContent = {
-        'msgtype': 'm.location',
-        'body': 'Current location',
-        'geo_uri': 'geo:${position.latitude},${position.longitude}',
-        'description': 'Current location',
-        'timestamp': DateTime.now().toUtc().toIso8601String()
-      };
+      // Extract latitude and longitude from LocationData
+      final latitude = locationData.latitude;
+      final longitude = locationData.longitude;
 
-      try {
-        await room.sendEvent(eventContent);
-      } catch (e) {
-        print("Failed to send location event: $e");
+      if (latitude != null && longitude != null) {
+        final eventContent = {
+          'msgtype': 'm.location',
+          'body': 'Current location',
+          'geo_uri': 'geo:$latitude,$longitude',
+          'description': 'Current location',
+          'timestamp': DateTime.now().toUtc().toIso8601String()
+        };
+
+        try {
+          await room.sendEvent(eventContent);
+        } catch (e) {
+          print("Failed to send location event: $e");
+        }
+      } else {
+        print("Latitude or Longitude is null");
       }
     } else {
       print("Room $roomId not found");
     }
   }
+
 
 
 

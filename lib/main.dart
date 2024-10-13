@@ -19,7 +19,6 @@ import 'screens/map/map_tab.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
-import 'providers/permissions_provider.dart';
 
 
 void main() async {
@@ -73,7 +72,6 @@ class GridApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(create: (_) => UserLocationProvider()),
-        ChangeNotifierProvider(create: (_) => PermissionsProvider()),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
         ChangeNotifierProvider(create: (context) => RoomProvider(client, databaseService)),
         ChangeNotifierProvider(create: (context) => LocationProvider()),
