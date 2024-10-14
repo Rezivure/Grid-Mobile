@@ -1,0 +1,40 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+Copyright (C) 2024 Chandler Gach
+"Grid" App - An end-to-end encrypted location-sharing application.
+
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
+
+                            Preamble
+
+The GNU Affero General Public License is a free, copyleft license for
+software and other kinds of works, specifically designed to ensure
+cooperation with the community in the case of network server software.
+
+The licenses for most software and other practical works are designed
+to take away your freedom to share and change the works. By contrast,
+our General Public Licenses are intended to guarantee your freedom to
+share and change all versions of a program--to make sure it remains
+free software for all its users.
+
+This license, like the GNU General Public License, is a copyleft
+license, which means that derivative works of the program must be free
+software and carry the same terms. In this case, when you run a
+modified program on a server and let other users interact with it, the
+AGPL requires you to make the source code of your modified version
+available to those users. These requirements apply to the modified
+version as well as any associated programs that interact with it.
+
+You are free to use this software under the following conditions:
+
+- The code is made available under the AGPL-3.0 license.
+- Any modifications made to the code must also be made publicly available under the same license.
+- If you make the program available to users through a network (for example, as a web application), you must make the modified source code available to those users under the AGPL-3.0.
+
+You may use this software as-is, without warranty of any kind, and you may redistribute it and modify it as long as you comply with the conditions of the AGPL-3.0 license.
+
+For the full text of the license, see <https://www.gnu.org/licenses/agpl-3.0.html>.
+
+END OF TERMS AND CONDITIONS
