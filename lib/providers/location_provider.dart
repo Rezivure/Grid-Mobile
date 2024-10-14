@@ -26,7 +26,6 @@ class LocationProvider with ChangeNotifier {
 
   void updateCurrentPosition(LocationData position) {
     _currentPosition = position;
-    print('Updated currentPosition in LocationProvider: Lat: ${position.latitude}, Long: ${position.longitude}');
     notifyListeners();
   }
 

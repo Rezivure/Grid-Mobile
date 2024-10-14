@@ -132,6 +132,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     await fetchAndUpdateUserLocations('contacts');
   }
 
+
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);

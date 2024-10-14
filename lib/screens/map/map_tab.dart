@@ -69,7 +69,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     super.didChangeDependencies();
 
     final selectedUserProvider = Provider.of<SelectedUserProvider>(context);
-    print('MapTab SelectedUserProvider hashCode: ${selectedUserProvider.hashCode}');
 
     if (_selectedUserProvider != selectedUserProvider) {
       _selectedUserProvider?.removeListener(_onSelectedUserChanged);
@@ -240,16 +239,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
 
     final currentPosition = locationProvider.currentPosition;
-
-    print(currentPosition);
-    print("Tried printing curPos");
-
     if (currentPosition != null) {
       LatLng userLocation = LatLng(
         currentPosition.latitude!,
         currentPosition.longitude!,
       );
-
       _animatedMapMove(userLocation, _mapController.zoom);
     } else {
       print('Current position is null, cannot center on user.');

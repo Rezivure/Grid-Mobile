@@ -82,6 +82,7 @@ class GridApp extends StatelessWidget {
         Provider(create: (context) => LocationTrackingService(
           Provider.of<DatabaseService>(context, listen: false),
           Provider.of<RoomProvider>(context, listen: false),
+            Provider.of<LocationProvider>(context, listen: false)
         )),
       ],
       child: MaterialApp(

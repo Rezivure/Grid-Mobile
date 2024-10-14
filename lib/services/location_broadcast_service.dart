@@ -30,7 +30,7 @@ class LocationBroadcastService {
         locationProvider.updateCurrentPosition(position);
 
         if (_shouldUpdateLocation(position)) {
-          _updateRooms(position);
+          roomProvider.updateRooms(position);
           _lastPosition = position;
           _lastUpdateTime = DateTime.now();
         }
@@ -62,25 +62,6 @@ class LocationBroadcastService {
 
     // Update only if more than 30 seconds have passed AND moved more than 50 meters
     return timeElapsed > _updateInterval && distance > _distanceThreshold;
-  }
-
-  void _updateRooms(LocationData position) {
-    String? currentUserId = roomProvider.userId;
-
-    List<Room> rooms = roomProvider.rooms;
-    var roomsUpdated = 0;
-    for (Room room in rooms) {
-      var joinedMembers = room
-          .getParticipants()
-          .where((member) => member.membership == Membership.join)
-          .toList();
-
-      if (joinedMembers.length >= 2) {
-        roomProvider.sendLocationEvent(room.id, position);
-        roomsUpdated += 1;
-      }
-    }
-    print("Updated a total of $roomsUpdated rooms with my location");
   }
 
   double _calculateDistance(
