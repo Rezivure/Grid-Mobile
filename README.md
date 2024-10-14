@@ -36,6 +36,11 @@ Before you begin, ensure you have the following installed:
    flutter pub get
    ```
 
+   ```bash
+   cp .env.example .env
+   ```
+   Modify .env to the accurate URLs
+
 ### Running the App
 
 1. **Open Android Studio**:
@@ -61,6 +66,7 @@ Before you begin, ensure you have the following installed:
 - **lib/**: Contains the main Flutter application code.
 - **assets/**: Store images, icons, and other assets.
 - **pubspec.yaml**: Defines the dependencies and assets for the project.
+  
 
 ## Contributing
 
@@ -68,4 +74,4 @@ We welcome contributions! Please submit a pull request or open an issue to discu
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](./LICENSE) file for details.
