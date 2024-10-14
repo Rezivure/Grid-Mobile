@@ -41,6 +41,8 @@ dependencies:
   sleek_circular_slider: ^2.0.1
   flutter_slidable: ^3.1.1
   flutter_dotenv: ^5.1.0
+  location: ^7.0.1
+  permission_handler: ^11.3.1
 
 
 flutter_launcher_icons:

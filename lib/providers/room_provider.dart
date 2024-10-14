@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
-import 'package:geolocator/geolocator.dart'; // Import the geolocator package
+import 'package:location/location.dart';  // Import LocationData
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:http/http.dart' as http;
@@ -41,6 +41,7 @@ class RoomProvider with ChangeNotifier {
     final id = client.userID;
     _userId = id;
   }
+
   List<Room> get rooms => client.rooms;
 
   Future<List<Room>> fetchRooms() async {
@@ -367,25 +368,36 @@ class RoomProvider with ChangeNotifier {
 
 
   Future<void> cleanRooms() async {
-      try {
-        for (var room in client.rooms) {
-          // Skip direct chats
-          if (room.isDirectChat) continue;
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current timestamp in Unix format
+      for (var room in client.rooms) {
+        final participants = await room.getParticipants();
 
-          // Get the list of participants in the room
-          final participants = room.getParticipants();
+        // If the room name matches the group room pattern and contains a timestamp
+        if (room.name.contains("Grid:Group:")) {
+          // Extract the expiration timestamp from the room name
+          final roomNameParts = room.name.split(":");
+          if (roomNameParts.length >= 4) {
+            final expirationTimestamp = int.tryParse(roomNameParts[2]);
 
-          // Check if the only participant left is the user
-          if (participants.length == 1 && participants.first.id == client.userID) {
-            // Leave the room
-            await room.leave();
-            print('Left room: ${room.name} (${room.id}) because you were the only participant left.');
+            // Check if the room has expired
+            if (expirationTimestamp != null && expirationTimestamp > 0 && expirationTimestamp < now) {
+              // Leave the room if it has expired
+              await room.leave();
+              print('Left expired room: ${room.name} (${room.id})');
+            }
           }
+        } else if (participants.length == 1 && participants.first.id == client.userID) {
+          // Leave the room if you're the only participant left
+          await room.leave();
+          print('Left room: ${room.name} (${room.id}) because you were the only participant left.');
         }
-      } catch (e) {
-        print("Error cleaning rooms: $e");
       }
+    } catch (e) {
+      print("Error cleaning rooms: $e");
     }
+  }
+
 
   Future<void> leaveGroup(Room room) async {
     try {
@@ -567,26 +579,54 @@ class RoomProvider with ChangeNotifier {
     return decryptedContents;
   }
 
-  void sendLocationEvent(String roomId, Position position) async {
+
+  void sendLocationEvent(String roomId, LocationData locationData) async {
     final room = client.getRoomById(roomId);
     if (room != null) {
-      final eventContent = {
-        'msgtype': 'm.location',
-        'body': 'Current location',
-        'geo_uri': 'geo:${position.latitude},${position.longitude}',
-        'description': 'Current location',
-        'timestamp': DateTime.now().toUtc().toIso8601String()
-      };
+      // Extract latitude and longitude from LocationData
+      final latitude = locationData.latitude;
+      final longitude = locationData.longitude;
 
-      try {
-        await room.sendEvent(eventContent);
-      } catch (e) {
-        print("Failed to send location event: $e");
+      if (latitude != null && longitude != null) {
+        final eventContent = {
+          'msgtype': 'm.location',
+          'body': 'Current location',
+          'geo_uri': 'geo:$latitude,$longitude',
+          'description': 'Current location',
+          'timestamp': DateTime.now().toUtc().toIso8601String()
+        };
+
+        try {
+          await room.sendEvent(eventContent);
+        } catch (e) {
+          print("Failed to send location event: $e");
+        }
+      } else {
+        print("Latitude or Longitude is null");
       }
     } else {
       print("Room $roomId not found");
     }
   }
+
+  void updateRooms(LocationData position) {
+    List<Room> rooms = client.rooms;
+    var roomsUpdated = 0;
+    for (Room room in rooms) {
+      var joinedMembers = room
+          .getParticipants()
+          .where((member) => member.membership == Membership.join)
+          .toList();
+
+      if (joinedMembers.length >= 2) {
+        sendLocationEvent(room.id, position);
+        roomsUpdated += 1;
+
+      }
+    }
+    print("Updated a total of $roomsUpdated rooms with my location: $position");
+  }
+
 
 
 

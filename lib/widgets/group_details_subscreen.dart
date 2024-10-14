@@ -201,9 +201,24 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                 return Column(
                   children: [
                     FutureBuilder<String>(
-                      future: _getLastSeen(user),
+                      future: _getLastSeen(user), // This will fetch the last seen time
                       builder: (context, snapshot) {
+                        final membership = user.membership; // Fetch the membership status
                         final lastSeen = snapshot.data ?? 'Unknown';
+
+                        String subtitleText;
+                        TextStyle subtitleStyle;
+
+                        if (membership == Membership.invite) {
+                          // If the user is invited, display "Invited" in orange
+                          subtitleText = 'Invitation Sent';
+                          subtitleStyle = TextStyle(color: Colors.orange);
+                        } else {
+                          // Otherwise, display the last seen time
+                          subtitleText = 'Last seen: $lastSeen';
+                          subtitleStyle = TextStyle(color: Theme.of(context).colorScheme.onSurface);
+                        }
+
                         return ListTile(
                           leading: CircleAvatar(
                             radius: 30,
@@ -212,25 +227,26 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                               height: 60,
                               width: 60,
                             ),
-                            backgroundColor:
-                            colorScheme.primary.withOpacity(0.2),
+                            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                           ),
                           title: Text(
                             user.displayName ?? user.id,
-                            style: TextStyle(color: colorScheme.onBackground),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onBackground),
                           ),
                           subtitle: Text(
-                            'Last seen: $lastSeen',
-                            style: TextStyle(color: colorScheme.onSurface),
+                            subtitleText,
+                            style: subtitleStyle,
                           ),
                           onTap: () {
-                            final selectedUserProvider = Provider.of<SelectedUserProvider>(context, listen: false);
+                            final selectedUserProvider =
+                            Provider.of<SelectedUserProvider>(context, listen: false);
                             selectedUserProvider.setSelectedUserId(user.id);
                             print('Group member selected: ${user.id}');
                           },
                         );
                       },
                     ),
+
                     if (index != _filteredParticipants.length - 1)
                       Divider(
                         thickness: 1,

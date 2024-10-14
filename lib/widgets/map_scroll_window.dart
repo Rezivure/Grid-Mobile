@@ -1,5 +1,3 @@
-// lib/widgets/map_scroll_window.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
@@ -13,8 +11,8 @@ import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
 import 'add_friend_modal.dart';
 import 'package:grid_frontend/providers/room_provider.dart';
-import '../providers/selected_subscreen_provider.dart'; // Ensure this is imported
-import '../providers/selected_user_provider.dart'; // May be needed
+import '../providers/selected_subscreen_provider.dart';
+import '../providers/selected_user_provider.dart';
 
 class MapScrollWindow extends StatefulWidget {
   @override
@@ -65,44 +63,53 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           onNotification: (notification) {
             if (_selectedOption == SubscreenOption.createGroup &&
                 notification.extent < 0.7) {
-              _expandScrollWindow();
+              // _expandScrollWindow(); // remove for now
             }
             return true;
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: colorScheme.background,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.onBackground.withOpacity(0.1),
-                  blurRadius: 10.0,
-                  spreadRadius: 5.0,
+          child: GestureDetector(
+            onVerticalDragUpdate: (details) {
+              // Move the sheet in sync with the user's finger movement (1:1)
+              _scrollableController.jumpTo(
+                _scrollableController.size - details.primaryDelta! / 800,
+              );
+            },
+            behavior: HitTestBehavior.translucent, // Allows gesture propagation
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.background,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    margin: EdgeInsets.only(top: 5),
-                    width: 50,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: colorScheme.onBackground.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.onBackground.withOpacity(0.1),
+                    blurRadius: 10.0,
+                    spreadRadius: 5.0,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      margin: EdgeInsets.only(top: 5),
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onBackground.withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
-                ),
-                _buildDropdownHeader(colorScheme, context),
-                if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
-                Expanded(
-                  child: _buildSubscreen(scrollController),
-                ),
-              ],
+                  _buildDropdownHeader(colorScheme, context),
+                  if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
+                  Expanded(
+                    child: _buildSubscreen(scrollController),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -152,7 +159,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               Stack(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.mail_outline, color: colorScheme.onBackground),
+                    icon: Icon(Icons.mail_outline,
+                        color: colorScheme.onBackground),
                     onPressed: () {
                       setState(() {
                         _selectedOption = SubscreenOption.invites;
@@ -208,7 +216,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
 
   Widget _buildHorizontalScroller(ColorScheme colorScheme) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchGroupRooms(),
+      future: _fetchGroupRooms(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Container(
@@ -390,7 +398,9 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     child: Container(
                       padding: EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: isExpired ? colorScheme.primary : colorScheme.secondary,
+                        color: isExpired
+                            ? colorScheme.primary
+                            : colorScheme.secondary,
                         shape: BoxShape.circle,
                       ),
                       child: Text(

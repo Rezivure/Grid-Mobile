@@ -6,7 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Add this import for SharedPreferences
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/selected_subscreen_provider.dart';
 import '../../providers/user_location_provider.dart';
 import '../../providers/location_provider.dart';
@@ -14,17 +14,11 @@ import '../../providers/room_provider.dart';
 import '../../widgets/map_scroll_window.dart';
 import '../../screens/settings/settings_page.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:matrix/matrix.dart'; // Import Client, SyncUpdate
+import 'package:matrix/matrix.dart';
 import '../../services/location_broadcast_service.dart';
 import '../../services/location_tracking_service.dart';
-import 'package:geolocator/geolocator.dart';
-import 'dart:async'; // Add this for StreamSubscription
-import '../../providers/permissions_provider.dart'; // Import PermissionsProvider
-
-// Import with prefixes to avoid name collisions
+import 'dart:async';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
-
-// Import the SelectedUserProvider and DatabaseService
 import '../../providers/selected_user_provider.dart';
 import '../../services/database_service.dart';
 import '../../widgets/user_info_bubble.dart';
@@ -46,10 +40,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   double zoom = 18;
   Object? _error;
   VectorTileProvider? tileProvider;
-  late vector_renderer.Theme mapTheme; // Use the prefixed Theme
+  late vector_renderer.Theme mapTheme;
 
   SelectedUserProvider? _selectedUserProvider;
-  AnimationController? _animationController; // For map animations
+  AnimationController? _animationController;
 
   // Variables for user bubble
   LatLng? _bubblePosition;
@@ -64,20 +58,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _mapController = MapController();
-    _startLocationServices(); // Start services when the MapTab is initialized
+    _startLocationServices();
     setMapProvider();
-
-    // Check location permissions before proceeding
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      bool hasPermission = await Provider.of<PermissionsProvider>(context, listen: false)
-          .checkLocationPermission(context);
-      if (hasPermission) {
-        _waitForClientSync();
-        _fetchInitialLocation();
-      } else {
-        print('Location permissions not granted. Map cannot function properly.');
-      }
-    });
+    _waitForClientSync();
+    _fetchInitialLocation();
   }
 
   @override
@@ -85,7 +69,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     super.didChangeDependencies();
 
     final selectedUserProvider = Provider.of<SelectedUserProvider>(context);
-    print('MapTab SelectedUserProvider hashCode: ${selectedUserProvider.hashCode}');
 
     if (_selectedUserProvider != selectedUserProvider) {
       _selectedUserProvider?.removeListener(_onSelectedUserChanged);
@@ -96,7 +79,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _animationController?.dispose(); // Dispose of the animation controller
+    _animationController?.dispose();
     _mapController.dispose();
     _selectedUserProvider?.removeListener(_onSelectedUserChanged);
     _syncSubscription?.cancel();
@@ -109,7 +92,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       final prefs = await SharedPreferences.getInstance();
       final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
 
-      mapTheme = _loadMapTheme(); // Now returns the correct Theme type
+      mapTheme = _loadMapTheme();
 
       // Attempt to load the map tiles
       tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
@@ -180,8 +163,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   }
 
   Future<void> _fetchInitialLocation() async {
-    final locationProvider =
-    Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     await locationProvider.determinePosition();
     if (locationProvider.currentPosition != null && _isMapReady) {
       _centerOnUser();
@@ -192,10 +174,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
 
   Future<void> _startLocationServices() async {
     // Start LocationBroadcastService and LocationTrackingService
-    final locationBroadcastService =
-    Provider.of<LocationBroadcastService>(context, listen: false);
-    final locationTrackingService =
-    Provider.of<LocationTrackingService>(context, listen: false);
+    final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
+    final locationTrackingService = Provider.of<LocationTrackingService>(context, listen: false);
 
     // Start broadcasting and tracking services
     locationBroadcastService.startBroadcastingLocation();
@@ -255,19 +235,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     _animationController!.forward();
   }
 
-  Future<void> _centerOnUser() async {
-    final currentPosition = await Geolocator.getLastKnownPosition();
+  void _centerOnUser() {
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
 
+    final currentPosition = locationProvider.currentPosition;
     if (currentPosition != null) {
       LatLng userLocation = LatLng(
-        currentPosition.latitude,
-        currentPosition.longitude,
+        currentPosition.latitude!,
+        currentPosition.longitude!,
       );
-      _animatedMapMove(userLocation, zoom);
+      _animatedMapMove(userLocation, _mapController.zoom);
     } else {
-      print('Current position is null');
+      print('Current position is null, cannot center on user.');
     }
   }
+
+
+
 
   void _orientNorth() {
     if (!_isMapReady) return;
@@ -277,7 +261,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   void _onSelectedUserChanged() async {
     try {
       final userId = _selectedUserProvider?.selectedUserId;
-      print('Selected user ID in MapTab: $userId'); // Debug statement
+      print('Selected user ID in MapTab: $userId');
       if (userId != null) {
         await _moveToUserLocation(userId);
         // Reset the selectedUserId to prevent repeated moves
@@ -318,8 +302,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
 
   Future<void> _moveToUserLocation(String userId) async {
     try {
-      final databaseService =
-      Provider.of<DatabaseService>(context, listen: false);
+      final databaseService = Provider.of<DatabaseService>(context, listen: false);
       final userLocationData = await databaseService.getUserLocationById(userId);
       if (userLocationData.isNotEmpty) {
         final locationData = userLocationData.first;
@@ -360,10 +343,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
               UserLocationProvider, RoomProvider>(
             builder: (context, locationProvider, selectedSubscreenProvider,
                 userLocationProvider, roomProvider, child) {
-              final selectedSubscreen =
-                  selectedSubscreenProvider.selectedSubscreen;
-              final userLocations =
-              userLocationProvider.getUserLocations(selectedSubscreen);
+              final selectedSubscreen = selectedSubscreenProvider.selectedSubscreen;
+              final userLocations = userLocationProvider.getUserLocations(selectedSubscreen);
 
               return FlutterMap(
                 mapController: _mapController,
@@ -371,8 +352,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   interactiveFlags: InteractiveFlag.all,
                   center: locationProvider.currentPosition != null
                       ? LatLng(
-                    locationProvider.currentPosition!.latitude,
-                    locationProvider.currentPosition!.longitude,
+                    locationProvider.currentPosition!.latitude!,
+                    locationProvider.currentPosition!.longitude!,
                   )
                       : LatLng(51.5, -0.09), // Default to London if no location
                   zoom: zoom,
@@ -382,9 +363,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   onMapReady: () {
                     setState(() {
                       _isMapReady = true;
-                      print('Map is ready'); // Debug statement
-                      if (!_isCenteredOnUser &&
-                          locationProvider.currentPosition != null) {
+                      print('Map is ready');
+                      if (!_isCenteredOnUser && locationProvider.currentPosition != null) {
                         _centerOnUser();
                         _isCenteredOnUser = true;
                       }
@@ -448,8 +428,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
             left: 16,
             child: FloatingActionButton(
               heroTag: "settingsBtn",
-              backgroundColor:
-              isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+              backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -460,21 +439,20 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
               },
               child: Icon(Icons.menu,
                   color: isDarkMode ? colorScheme.primary : Colors.black),
-              mini: true, // Keeping it consistent with the mini size
+              mini: true,
             ),
           ),
 
           // Overlay buttons: Center User & Orient North
           Positioned(
             right: 16,
-            top: 100, // Align the avatar and the buttons at the same level
+            top: 100,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 FloatingActionButton(
                   heroTag: "orientNorthBtn",
-                  backgroundColor:
-                  isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+                  backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
                   onPressed: () {
                     _orientNorth();
                   },
@@ -485,8 +463,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                 SizedBox(height: 10),
                 FloatingActionButton(
                   heroTag: "centerUserBtn",
-                  backgroundColor:
-                  isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+                  backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
                   onPressed: () {
                     _centerOnUser();
                   },
