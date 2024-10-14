@@ -1,4 +1,3 @@
-
 # Grid - E2EE Location Sharing Application
 
 Grid is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
@@ -18,14 +17,16 @@ Before you begin, ensure you have the following installed:
 
 - **Flutter SDK**: [Install Flutter](https://flutter.dev/docs/get-started/install)
 - **Android Studio**: [Download Android Studio](https://developer.android.com/studio)
+- **Xcode** (for iOS development): [Install Xcode](https://developer.apple.com/xcode/)
+- **CocoaPods** (for iOS): [Install CocoaPods](https://guides.cocoapods.org/using/getting-started.html)
 
 ### Installation
 
 1. **Clone the repository**:
 
    ```bash
-   git clone https://github.com/your-username/grid.git
-   cd grid
+   git clone https://github.com/Rezivure/grid-frontend.git
+   cd grid-frontend
    ```
 
 2. **Install dependencies**:
@@ -36,10 +37,40 @@ Before you begin, ensure you have the following installed:
    flutter pub get
    ```
 
+3. **Set up environment variables**:
+
+   Copy the example environment configuration and modify it with the appropriate URLs:
+
    ```bash
    cp .env.example .env
    ```
-   Modify .env to the accurate URLs
+   Edit `.env` to configure your API and server URLs.
+
+4. **Platform-specific setup**:
+
+   #### For iOS:
+
+   - Navigate to the `ios/` directory:
+     
+     ```bash
+     cd ios
+     ```
+
+   - Install CocoaPods dependencies:
+
+     ```bash
+     pod install
+     ```
+
+   - Return to the root directory:
+
+     ```bash
+     cd ..
+     ```
+
+   #### For Android:
+
+   No additional setup is required.
 
 ### Running the App
 
@@ -48,7 +79,7 @@ Before you begin, ensure you have the following installed:
     - Open the cloned repository in Android Studio.
     - Ensure your Flutter SDK is correctly set up in Android Studio.
 
-2. **Set Up Emulator**:
+2. **Set Up Emulator or Physical Device**:
 
     - Create an Android Emulator or connect a physical device.
     - Ensure the device is running and detected by Android Studio.
@@ -64,10 +95,9 @@ Before you begin, ensure you have the following installed:
 ## Project Structure
 
 - **lib/**: Contains the main Flutter application code.
-- **assets/**: Store images, icons, and other assets.
+- **assets/**: Stores images, icons, and other assets.
 - **pubspec.yaml**: Defines the dependencies and assets for the project.
   
-
 ## Contributing
 
 We welcome contributions! Please submit a pull request or open an issue to discuss any changes.
@@ -75,3 +105,4 @@ We welcome contributions! Please submit a pull request or open an issue to discu
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](./LICENSE) file for details.
+
