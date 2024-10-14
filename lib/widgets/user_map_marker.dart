@@ -1,67 +1,74 @@
 import 'package:flutter/material.dart';
 import 'package:random_avatar/random_avatar.dart';
 
-class UserMapMarker extends StatelessWidget {
+class UserMapMarker extends StatefulWidget {
   final String userId;
 
   UserMapMarker({required this.userId});
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      clipBehavior: Clip.none, // Allow overflow for the triangle
-      children: [
-        // Triangle at the bottom
-        Positioned(
-          bottom: -10, // Adjust as needed
-          child: CustomPaint(
-            size: Size(20, 10),
-            painter: TrianglePainter(color: Colors.white),
-          ),
-        ),
-        // Circle Avatar with white border
-        Container(
-          padding: EdgeInsets.all(3), // Border width
-          decoration: BoxDecoration(
-            color: Colors.white, // Border color
-            shape: BoxShape.circle,
-          ),
-          child: ClipOval(
-            child: RandomAvatar(
-              (userId.split(':')[0]
-                  .replaceFirst('@', '')),
-              height: 40,
-              width: 40,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  _UserMapMarkerState createState() => _UserMapMarkerState();
 }
 
-class TrianglePainter extends CustomPainter {
-  final Color color;
-
-  TrianglePainter({required this.color});
+class _UserMapMarkerState extends State<UserMapMarker>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  Animation<double>? _animation;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+  void initState() {
+    super.initState();
 
-    final Path path = Path();
+    // Set up the animation controller and animation
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: 1), // 1-second pulse
+    )..repeat(reverse: true); // Repeat animation indefinitely
 
-    path.moveTo(0, 0);
-    path.lineTo(size.width / 2, size.height);
-    path.lineTo(size.width, 0);
-    path.close();
-
-    canvas.drawPath(path, paint);
+    _animation = Tween<double>(begin: 1.0, end: 1.3).animate(_controller!);
   }
 
   @override
-  bool shouldRepaint(TrianglePainter oldDelegate) => false;
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation!,
+      builder: (context, child) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Pulsing border
+            Container(
+              width: 50 * _animation!.value,
+              height: 50 * _animation!.value,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.green.withOpacity(0.4), // Green with transparency
+              ),
+            ),
+            // User Avatar with static border
+            Container(
+              padding: EdgeInsets.all(3), // Border width
+              decoration: BoxDecoration(
+                color: Colors.white, // Static white border inside the pulse
+                shape: BoxShape.circle,
+              ),
+              child: ClipOval(
+                child: RandomAvatar(
+                  widget.userId.split(':')[0].replaceFirst('@', ''),
+                  height: 40,
+                  width: 40,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
