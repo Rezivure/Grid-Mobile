@@ -28,6 +28,9 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   String? _contactError;
   String? _matrixUserId = "";
 
+  // New variable for member limit error
+  String? _memberLimitError;
+
   late TabController _tabController;
 
   // QR code scanning variables
@@ -52,6 +55,15 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       // Reset _matrixUserId if the user types in the text field
       if (_controller.text.isNotEmpty) {
         _matrixUserId = null;
+      }
+    });
+
+    // Add listener to clear _memberLimitError when the user types
+    _memberInputController.addListener(() {
+      if (_memberLimitError != null) {
+        setState(() {
+          _memberLimitError = null;
+        });
       }
     });
   }
@@ -156,26 +168,26 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   // Create Group methods
   void _addMember() async {
     if (_members.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You can only invite up to 5 members.')),
-      );
+      setState(() {
+        _memberLimitError = 'Limit reached. Create group first.';
+      });
       return;
     }
 
     String inputUsername = _memberInputController.text.trim();
     if (inputUsername.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter a username.')),
-      );
+      setState(() {
+        _usernameError = 'Please enter a username.';
+      });
       return;
     }
 
     String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
 
     if (_members.contains(username)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User already added.')),
-      );
+      setState(() {
+        _usernameError = 'User already added.';
+      });
       return;
     }
 
@@ -189,7 +201,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } else {
       setState(() {
         _members.add(username);
-        _usernameError = null;  // Clear error on successful add
+        _usernameError = null; // Clear error on successful add
+        _memberLimitError = null; // Clear limit error if member added successfully
         _memberInputController.clear();
       });
     }
@@ -198,6 +211,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   void _removeMember(String username) {
     setState(() {
       _members.remove(username);
+      // Clear the member limit error when a member is removed
+      if (_memberLimitError != null && _members.length < 5) {
+        _memberLimitError = null;
+      }
     });
   }
 
@@ -487,7 +504,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                         decoration: InputDecoration(
                                           hintText: 'Enter username to add',
                                           prefixText: '@',
-                                          errorText: _usernameError,
+                                          errorText: _usernameError ?? _memberLimitError,
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
                                             borderSide: BorderSide.none,
