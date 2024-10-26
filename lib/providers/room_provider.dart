@@ -44,14 +44,6 @@ class RoomProvider with ChangeNotifier {
 
   List<Room> get rooms => client.rooms;
 
-  Future<List<Room>> fetchRooms() async {
-    await client.sync();
-    await cleanRooms(); // TODO might need to optimize
-    var rooms = client.rooms.toList();
-    await fetchAndUpdateLocations(); // TODO heavy usage optimize
-    return rooms;
-  }
-
   Future<RelationshipStatus> getRelationshipStatus(String userId) async {
     await client.sync();
 
@@ -378,19 +370,19 @@ class RoomProvider with ChangeNotifier {
   Future<void> cleanRooms() async {
     try {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current timestamp in Unix format
+
       for (var room in client.rooms) {
         final participants = await room.getParticipants();
 
         // If the room name matches the group room pattern and contains a timestamp
         if (room.name.contains("Grid:Group:")) {
-          // Extract the expiration timestamp from the room name
           final roomNameParts = room.name.split(":");
+
           if (roomNameParts.length >= 4) {
-            final expirationTimestamp = int.tryParse(roomNameParts[2]);
+            final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
 
             // Check if the room has expired
-            if (expirationTimestamp != null && expirationTimestamp > 0 && expirationTimestamp < now) {
-              // Leave the room if it has expired
+            if (expirationTimestamp > 0 && expirationTimestamp < now) {
               await room.leave();
               print('Left expired room: ${room.name} (${room.id})');
             }
@@ -405,7 +397,6 @@ class RoomProvider with ChangeNotifier {
       print("Error cleaning rooms: $e");
     }
   }
-
 
   Future<void> leaveGroup(Room room) async {
     try {
@@ -639,6 +630,7 @@ class RoomProvider with ChangeNotifier {
 
 
   Future<void> fetchAndUpdateLocations() async {
+    await cleanRooms(); // leave rooms that are expired or empty
     Map<String, Map<String, dynamic>> userLocationMap = {};
 
     final rooms = client.rooms.where((room) => room.membership == Membership.join);
