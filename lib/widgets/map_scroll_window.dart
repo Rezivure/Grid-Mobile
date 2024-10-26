@@ -1,12 +1,14 @@
+// map_scroll_window.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/profile_modal.dart'; // Import the profile modal
 
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_subscreen.dart';
-import 'create_group_subscreen.dart';
 import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
 import 'add_friend_modal.dart';
@@ -19,7 +21,7 @@ class MapScrollWindow extends StatefulWidget {
   _MapScrollWindowState createState() => _MapScrollWindowState();
 }
 
-enum SubscreenOption { contacts, groups, invites, createGroup, groupDetails }
+enum SubscreenOption { contacts, groups, invites, groupDetails }
 
 class _MapScrollWindowState extends State<MapScrollWindow> {
   SubscreenOption _selectedOption = SubscreenOption.contacts;
@@ -61,10 +63,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       builder: (BuildContext context, ScrollController scrollController) {
         return NotificationListener<DraggableScrollableNotification>(
           onNotification: (notification) {
-            if (_selectedOption == SubscreenOption.createGroup &&
-                notification.extent < 0.7) {
-              // _expandScrollWindow(); // remove for now
-            }
             return true;
           },
           child: GestureDetector(
@@ -104,7 +102,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     ),
                   ),
                   _buildDropdownHeader(colorScheme, context),
-                  if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
+                  if (_isDropdownExpanded)
+                    _buildHorizontalScroller(colorScheme),
                   Expanded(
                     child: _buildSubscreen(scrollController),
                   ),
@@ -156,6 +155,12 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                   _showAddFriendModal(context);
                 },
               ),
+              IconButton(
+                icon: Icon(Icons.qr_code, color: colorScheme.onBackground),
+                onPressed: () {
+                  _showProfileModal(context);
+                },
+              ),
               Stack(
                 children: [
                   IconButton(
@@ -177,7 +182,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     right: 4,
                     top: 4,
                     child: FutureBuilder<int>(
-                      future: Provider.of<RoomProvider>(context, listen: false)
+                      future:
+                      Provider.of<RoomProvider>(context, listen: false)
                           .getNumInvites(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
@@ -250,7 +256,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                   _buildContactOption(colorScheme),
                   for (var groupRoomData in groupRooms)
                     _buildGroupOption(colorScheme, groupRoomData),
-                  _buildCreateGroupOption(colorScheme),
                 ],
               ),
             ),
@@ -308,47 +313,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-  Widget _buildCreateGroupOption(ColorScheme colorScheme) {
-    final isSelected = _selectedLabel == 'Create Group';
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedOption = SubscreenOption.createGroup;
-          _selectedLabel = 'Create Group';
-          _isDropdownExpanded = false;
-          if (_selectedOption == SubscreenOption.createGroup) {
-            _expandScrollWindow();
-          }
-          // Update SelectedSubscreenProvider
-          Provider.of<SelectedSubscreenProvider>(context, listen: false)
-              .setSelectedSubscreen('createGroup');
-        });
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0),
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 30,
-              child: Icon(Icons.add, color: Colors.white),
-              backgroundColor: isSelected
-                  ? Colors.grey.shade200.withOpacity(1)
-                  : Colors.grey.shade200.withOpacity(0.5),
-            ),
-            SizedBox(height: 5),
-            Text(
-              'Create Group',
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onBackground,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildGroupOption(
       ColorScheme colorScheme, Map<String, dynamic> groupRoomData) {
@@ -444,11 +409,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           scrollController: scrollController,
           onInviteHandled: _navigateToContacts,
         );
-      case SubscreenOption.createGroup:
-        return CreateGroupSubscreen(
-          scrollController: scrollController,
-          onGroupCreated: _navigateToContacts,
-        );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
           return GroupDetailsSubscreen(
@@ -497,6 +457,25 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           top: 16,
         ),
         child: AddFriendModal(),
+      ),
+    );
+  }
+
+  void _showProfileModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16,
+        ),
+        child: ProfileModal(),
       ),
     );
   }

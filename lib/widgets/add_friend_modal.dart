@@ -3,6 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:sleek_circular_slider/sleek_circular_slider.dart';
+import 'package:random_avatar/random_avatar.dart';
 import '../../providers/room_provider.dart';
 
 class AddFriendModal extends StatefulWidget {
@@ -10,77 +13,582 @@ class AddFriendModal extends StatefulWidget {
   _AddFriendModalState createState() => _AddFriendModalState();
 }
 
-class _AddFriendModalState extends State<AddFriendModal> {
+class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProviderStateMixin {
+  // Add Contact variables
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
 
-  void _addFriend() async {
+  // Create Group variables
+  final TextEditingController _groupNameController = TextEditingController();
+  final TextEditingController _memberInputController = TextEditingController();
+  List<String> _members = [];
+  double _sliderValue = 1;
+  bool _isForever = false;
+  String? _usernameError;
+  String? _contactError;
+  String? _matrixUserId = "";
+
+  late TabController _tabController;
+
+  // QR code scanning variables
+  bool _isScanning = false;
+  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
+  QRViewController? _qrController;
+
+  // Used to prevent multiple scans
+  bool hasScanned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+
+    _controller.addListener(() {
+      if (_contactError != null) {
+        setState(() {
+          _contactError = null;
+        });
+      }
+      // Reset _matrixUserId if the user types in the text field
+      if (_controller.text.isNotEmpty) {
+        _matrixUserId = null;
+      }
+    });
+  }
+
+  void _addContact() async {
     final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     final inputText = _controller.text.trim();
-    String normalizedUserId = inputText.startsWith('@')
-        ? inputText
-        : '@$inputText:${dotenv.env['HOMESERVER']}';
+    String username;
 
-    if (inputText.isNotEmpty) {
-      setState(() {
-        _isProcessing = true;
-      });
+    if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
+      username = _matrixUserId!;
+    } else {
+      username = inputText;
+    }
+
+    String normalizedUserId = username.startsWith('@')
+        ? username
+        : '@$username:${dotenv.env['HOMESERVER']}';
+
+    if (username.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = true;
+          _contactError = null; // Reset error before trying to add
+        });
+      }
       try {
         bool userExists = await roomProvider.userExists(normalizedUserId);
 
         if (!userExists) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('The user $inputText does not exist.')),
-          );
+          if (mounted) {
+            setState(() {
+              _contactError = 'Invalid username: @$inputText';
+              _isProcessing = false;
+            });
+          }
           return;
         }
 
-        // Proceed with sending an invitation
-        await roomProvider.createAndInviteUser(inputText, context);
+        // User exists, proceed with invitation
+        await roomProvider.createAndInviteUser(normalizedUserId, context);
+
+        // Clear _matrixUserId after use
+        _matrixUserId = null;
+
+        // Only pop the modal if the widget is still mounted
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       } catch (e) {
-        print(e);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add friend: $e')),
-        );
+        // Catch any other errors
+        if (mounted) {
+          setState(() {
+            _contactError = 'Error adding user: ${e.toString()}';
+          });
+        }
       } finally {
-        setState(() {
-          _isProcessing = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+        }
       }
-    } else {
+    }
+  }
+
+  // QR code scanning methods
+  void _scanQRCode() {
+    setState(() {
+      _isScanning = true;
+    });
+  }
+
+  void _onQRViewCreated(QRViewController controller) {
+    _qrController = controller;
+    controller.scannedDataStream.listen((scanData) async {
+      if (!hasScanned) {
+        String scannedUserId = scanData.code ?? '';
+        print('Scanned QR Code: $scannedUserId');
+
+        if (scannedUserId.isNotEmpty) {
+          hasScanned = true;
+          controller.pauseCamera(); // Pause the camera to avoid rescanning
+          setState(() {
+            _isScanning = false;
+            _matrixUserId = scannedUserId;
+            _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+          });
+          _addContact();
+        } else {
+          print('QR Code data is empty');
+        }
+      }
+    });
+  }
+
+  void _resetScan() {
+    hasScanned = false;
+    _qrController?.resumeCamera();
+  }
+
+  // Create Group methods
+  void _addMember() async {
+    if (_members.length >= 5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter a valid username')),
+        SnackBar(content: Text('You can only invite up to 5 members.')),
       );
+      return;
+    }
+
+    String inputUsername = _memberInputController.text.trim();
+    if (inputUsername.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter a username.')),
+      );
+      return;
+    }
+
+    String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
+
+    if (_members.contains(username)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User already added.')),
+      );
+      return;
+    }
+
+    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
+    final doesExist = await roomProvider.userExists('@$username:${dotenv.env['HOMESERVER']}');
+
+    if (!doesExist) {
+      setState(() {
+        _usernameError = 'Invalid username: @$username';
+      });
+    } else {
+      setState(() {
+        _members.add(username);
+        _usernameError = null;  // Clear error on successful add
+        _memberInputController.clear();
+      });
+    }
+  }
+
+  void _removeMember(String username) {
+    setState(() {
+      _members.remove(username);
+    });
+  }
+
+  Future<void> _createGroup() async {
+    if (_groupNameController.text.trim().isEmpty || _members.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter a group name and add members.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final roomProvider = Provider.of<RoomProvider>(context, listen: false);
+      final groupName = _groupNameController.text.trim();
+
+      final durationInHours = _isForever ? 0 : _sliderValue.toInt();
+
+      // Proceed with group creation and pass the duration
+      await roomProvider.createGroup(groupName, _members, durationInHours, context);
+
+      // Optionally, show a success message
+      Navigator.pop(context);
+    } catch (e) {
+      // Handle exceptions if necessary
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
     }
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    _tabController.dispose();
+    _qrController?.dispose();
+    _groupNameController.dispose();
+    _memberInputController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Add Friend',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 20),
-        TextField(
-          controller: _controller,
-          decoration: InputDecoration(
-            hintText: 'Enter username',
-            prefixText: '@',
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Material(
+      color: Colors.transparent, // Ensure modal background is transparent
+      child: SingleChildScrollView(
+        child: Container(
+          color: Colors.transparent,
+          padding: EdgeInsets.all(16.0),
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tabs
+                TabBar(
+                  controller: _tabController,
+                  labelColor: theme.textTheme.bodyMedium?.color,
+                  unselectedLabelColor: theme.textTheme.bodySmall?.color,
+                  indicatorColor: theme.textTheme.bodyMedium?.color,
+                  tabs: [
+                    Tab(text: 'Add Contact'),
+                    Tab(text: 'Create Group'),
+                  ],
+                ),
+                // Tab views
+                Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.6,
+                  ),
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // Add Contact Tab
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: _isScanning
+                            ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Scan QR Code',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: theme.textTheme.bodyMedium?.color,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Container(
+                              height: 300,
+                              child: QRView(
+                                key: qrKey,
+                                onQRViewCreated: _onQRViewCreated,
+                                overlay: QrScannerOverlayShape(
+                                  borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
+                                  borderRadius: 10,
+                                  borderLength: 30,
+                                  borderWidth: 10,
+                                  cutOutSize: 250,
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            ElevatedButton(
+                              onPressed: () {
+                                _qrController?.pauseCamera();
+                                setState(() {
+                                  _isScanning = false;
+                                });
+                              },
+                              child: Text('Cancel'),
+                            ),
+                          ],
+                        )
+                            : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Styled Text Field for Add Contact
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: theme.cardColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: TextField(
+                                  controller: _controller,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter username',
+                                    prefixText: '@',
+                                    errorText: _contactError,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  ),
+                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              ElevatedButton(
+                                onPressed: _isProcessing ? null : _addContact,
+                                child: _isProcessing
+                                    ? CircularProgressIndicator(color: Colors.white)
+                                    : Text('Send Request'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              // Scan QR Code Icon
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: theme.cardColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: IconButton(
+                                  icon: Icon(Icons.qr_code_scanner),
+                                  onPressed: _scanQRCode,
+                                  iconSize: 50,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Create Group Tab
+                      SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              // Styled Group Name Input
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: theme.cardColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: TextField(
+                                  controller: _groupNameController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter group name',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  ),
+                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                ),
+                              ),
+                              SizedBox(height: 20),
+                              // Circular Slider
+                              SleekCircularSlider(
+                                min: 1,
+                                max: 72,
+                                initialValue: _sliderValue,
+                                appearance: CircularSliderAppearance(
+                                  customWidths: CustomSliderWidths(
+                                    trackWidth: 4,
+                                    progressBarWidth: 8,
+                                    handlerSize: 8,
+                                  ),
+                                  customColors: CustomSliderColors(
+                                    trackColor: theme.dividerColor,
+                                    progressBarColor: colorScheme.primary,
+                                    dotColor: colorScheme.primary,
+                                    hideShadow: true,
+                                  ),
+                                  infoProperties: InfoProperties(
+                                    modifier: (double value) {
+                                      if (value >= 71) {
+                                        _isForever = true;
+                                        return 'Forever';
+                                      } else {
+                                        _isForever = false;
+                                        return '${value.toInt()}h';
+                                      }
+                                    },
+                                    mainLabelStyle: TextStyle(
+                                      color: colorScheme.primary,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  startAngle: 270,
+                                  angleRange: 360,
+                                  size: 200,
+                                ),
+                                onChange: (value) {
+                                  setState(() {
+                                    _sliderValue = value >= 71 ? 72 : value;
+                                  });
+                                },
+                              ),
+                              SizedBox(height: 20),
+                              // Styled Add Member Input
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: theme.cardColor,
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black12,
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: TextField(
+                                        controller: _memberInputController,
+                                        decoration: InputDecoration(
+                                          hintText: 'Enter username to add',
+                                          prefixText: '@',
+                                          errorText: _usernameError,
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                        ),
+                                        style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  ElevatedButton(
+                                    onPressed: _addMember,
+                                    child: Text('Add'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 20),
+                              // Display Added Members
+                              if (_members.isNotEmpty)
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: _members.map((username) {
+                                    return Stack(
+                                      children: [
+                                        Column(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 40,
+                                              child: RandomAvatar(
+                                                username,
+                                                height: 80,
+                                                width: 80,
+                                              ),
+                                            ),
+                                            SizedBox(height: 5),
+                                            Text(
+                                              username,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: theme.textTheme.bodyMedium?.color,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Positioned(
+                                          top: 0,
+                                          right: 0,
+                                          child: GestureDetector(
+                                            onTap: () => _removeMember(username),
+                                            child: CircleAvatar(
+                                              radius: 12,
+                                              backgroundColor: Colors.red,
+                                              child: Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }).toList(),
+                                ),
+                              SizedBox(height: 20),
+                              ElevatedButton(
+                                onPressed: (_isProcessing ||
+                                    _members.isEmpty ||
+                                    _groupNameController.text.trim().isEmpty)
+                                    ? null
+                                    : _createGroup,
+                                child: _isProcessing
+                                    ? CircularProgressIndicator(color: Colors.white)
+                                    : Text('Create Group'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: _isProcessing ? null : _addFriend,
-          child: _isProcessing
-              ? CircularProgressIndicator(color: Colors.white)
-              : Text('Send Request'),
-        ),
-        SizedBox(height: 20),
-      ],
+      ),
     );
   }
 }

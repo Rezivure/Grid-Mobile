@@ -116,44 +116,52 @@ class RoomProvider with ChangeNotifier {
     String matrixUserId = normalizedUserId.startsWith('@')
         ? normalizedUserId
         : '@$normalizedUserId:${dotenv.env['HOMESERVER']}';
+    String displayUsername = normalizedUserId.startsWith('@')
+        ? normalizedUserId.substring(1).split(':').first
+        : normalizedUserId;
 
     // Check if the user exists before proceeding
-    bool userExists = await this.userExists(matrixUserId);
-    if (!userExists) {
+    try {
+      bool userExists = await this.userExists(matrixUserId);
+      if (!userExists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('The user $displayUsername does not exist.')),
+        );
+        return;
+      }
+    } catch (e) {
+      print('Error checking if user exists: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('The user $normalizedUserId does not exist.')),
+        SnackBar(content: Text('Error checking user existence: $e')),
       );
       return;
     }
 
-    // Proceed with the existing logic to create the room and invite the user
+    // Proceed with creating the room and inviting the user
     final roomName1 = "Grid:Direct:$effectiveUserId:$matrixUserId";
     final roomName2 = "Grid:Direct:$matrixUserId:$effectiveUserId";
 
-    RelationshipStatus status = await getRelationshipStatus(matrixUserId);
-
-    if (status == RelationshipStatus.alreadyFriends) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You are already friends with $normalizedUserId.')),
-      );
-      return;
-    } else if (status == RelationshipStatus.invitationSent) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('An invitation has already been sent to $normalizedUserId.')),
-      );
-      return;
-    }
-
     try {
+      RelationshipStatus status = await getRelationshipStatus(matrixUserId);
+
+      if (status == RelationshipStatus.alreadyFriends) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You are already friends with $displayUsername.')),
+        );
+        return;
+      } else if (status == RelationshipStatus.invitationSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('An invitation has already been sent to $displayUsername.')),
+        );
+        return;
+      }
+
       final roomExists = client.rooms.any((room) =>
       room.name == roomName1 || room.name == roomName2);
 
       if (roomExists) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('You already have a request or active session with $normalizedUserId.')),
+          SnackBar(content: Text('You already have a request or active session with $displayUsername.')),
         );
         return;
       }
@@ -178,9 +186,8 @@ class RoomProvider with ChangeNotifier {
         await addTag(roomId, 'direct');
       }
 
-      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invitation sent to $normalizedUserId.')),
+        SnackBar(content: Text('Invitation sent to $displayUsername.')),
       );
     } catch (e) {
       print('Error creating room or inviting user: $e');
@@ -189,6 +196,7 @@ class RoomProvider with ChangeNotifier {
       );
     }
   }
+
 
 
   Future<bool> userExists(String userId) async {

@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+    <string>We need camera access to scan QR codes.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Grid needs access to your location to send updates to your Grid in the background. Your location data is end-to-end encrypted.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

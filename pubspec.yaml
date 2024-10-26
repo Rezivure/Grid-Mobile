@@ -43,6 +43,8 @@ dependencies:
   flutter_dotenv: ^5.1.0
   location: ^7.0.1
   permission_handler: ^11.3.1
+  qr_flutter: ^4.1.0
+  qr_code_scanner: ^1.0.1
 
 
 flutter_launcher_icons:

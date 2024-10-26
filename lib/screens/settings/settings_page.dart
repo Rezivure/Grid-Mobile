@@ -210,14 +210,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   Divider(color: colorScheme.onBackground), // Divider uses theme
                   _buildSettingsOption(
                     icon: Icons.delete,
-                    title: 'Clear All Data',
+                    title: 'Clear Cache',
                     color: Colors.red,
                     onTap: () async {
                       final confirmed = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: Text('Clear All Data'),
-                          content: Text('Are you sure you want to clear all data? This action cannot be undone.'),
+                          title: Text('Clear Cache'),
+                          content: Text('Are you sure you want to clear cache? User locations saved on the device will be cleared.'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
