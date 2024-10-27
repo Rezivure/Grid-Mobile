@@ -6,6 +6,7 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
