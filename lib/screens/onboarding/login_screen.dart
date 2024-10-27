@@ -43,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
 
+      await prefs.setString('serverType', 'custom');
       Navigator.pushReplacementNamed(context, '/main');
     } catch (e) {
       setState(() {

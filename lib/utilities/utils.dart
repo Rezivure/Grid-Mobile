@@ -38,3 +38,7 @@ String parseGroupName(String roomName) {
   // Default case: return the first 12 characters if no prefix/suffix found
   return roomName.length > 12 ? roomName.substring(0, 12) : roomName;
 }
+
+String localpart(String userId) {
+  return userId.split(":").first.replaceFirst('@', '');
+}

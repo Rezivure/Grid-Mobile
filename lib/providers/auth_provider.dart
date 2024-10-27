@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
+import 'package:grid_frontend/utilities/utils.dart';
 class AuthProvider with ChangeNotifier {
   bool _isLoggedIn = false;
   String? _token;
@@ -75,11 +75,72 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> authenticateWithJWT(String jwt) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('serverType', 'default');
       await loginWithJWT(jwt);
     } catch (e) {
       print('Failed to authenticate with JWT: $e');
     }
   }
+
+  Future<bool> requestDeactivateAccount(String phoneNumber) async {
+    var curUser = localpart(_userId!);
+    try {
+      final response = await http.post(
+        Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/request'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone_number': phoneNumber,
+          'username': curUser,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("Deactivation request sent successfully");
+        return true;
+      } else {
+        print("Failed to send deactivation request: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print('Error requesting deactivation: $e');
+      return false;
+    }
+  }
+
+
+  String localpart(String userId) {
+    return userId.split(":").first.replaceFirst('@', '');
+  }
+
+
+  Future<bool> confirmDeactivateAccount(String phoneNumber, String code) async {
+    var username = localpart(_userId!);
+    try {
+      final response = await http.post(
+        Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username,
+          'phone_number': phoneNumber,
+          'code': code,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("Deactivation confirmed successfully");
+        return true;
+      } else {
+        print("Failed to confirm deactivation code: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print('Error verifying deactivation code: $e');
+      return false;
+    }
+  }
+
+
 
   Future<void> verifyLoginCode(String phoneNumber, String code) async {
     try {
