@@ -171,137 +171,150 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    return SafeArea(
-      child: GestureDetector(
-        onTap: () {
-          // Close the keyboard when tapping outside
-          FocusScope.of(context).unfocus();
-        },
-        child: SingleChildScrollView(
-          // This ensures the modal adjusts when the keyboard appears
-          child: Padding(
-            // Adjust padding when keyboard is visible
-            padding: EdgeInsets.only(
-              left: 16.0,
-              right: 16.0,
-              top: 16.0,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
-            ),
-            child: Center(
-              child: _isScanning
-                  ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Scan QR Code',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: theme.textTheme.bodyMedium?.color,
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Container(
-                    height: 300,
-                    child: QRView(
-                      key: qrKey,
-                      onQRViewCreated: _onQRViewCreated,
-                      overlay: QrScannerOverlayShape(
-                        borderColor:
-                        theme.textTheme.bodyMedium?.color ?? Colors.black,
-                        borderRadius: 10,
-                        borderLength: 30,
-                        borderWidth: 10,
-                        cutOutSize: 250,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () {
-                      _qrController?.pauseCamera();
-                      setState(() {
-                        _isScanning = false;
-                      });
-                    },
-                    child: Text('Cancel'),
-                  ),
-                ],
-              )
-                  : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Styled Text Field for Add Group Member
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: 'Enter username',
-                        prefixText: '@',
-                        errorText: _contactError,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                      ),
-                      style: TextStyle(
-                          color: theme.textTheme.bodyMedium?.color),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _isProcessing ? null : _addMember,
-                    child: _isProcessing
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text('Send Invite'),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 40, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  // Scan QR Code Icon
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.qr_code_scanner),
-                      onPressed: _scanQRCode,
-                      iconSize: 50,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ],
+    return Material(
+      color: Colors.transparent,
+        child: Container(
+          color: Colors.transparent,
+          padding: EdgeInsets.all(16.0),
+          child: _isScanning
+              ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Scan QR Code',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: theme.textTheme.bodyMedium?.color,
+                ),
               ),
-            ),
+              SizedBox(height: 10),
+              Container(
+                height: 300,
+                child: QRView(
+                  key: qrKey,
+                  onQRViewCreated: _onQRViewCreated,
+                  overlay: QrScannerOverlayShape(
+                    borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
+                    borderRadius: 36,
+                    borderLength: 30,
+                    borderWidth: 10,
+                    cutOutSize: 250,
+                  ),
+                ),
+              ),
+              SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: () {
+                  _qrController?.pauseCamera();
+                  setState(() {
+                    _isScanning = false;
+                  });
+                },
+                child: Text('Cancel'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.onSurface,
+                  foregroundColor: colorScheme.surface,
+                ),
+              ),
+            ],
+          )
+              : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+
+              Center(
+                child: Container(
+                  width: 300, // Set a fixed width for the text field
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(36),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: 'Enter username',
+                      prefixText: '@',
+                      errorText: _contactError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(1),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    ),
+                    style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                  ),
+                ),
+              ),
+
+              SizedBox(height: 8), // Space between the TextField and subtext
+              Text(
+                'Secure location sharing begins once accepted.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _isProcessing ? null : _addMember,
+                child: _isProcessing
+                    ? CircularProgressIndicator(color: Colors.white)
+                    : Text('Send Request'),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(35),
+                  ),
+                  backgroundColor: colorScheme.onSurface,
+                  foregroundColor: colorScheme.surface,
+                ),
+              ),
+              SizedBox(height: 20),
+              // Scan QR Code Button with Text and Icon
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _scanQRCode,
+                  icon: Icon(
+                    Icons.qr_code_scanner,
+                    color: colorScheme.primary,
+                  ),
+                  label: Text(
+                    'Scan QR Code',
+                    style: TextStyle(color: colorScheme.onSurface),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(35),
+                    ),
+                    backgroundColor: colorScheme.surface,
+                    foregroundColor: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
+
     );
   }
 }
