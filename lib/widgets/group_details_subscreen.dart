@@ -271,9 +271,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                               : () => _showAddGroupMemberModal(),
                           child: Text('Add Member'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: colorScheme.primary,
-                            side: BorderSide(color: colorScheme.primary),
+                            backgroundColor: colorScheme.onSurface,
+                            foregroundColor: colorScheme.surface,
+                            side: BorderSide(color: colorScheme.onSurface),
                             minimumSize: Size(150, 40), // Narrower button
                           ),
                         ),
@@ -311,6 +311,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   void _showAddGroupMemberModal() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) {
         return AddGroupMemberModal(roomId: widget.room.id); // Pass the roomId
       },

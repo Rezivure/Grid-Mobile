@@ -51,7 +51,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                   onPressed: _declineRequest,
                   child: Text('Decline', style: TextStyle(color: Colors.red)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: colorScheme.surface,
                     foregroundColor: Colors.red,
                     side: BorderSide(color: Colors.red),
                     minimumSize: Size(100, 40),

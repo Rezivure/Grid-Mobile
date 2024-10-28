@@ -60,6 +60,9 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return AlertDialog(
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -88,13 +91,30 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         ],
       ),
       actions: [
-        TextButton(
+        ElevatedButton(
           onPressed: _declineGroupInvitation,
-          child: Text('Decline'),
+            child: Text('Decline', style: TextStyle(color: Colors.red)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colorScheme.surface,
+            foregroundColor: Colors.red,
+            side: BorderSide(color: Colors.red),
+            minimumSize: Size(100, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+          ),
         ),
         ElevatedButton(
           onPressed: _acceptGroupInvitation,
-          child: Text('Accept'),
+            child: Text('Accept'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.surface,
+            minimumSize: Size(100, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+          ),
         ),
       ],
     );

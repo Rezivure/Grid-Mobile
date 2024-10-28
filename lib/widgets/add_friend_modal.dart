@@ -302,7 +302,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Scan QR Code',
+                              'Scan a Profile QR',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -317,7 +317,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 onQRViewCreated: _onQRViewCreated,
                                 overlay: QrScannerOverlayShape(
                                   borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
-                                  borderRadius: 10,
+                                  borderRadius: 36,
                                   borderLength: 30,
                                   borderWidth: 10,
                                   cutOutSize: 250,
@@ -333,6 +333,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 });
                               },
                               child: Text('Cancel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.onSurface,
+                                foregroundColor: colorScheme.surface,
+                              )
                             ),
                           ],
                         )
@@ -344,7 +348,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               Container(
                                 decoration: BoxDecoration(
                                   color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(36),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -360,12 +364,20 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     prefixText: '@',
                                     errorText: _contactError,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(1),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                                   ),
                                   style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                ),
+                              ),
+                              SizedBox(height: 8), // Space between the TextField and subtext
+                              Text(
+                                'Secure location sharing will begin once accepted.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurface,
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -377,8 +389,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 style: ElevatedButton.styleFrom(
                                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(35),
                                   ),
+                                  backgroundColor: colorScheme.onSurface,
+                                  foregroundColor: colorScheme.surface,
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -395,12 +409,27 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ),
                                   ],
                                 ),
-                                child: IconButton(
-                                  icon: Icon(Icons.qr_code_scanner),
+                                child: // "Scan QR Code" Button with Text and Icon
+                                ElevatedButton.icon(
                                   onPressed: _scanQRCode,
-                                  iconSize: 50,
-                                  color: colorScheme.primary,
+                                  icon: Icon(
+                                    Icons.qr_code_scanner,
+                                    color: colorScheme.primary,
+                                  ),
+                                  label: Text(
+                                    'Scan QR Code',
+                                    style: TextStyle(color: colorScheme.onSurface),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(35),
+                                    ),
+                                    iconColor: colorScheme.primary, // Set the button color if needed
+                                    backgroundColor: colorScheme.surface,
+                                  ),
                                 ),
+
                               ),
                             ],
                           ),
@@ -416,7 +445,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               Container(
                                 decoration: BoxDecoration(
                                   color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(36),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -430,7 +459,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                   decoration: InputDecoration(
                                     hintText: 'Enter group name',
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(1),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -469,7 +498,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     mainLabelStyle: TextStyle(
                                       color: colorScheme.primary,
                                       fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+
                                     ),
                                   ),
                                   startAngle: 270,
@@ -490,7 +519,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: theme.cardColor,
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(36),
                                         boxShadow: [
                                           BoxShadow(
                                             color: Colors.black12,
@@ -520,9 +549,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     onPressed: _addMember,
                                     child: Text('Add'),
                                     style: ElevatedButton.styleFrom(
+                                      backgroundColor: colorScheme.onSurface,
+                                      foregroundColor: colorScheme.surface,
                                       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(36),
                                       ),
                                     ),
                                   ),
@@ -540,11 +571,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                         Column(
                                           children: [
                                             CircleAvatar(
-                                              radius: 40,
+                                              radius: 20,
                                               child: RandomAvatar(
                                                 username,
-                                                height: 80,
-                                                width: 80,
+                                                height: 40,
+                                                width: 40,
                                               ),
                                             ),
                                             SizedBox(height: 5),
@@ -563,12 +594,12 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                           child: GestureDetector(
                                             onTap: () => _removeMember(username),
                                             child: CircleAvatar(
-                                              radius: 12,
+                                              radius: 8,
                                               backgroundColor: Colors.red,
                                               child: Icon(
                                                 Icons.close,
                                                 color: Colors.white,
-                                                size: 16,
+                                                size: 10,
                                               ),
                                             ),
                                           ),
@@ -588,9 +619,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ? CircularProgressIndicator(color: Colors.white)
                                     : Text('Create Group'),
                                 style: ElevatedButton.styleFrom(
+                                  backgroundColor: colorScheme.onSurface,
+                                  foregroundColor: colorScheme.surface,
                                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(36),
                                   ),
                                 ),
                               ),
@@ -601,10 +634,25 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                     ],
                   ),
                 ),
+                // Close button at the bottom
+                Center(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.onSurface,
+                      foregroundColor: colorScheme.surface,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text('Close'),
+                  ),
+                ),
               ],
             ),
           ),
+
         ),
+
       ),
     );
   }

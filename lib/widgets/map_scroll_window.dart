@@ -164,7 +164,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               Stack(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.mail_outline,
+                    icon: Icon(Icons.notifications_outlined,
                         color: colorScheme.onBackground),
                     onPressed: () {
                       setState(() {
@@ -446,6 +446,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.background,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -462,9 +463,11 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   }
 
   void _showProfileModal(BuildContext context) {
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.background,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -479,6 +482,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       ),
     );
   }
+
 
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {

@@ -25,7 +25,7 @@ class _ProfileModalState extends State<ProfileModal> {
     final userLocalpart = userId.split(':')[0].replaceFirst('@', '');
 
     return Material(
-      color: Colors.transparent,
+      color: colorScheme.background,
       child: SingleChildScrollView(
         child: Container(
           height: MediaQuery.of(context).size.height * 0.7, // 70% of screen height
@@ -106,7 +106,7 @@ class _ProfileModalState extends State<ProfileModal> {
                       data: userId,
                       version: QrVersions.auto,
                       size: 250.0,
-                      backgroundColor: Colors.transparent,
+                      backgroundColor: colorScheme.background,
                       foregroundColor: colorScheme.onBackground,
                     ),
                   ],
@@ -118,6 +118,10 @@ class _ProfileModalState extends State<ProfileModal> {
               // Close button at the bottom
               Center(
                 child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.onSurface,
+                    foregroundColor: colorScheme.surface,
+                  ),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
