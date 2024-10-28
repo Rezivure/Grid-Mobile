@@ -10,12 +10,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _homeserverController = TextEditingController(text:  dotenv.env['HOMESERVER']); // Default homeserver
+  final _homeserverController = TextEditingController();
+  final _mapsUrlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _mapsUrlController = TextEditingController(text:  dotenv.env['MAPS_URL']); // Default Maps URL
   bool _isLoading = false;
   String? _errorMessage;
+
+  bool _useDefaultMapsUrl = true; // Default is to use the default maps URL
 
   Future<void> _login() async {
     setState(() {
@@ -25,8 +27,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final client = Provider.of<Client>(context, listen: false);
-      final homeserver = _homeserverController.text.trim(); // Get homeserver from text field
-      final mapsUrl = _mapsUrlController.text.trim(); // Get maps URL from text field
+      final homeserver = _homeserverController.text.trim();
+      String mapsUrl;
+
+      if (_useDefaultMapsUrl) {
+        mapsUrl = (dotenv.env['MAPS_URL'] ?? '').trim();
+      } else {
+        mapsUrl = _mapsUrlController.text.trim();
+      }
 
       // Store the maps URL in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -36,14 +44,16 @@ class _LoginScreenState extends State<LoginScreen> {
       await client.login(
         LoginType.mLoginPassword,
         password: _passwordController.text,
-        identifier: AuthenticationUserIdentifier(user: _usernameController.text),
+        identifier:
+        AuthenticationUserIdentifier(user: _usernameController.text),
       );
 
       setState(() {
         _isLoading = false;
       });
 
-      await prefs.setString('serverType', 'custom');
+      await prefs.setString(
+          'maps_url_type', _useDefaultMapsUrl ? 'default' : 'custom');
       Navigator.pushReplacementNamed(context, '/main');
     } catch (e) {
       setState(() {
@@ -59,29 +69,30 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background, // Use theme background color
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        leading: BackButton(color: colorScheme.onBackground), // Use theme color for back button
+        leading: BackButton(color: colorScheme.onBackground),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: SingleChildScrollView( // Make the content scrollable
+      body: SingleChildScrollView(
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20), // Add some vertical padding
+          padding:
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              const SizedBox(height: 20), // Add some space at the top
+              const SizedBox(height: 20),
               Image.asset(
-                'assets/logos/png-file-2.png', // Replace the lock icon with your logo
-                height: 175, // Adjust the size as needed
+                'assets/logos/png-file-2.png',
+                height: 175,
               ),
               const SizedBox(height: 10),
               Text(
                 'Sign In',
                 style: theme.textTheme.headlineMedium?.copyWith(
-                  color: colorScheme.primary, // Use primary color for text
+                  color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
@@ -102,33 +113,65 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 10),
               ],
+              // Radio buttons for Default and Custom Maps URL (moved above input boxes)
+              Column(
+                children: [
+                  ListTile(
+                    title: const Text('Grid Maps'),
+                    leading: Radio<bool>(
+                      value: true,
+                      groupValue: _useDefaultMapsUrl,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _useDefaultMapsUrl = value!;
+                        });
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    title: const Text('Custom Maps'),
+                    leading: Radio<bool>(
+                      value: false,
+                      groupValue: _useDefaultMapsUrl,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _useDefaultMapsUrl = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: _homeserverController,
                 decoration: InputDecoration(
                   labelText: 'Homeserver URL',
                   filled: true,
                   fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
+                  border: const UnderlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: _mapsUrlController,
-                decoration: InputDecoration(
-                  labelText: 'Maps URL (.pmtiles path)',
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
+              if (!_useDefaultMapsUrl) ...[
+                TextField(
+                  controller: _mapsUrlController,
+                  decoration: InputDecoration(
+                    labelText: 'Maps URL (.pmtiles path)',
+                    filled: true,
+                    fillColor: colorScheme.surface,
+                    border: const UnderlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: _usernameController,
                 decoration: InputDecoration(
                   labelText: 'Username',
                   filled: true,
                   fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
+                  border: const UnderlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 10),
@@ -138,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   labelText: 'Password',
                   filled: true,
                   fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
+                  border: const UnderlineInputBorder(),
                 ),
                 obscureText: true,
               ),
@@ -150,26 +193,34 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text(
                   'Continue',
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onPrimary, // Text color in the button
+                    color: colorScheme.onPrimary,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary, // Button color
+                  backgroundColor: colorScheme.primary,
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
                   ),
                 ),
               ),
-              const SizedBox(height: 5), // Add space between button and text button
+              const SizedBox(height: 5),
               TextButton(
                 onPressed: () {
+                  // Get the latest mapsUrl value based on user's selection
+                  String mapsUrl;
+                  if (_useDefaultMapsUrl) {
+                    mapsUrl = (dotenv.env['MAPS_URL'] ?? '').trim();
+                  } else {
+                    mapsUrl = _mapsUrlController.text.trim();
+                  }
+
                   Navigator.pushNamed(
                     context,
                     '/signup',
                     arguments: {
-                      'homeserver': _homeserverController.text, // Pass homeserver
-                      'mapsUrl': _mapsUrlController.text, // Pass maps URL
+                      'homeserver': _homeserverController.text.trim(),
+                      'mapsUrl': mapsUrl,
                     },
                   );
                 },
@@ -192,8 +243,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
-    _homeserverController.dispose(); // Dispose of homeserver controller
-    _mapsUrlController.dispose(); // Dispose of maps URL controller
+    _homeserverController.dispose();
+    _mapsUrlController.dispose();
     super.dispose();
   }
 }
