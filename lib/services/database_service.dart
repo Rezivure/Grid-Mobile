@@ -113,31 +113,29 @@ class DatabaseService {
     final encryptionKey = await _getOrCreateEncryptionKey();
 
     // Generate a random IV for encryption
-    final iv = encrypt.IV.fromLength(16);
-    final ivString = iv.base64; // Store the IV as a Base64 string
+    final iv = encrypt.IV.fromLength(16).base64;
 
-    // Encrypt latitude and longitude
-    final encryptedLatitude = _encrypt(latitude.toString(), iv, encryptionKey);
-    final encryptedLongitude = _encrypt(longitude.toString(), iv, encryptionKey);
+    // Create a UserLocation instance and convert it to a map for insertion
+    final userLocation = UserLocation(
+      userId: userId,
+      latitude: latitude,
+      longitude: longitude,
+      timestamp: timestamp,
+      deviceKeys: jsonDecode(deviceKeysJson),
+      iv: iv,
+    );
 
-    // Prepare the location map with encrypted values
-    final locationData = {
-      'userId': userId,
-      'latitude': encryptedLatitude,
-      'longitude': encryptedLongitude,
-      'timestamp': timestamp,
-      'deviceKeys': deviceKeysJson, // Already JSON-encoded
-      'iv': ivString,
-    };
+    await db.insert(
+      'UserLocations',
+      userLocation.toMap(encryptionKey),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
 
-    print('Inserting user location into DB: $locationData');
-
-    await db.insert('UserLocations', locationData, conflictAlgorithm: ConflictAlgorithm.replace);
+    print('Inserting user location into DB: $userLocation');
     _emitLocationUpdates(); // Emit updates to the stream
   }
 
-
-  Future<List<Map<String, dynamic>>> getUserLocationById(String userId) async {
+  Future<UserLocation?> getUserLocationById(String userId) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
     final results = await db.query(
@@ -146,22 +144,11 @@ class DatabaseService {
       whereArgs: [userId],
     );
 
-    // Decrypt data after fetching it from the database
-    return results.map((location) {
-      final ivString = location['iv'] as String;
-      final encryptedLatitude = location['latitude'] as String;
-      final encryptedLongitude = location['longitude'] as String;
-
-      final decryptedLatitude = _decrypt(encryptedLatitude, ivString, encryptionKey);
-      final decryptedLongitude = _decrypt(encryptedLongitude, ivString, encryptionKey);
-
-      return {
-        'userId': location['userId'],
-        'latitude': double.parse(decryptedLatitude),
-        'longitude': double.parse(decryptedLongitude),
-        'timestamp': location['timestamp'],
-      };
-    }).toList();
+    if (results.isNotEmpty) {
+      // Use UserLocation's fromMap constructor to handle decryption
+      return UserLocation.fromMap(results.first, encryptionKey);
+    }
+    return null;
   }
 
   Future<void> updateUserLocation(
@@ -174,7 +161,7 @@ class DatabaseService {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
 
-    // Fetch the existing record to retrieve the stored IV
+    // Retrieve the existing IV for this user
     final existingRecord = await db.query(
       'UserLocations',
       columns: ['iv'],
@@ -187,27 +174,28 @@ class DatabaseService {
       return;
     }
 
-    final ivString = existingRecord.first['iv'] as String;
-    final iv = encrypt.IV.fromBase64(ivString); // Use the existing IV
+    final iv = existingRecord.first['iv'] as String;
 
-    // Encrypt latitude and longitude using the existing IV
-    final encryptedLatitude = _encrypt(latitude.toString(), iv, encryptionKey);
-    final encryptedLongitude = _encrypt(longitude.toString(), iv, encryptionKey);
-
-    print('Updating user location in DB: UserID: $userId, Latitude: $latitude, Longitude: $longitude, Timestamp: $timestamp, Keys: $deviceKeysJson');
+    // Create a UserLocation instance and convert it to a map for updating
+    final userLocation = UserLocation(
+      userId: userId,
+      latitude: latitude,
+      longitude: longitude,
+      timestamp: timestamp,
+      deviceKeys: jsonDecode(deviceKeysJson),
+      iv: iv,
+    );
 
     await db.update(
       'UserLocations',
-      {
-        'latitude': encryptedLatitude,
-        'longitude': encryptedLongitude,
-        'timestamp': timestamp,
-        'deviceKeys': deviceKeysJson, // Updated device keys JSON
-      },
+      userLocation.toMap(encryptionKey),
       where: 'userId = ?',
       whereArgs: [userId],
     );
+
+    print('Updating user location in DB: $userLocation');
   }
+
 
 
   void emitUpdatesToAppAfterUpdatingDB() {

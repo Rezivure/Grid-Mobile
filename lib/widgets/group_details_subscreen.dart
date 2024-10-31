@@ -141,27 +141,23 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
         .updateUserLocations(subscreen, locations);
   }
 
+
   Future<List<UserLocation>> getUserLocations(List<User> users) async {
     List<UserLocation> locations = [];
 
-    final databaseService =
-    Provider.of<DatabaseService>(context, listen: false);
+    final databaseService = Provider.of<DatabaseService>(context, listen: false);
 
     for (var user in users) {
-      final userLocationData =
-      await databaseService.getUserLocationById(user.id);
+      final userLocationData = await databaseService.getUserLocationById(user.id);
 
-      if (userLocationData.isNotEmpty) {
-        final locationData = userLocationData.first;
-        final latitude = locationData['latitude'] as double;
-        final longitude = locationData['longitude'] as double;
-
-        String timestamp = locationData['timestamp'] as String;
-
+      if (userLocationData != null) {
         locations.add(UserLocation(
-          userId: user.id,
-          position: LatLng(latitude, longitude),
-          timestamp: timestamp,
+          userId: userLocationData.userId,
+          latitude: userLocationData.latitude,
+          longitude: userLocationData.longitude,
+          timestamp: userLocationData.timestamp,
+          deviceKeys: userLocationData.deviceKeys,
+          iv: userLocationData.iv,
         ));
       } else {
         print('No location data available for user: ${user.id}');

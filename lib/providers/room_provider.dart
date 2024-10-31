@@ -271,10 +271,10 @@ class RoomProvider with ChangeNotifier {
 
   Future<String> getLastSeenTime(User user) async {
     try {
-      final locations = await databaseService.getUserLocationById(user.id); // Replace with actual database logic
-      if (locations.isEmpty) return 'Offline';
+      final location = await databaseService.getUserLocationById(user.id); // Returns a UserLocation or null
+      if (location == null) return 'Offline';
 
-      final lastTimestamp = locations.first['timestamp'];
+      final lastTimestamp = location.timestamp;
       if (lastTimestamp == null) return 'Offline';
 
       // Ensure the timestamp is in correct ISO 8601 format
@@ -299,6 +299,7 @@ class RoomProvider with ChangeNotifier {
       return 'Offline';
     }
   }
+
 
   Future<int> getNumInvites() async {
     try {
@@ -742,14 +743,13 @@ class RoomProvider with ChangeNotifier {
         final existing = await databaseService.getUserLocationById(userId);
         final hasNewKeys = await userHasNewDeviceKeys(userId, deviceKeys);
 
-        if (existing.isEmpty) {
+        if (existing == null) {
           // If no existing record, insert a new one
           await databaseService.insertUserLocation(
               userId, latitude, longitude, timestamp, deviceKeysJson
           );
         } else {
           // If the record exists, update it
-          // first check if device keys changed
           if (hasNewKeys) {
             // TODO: implement a notification or update a new table
             // that keys have changed
@@ -761,6 +761,7 @@ class RoomProvider with ChangeNotifier {
       }
     }
   }
+
 
   Future<bool> userHasNewDeviceKeys(String userId, Map<String, dynamic> newKeys) async {
     final curKeys = await databaseService.getDeviceKeysByUserId(userId);
