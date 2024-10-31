@@ -627,50 +627,71 @@ class RoomProvider with ChangeNotifier {
   }
 
 
+  Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
+    final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
+    Map<String, Map<String, String>> deviceKeysMap = {};
+
+    if (userDeviceKeys != null) {
+      for (final deviceKeyEntry in userDeviceKeys) {
+        final deviceId = deviceKeyEntry.deviceId;
+
+        // Ensure deviceId is not null before proceeding
+        if (deviceId != null) {
+          // Collect all keys for this device, using an empty string if the key is null
+          final deviceKeys = {
+            "curve25519": deviceKeyEntry.keys['curve25519:$deviceId'] ?? "",
+            "ed25519": deviceKeyEntry.keys['ed25519:$deviceId'] ?? ""
+          };
+
+          // Print device_id and each key type for debugging
+          print('Device ID: $deviceId');
+          deviceKeys.forEach((keyType, key) {
+            print('$keyType Key: $key');
+          });
+
+          // Add this device's keys to the map with deviceId as the key
+          deviceKeysMap[deviceId] = deviceKeys;
+        }
+      }
+    }
+    return deviceKeysMap; // Returns a map of device IDs to their key maps
+  }
 
 
   Future<void> fetchAndUpdateLocations() async {
+    // TODO: check unjoined/invited rooms
+    // currently only checks joined rooms
     await cleanRooms(); // leave rooms that are expired or empty
-    Map<String, Map<String, dynamic>> userLocationMap = {};
+    Map<String, dynamic> usersLocationAndKeysMap = {};
 
     final rooms = client.rooms.where((room) => room.membership == Membership.join);
-
     for (Room unreadRoom in rooms) {
       final events = await getDecryptedRoomEvents(unreadRoom.id);
 
       if (events.isNotEmpty) {
         final eventLocations = await processRoomEvents(events);
-
         eventLocations.forEach((userId, locationData) {
-          if (userLocationMap.containsKey(userId)) {
-            // Compare timestamps
-            final DateTime existingTimestamp = DateTime.parse(userLocationMap[userId]!['timestamp']);
-            final DateTime newTimestamp = DateTime.parse(locationData['timestamp']);
-
-            // If the new event has a more recent timestamp, update the map
-            if (newTimestamp.isAfter(existingTimestamp)) {
-              userLocationMap[userId] = locationData;
-            }
-          } else {
-            // If no entry exists for this user, add the new location data
-            userLocationMap[userId] = locationData;
-          }
+          var userDeviceKeys = getUserDeviceKeys(userId);
+          var userLocationAndKeys = {
+            ...locationData,
+            'devices': userDeviceKeys, // Add all device keys for this user
+          };
+          usersLocationAndKeysMap[userId] = userLocationAndKeys;
         });
-      } else {
-        // Do nothing if events are empty
       }
     }
-    await updateUserLocationsInDatabase(userLocationMap);
+    await updateUserLocationsInDatabase(usersLocationAndKeysMap);
     print("Emitting updates after fully updating database.");
     databaseService.emitUpdatesToAppAfterUpdatingDB(); // Update ONCE after completed fetching
   }
 
   processRoomEvents(List<Event> events) async {
+    // cleans up so only one location per room is grabbed
     Map<String, dynamic> userLocationMap = {};
 
     for (final event in events) {
       if (event.content['msgtype'] == 'm.location') {
-        final String sender = event.senderId; // Corrected this line
+        final String sender = event.senderId;
         final String geoUri = event.content['geo_uri'] as String;
         final String timestamp = event.content['timestamp'] as String;
 
@@ -678,21 +699,18 @@ class RoomProvider with ChangeNotifier {
         final latLong = geoUri.replaceFirst('geo:', '').split(',');
         final double latitude = double.parse(latLong[0]);
         final double longitude = double.parse(latLong[1]);
+
         // Check if we already have a record for this user and compare timestamps
         if (userLocationMap.containsKey(sender)) {
-          // Compare timestamps to keep the most recent one
           final existingTimestamp = DateTime.parse(userLocationMap[sender]!['timestamp']);
           final newTimestamp = DateTime.parse(timestamp);
           if (newTimestamp.isAfter(existingTimestamp)) {
-            // Update the map with the more recent event
+            // Update with the most recent event
             userLocationMap[sender] = {
               'latitude': latitude,
               'longitude': longitude,
               'timestamp': timestamp,
             };
-          } else {
-            // don't update temp map since we got more recent time from other room
-            continue;
           }
         } else {
           // If there's no other recent event, add the current event
@@ -711,33 +729,57 @@ class RoomProvider with ChangeNotifier {
   Future<void> updateUserLocationsInDatabase(Map<String, dynamic> eventLocations) async {
     for (final eventLocation in eventLocations.entries) {
       final userId = eventLocation.key;
-      if (eventLocation.key != null) {
+      if (userId != null) {
         final latitude = eventLocation.value['latitude'] as double;
         final longitude = eventLocation.value['longitude'] as double;
         final timestamp = eventLocation.value['timestamp'] as String;
-        // Check if the userId already exists in the database
+        final deviceKeys = eventLocation.value['devices'];
 
-        // TODO this isnt working vvv
+        // Encode device keys as JSON
+        final deviceKeysJson = jsonEncode(deviceKeys);
+
+        // Check if the userId already exists in the database
         final existing = await databaseService.getUserLocationById(userId);
+        final hasNewKeys = await userHasNewDeviceKeys(userId, deviceKeys);
+
         if (existing.isEmpty) {
           // If no existing record, insert a new one
-          await databaseService.insertUserLocation({
-            'userId': userId,
-            'latitude': latitude,
-            'longitude': longitude,
-            'timestamp': timestamp,
-            'status': '', // Add other fields as needed
-            'activity': '',
-            'roomId': '',
-            'isDirect': 0,
-            'groupOrFriendStatus': '',
-          });
+          await databaseService.insertUserLocation(
+              userId, latitude, longitude, timestamp, deviceKeysJson
+          );
         } else {
           // If the record exists, update it
+          // first check if device keys changed
+          if (hasNewKeys) {
+            // TODO: implement a notification or update a new table
+            // that keys have changed
+          }
           await databaseService.updateUserLocation(
-              userId, latitude, longitude, timestamp);
+              userId, latitude, longitude, timestamp, deviceKeysJson
+          );
         }
       }
     }
   }
+
+  Future<bool> userHasNewDeviceKeys(String userId, Map<String, dynamic> newKeys) async {
+    final curKeys = await databaseService.getDeviceKeysByUserId(userId);
+
+    print(curKeys);
+    if (curKeys == null) {
+      return false; // actually return false since we don't need to alert
+    }
+
+    for (final key in newKeys.keys) {
+      print(key);
+      if (!curKeys.containsKey(key)) {
+        return true; // New key found
+      }
+    }
+
+    // All keys in newKeys are already present in curKeys
+    return false;
+  }
+
+// end
 }
