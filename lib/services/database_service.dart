@@ -135,6 +135,34 @@ class DatabaseService {
     _emitLocationUpdates(); // Emit updates to the stream
   }
 
+  Future<void> insertSharingPreferences({
+    required String userId,
+    required bool activeSharing,
+    required bool approvedKeys,
+    required Map<String, dynamic> sharePeriods, // Define share periods as a map
+  }) async {
+    final db = await database;
+
+    // Convert share periods to JSON string
+    final sharePeriodsJson = jsonEncode(sharePeriods);
+
+    // Prepare data for insertion
+    final sharingPreferences = {
+      'userId': userId,
+      'activeSharing': activeSharing ? 'true' : 'false',
+      'approvedKeys': approvedKeys ? 'true' : 'false',
+      'sharePeriods': sharePeriodsJson,
+    };
+
+    print('Inserting sharing preferences into DB for user: $userId');
+
+    await db.insert(
+      'SharingPreferences',
+      sharingPreferences,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<UserLocation?> getUserLocationById(String userId) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
@@ -310,6 +338,41 @@ class DatabaseService {
     return null; // Return null if no result is found
   }
 
+  Future<bool?> getApprovedKeys(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'SharingPreferences',
+      columns: ['approvedKeys'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    if (result.isNotEmpty) {
+      return result.first['approvedKeys']?.toString().toLowerCase() == 'true';
+    }
+    return null; // Returns null if no record found for userId
+  }
+
+  Future<int> updateApprovedKeys(String userId, bool approvedKeys) async {
+    final db = await database;
+    return await db.update(
+      'SharingPreferences',
+      {'approvedKeys': approvedKeys.toString()},
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<bool> checkIfUserHasSharedPrefs(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'SharingPreferences',
+      columns: ['userId'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+    return result.isNotEmpty;
+  }
 
   void _emitLocationUpdates() async {
     final userLocations = await getUserLocations();

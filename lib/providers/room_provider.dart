@@ -609,7 +609,7 @@ class RoomProvider with ChangeNotifier {
     }
   }
 
-  void updateRooms(LocationData position) {
+  Future<void> updateRooms(LocationData position) async {
     List<Room> rooms = client.rooms;
     var roomsUpdated = 0;
     for (Room room in rooms) {
@@ -618,10 +618,28 @@ class RoomProvider with ChangeNotifier {
           .where((member) => member.membership == Membership.join)
           .toList();
 
-      if (joinedMembers.length >= 2) {
+      // update groups
+      if (joinedMembers.length > 2) {
         sendLocationEvent(room.id, position);
         roomsUpdated += 1;
+      }
 
+      // update contacts
+      else if (joinedMembers.length == 2) {
+        final contactsUserId = joinedMembers
+            .firstWhere((member) => member.id != userId)
+            .id;
+        if (await databaseService.checkIfUserHasSharedPrefs(contactsUserId)) {
+          var approved = await databaseService.getApprovedKeys(contactsUserId);
+          if (await databaseService.getApprovedKeys(contactsUserId) == false) {
+            print("$contactsUserId has new keys, warning user");
+          }
+          sendLocationEvent(room.id, position);
+          roomsUpdated += 1;
+        }
+      }
+      else {
+        // dont update prob clean rooms?
       }
     }
     print("Updated a total of $roomsUpdated rooms with my location: $position");
@@ -643,12 +661,6 @@ class RoomProvider with ChangeNotifier {
             "curve25519": deviceKeyEntry.keys['curve25519:$deviceId'] ?? "",
             "ed25519": deviceKeyEntry.keys['ed25519:$deviceId'] ?? ""
           };
-
-          // Print device_id and each key type for debugging
-          print('Device ID: $deviceId');
-          deviceKeys.forEach((keyType, key) {
-            print('$keyType Key: $key');
-          });
 
           // Add this device's keys to the map with deviceId as the key
           deviceKeysMap[deviceId] = deviceKeys;
@@ -748,11 +760,14 @@ class RoomProvider with ChangeNotifier {
           await databaseService.insertUserLocation(
               userId, latitude, longitude, timestamp, deviceKeysJson
           );
+          // if first time seeing user just create a shared prefs for them too
+          await databaseService.insertSharingPreferences(
+              userId: userId, activeSharing: true, approvedKeys: true, sharePeriods: {"":""});
         } else {
           // If the record exists, update it
           if (hasNewKeys) {
-            // TODO: implement a notification or update a new table
-            // that keys have changed
+            // set approved keys to false for userId
+            databaseService.updateApprovedKeys(userId, false);
           }
           await databaseService.updateUserLocation(
               userId, latitude, longitude, timestamp, deviceKeysJson
@@ -765,22 +780,17 @@ class RoomProvider with ChangeNotifier {
 
   Future<bool> userHasNewDeviceKeys(String userId, Map<String, dynamic> newKeys) async {
     final curKeys = await databaseService.getDeviceKeysByUserId(userId);
-
-    print(curKeys);
     if (curKeys == null) {
       return false; // actually return false since we don't need to alert
     }
 
     for (final key in newKeys.keys) {
-      print(key);
       if (!curKeys.containsKey(key)) {
         return true; // New key found
       }
     }
-
     // All keys in newKeys are already present in curKeys
     return false;
   }
-
 // end
 }

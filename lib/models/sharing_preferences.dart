@@ -32,4 +32,6 @@ class SharingPreferences {
       'sharePeriods': jsonEncode(sharePeriods),  // Encode JSON for storage
     };
   }
+
+
 }
