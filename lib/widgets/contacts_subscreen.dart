@@ -63,18 +63,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     await fetchAndUpdateUserLocations('contacts');
   }
 
-  // Fetch approved keys status for all contacts
   Future<void> _fetchApprovedKeysStatus() async {
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     Map<String, bool> tempApprovedKeysStatus = {};
     for (var user in _contacts) {
-      bool status = await databaseService.getApprovedKeys(user.id) ?? false;
-      tempApprovedKeysStatus[user.id] = status;
+      bool? status = await databaseService.getApprovedKeys(user.id);
+      if (status != null) {
+        // Only add to the map if the status is not null
+        tempApprovedKeysStatus[user.id] = status;
+      }
     }
     setState(() {
       _approvedKeysStatus = tempApprovedKeysStatus;
     });
   }
+
 
   void _startAutoSync() {
     _timer = Timer.periodic(Duration(seconds: 30), (timer) {
@@ -359,35 +362,37 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                             right: 0,
                             child: GestureDetector(
                               onTap: () async {
-                                bool? result =
-                                await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => UserKeysModal(
-                                    userId: contact.id,
-                                    approvedKeys: approvedKeys,
-                                  ),
-                                );
-                                if (result == true) {
-                                  // Update the approvedKeys status and rebuild UI
-                                  setState(() {
-                                    _approvedKeysStatus[
-                                    contact.id] = true;
-                                  });
+                                if (approvedKeys || _approvedKeysStatus.containsKey(contact.id)) {
+                                  bool? result = await showDialog<bool>(
+                                    context: context,
+                                    builder: (_) => UserKeysModal(
+                                      userId: contact.id,
+                                      approvedKeys: approvedKeys,
+                                    ),
+                                  );
+                                  if (result == true) {
+                                    setState(() {
+                                      _approvedKeysStatus[contact.id] = true;
+                                    });
+                                  }
                                 }
                               },
                               child: Container(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: approvedKeys
-                                      ? Colors.green
-                                      .withOpacity(0.8)
-                                      : Colors.red.withOpacity(0.8),
+                                      ? Colors.green.withOpacity(0.8)
+                                      : (_approvedKeysStatus.containsKey(contact.id)
+                                      ? Colors.red.withOpacity(0.8)
+                                      : Colors.grey.withOpacity(0.8)), // Grey for unknown status
                                 ),
                                 padding: EdgeInsets.all(4),
                                 child: Icon(
                                   approvedKeys
                                       ? Icons.lock
-                                      : Icons.lock_open,
+                                      : (_approvedKeysStatus.containsKey(contact.id)
+                                      ? Icons.lock_open
+                                      : Icons.help_rounded), // Grey question mark for unknown
                                   color: Colors.white,
                                   size: 16,
                                 ),

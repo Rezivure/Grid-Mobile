@@ -10,9 +10,9 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/services/database_service.dart';
-import 'add_group_member_modal.dart';  // Import the AddGroupMemberModal
+import 'add_group_member_modal.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
-
+import 'package:grid_frontend/widgets/user_keys_modal.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
@@ -35,6 +35,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   TextEditingController _searchController = TextEditingController();
   List<User> _filteredParticipants = [];
   late Client _client;
+  Map<String, bool> _approvedKeysStatus = {};
 
   Timer? _timer;
   bool _isSyncing = false;
@@ -46,12 +47,32 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     _filteredParticipants = _getFilteredParticipants();
     _searchController.addListener(_filterParticipants);
     _startAutoSync();
+    _fetchApprovedKeysStatus();
 
     // Set the selected subscreen to the current group
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('group:${widget.room.id}');
     });
   }
+
+  Future<void> _fetchApprovedKeysStatus() async {
+    final databaseService = Provider.of<DatabaseService>(context, listen: false);
+    Map<String, bool> tempApprovedKeysStatus = {};
+
+    for (var user in _filteredParticipants) {
+      bool? status = await databaseService.getApprovedKeys(user.id);
+      if (status != null) {
+        // Only add users to the map if the status is not null
+        tempApprovedKeysStatus[user.id] = status;
+      }
+    }
+
+    setState(() {
+      _approvedKeysStatus = tempApprovedKeysStatus;
+    });
+  }
+
+
 
   // NEW: Override didUpdateWidget to handle updates when widget.room changes
   @override
@@ -216,14 +237,61 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                         }
 
                         return ListTile(
-                          leading: CircleAvatar(
-                            radius: 30,
-                            child: RandomAvatar(
-                              user.id.split(':')[0].replaceFirst('@', ''),
-                              height: 60,
-                              width: 60,
-                            ),
-                            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                          leading: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 30,
+                                child: RandomAvatar(
+                                  user.id.split(':')[0].replaceFirst('@', ''),
+                                  height: 60,
+                                  width: 60,
+                                ),
+                                backgroundColor: colorScheme.primary.withOpacity(0.2),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    if (_approvedKeysStatus.containsKey(user.id)) {
+                                      bool? result = await showDialog<bool>(
+                                        context: context,
+                                        builder: (_) => UserKeysModal(
+                                          userId: user.id,
+                                          approvedKeys: _approvedKeysStatus[user.id] ?? false,
+                                        ),
+                                      );
+                                      if (result == true) {
+                                        setState(() {
+                                          _approvedKeysStatus[user.id] = true;
+                                        });
+                                      }
+                                    }
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: (_approvedKeysStatus[user.id] ?? false)
+                                          ? Colors.green.withOpacity(0.8)
+                                          : (_approvedKeysStatus.containsKey(user.id)
+                                          ? Colors.red.withOpacity(0.8)
+                                          : Colors.grey.withOpacity(0.8)), // Grey for unknown status
+                                    ),
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(
+                                      (_approvedKeysStatus[user.id] ?? false)
+                                          ? Icons.lock
+                                          : (_approvedKeysStatus.containsKey(user.id)
+                                          ? Icons.lock_open
+                                          : Icons.help_rounded), // Grey question mark for unknown
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                            ],
                           ),
                           title: Text(
                             user.displayName ?? user.id,
