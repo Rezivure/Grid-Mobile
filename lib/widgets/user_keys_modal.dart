@@ -70,8 +70,8 @@ class UserKeysModal extends StatelessWidget {
           SizedBox(height: 10),
           Text(
             approvedKeys
-                ? 'This user’s keys are verified and trusted for secure communication.'
-                : 'This user’s keys are not verified. Keys change when a user potentially logs in from a new device, or their account may have been compromised. Verify their Device ID below:',
+                ? 'This contact\'s keys are verified and trusted for secure communication.'
+                : 'This user’s keys have changed. Please verify their device IDs below. ',
             style: TextStyle(fontSize: 14),
           ),
           SizedBox(height: 10),

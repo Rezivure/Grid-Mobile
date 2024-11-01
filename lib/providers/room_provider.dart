@@ -627,21 +627,25 @@ class RoomProvider with ChangeNotifier {
 
       // update contacts
       else if (joinedMembers.length == 2) {
+        sendLocationEvent(room.id, position);
+        roomsUpdated += 1;
+      }
+
+        /*
         final contactsUserId = joinedMembers
             .firstWhere((member) => member.id != userId)
             .id;
         if (await databaseService.checkIfUserHasSharedPrefs(contactsUserId)) {
           if (await databaseService.getApprovedKeys(contactsUserId) == false) {
             print("$contactsUserId has new keys, not sending location and warning user");
-            // TODO: notification indicating key changes
-          } else {
-            sendLocationEvent(room.id, position);
-            roomsUpdated += 1;
+            // TODO: option to only send to approved/verified rooms
+            // right now sending regardless to prevent a standstill
+            // where nobody shares which leads to nobody verifying keys
+
           }
-        }
-      }
+          */
       else {
-        // dont update prob clean rooms?
+        // dont update and clean rooms?
       }
     }
     print("Updated a total of $roomsUpdated rooms with my location: $position");
@@ -767,9 +771,12 @@ class RoomProvider with ChangeNotifier {
 
         // Check if the userId already exists in the database
         final existing = await databaseService.getUserLocationById(userId);
+
+        // first check if we are tracking the,
         final hasNewKeys = await userHasNewDeviceKeys(userId, deviceKeys);
 
         if (existing == null) {
+          print("First time seeing $userId, updating user in local DB");
           // If no existing record, insert a new one
           await databaseService.insertUserLocation(
               userId, latitude, longitude, timestamp, deviceKeysJson
