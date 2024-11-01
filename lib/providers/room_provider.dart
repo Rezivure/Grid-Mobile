@@ -445,7 +445,6 @@ class RoomProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> declineInvitation(String roomId) async {
     try {
       await client.leaveRoom(roomId);
@@ -613,6 +612,8 @@ class RoomProvider with ChangeNotifier {
     List<Room> rooms = client.rooms;
     var roomsUpdated = 0;
     for (Room room in rooms) {
+      // first check all keys again to be careful
+      await updateUsersInRoomKeysStatus(room);
       var joinedMembers = room
           .getParticipants()
           .where((member) => member.membership == Membership.join)
@@ -630,12 +631,13 @@ class RoomProvider with ChangeNotifier {
             .firstWhere((member) => member.id != userId)
             .id;
         if (await databaseService.checkIfUserHasSharedPrefs(contactsUserId)) {
-          var approved = await databaseService.getApprovedKeys(contactsUserId);
           if (await databaseService.getApprovedKeys(contactsUserId) == false) {
-            print("$contactsUserId has new keys, warning user");
+            print("$contactsUserId has new keys, not sending location and warning user");
+            // TODO: notification indicating key changes
+          } else {
+            sendLocationEvent(room.id, position);
+            roomsUpdated += 1;
           }
-          sendLocationEvent(room.id, position);
-          roomsUpdated += 1;
         }
       }
       else {
@@ -670,6 +672,18 @@ class RoomProvider with ChangeNotifier {
     return deviceKeysMap; // Returns a map of device IDs to their key maps
   }
 
+  Future<void> updateUsersInRoomKeysStatus(Room room) async {
+    final members = room.getParticipants().where((member) => member.membership == Membership.join);
+    members.forEach((member) async {
+      final userDeviceKey = getUserDeviceKeys(member.id);
+      final hasNewKeys = await userHasNewDeviceKeys(member.id, userDeviceKey);
+      if (hasNewKeys) {
+        databaseService.updateApprovedKeys(member.id, false);
+      } else {
+        // do nothing
+      }
+    });
+  }
 
   Future<void> fetchAndUpdateLocations() async {
     // TODO: check unjoined/invited rooms
