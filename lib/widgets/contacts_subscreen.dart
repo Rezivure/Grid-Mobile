@@ -275,7 +275,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
             padding: EdgeInsets.all(8.0),
             child: Text(
               'Syncing...',
-              style: TextStyle(color: Colors.black),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         Expanded(
