@@ -1,9 +1,14 @@
+import 'dart:convert';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
+import 'package:grid_frontend/models/sharing_preferences.dart';
+import 'package:grid_frontend/models/user_location.dart';
+
 
 class DatabaseService {
   static Database? _database;
@@ -41,6 +46,10 @@ class DatabaseService {
   }
 
   void _createDb(Database db, int newVersion) async {
+
+    // UserLocations DB maps all contacts/group members
+    // to a location, timestamp, and their most recent list of
+    // device keys
     print('Creating UserLocations table');
     await db.execute('''
     CREATE TABLE IF NOT EXISTS UserLocations (
@@ -49,16 +58,32 @@ class DatabaseService {
       latitude TEXT,
       longitude TEXT,
       timestamp TEXT,
-      status TEXT,
-      activity TEXT,
-      roomId TEXT,
-      isDirect INTEGER,
-      groupOrFriendStatus TEXT,
+      deviceKeys TEXT,
       iv TEXT
     );
   ''');
     print('UserLocations table created');
+
+    // SharingPreferences DB maps all contacts/group members
+    // to a true/false activeSharing which toggles whether you send
+    // location updates, approvedKeys which is a bool that gets set to
+    // false if keys change, once manually approved in app changes to true
+    // and sharePeriods which is a JSON that tracks share windows like
+    // 5-7PM Mon-Fri, which can have multiple, etc.
+
+    print('Creating SharingPreferences table');
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS SharingPreferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT,
+      activeSharing TEXT,       -- true/false as TEXT
+      approvedKeys TEXT,        -- true/false as TEXT
+      sharePeriods TEXT         -- JSON-encoded string with sharing periods
+    );
+  ''');
+    print('SharingPreferences table created');
   }
+
 
   String _encrypt(String text, encrypt.IV iv, String encryptionKey) {
     final key = encrypt.Key.fromBase64(encryptionKey);
@@ -77,26 +102,68 @@ class DatabaseService {
     return decrypted;
   }
 
-  Future<void> insertUserLocation(Map<String, dynamic> location) async {
+  Future<void> insertUserLocation(
+      String userId,
+      double latitude,
+      double longitude,
+      String timestamp,
+      String deviceKeysJson,
+      ) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
 
-    // Generate a random IV
-    final iv = encrypt.IV.fromLength(16);
-    final ivString = iv.base64; // Store the IV as a Base64 string
+    // Generate a random IV for encryption
+    final iv = encrypt.IV.fromLength(16).base64;
 
-    // Encrypt latitude and longitude only
-    location['latitude'] = _encrypt(location['latitude'].toString(), iv, encryptionKey);
-    location['longitude'] = _encrypt(location['longitude'].toString(), iv, encryptionKey);
-    location['iv'] = ivString;
+    // Create a UserLocation instance and convert it to a map for insertion
+    final userLocation = UserLocation(
+      userId: userId,
+      latitude: latitude,
+      longitude: longitude,
+      timestamp: timestamp,
+      deviceKeys: jsonDecode(deviceKeysJson),
+      iv: iv,
+    );
 
-    print('Inserting user location into DB: $location');
+    await db.insert(
+      'UserLocations',
+      userLocation.toMap(encryptionKey),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
 
-    await db.insert('UserLocations', location, conflictAlgorithm: ConflictAlgorithm.replace);
+    print('Inserting user location into DB: $userLocation');
     _emitLocationUpdates(); // Emit updates to the stream
   }
 
-  Future<List<Map<String, dynamic>>> getUserLocationById(String userId) async {
+  Future<void> insertSharingPreferences({
+    required String userId,
+    required bool activeSharing,
+    required bool approvedKeys,
+    required Map<String, dynamic> sharePeriods, // Define share periods as a map
+  }) async {
+    final db = await database;
+
+    // Convert share periods to JSON string
+    final sharePeriodsJson = jsonEncode(sharePeriods);
+
+    // Prepare data for insertion
+    final sharingPreferences = {
+      'userId': userId,
+      'activeSharing': activeSharing ? 'true' : 'false',
+      'approvedKeys': approvedKeys ? 'true' : 'false',
+      'sharePeriods': sharePeriodsJson,
+    };
+
+    print('Inserting sharing preferences into DB for user: $userId');
+
+    await db.insert(
+      'SharingPreferences',
+      sharingPreferences,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<UserLocation?> getUserLocationById(String userId) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
     final results = await db.query(
@@ -105,55 +172,59 @@ class DatabaseService {
       whereArgs: [userId],
     );
 
-    // Decrypt data after fetching it from the database
-    return results.map((location) {
-      final ivString = location['iv'] as String;
-      final encryptedLatitude = location['latitude'] as String;
-      final encryptedLongitude = location['longitude'] as String;
-
-      final decryptedLatitude = _decrypt(encryptedLatitude, ivString, encryptionKey);
-      final decryptedLongitude = _decrypt(encryptedLongitude, ivString, encryptionKey);
-
-      return {
-        'userId': location['userId'],
-        'latitude': double.parse(decryptedLatitude),
-        'longitude': double.parse(decryptedLongitude),
-        'timestamp': location['timestamp'],
-        'status': location['status'],
-        'activity': location['activity'],
-        'roomId': location['roomId'],
-        'isDirect': location['isDirect'],
-        'groupOrFriendStatus': location['groupOrFriendStatus'],
-      };
-    }).toList();
+    if (results.isNotEmpty) {
+      // Use UserLocation's fromMap constructor to handle decryption
+      return UserLocation.fromMap(results.first, encryptionKey);
+    }
+    return null;
   }
 
-  Future<void> updateUserLocation(String userId, double latitude, double longitude, String timestamp) async {
+  Future<void> updateUserLocation(
+      String userId,
+      double latitude,
+      double longitude,
+      String timestamp,
+      String deviceKeysJson
+      ) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
 
-    // Generate a random IV
-    final iv = encrypt.IV.fromLength(16);
-    final ivString = iv.base64; // Store the IV as a Base64 string
+    // Retrieve the existing IV for this user
+    final existingRecord = await db.query(
+      'UserLocations',
+      columns: ['iv'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
 
-    // Encrypt latitude and longitude only
-    final encryptedLatitude = _encrypt(latitude.toString(), iv, encryptionKey);
-    final encryptedLongitude = _encrypt(longitude.toString(), iv, encryptionKey);
+    if (existingRecord.isEmpty) {
+      print('No existing record found for userId $userId');
+      return;
+    }
 
-    print('Updating user location in DB: UserID: $userId, Latitude: $latitude, Longitude: $longitude, Timestamp: $timestamp');
+    final iv = existingRecord.first['iv'] as String;
+
+    // Create a UserLocation instance and convert it to a map for updating
+    final userLocation = UserLocation(
+      userId: userId,
+      latitude: latitude,
+      longitude: longitude,
+      timestamp: timestamp,
+      deviceKeys: jsonDecode(deviceKeysJson),
+      iv: iv,
+    );
 
     await db.update(
       'UserLocations',
-      {
-        'latitude': encryptedLatitude,
-        'longitude': encryptedLongitude,
-        'timestamp': timestamp,
-        'iv': ivString, // Store the IV with the data
-      },
+      userLocation.toMap(encryptionKey),
       where: 'userId = ?',
-      whereArgs: [userId],  // Use the plaintext userId for lookup
+      whereArgs: [userId],
     );
+
+    print('Updating user location in DB: $userLocation');
   }
+
+
 
   void emitUpdatesToAppAfterUpdatingDB() {
     _emitLocationUpdates(); // Emit updates to the stream
@@ -178,11 +249,6 @@ class DatabaseService {
         'latitude': double.parse(decryptedLatitude),
         'longitude': double.parse(decryptedLongitude),
         'timestamp': location['timestamp'],
-        'status': location['status'],
-        'activity': location['activity'],
-        'roomId': location['roomId'],
-        'isDirect': location['isDirect'],
-        'groupOrFriendStatus': location['groupOrFriendStatus'],
       };
     }).toList();
   }
@@ -233,6 +299,79 @@ class DatabaseService {
     // Check if any data is in the table
     result = await db.query('UserLocations');
     print('Current data in UserLocations: $result');
+  }
+
+  Future<Map<String, dynamic>?> getDeviceKeysByUserId(String userId) async {
+    final db = await database;
+
+    // Query the database for the user location record by userId
+    final result = await db.query(
+      'UserLocations',
+      columns: ['deviceKeys'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    if (result.isNotEmpty) {
+      // Retrieve and decode the deviceKeys JSON if the record exists
+      final deviceKeysJson = result.first['deviceKeys'] as String;
+      return jsonDecode(deviceKeysJson) as Map<String, dynamic>;
+    }
+
+    // Return null if no record found for the userId
+    return null;
+  }
+
+
+  Future<SharingPreferences?> getSharingPrefsForUser(String userId) async {
+    final db = await database;
+    final results = await db.query(
+      'SharingPreferences',
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    if (results.isNotEmpty) {
+      return SharingPreferences.fromMap(results.first);
+    }
+
+    return null; // Return null if no result is found
+  }
+
+  Future<bool?> getApprovedKeys(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'SharingPreferences',
+      columns: ['approvedKeys'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    if (result.isNotEmpty) {
+      return result.first['approvedKeys']?.toString().toLowerCase() == 'true';
+    }
+    return null; // Returns null if no record found for userId
+  }
+
+  Future<int> updateApprovedKeys(String userId, bool approvedKeys) async {
+    final db = await database;
+    return await db.update(
+      'SharingPreferences',
+      {'approvedKeys': approvedKeys.toString()},
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<bool> checkIfUserHasSharedPrefs(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'SharingPreferences',
+      columns: ['userId'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+    return result.isNotEmpty;
   }
 
   void _emitLocationUpdates() async {

@@ -15,6 +15,7 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/widgets/user_keys_modal.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
@@ -36,6 +37,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   Map<String, String> _userRoomMap = {};
   Map<String, Map<String, dynamic>> _userStatusCache = {};
 
+  // Added to keep track of approved keys status
+  Map<String, bool> _approvedKeysStatus = {};
+
   TextEditingController _searchController = TextEditingController();
 
   @override
@@ -55,8 +59,25 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   Future<void> _initializeContacts() async {
     await _fetchContacts();
+    await _fetchApprovedKeysStatus(); // Fetch approved keys status
     await fetchAndUpdateUserLocations('contacts');
   }
+
+  Future<void> _fetchApprovedKeysStatus() async {
+    final databaseService = Provider.of<DatabaseService>(context, listen: false);
+    Map<String, bool> tempApprovedKeysStatus = {};
+    for (var user in _contacts) {
+      bool? status = await databaseService.getApprovedKeys(user.id);
+      if (status != null) {
+        // Only add to the map if the status is not null
+        tempApprovedKeysStatus[user.id] = status;
+      }
+    }
+    setState(() {
+      _approvedKeysStatus = tempApprovedKeysStatus;
+    });
+  }
+
 
   void _startAutoSync() {
     _timer = Timer.periodic(Duration(seconds: 30), (timer) {
@@ -94,7 +115,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
     Map<String, Map<String, dynamic>> userStatusCache = {};
 
-    Map<User, String> userRoomMap = Map<User, String>.from(result['userRoomMap']);
+    Map<User, String> userRoomMap =
+    Map<User, String>.from(result['userRoomMap']);
     Map<String, String> tempUserRoomMap = userRoomMap.map<String, String>(
             (User user, String roomId) => MapEntry(user.id, roomId));
     List<User> contacts = result['users'];
@@ -113,7 +135,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
       // Only add to status cache if the current user is in a joined state or has sent an invite.
       if (isInvited || userRoomMap[user]?.isNotEmpty == true) {
-        Map<String, dynamic> status = {'lastSeen': lastSeen, 'isInvited': isInvited};
+        Map<String, dynamic> status = {
+          'lastSeen': lastSeen,
+          'isInvited': isInvited
+        };
         userStatusCache[user.id] = status;
       }
     }
@@ -129,9 +154,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   Future<void> refreshContacts() async {
     await _fetchContacts();
+    await _fetchApprovedKeysStatus(); // Refresh approved keys status
     await fetchAndUpdateUserLocations('contacts');
   }
-
 
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
@@ -146,23 +171,19 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   Future<List<UserLocation>> getUserLocations(List<User> users) async {
     List<UserLocation> locations = [];
-    final databaseService =
-    Provider.of<DatabaseService>(context, listen: false);
+    final databaseService = Provider.of<DatabaseService>(context, listen: false);
 
     for (var user in users) {
       final userLocationData =
       await databaseService.getUserLocationById(user.id);
-
-      if (userLocationData.isNotEmpty) {
-        final locationData = userLocationData.first;
-        final latitude = locationData['latitude'] as double;
-        final longitude = locationData['longitude'] as double;
-        String timestamp = locationData['timestamp'] as String;
-
+      if (userLocationData != null) {
         locations.add(UserLocation(
-          userId: user.id,
-          position: LatLng(latitude, longitude),
-          timestamp: timestamp,
+          userId: userLocationData.userId,
+          latitude: userLocationData.latitude,
+          longitude: userLocationData.longitude,
+          timestamp: userLocationData.timestamp,
+          deviceKeys: userLocationData.deviceKeys,
+          iv: userLocationData.iv,
         ));
       } else {
         print('No location data available for user: ${user.id}');
@@ -178,7 +199,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       _filteredContacts = _contacts.where((user) {
         String displayName = user.displayName?.toLowerCase() ?? '';
         String userId = user.id.toLowerCase();
-        return displayName.contains(searchQuery) || userId.contains(searchQuery);
+        return displayName.contains(searchQuery) ||
+            userId.contains(searchQuery);
       }).toList();
     });
   }
@@ -221,6 +243,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           _filteredContacts.remove(contact);
           _userRoomMap.remove(contact.id);
           _userStatusCache.remove(contact.id);
+          _approvedKeysStatus.remove(contact.id);
         });
         await fetchAndUpdateUserLocations('contacts');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -255,7 +278,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
             padding: EdgeInsets.all(8.0),
             child: Text(
               'Syncing...',
-              style: TextStyle(color: Colors.black),
+              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         Expanded(
@@ -295,6 +318,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 subtitleStyle = TextStyle(color: Colors.grey);
               }
 
+              // Use the stored approvedKeys status
+              bool approvedKeys =
+                  _approvedKeysStatus[contact.id] ?? false;
+
               return Column(
                 children: [
                   Slidable(
@@ -316,19 +343,68 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                       ],
                     ),
                     child: ListTile(
-                      leading: CircleAvatar(
-                        radius: 30,
-                        child: RandomAvatar(
-                          contact.id.split(':')[0].replaceFirst('@', ''),
-                          height: 60,
-                          width: 60,
-                        ),
-                        backgroundColor:
-                        colorScheme.primary.withOpacity(0.2),
+                      leading: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 30,
+                            child: RandomAvatar(
+                              contact.id
+                                  .split(':')[0]
+                                  .replaceFirst('@', ''),
+                              height: 60,
+                              width: 60,
+                            ),
+                            backgroundColor: colorScheme.primary
+                                .withOpacity(0.2),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () async {
+                                if (approvedKeys || _approvedKeysStatus.containsKey(contact.id)) {
+                                  bool? result = await showDialog<bool>(
+                                    context: context,
+                                    builder: (_) => UserKeysModal(
+                                      userId: contact.id,
+                                      approvedKeys: approvedKeys,
+                                    ),
+                                  );
+                                  if (result == true) {
+                                    setState(() {
+                                      _approvedKeysStatus[contact.id] = true;
+                                    });
+                                  }
+                                }
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: approvedKeys
+                                      ? Colors.green.withOpacity(0.8)
+                                      : (_approvedKeysStatus.containsKey(contact.id)
+                                      ? Colors.red.withOpacity(0.8)
+                                      : Colors.grey.withOpacity(0.8)), // Grey for unknown status
+                                ),
+                                padding: EdgeInsets.all(4),
+                                child: Icon(
+                                  approvedKeys
+                                      ? Icons.lock
+                                      : (_approvedKeysStatus.containsKey(contact.id)
+                                      ? Icons.lock_open
+                                      : Icons.help_rounded), // Grey question mark for unknown
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       title: Text(
                         contact.displayName ?? contact.id,
-                        style: TextStyle(color: colorScheme.onBackground),
+                        style: TextStyle(
+                            color: colorScheme.onBackground),
                       ),
                       subtitle: Text(
                         subtitleText,
@@ -336,7 +412,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                       ),
                       onTap: () {
                         final selectedUserProvider =
-                        Provider.of<SelectedUserProvider>(context,
+                        Provider.of<SelectedUserProvider>(
+                            context,
                             listen: false);
                         selectedUserProvider
                             .setSelectedUserId(contact.id);
