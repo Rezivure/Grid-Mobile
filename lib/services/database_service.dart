@@ -374,6 +374,27 @@ class DatabaseService {
     return result.isNotEmpty;
   }
 
+  Future<void> insertUserKeys(String userId, Map<String, dynamic> keysMap) async {
+    final db = await database;
+
+    // Convert the keys map to JSON string
+    final deviceKeysJson = jsonEncode(keysMap);
+
+    // Update the deviceKeys field in the UserLocations table
+    await db.update(
+      'UserLocations',
+      {
+        'deviceKeys': deviceKeysJson,
+      },
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    print('Updated deviceKeys for userId $userId');
+    _emitLocationUpdates(); // Emit updates to the stream
+  }
+
+
   void _emitLocationUpdates() async {
     final userLocations = await getUserLocations();
     _locationStreamController.add(userLocations);

@@ -275,7 +275,7 @@ class RoomProvider with ChangeNotifier {
       if (location == null) return 'Offline';
 
       final lastTimestamp = location.timestamp;
-      if (lastTimestamp == null) return 'Offline';
+      if (lastTimestamp == "null") return 'Offline';
 
       // Ensure the timestamp is in correct ISO 8601 format
       String validTimestamp = lastTimestamp.endsWith('Z') ? lastTimestamp : lastTimestamp + 'Z';
@@ -677,9 +677,17 @@ class RoomProvider with ChangeNotifier {
   }
 
   Future<void> updateUsersInRoomKeysStatus(Room room) async {
+    // TODO: this may need to be renamed as like completeUpdateDbFromRooms
     final members = room.getParticipants().where((member) => member.membership == Membership.join);
     members.forEach((member) async {
       final userDeviceKey = getUserDeviceKeys(member.id);
+      final keysEncoded = jsonEncode(userDeviceKey);
+      final hasSeenUser = await databaseService.checkIfUserHasSharedPrefs(member.id);
+      if (!hasSeenUser) {
+        databaseService.insertUserLocation(member.id, 0.0, 0.0, "null", keysEncoded);
+        databaseService.insertUserKeys(member.id, userDeviceKey);
+        databaseService.insertSharingPreferences(userId: member.id, activeSharing: true, approvedKeys: true, sharePeriods: {"":""});
+      }
       final hasNewKeys = await userHasNewDeviceKeys(member.id, userDeviceKey);
       if (hasNewKeys) {
         databaseService.updateApprovedKeys(member.id, false);
@@ -697,8 +705,9 @@ class RoomProvider with ChangeNotifier {
 
     final rooms = client.rooms.where((room) => room.membership == Membership.join);
     for (Room unreadRoom in rooms) {
+      // TODO: fetch userKeys here
+      updateUsersInRoomKeysStatus(unreadRoom);
       final events = await getDecryptedRoomEvents(unreadRoom.id);
-
       if (events.isNotEmpty) {
         final eventLocations = await processRoomEvents(events);
         eventLocations.forEach((userId, locationData) {
@@ -797,6 +806,7 @@ class RoomProvider with ChangeNotifier {
       }
     }
   }
+
 
 
   Future<bool> userHasNewDeviceKeys(String userId, Map<String, dynamic> newKeys) async {
