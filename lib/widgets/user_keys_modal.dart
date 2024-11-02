@@ -20,8 +20,8 @@ class UserKeysModal extends StatelessWidget {
 
   void approveKeys(BuildContext context) async {
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
-
     try {
+      print("attemping to approve keys for ${this.userId}");
       await databaseService.updateApprovedKeys(this.userId, true);
 
       // Notify the parent widget that keys were approved

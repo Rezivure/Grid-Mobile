@@ -8,7 +8,6 @@ class UserLocation {
   final double latitude;
   final double longitude;
   final String timestamp;
-  final Map<String, dynamic> deviceKeys;
   final String iv; // Store as a String in the database
 
   UserLocation({
@@ -16,7 +15,6 @@ class UserLocation {
     required this.latitude,
     required this.longitude,
     required this.timestamp,
-    required this.deviceKeys,
     required this.iv,
   });
 
@@ -36,7 +34,6 @@ class UserLocation {
       latitude: double.parse(decryptedLatitude),
       longitude: double.parse(decryptedLongitude),
       timestamp: map['timestamp'] as String,
-      deviceKeys: jsonDecode(map['deviceKeys'] as String),
       iv: map['iv'] as String,
     );
   }
@@ -55,7 +52,6 @@ class UserLocation {
       'latitude': encryptedLatitude,
       'longitude': encryptedLongitude,
       'timestamp': timestamp,
-      'deviceKeys': jsonEncode(deviceKeys),
       'iv': iv, // Store the IV as a string in the database
     };
   }

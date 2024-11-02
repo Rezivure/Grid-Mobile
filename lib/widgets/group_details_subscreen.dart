@@ -177,7 +177,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
           latitude: userLocationData.latitude,
           longitude: userLocationData.longitude,
           timestamp: userLocationData.timestamp,
-          deviceKeys: userLocationData.deviceKeys,
           iv: userLocationData.iv,
         ));
       } else {
