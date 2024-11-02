@@ -58,18 +58,11 @@ class DatabaseService {
       latitude TEXT,
       longitude TEXT,
       timestamp TEXT,
-      deviceKeys TEXT,
       iv TEXT
     );
   ''');
     print('UserLocations table created');
 
-    // SharingPreferences DB maps all contacts/group members
-    // to a true/false activeSharing which toggles whether you send
-    // location updates, approvedKeys which is a bool that gets set to
-    // false if keys change, once manually approved in app changes to true
-    // and sharePeriods which is a JSON that tracks share windows like
-    // 5-7PM Mon-Fri, which can have multiple, etc.
 
     print('Creating SharingPreferences table');
     await db.execute('''
@@ -77,11 +70,21 @@ class DatabaseService {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId TEXT,
       activeSharing TEXT,       -- true/false as TEXT
-      approvedKeys TEXT,        -- true/false as TEXT
       sharePeriods TEXT         -- JSON-encoded string with sharing periods
     );
   ''');
     print('SharingPreferences table created');
+
+    print('Creating UserDeviceKeys table');
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS UserDeviceKeys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT,
+    deviceKeys TEXT,
+    approvedKeys TEXT
+    );
+    ''');
+    print('UserDeviceKeys table created');
   }
 
 
@@ -107,7 +110,6 @@ class DatabaseService {
       double latitude,
       double longitude,
       String timestamp,
-      String deviceKeysJson,
       ) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
@@ -121,16 +123,13 @@ class DatabaseService {
       latitude: latitude,
       longitude: longitude,
       timestamp: timestamp,
-      deviceKeys: jsonDecode(deviceKeysJson),
       iv: iv,
     );
-
     await db.insert(
       'UserLocations',
       userLocation.toMap(encryptionKey),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-
     print('Inserting user location into DB: $userLocation');
     _emitLocationUpdates(); // Emit updates to the stream
   }
@@ -138,7 +137,6 @@ class DatabaseService {
   Future<void> insertSharingPreferences({
     required String userId,
     required bool activeSharing,
-    required bool approvedKeys,
     required Map<String, dynamic> sharePeriods, // Define share periods as a map
   }) async {
     final db = await database;
@@ -150,7 +148,6 @@ class DatabaseService {
     final sharingPreferences = {
       'userId': userId,
       'activeSharing': activeSharing ? 'true' : 'false',
-      'approvedKeys': approvedKeys ? 'true' : 'false',
       'sharePeriods': sharePeriodsJson,
     };
 
@@ -184,7 +181,6 @@ class DatabaseService {
       double latitude,
       double longitude,
       String timestamp,
-      String deviceKeysJson
       ) async {
     final db = await database;
     final encryptionKey = await _getOrCreateEncryptionKey();
@@ -210,7 +206,6 @@ class DatabaseService {
       latitude: latitude,
       longitude: longitude,
       timestamp: timestamp,
-      deviceKeys: jsonDecode(deviceKeysJson),
       iv: iv,
     );
 
@@ -306,7 +301,7 @@ class DatabaseService {
 
     // Query the database for the user location record by userId
     final result = await db.query(
-      'UserLocations',
+      'UserDeviceKeys',
       columns: ['deviceKeys'],
       where: 'userId = ?',
       whereArgs: [userId],
@@ -317,7 +312,6 @@ class DatabaseService {
       final deviceKeysJson = result.first['deviceKeys'] as String;
       return jsonDecode(deviceKeysJson) as Map<String, dynamic>;
     }
-
     // Return null if no record found for the userId
     return null;
   }
@@ -341,26 +335,28 @@ class DatabaseService {
   Future<bool?> getApprovedKeys(String userId) async {
     final db = await database;
     final result = await db.query(
-      'SharingPreferences',
+      'UserDeviceKeys',
       columns: ['approvedKeys'],
       where: 'userId = ?',
       whereArgs: [userId],
     );
-
     if (result.isNotEmpty) {
       return result.first['approvedKeys']?.toString().toLowerCase() == 'true';
     }
     return null; // Returns null if no record found for userId
   }
 
-  Future<int> updateApprovedKeys(String userId, bool approvedKeys) async {
+  Future<void> updateApprovedKeys(String userId, bool approvedKeys) async {
     final db = await database;
-    return await db.update(
-      'SharingPreferences',
+    final keys = await getDeviceKeysByUserId(userId);
+    await db.update(
+      'UserDeviceKeys',
       {'approvedKeys': approvedKeys.toString()},
       where: 'userId = ?',
       whereArgs: [userId],
     );
+
+
   }
 
   Future<bool> checkIfUserHasSharedPrefs(String userId) async {
@@ -373,6 +369,58 @@ class DatabaseService {
     );
     return result.isNotEmpty;
   }
+
+  Future<bool> checkIfUserHasDeviceKeys(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'UserDeviceKeys',
+      columns: ['userId'],
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+    return result.isNotEmpty;
+  }
+
+  Future<void> insertUserKeys(String userId, Map<String, dynamic> keysMap) async {
+    final db = await database;
+
+    // Convert the keys map to a JSON string
+    final deviceKeysJson = jsonEncode(keysMap);
+
+    // Check if the record exists
+    final result = await db.query(
+      'UserDeviceKeys',
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+    print(result);
+
+    if (result.isNotEmpty) {
+      // Update existing record
+      await db.update(
+        'UserDeviceKeys',
+        {
+          'deviceKeys': deviceKeysJson,
+        },
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
+      print('Updated deviceKeys for userId $userId');
+    } else {
+      // Insert new record with approvedKeys defaulting to true
+      await db.insert(
+        'UserDeviceKeys',
+        {
+          'userId': userId,
+          'deviceKeys': deviceKeysJson,
+          'approvedKeys': "true", // Default to true when inserting
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('Inserted new deviceKeys and approvedKeys for userId $userId');
+    }
+  }
+
 
   void _emitLocationUpdates() async {
     final userLocations = await getUserLocations();

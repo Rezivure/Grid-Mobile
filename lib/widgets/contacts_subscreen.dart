@@ -65,6 +65,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   Future<void> _fetchApprovedKeysStatus() async {
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
+    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     Map<String, bool> tempApprovedKeysStatus = {};
     for (var user in _contacts) {
       bool? status = await databaseService.getApprovedKeys(user.id);
@@ -182,7 +183,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           latitude: userLocationData.latitude,
           longitude: userLocationData.longitude,
           timestamp: userLocationData.timestamp,
-          deviceKeys: userLocationData.deviceKeys,
           iv: userLocationData.iv,
         ));
       } else {
