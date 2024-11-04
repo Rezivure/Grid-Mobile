@@ -1,4 +1,23 @@
-# Grid - E2EE Location Sharing Application
+<div align="center">
+  <h1 align="center">Grid - Encrypted Location Sharing</h1>
+  <h3>Be Hard to Track.</h3>
+<div align="center">
+  <img src="https://unicorn-cdn.b-cdn.net/bbdb9366-4fba-4f6f-bcb0-b6bb733736d1/-/preview/999x443/logo-grid-v2.png" alt="Logo Grid" width="50%" />
+</div>
+</div>
+<div align="center">
+  <a href="https://www.mygrid.app">mygrid.app</a>
+</div>
+
+
+<br/>
+
+<div align="center">
+  <a href="https://github.com/rezivure/grid-frontend/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/rezivure/grid-frontend"></a>
+  <a href="https://x.com/rezivure"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/rezivure"></a>
+  <a href="https://github.com/rezivure/grid-frontend/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPLv3-purple"></a>
+</div>
+<br/>
 
 Grid is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
 
@@ -8,9 +27,10 @@ Grid is a secure, end-to-end encrypted (E2EE) location sharing application integ
 - **Matrix Protocol Integration**: Grid leverages the Matrix protocol for secure communication and decentralized data storage.
 - **Cross-Platform**: Developed with Flutter, Grid runs seamlessly on both Android and iOS devices.
 - **Real-Time Location Sharing**: Share your real-time location with friends or groups, with fine-grained control over who can see your location.
+- **Self-Hosted Capability** Grid is designed to enable users to easily self host their own backend server and map tile provider for complete control over how they share.
 
-## Getting Started
-
+## Getting Started With the App
+If you wish to develop/contribute PRs to application, follow the steps below:
 ### Prerequisites
 
 Before you begin, ensure you have the following installed:
