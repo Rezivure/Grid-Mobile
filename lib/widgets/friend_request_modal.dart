@@ -40,7 +40,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           SizedBox(height: 20),
           Text('${widget.userId.split(":").first.replaceFirst('@', '')}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           SizedBox(height: 10),
-          Text('Wants to connect with you.'),
+          Text('Wants to connect with you. You will begin sharing locations once you accept.'),
           SizedBox(height: 20),
           if (_isProcessing) CircularProgressIndicator(),
           if (!_isProcessing)
@@ -51,7 +51,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                   onPressed: _declineRequest,
                   child: Text('Decline', style: TextStyle(color: Colors.red)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: colorScheme.surface,
                     foregroundColor: Colors.red,
                     side: BorderSide(color: Colors.red),
                     minimumSize: Size(100, 40),

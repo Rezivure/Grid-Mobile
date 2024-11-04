@@ -28,6 +28,9 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   String? _contactError;
   String? _matrixUserId = "";
 
+  // New variable for member limit error
+  String? _memberLimitError;
+
   late TabController _tabController;
 
   // QR code scanning variables
@@ -52,6 +55,15 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       // Reset _matrixUserId if the user types in the text field
       if (_controller.text.isNotEmpty) {
         _matrixUserId = null;
+      }
+    });
+
+    // Add listener to clear _memberLimitError when the user types
+    _memberInputController.addListener(() {
+      if (_memberLimitError != null) {
+        setState(() {
+          _memberLimitError = null;
+        });
       }
     });
   }
@@ -156,26 +168,26 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   // Create Group methods
   void _addMember() async {
     if (_members.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('You can only invite up to 5 members.')),
-      );
+      setState(() {
+        _memberLimitError = 'Limit reached. Create group first.';
+      });
       return;
     }
 
     String inputUsername = _memberInputController.text.trim();
     if (inputUsername.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter a username.')),
-      );
+      setState(() {
+        _usernameError = 'Please enter a username.';
+      });
       return;
     }
 
     String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
 
     if (_members.contains(username)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User already added.')),
-      );
+      setState(() {
+        _usernameError = 'User already added.';
+      });
       return;
     }
 
@@ -189,7 +201,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } else {
       setState(() {
         _members.add(username);
-        _usernameError = null;  // Clear error on successful add
+        _usernameError = null; // Clear error on successful add
+        _memberLimitError = null; // Clear limit error if member added successfully
         _memberInputController.clear();
       });
     }
@@ -198,6 +211,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   void _removeMember(String username) {
     setState(() {
       _members.remove(username);
+      // Clear the member limit error when a member is removed
+      if (_memberLimitError != null && _members.length < 5) {
+        _memberLimitError = null;
+      }
     });
   }
 
@@ -285,7 +302,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Scan QR Code',
+                              'Scan a Profile QR',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -300,7 +317,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 onQRViewCreated: _onQRViewCreated,
                                 overlay: QrScannerOverlayShape(
                                   borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
-                                  borderRadius: 10,
+                                  borderRadius: 36,
                                   borderLength: 30,
                                   borderWidth: 10,
                                   cutOutSize: 250,
@@ -316,6 +333,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 });
                               },
                               child: Text('Cancel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.onSurface,
+                                foregroundColor: colorScheme.surface,
+                              )
                             ),
                           ],
                         )
@@ -327,7 +348,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               Container(
                                 decoration: BoxDecoration(
                                   color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(36),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -343,12 +364,20 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     prefixText: '@',
                                     errorText: _contactError,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(1),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                                   ),
                                   style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                ),
+                              ),
+                              SizedBox(height: 8), // Space between the TextField and subtext
+                              Text(
+                                'Secure location sharing will begin once accepted.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurface,
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -360,8 +389,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 style: ElevatedButton.styleFrom(
                                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(35),
                                   ),
+                                  backgroundColor: colorScheme.onSurface,
+                                  foregroundColor: colorScheme.surface,
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -378,12 +409,27 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ),
                                   ],
                                 ),
-                                child: IconButton(
-                                  icon: Icon(Icons.qr_code_scanner),
+                                child: // "Scan QR Code" Button with Text and Icon
+                                ElevatedButton.icon(
                                   onPressed: _scanQRCode,
-                                  iconSize: 50,
-                                  color: colorScheme.primary,
+                                  icon: Icon(
+                                    Icons.qr_code_scanner,
+                                    color: colorScheme.primary,
+                                  ),
+                                  label: Text(
+                                    'Scan QR Code',
+                                    style: TextStyle(color: colorScheme.onSurface),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(35),
+                                    ),
+                                    iconColor: colorScheme.primary, // Set the button color if needed
+                                    backgroundColor: colorScheme.surface,
+                                  ),
                                 ),
+
                               ),
                             ],
                           ),
@@ -399,7 +445,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               Container(
                                 decoration: BoxDecoration(
                                   color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(36),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -413,7 +459,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                   decoration: InputDecoration(
                                     hintText: 'Enter group name',
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(1),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -452,7 +498,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     mainLabelStyle: TextStyle(
                                       color: colorScheme.primary,
                                       fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+
                                     ),
                                   ),
                                   startAngle: 270,
@@ -473,7 +519,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     child: Container(
                                       decoration: BoxDecoration(
                                         color: theme.cardColor,
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(36),
                                         boxShadow: [
                                           BoxShadow(
                                             color: Colors.black12,
@@ -487,7 +533,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                         decoration: InputDecoration(
                                           hintText: 'Enter username to add',
                                           prefixText: '@',
-                                          errorText: _usernameError,
+                                          errorText: _usernameError ?? _memberLimitError,
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
                                             borderSide: BorderSide.none,
@@ -503,9 +549,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     onPressed: _addMember,
                                     child: Text('Add'),
                                     style: ElevatedButton.styleFrom(
+                                      backgroundColor: colorScheme.onSurface,
+                                      foregroundColor: colorScheme.surface,
                                       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(36),
                                       ),
                                     ),
                                   ),
@@ -523,11 +571,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                         Column(
                                           children: [
                                             CircleAvatar(
-                                              radius: 40,
+                                              radius: 20,
                                               child: RandomAvatar(
                                                 username,
-                                                height: 80,
-                                                width: 80,
+                                                height: 40,
+                                                width: 40,
                                               ),
                                             ),
                                             SizedBox(height: 5),
@@ -546,12 +594,12 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                           child: GestureDetector(
                                             onTap: () => _removeMember(username),
                                             child: CircleAvatar(
-                                              radius: 12,
+                                              radius: 8,
                                               backgroundColor: Colors.red,
                                               child: Icon(
                                                 Icons.close,
                                                 color: Colors.white,
-                                                size: 16,
+                                                size: 10,
                                               ),
                                             ),
                                           ),
@@ -571,9 +619,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ? CircularProgressIndicator(color: Colors.white)
                                     : Text('Create Group'),
                                 style: ElevatedButton.styleFrom(
+                                  backgroundColor: colorScheme.onSurface,
+                                  foregroundColor: colorScheme.surface,
                                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(36),
                                   ),
                                 ),
                               ),
@@ -584,10 +634,25 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                     ],
                   ),
                 ),
+                // Close button at the bottom
+                Center(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.onSurface,
+                      foregroundColor: colorScheme.surface,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Text('Close'),
+                  ),
+                ),
               ],
             ),
           ),
+
         ),
+
       ),
     );
   }

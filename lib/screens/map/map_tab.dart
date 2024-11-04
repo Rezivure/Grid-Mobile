@@ -304,10 +304,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     try {
       final databaseService = Provider.of<DatabaseService>(context, listen: false);
       final userLocationData = await databaseService.getUserLocationById(userId);
-      if (userLocationData.isNotEmpty) {
-        final locationData = userLocationData.first;
-        final latitude = locationData['latitude'] as double;
-        final longitude = locationData['longitude'] as double;
+
+      if (userLocationData != null) {
+        final latitude = userLocationData.latitude;
+        final longitude = userLocationData.longitude;
 
         final position = LatLng(latitude, longitude);
 
@@ -325,6 +325,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
