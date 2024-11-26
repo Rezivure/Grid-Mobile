@@ -80,8 +80,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     }
 
     String normalizedUserId = username.startsWith('@')
-        ? username
-        : '@$username:${dotenv.env['HOMESERVER']}';
+        ? username.toLowerCase()
+        : '@$username:${dotenv.env['HOMESERVER']}'.toLowerCase();
 
     if (username.isNotEmpty) {
       if (mounted) {
