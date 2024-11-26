@@ -388,7 +388,7 @@ class RoomProvider with ChangeNotifier {
               print('Left expired room: ${room.name} (${room.id})');
             }
           }
-        } else if (participants.length == 1 && participants.first.id == client.userID) {
+        } else if (participants.length == 1 && participants.first.id == client.userID && participants.first.membership == Membership.join) {
           // Leave the room if you're the only participant left
           await room.leave();
           print('Left room: ${room.name} (${room.id}) because you were the only participant left.');
