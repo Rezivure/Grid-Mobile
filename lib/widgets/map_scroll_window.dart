@@ -6,8 +6,10 @@ import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/profile_modal.dart'; // Import the profile modal
 
+import '../services/sync_manager.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
+import 'invites_modal.dart';
 import 'invites_subscreen.dart';
 import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
@@ -49,6 +51,29 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     return await Provider.of<RoomProvider>(context, listen: false)
         .getGroupRooms();
   }
+
+  void _showInvitesModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.background,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16,
+        ),
+        child: InvitesModal(
+          onInviteHandled: _navigateToContacts, // Refresh invites when handled
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -167,42 +192,34 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     icon: Icon(Icons.notifications_outlined,
                         color: colorScheme.onBackground),
                     onPressed: () {
-                      setState(() {
-                        _selectedOption = SubscreenOption.invites;
-                        _selectedLabel = 'Invites';
-                        _isDropdownExpanded = false;
-                        // Update SelectedSubscreenProvider
-                        Provider.of<SelectedSubscreenProvider>(context,
-                            listen: false)
-                            .setSelectedSubscreen('invites');
-                      });
+                      _showInvitesModal(context);
                     },
                   ),
                   Positioned(
                     right: 4,
                     top: 4,
-                    child: FutureBuilder<int>(
-                      future:
-                      Provider.of<RoomProvider>(context, listen: false)
-                          .getNumInvites(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return SizedBox();
-                        } else if (snapshot.hasData && snapshot.data! > 0) {
+                    child: Consumer<SyncManager>(
+                      builder: (context, syncManager, child) {
+                        int inviteCount = syncManager.totalInvites;
+                        if (inviteCount > 0) {
                           return Container(
                             padding: EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.red,
                               shape: BoxShape.circle,
                             ),
+                            constraints: BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
                             child: Text(
-                              '${snapshot.data}',
+                              '$inviteCount',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           );
                         } else {
@@ -219,6 +236,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       ),
     );
   }
+
 
   Widget _buildHorizontalScroller(ColorScheme colorScheme) {
     return FutureBuilder<List<Map<String, dynamic>>>(
