@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:grid_frontend/providers/room_provider.dart'; // Ensure you import your RoomProvider
-import 'dart:math';
-
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/providers/room_provider.dart';
 
 class GroupInvitationModal extends StatefulWidget {
   final String groupName;
@@ -68,7 +67,11 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center, // Center content horizontally
         children: [
-          RandomAvatar(widget.inviter.split(':')[0].replaceFirst('@', ''), height: 80, width: 80), // Centered avatar
+          RandomAvatar(
+            widget.inviter.split(':')[0].replaceFirst('@', ''),
+            height: 80,
+            width: 80,
+          ), // Centered avatar
           SizedBox(height: 16),
           Text(
             'Would you like to join the group "${widget.groupName}"?',
@@ -86,14 +89,15 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             textAlign: TextAlign.center, // Center the text
             style: TextStyle(fontSize: 14, color: Colors.grey[700]),
           ),
-
-          if (_isProcessing) CircularProgressIndicator(),
+          SizedBox(height: 20),
+          if (_isProcessing)
+            CircularProgressIndicator()
         ],
       ),
       actions: [
         ElevatedButton(
           onPressed: _declineGroupInvitation,
-            child: Text('Decline', style: TextStyle(color: Colors.red)),
+          child: Text('Decline', style: TextStyle(color: Colors.red)),
           style: ElevatedButton.styleFrom(
             backgroundColor: colorScheme.surface,
             foregroundColor: Colors.red,
@@ -106,10 +110,10 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         ),
         ElevatedButton(
           onPressed: _acceptGroupInvitation,
-            child: Text('Accept'),
+          child: Text('Accept'),
           style: ElevatedButton.styleFrom(
             backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.surface,
+            foregroundColor: colorScheme.onPrimary,
             minimumSize: Size(100, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(25),
@@ -127,9 +131,16 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
     try {
       // Accept the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false).acceptInvitation(widget.roomId);
+      await Provider.of<RoomProvider>(context, listen: false)
+          .acceptInvitation(widget.roomId);
+
+      // Remove the invitation from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
       Navigator.of(context).pop(); // Close the modal
-      widget.refreshCallback(); // Trigger the callback to refresh
+      await widget.refreshCallback(); // Trigger the callback to refresh
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Group invitation accepted.")),
       );
@@ -151,9 +162,16 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
     try {
       // Decline the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false).declineInvitation(widget.roomId);
+      await Provider.of<RoomProvider>(context, listen: false)
+          .declineInvitation(widget.roomId);
+
+      // Remove the invitation from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
       Navigator.of(context).pop(); // Close the modal
-      widget.refreshCallback(); // Trigger the callback to refresh
+      await widget.refreshCallback(); // Trigger the callback to refresh
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Group invitation declined.")),
       );

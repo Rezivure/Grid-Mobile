@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import dotenv
+import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:matrix/matrix.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -54,14 +55,18 @@ void main() async {
     }
   }
 
-  runApp(GridApp(client: client, databaseService: databaseService));
+  final syncManager = SyncManager(client);
+
+  runApp(GridApp(client: client, databaseService: databaseService, syncManager: syncManager));
 }
 
 class GridApp extends StatelessWidget {
   final Client client;
   final DatabaseService databaseService;
+  final SyncManager syncManager;
 
-  const GridApp({required this.client, required this.databaseService, Key? key}) : super(key: key);
+  const GridApp({required this.client, required this.databaseService, required this.syncManager, Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +74,7 @@ class GridApp extends StatelessWidget {
       providers: [
         Provider<Client>.value(value: client),
         Provider<DatabaseService>.value(value: databaseService),
+        ChangeNotifierProvider(create: (_) => syncManager..startSync()),
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(create: (_) => UserLocationProvider()),

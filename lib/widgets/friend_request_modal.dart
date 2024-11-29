@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart'; // Import the random_avatar package
+import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/providers/room_provider.dart';
 
 class FriendRequestModal extends StatefulWidget {
   final String userId;
   final String displayName;
   final String roomId;
-  final VoidCallback onResponse; // Callback for refreshing
+  final Future<void> Function() onResponse; // Callback for refreshing
 
   FriendRequestModal({
     required this.userId,
     required this.displayName,
     required this.roomId,
-    required this.onResponse, // Add this parameter
+    required this.onResponse,
   });
 
   @override
@@ -33,17 +34,24 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         mainAxisSize: MainAxisSize.min,
         children: [
           RandomAvatar(
-            widget.userId.split(":").first.replaceFirst('@', ''), // Generate random avatar based on user ID
+            widget.userId.split(":").first.replaceFirst('@', ''),
             height: 80.0,
             width: 80.0,
           ),
           SizedBox(height: 20),
-          Text('${widget.userId.split(":").first.replaceFirst('@', '')}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(
+            '${widget.userId.split(":").first.replaceFirst('@', '')}',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           SizedBox(height: 10),
-          Text('Wants to connect with you. You will begin sharing locations once you accept.'),
+          Text(
+            'Wants to connect with you. You will begin sharing locations once you accept.',
+            textAlign: TextAlign.center,
+          ),
           SizedBox(height: 20),
-          if (_isProcessing) CircularProgressIndicator(),
-          if (!_isProcessing)
+          if (_isProcessing)
+            CircularProgressIndicator()
+          else
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -85,9 +93,17 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     });
 
     try {
-      await Provider.of<RoomProvider>(context, listen: false).acceptInvitation(widget.roomId);
+      // Accept the invitation using RoomProvider
+      await Provider.of<RoomProvider>(context, listen: false)
+          .acceptInvitation(widget.roomId);
+
+      // Remove invite from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
       Navigator.of(context).pop(); // Close the modal
-      widget.onResponse(); // Trigger the callback to refresh
+      await widget.onResponse(); // Trigger the callback to refresh
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Friend request accepted.")),
       );
@@ -108,9 +124,17 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     });
 
     try {
-      await Provider.of<RoomProvider>(context, listen: false).declineInvitation(widget.roomId);
+      // Decline the invitation using RoomProvider
+      await Provider.of<RoomProvider>(context, listen: false)
+          .declineInvitation(widget.roomId);
+
+      // Remove invite from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
       Navigator.of(context).pop(); // Close the modal
-      widget.onResponse(); // Trigger the callback to refresh
+      await widget.onResponse(); // Trigger the callback to refresh
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Friend request declined.")),
       );
