@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/friend_request_modal.dart';
@@ -127,7 +128,10 @@ class InvitesModal extends StatelessWidget {
           userId: inviterId,
           displayName: displayName,
           roomId: roomId,
-          onResponse: onInviteHandled,
+          onResponse: () async {
+            // Callback to refresh invites list after action
+            await onInviteHandled();
+          },
         ),
       );
     } else {
@@ -147,9 +151,13 @@ class InvitesModal extends StatelessWidget {
           roomId: roomId,
           inviter: inviterId,
           expiration: expiration,
-          refreshCallback: onInviteHandled,
+          refreshCallback: () async {
+            // Callback to refresh invites list after action
+            await onInviteHandled();
+          },
         ),
       );
     }
   }
+
 }

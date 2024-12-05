@@ -150,14 +150,6 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    final currentUserId = Provider.of<AuthProvider>(context, listen: false).userId ?? 'default-user-id';
-
-    // Initialize LocationBroadcastService and LocationTrackingService upon login
-    final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
-    final locationTrackingService = Provider.of<LocationTrackingService>(context, listen: false);
-
-    locationBroadcastService.startBroadcastingLocation();
-    locationTrackingService.startService();
   }
 
   @override

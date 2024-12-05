@@ -14,6 +14,11 @@ class SyncManager with ChangeNotifier {
   // **Add this getter to return the total number of invites**
   int get totalInvites => _invites.length;
 
+  Future<void> initialize() async {
+    await fetchInitialInvites();
+    await startSync();
+  }
+
   Future<void> startSync() async {
     if (_isSyncing) return;
 
@@ -67,6 +72,33 @@ class SyncManager with ChangeNotifier {
     }
     return null;
   }
+
+  Future<void> fetchInitialInvites() async {
+    try {
+      // Trigger an initial sync to get invites
+      final response = await client.sync(fullState: true);
+      if (response.rooms?.invite != null) {
+        response.rooms!.invite!.forEach((roomId, inviteUpdate) {
+          final inviter = _extractInviter(inviteUpdate);
+          final roomName = _extractRoomName(inviteUpdate) ?? 'Unnamed Room';
+          print(roomName);
+          final inviteData = {
+            'roomId': roomId,
+            'inviter': inviter,
+            'roomName': roomName,
+          };
+
+          if (!_invites.any((invite) => invite['roomId'] == roomId)) {
+            _invites.add(inviteData);
+          }
+        });
+        notifyListeners(); // Notify UI of updated invites
+      }
+    } catch (e) {
+      print("Error fetching initial invites: $e");
+    }
+  }
+
 
   void clearInvites() {
     _invites.clear();
