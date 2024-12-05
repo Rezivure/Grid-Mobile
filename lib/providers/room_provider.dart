@@ -424,19 +424,47 @@ class RoomProvider with ChangeNotifier {
     }
   }
 
-  Future<void> acceptInvitation(String roomId) async {
+  Future<bool> acceptInvitation(String roomId) async {
     try {
+      print("Attempting to join room: $roomId");
+
+      // Attempt to join the room
       await client.joinRoom(roomId);
+      print("Successfully joined room: $roomId");
+
+      // Check if the room exists
+      final room = client.getRoomById(roomId);
+      if (room == null) {
+        print("Room not found after joining.");
+        return false; // Invalid invite
+      }
+
+      // Optionally, you can check participants
+      final participants = await room.getParticipants();
+      final hasValidParticipant = participants.any(
+            (user) => user.membership == Membership.join && user.id != client.userID,
+      );
+
+      if (!hasValidParticipant) {
+        print("No valid participants found, leaving the room.");
+        await leaveRoom(roomId);
+        return false; // Invalid invite
+      }
 
       notifyListeners();
+      return true; // Successfully joined
     } catch (e) {
-      print("Error accepting invitation: $e");
+      print("Error during acceptInvitation: $e");
+      await leaveRoom(roomId);
+      return false; // Failed to join
     }
   }
 
   Future<bool> leaveRoom(String roomId) async {
+    print("Leaving room: $roomId");
     try {
       await client.leaveRoom(roomId);
+      print("Left room.");
       notifyListeners();
       return true;
     } catch (e) {
@@ -560,7 +588,6 @@ class RoomProvider with ChangeNotifier {
     }
     return false;
   }
-
 
   Future<List<Event>> getDecryptedRoomEvents(String roomId) async {
     final response = await client.getRoomEvents(roomId, Direction.b);

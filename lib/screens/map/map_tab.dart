@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
@@ -62,6 +63,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     setMapProvider();
     _waitForClientSync();
     _fetchInitialLocation();
+    _initalFetchAndSync();
   }
 
   @override
@@ -84,6 +86,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     _selectedUserProvider?.removeListener(_onSelectedUserChanged);
     _syncSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _initalFetchAndSync() async {
+    // post login load
+    print("Trying to sync initial invites");
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
+    syncManager.fetchInitialInvites();
   }
 
   Future<void> setMapProvider() async {

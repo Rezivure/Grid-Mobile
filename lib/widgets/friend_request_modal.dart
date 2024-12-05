@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/providers/room_provider.dart';
+import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 
 class FriendRequestModal extends StatefulWidget {
   final String userId;
@@ -40,7 +41,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           ),
           SizedBox(height: 20),
           Text(
-            '${widget.userId.split(":").first.replaceFirst('@', '')}',
+            widget.displayName,
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 10),
@@ -88,30 +89,48 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   }
 
   Future<void> _acceptRequest() async {
+    if (!mounted) return; // Ensure the widget is still in the tree
+
     setState(() {
       _isProcessing = true;
     });
 
-    try {
-      // Accept the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false)
-          .acceptInvitation(widget.roomId);
+    // Attempt to accept the invitation
+    final didJoin = await Provider.of<RoomProvider>(context, listen: false)
+        .acceptInvitation(widget.roomId);
 
-      // Remove invite from SyncManager
+    if (!mounted) return; // Ensure the widget is still in the tree
+
+    if (didJoin) {
+      // Success: Remove invite and refresh
+      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+      Navigator.of(context).pop(); // Close FriendRequestModal
+      await widget.onResponse(); // Refresh invite list
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Friend request accepted.")),
+        );
+      }
+    } else {
+      // Failure: Show the reusable error modal
+      Navigator.of(context).pop(); // Close FriendRequestModal if still open
+      // Remove invalid invite
       Provider.of<SyncManager>(context, listen: false)
           .removeInvite(widget.roomId);
-
-      Navigator.of(context).pop(); // Close the modal
-      await widget.onResponse(); // Trigger the callback to refresh
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Friend request accepted.")),
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return NoticeContinueModal(
+            message: "The invite is no longer valid. It may have been removed.",
+            onContinue: () {
+            },
+          );
+        },
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error accepting the request: $e")),
-      );
-    } finally {
+      await widget.onResponse();
+    }
+    if (mounted) {
       setState(() {
         _isProcessing = false;
       });
