@@ -1,33 +1,41 @@
 import 'dart:convert';
 
 class SharingPreferences {
-  final String userId;
-  final bool activeSharing;
-  final List<dynamic> sharePeriods;
+  final int? id;
+  final String targetId; // ID of the user or group
+  final String targetType; // Type: 'user' or 'group'
+  final bool activeSharing; // Whether sharing is currently active
+  final Map<String, dynamic>? sharePeriods; // Custom sharing periods (optional)
 
   SharingPreferences({
-    required this.userId,
+    this.id,
+    required this.targetId,
+    required this.targetType,
     required this.activeSharing,
-    required this.sharePeriods,
+    this.sharePeriods,
   });
 
-  // Factory constructor to create an instance from a database map
-  factory SharingPreferences.fromMap(Map<String, dynamic> map) {
-    return SharingPreferences(
-      userId: map['userId'] as String,
-      activeSharing: map['activeSharing']?.toString().toLowerCase() == 'true',
-      sharePeriods: jsonDecode(map['sharePeriods'] as String) as List<dynamic>,
-    );
-  }
-
-  // Convert the model to a map for database insertion
+  // Convert model to a map for database insertion
   Map<String, dynamic> toMap() {
     return {
-      'userId': userId,
-      'activeSharing': activeSharing.toString(), // Store as TEXT
-      'sharePeriods': jsonEncode(sharePeriods),  // Encode JSON for storage
+      'id': id,
+      'targetId': targetId,
+      'targetType': targetType,
+      'activeSharing': activeSharing ? 1 : 0, // Convert bool to integer
+      'sharePeriods': sharePeriods != null ? jsonEncode(sharePeriods) : null, // Encode as JSON
     };
   }
 
-
+  // Create an instance from a database map
+  factory SharingPreferences.fromMap(Map<String, dynamic> map) {
+    return SharingPreferences(
+      id: map['id'] as int?,
+      targetId: map['targetId'] as String,
+      targetType: map['targetType'] as String,
+      activeSharing: (map['activeSharing'] as int) == 1, // Convert integer to bool
+      sharePeriods: map['sharePeriods'] != null
+          ? jsonDecode(map['sharePeriods'] as String) as Map<String, dynamic>
+          : null, // Decode JSON if not null
+    );
+  }
 }

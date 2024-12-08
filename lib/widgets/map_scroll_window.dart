@@ -7,18 +7,22 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/profile_modal.dart'; // Import the profile modal
 
 import '../services/sync_manager.dart';
+import '../utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
-import 'invites_subscreen.dart';
 import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
 import 'add_friend_modal.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import '../providers/selected_subscreen_provider.dart';
-import '../providers/selected_user_provider.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/user_keys_repository.dart';
 
 class MapScrollWindow extends StatefulWidget {
+  const MapScrollWindow({Key? key}) : super(key: key);
+
   @override
   _MapScrollWindowState createState() => _MapScrollWindowState();
 }
@@ -26,6 +30,11 @@ class MapScrollWindow extends StatefulWidget {
 enum SubscreenOption { contacts, groups, invites, groupDetails }
 
 class _MapScrollWindowState extends State<MapScrollWindow> {
+  late final RoomService _roomService;
+  late final UserService _userService;
+  late final LocationRepository _locationRepository;
+  late final UserKeysRepository _userKeysRepository;
+
   SubscreenOption _selectedOption = SubscreenOption.contacts;
   bool _isDropdownExpanded = false;
   String _selectedLabel = 'My Contacts';
@@ -39,6 +48,11 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   @override
   void initState() {
     super.initState();
+    // Fetching all services from Provider
+    _roomService = context.read<RoomService>();
+    _userService = context.read<UserService>();
+    _locationRepository = context.read<LocationRepository>();
+    _userKeysRepository = context.read<UserKeysRepository>();
 
     // Set the selected subscreen to 'contacts' in SelectedSubscreenProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -48,8 +62,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchGroupRooms() async {
-    return await Provider.of<RoomProvider>(context, listen: false)
-        .getGroupRooms();
+    return await _roomService.getGroupRooms();
   }
 
   void _showInvitesModal(BuildContext context) {
@@ -57,7 +70,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.background,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Padding(
@@ -68,12 +81,12 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           top: 16,
         ),
         child: InvitesModal(
+          roomService: _roomService,
           onInviteHandled: _navigateToContacts, // Refresh invites when handled
         ),
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -87,9 +100,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       maxChildSize: 0.7,
       builder: (BuildContext context, ScrollController scrollController) {
         return NotificationListener<DraggableScrollableNotification>(
-          onNotification: (notification) {
-            return true;
-          },
+          onNotification: (notification) => true,
           child: GestureDetector(
             onVerticalDragUpdate: (details) {
               // Move the sheet in sync with the user's finger movement (1:1)
@@ -101,7 +112,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             child: Container(
               decoration: BoxDecoration(
                 color: colorScheme.background,
-                borderRadius: BorderRadius.only(
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   topRight: Radius.circular(20),
                 ),
@@ -117,7 +128,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                 children: [
                   Center(
                     child: Container(
-                      margin: EdgeInsets.only(top: 5),
+                      margin: const EdgeInsets.only(top: 5),
                       width: 50,
                       height: 5,
                       decoration: BoxDecoration(
@@ -127,8 +138,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     ),
                   ),
                   _buildDropdownHeader(colorScheme, context),
-                  if (_isDropdownExpanded)
-                    _buildHorizontalScroller(colorScheme),
+                  if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
                   Expanded(
                     child: _buildSubscreen(scrollController),
                   ),
@@ -203,18 +213,18 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                         int inviteCount = syncManager.totalInvites;
                         if (inviteCount > 0) {
                           return Container(
-                            padding: EdgeInsets.all(6),
-                            decoration: BoxDecoration(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
                               color: Colors.red,
                               shape: BoxShape.circle,
                             ),
-                            constraints: BoxConstraints(
+                            constraints: const BoxConstraints(
                               minWidth: 16,
                               minHeight: 16,
                             ),
                             child: Text(
                               '$inviteCount',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -223,7 +233,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                             ),
                           );
                         } else {
-                          return SizedBox();
+                          return const SizedBox();
                         }
                       },
                     ),
@@ -237,25 +247,24 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-
   Widget _buildHorizontalScroller(ColorScheme colorScheme) {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _fetchGroupRooms(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
+          return const SizedBox(
             height: 100,
             child: Center(child: CircularProgressIndicator()),
           );
         } else if (snapshot.hasError) {
-          return Container(
+          return const SizedBox(
             height: 100,
             child: Center(child: Text('Error loading groups')),
           );
         } else {
           final groupRooms = snapshot.data ?? [];
 
-          return Container(
+          return SizedBox(
             height: 100,
             child: NotificationListener<ScrollNotification>(
               onNotification: (scrollNotification) {
@@ -268,7 +277,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               },
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                physics: AlwaysScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 primary: false,
                 children: [
                   _buildContactOption(colorScheme),
@@ -285,10 +294,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
 
   Widget _buildContactOption(ColorScheme colorScheme) {
     final isSelected = _selectedLabel == 'My Contacts';
-
-    final client = Provider.of<RoomProvider>(context, listen: false).client;
-
-    final userId = client.userID ?? 'unknown';
+    final String userId = _userService.getMyUserId() as String;
 
     return GestureDetector(
       onTap: () {
@@ -311,12 +317,12 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                   ? colorScheme.primary
                   : colorScheme.primary.withOpacity(0.2),
               child: RandomAvatar(
-                userId.split(':')[0].replaceFirst('@', ''),
+                localpart(userId),
                 height: 60,
                 width: 60,
               ),
             ),
-            SizedBox(height: 5),
+            const SizedBox(height: 5),
             Text(
               'My Contacts',
               style: TextStyle(
@@ -330,8 +336,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       ),
     );
   }
-
-
 
   Widget _buildGroupOption(
       ColorScheme colorScheme, Map<String, dynamic> groupRoomData) {
@@ -379,7 +383,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     bottom: 0,
                     right: 0,
                     child: Container(
-                      padding: EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: isExpired
                             ? colorScheme.primary
@@ -388,7 +392,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                       ),
                       child: Text(
                         isExpired ? '∞' : remainingTimeStr,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -398,14 +402,12 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                   ),
                 ],
               ),
-              SizedBox(height: 5),
+              const SizedBox(height: 5),
               Text(
                 groupName,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isSelected
-                      ? colorScheme.onBackground
-                      : colorScheme.onBackground,
+                  color: colorScheme.onBackground,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
@@ -414,7 +416,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
         ),
       );
     } else {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
   }
 
@@ -422,24 +424,27 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     switch (_selectedOption) {
       case SubscreenOption.groups:
         return GroupsSubscreen(scrollController: scrollController);
-      case SubscreenOption.invites:
-        return InvitesSubscreen(
-          scrollController: scrollController,
-          onInviteHandled: _navigateToContacts,
-        );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
           return GroupDetailsSubscreen(
+            roomService: _roomService,
+            userService: _userService,
+            locationRepository: _locationRepository,
+            userKeysRepository: _userKeysRepository,
             scrollController: scrollController,
             room: _selectedRoom!,
             onGroupLeft: _navigateToContacts,
           );
         } else {
-          return Center(child: Text('No group selected'));
+          return const Center(child: Text('No group selected'));
         }
       case SubscreenOption.contacts:
       default:
         return ContactsSubscreen(
+          locationRepository: _locationRepository,
+          roomService: _roomService,
+          userKeysRepository: _userKeysRepository,
+          userService: _userService,
           scrollController: scrollController,
         );
     }
@@ -465,7 +470,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.background,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Padding(
@@ -475,18 +480,20 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           right: 16,
           top: 16,
         ),
-        child: AddFriendModal(),
+        child: AddFriendModal(
+          roomService: _roomService,
+          userService: _userService,
+        ),
       ),
     );
   }
 
   void _showProfileModal(BuildContext context) {
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.background,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Padding(
@@ -496,11 +503,12 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           right: 16,
           top: 16,
         ),
-        child: ProfileModal(),
+        child: ProfileModal(
+          userService: _userService,
+        ),
       ),
     );
   }
-
 
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {

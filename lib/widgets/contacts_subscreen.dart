@@ -1,26 +1,34 @@
 // lib/widgets/contacts_subscreen.dart
 
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/widgets/user_keys_modal.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/repositories/user_keys_repository.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
+  final RoomService roomService;
+  final UserService userService;
+  final UserKeysRepository userKeysRepository;
+  final LocationRepository locationRepository;
 
-  ContactsSubscreen({required this.scrollController, Key? key})
+  ContactsSubscreen({required this.scrollController, Key? key,
+    required this.roomService,
+    required this.userService,
+    required this.userKeysRepository, required this.locationRepository})
       : super(key: key);
 
   @override
@@ -64,11 +72,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   }
 
   Future<void> _fetchApprovedKeysStatus() async {
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     Map<String, bool> tempApprovedKeysStatus = {};
     for (var user in _contacts) {
-      bool? status = await databaseService.getApprovedKeys(user.id);
+      bool? status = await this.widget.userKeysRepository.getApprovedKeys(user.id);
       if (status != null) {
         // Only add to the map if the status is not null
         tempApprovedKeysStatus[user.id] = status;
@@ -111,8 +117,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       _isLoading = true;
     });
 
-    var result = await Provider.of<RoomProvider>(context, listen: false)
-        .getDirectRooms();
+    var result = await this.widget.roomService.getDirectRooms();
 
     Map<String, Map<String, dynamic>> userStatusCache = {};
 
@@ -124,14 +129,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
     // Fetch status for all contacts
     for (User user in contacts) {
-      String lastSeen = await Provider.of<RoomProvider>(context, listen: false)
-          .getLastSeenTime(user);
+      String lastSeen = await widget.userService.getLastSeenTime(user.id);
       String? roomId = tempUserRoomMap[user.id];
       bool isInvited = false;
 
       if (roomId != null) {
-        isInvited = await Provider.of<RoomProvider>(context, listen: false)
-            .isUserInvited(roomId, user.id);
+        isInvited = await this.widget.userService.isUserInvited(roomId, user.id);
       }
 
       // Only add to status cache if the current user is in a joined state or has sent an invite.
@@ -176,7 +179,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
     for (var user in users) {
       final userLocationData =
-      await databaseService.getUserLocationById(user.id);
+      await this.widget.locationRepository.getLatestLocation(user.id);
       if (userLocationData != null) {
         locations.add(UserLocation(
           userId: userLocationData.userId,
@@ -189,7 +192,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
         print('No location data available for user: ${user.id}');
       }
     }
-
     return locations;
   }
 
@@ -235,8 +237,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   void _removeContact(User contact) async {
     String? roomId = _userRoomMap[contact.id];
     if (roomId != null) {
-      bool success = await Provider.of<RoomProvider>(context, listen: false)
-          .leaveRoom(roomId);
+      bool success = await this.widget.roomService.leaveRoom(roomId);
       if (success) {
         setState(() {
           _contacts.remove(contact);
@@ -366,6 +367,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                                   bool? result = await showDialog<bool>(
                                     context: context,
                                     builder: (_) => UserKeysModal(
+                                      userKeysRepository: widget.userKeysRepository,
+                                      userService: widget.userService,
                                       userId: contact.id,
                                       approvedKeys: approvedKeys,
                                     ),

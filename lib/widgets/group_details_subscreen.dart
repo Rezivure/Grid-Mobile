@@ -2,10 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
@@ -13,8 +11,17 @@ import 'package:grid_frontend/services/database_service.dart';
 import 'add_group_member_modal.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/widgets/user_keys_modal.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/repositories/user_keys_repository.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/services/user_service.dart';
+
 
 class GroupDetailsSubscreen extends StatefulWidget {
+  final UserService userService;
+  final LocationRepository locationRepository;
+  final RoomService roomService;
+  final UserKeysRepository userKeysRepository;
   final ScrollController scrollController;
   final Room room;
   final VoidCallback onGroupLeft;
@@ -22,7 +29,11 @@ class GroupDetailsSubscreen extends StatefulWidget {
   GroupDetailsSubscreen({
     required this.scrollController,
     required this.room,
-    required this.onGroupLeft,
+    required this.onGroupLeft, 
+    required this.roomService, 
+    required this.userKeysRepository, 
+    required this.locationRepository,
+    required this.userService
   });
 
   @override
@@ -43,7 +54,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   @override
   void initState() {
     super.initState();
-    _client = Provider.of<RoomProvider>(context, listen: false).client;
     _filteredParticipants = _getFilteredParticipants();
     _searchController.addListener(_filterParticipants);
     _startAutoSync();
@@ -60,7 +70,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     Map<String, bool> tempApprovedKeysStatus = {};
 
     for (var user in _filteredParticipants) {
-      bool? status = await databaseService.getApprovedKeys(user.id);
+      bool? status = await this.widget.userKeysRepository.getApprovedKeys(user.id);
       if (status != null) {
         // Only add users to the map if the status is not null
         tempApprovedKeysStatus[user.id] = status;
@@ -169,7 +179,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
 
     for (var user in users) {
-      final userLocationData = await databaseService.getUserLocationById(user.id);
+      final userLocationData = await widget.locationRepository.getLatestLocation(user.id);
 
       if (userLocationData != null) {
         locations.add(UserLocation(
@@ -256,6 +266,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                                       bool? result = await showDialog<bool>(
                                         context: context,
                                         builder: (_) => UserKeysModal(
+                                          userService: widget.userService,
+                                          userKeysRepository: widget.userKeysRepository,
                                           userId: user.id,
                                           approvedKeys: _approvedKeysStatus[user.id] ?? false,
                                         ),
@@ -376,7 +388,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (context) {
-        return AddGroupMemberModal(roomId: widget.room.id); // Pass the roomId
+        return AddGroupMemberModal(roomId: widget.room.id, userService: widget.userService, roomService: widget.roomService); // Pass the roomId
       },
     );
   }
@@ -413,9 +425,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     });
 
     try {
-      final roomProvider = Provider.of<RoomProvider>(context, listen: false);
-      await roomProvider.leaveGroup(widget.room);
-
+      await widget.roomService.leaveRoom(widget.room.id);
       widget.onGroupLeft();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -429,8 +439,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   }
 
   Future<String> _getLastSeen(User user) async {
-    final lastSeen = await Provider.of<RoomProvider>(context, listen: false)
-        .getLastSeenTime(user);
+    final lastSeen = await widget.userService
+        .getLastSeenTime(user.id);
     return lastSeen;
   }
 }

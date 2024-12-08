@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 
 Color generateColorFromUsername(String username) {
@@ -42,3 +42,43 @@ String parseGroupName(String roomName) {
 String localpart(String userId) {
   return userId.split(":").first.replaceFirst('@', '');
 }
+
+/// Converts a `DateTime` into a human-readable "time ago" string.
+String timeAgo(DateTime lastSeen) {
+  final now = DateTime.now();
+  final difference = now.difference(lastSeen);
+
+  if (difference.inSeconds < 60) {
+    return '${difference.inSeconds}s ago';
+  } else if (difference.inMinutes < 60) {
+    return '${difference.inMinutes}m ago';
+  } else if (difference.inHours < 24) {
+    return '${difference.inHours}h ago';
+  } else {
+    return '${difference.inDays}d ago';
+  }
+}
+
+/// Normalizes a username and constructs a Matrix-compatible user ID.
+///
+/// Returns a Map with `matrixUserId` and `displayUsername`.
+Map<String, String> normalizeUser(String username) {
+  // Ensure the username is trimmed and lowercase
+  String normalizedUserId = username.trim().toLowerCase();
+
+  // Construct the Matrix-compatible user ID
+  String matrixUserId = normalizedUserId.startsWith('@')
+      ? normalizedUserId
+      : '@$normalizedUserId:${dotenv.env['HOMESERVER']}';
+
+  // Extract the display username
+  String displayUsername = normalizedUserId.startsWith('@')
+      ? normalizedUserId.substring(1).split(':').first
+      : normalizedUserId;
+
+  return {
+    'matrixUserId': matrixUserId,
+    'displayUsername': displayUsername,
+  };
+}
+

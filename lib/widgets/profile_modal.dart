@@ -1,14 +1,19 @@
 // profile_modal.dart
 
 import 'package:flutter/material.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/services.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
+import 'package:grid_frontend/services/user_service.dart';
 
 class ProfileModal extends StatefulWidget {
+  final UserService userService;
+
+  const ProfileModal({Key? key, required this.userService}) : super(key: key);
+
   @override
   _ProfileModalState createState() => _ProfileModalState();
 }
@@ -20,9 +25,8 @@ class _ProfileModalState extends State<ProfileModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final client = Provider.of<RoomProvider>(context, listen: false).client;
-    final userId = client.userID ?? 'unknown';
-    final userLocalpart = userId.split(':')[0].replaceFirst('@', '');
+    final String userId = widget.userService.getMyUserId() as String;
+    final userLocalpart = localpart(userId);
 
     return Material(
       color: colorScheme.background,

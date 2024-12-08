@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-class User {
+class GridUser {
   final String userId;
   final String? displayName;
   final String? avatarUrl;
   final String lastSeen;
   final String? profileStatus;
 
-  User({
+  GridUser({
     required this.userId,
     this.displayName,
     this.avatarUrl,
@@ -15,8 +15,9 @@ class User {
     this.profileStatus,
   });
 
-  factory User.fromMap(Map<String, dynamic> map) {
-    return User(
+  /// Factory method to create a `GridUser` from a map
+  factory GridUser.fromMap(Map<String, dynamic> map) {
+    return GridUser(
       userId: map['userId'] as String,
       displayName: map['displayName'] as String?,
       avatarUrl: map['avatarUrl'] as String?,
@@ -25,6 +26,7 @@ class User {
     );
   }
 
+  /// Converts a `GridUser` to a map
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
@@ -35,8 +37,10 @@ class User {
     };
   }
 
+  /// Converts a `GridUser` to JSON
   String toJson() => jsonEncode(toMap());
 
-  factory User.fromJson(String source) =>
-      User.fromMap(jsonDecode(source) as Map<String, dynamic>);
+  /// Factory method to create a `GridUser` from JSON
+  factory GridUser.fromJson(String source) =>
+      GridUser.fromMap(jsonDecode(source) as Map<String, dynamic>);
 }

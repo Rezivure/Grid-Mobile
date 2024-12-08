@@ -1,21 +1,26 @@
 import 'dart:async';
 import 'dart:math'; // For mathematical calculations
 import 'package:grid_frontend/providers/location_provider.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
-import 'package:matrix/matrix.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/services/room_service.dart';
 import 'package:location/location.dart';
 
 class LocationBroadcastService {
   final LocationProvider locationProvider;
-  final RoomProvider roomProvider;
-
-  LocationBroadcastService(this.locationProvider, this.roomProvider);
+  final LocationRepository locationRepository;
+  final RoomService roomService;
 
   LocationData? _lastPosition;
   DateTime? _lastUpdateTime;
-  final Duration _updateInterval = Duration(seconds: 30); // Updated to 30 seconds
+  final Duration _updateInterval = const Duration(seconds: 30); // 30 seconds interval
   final double _distanceThreshold = 50; // 50 meters threshold
   StreamSubscription<LocationData>? _locationSubscription;
+
+  LocationBroadcastService(
+      this.locationProvider,
+      this.locationRepository,
+      this.roomService
+      );
 
   void startBroadcastingLocation() {
     if (_locationSubscription != null) {
@@ -25,12 +30,12 @@ class LocationBroadcastService {
     print("Location Broadcast Service Starting");
 
     _locationSubscription = locationProvider.getLocationStream().listen(
-          (position) {
+          (position) async {
         // Update currentPosition in the LocationProvider
         locationProvider.updateCurrentPosition(position);
 
         if (_shouldUpdateLocation(position)) {
-          roomProvider.updateRooms(position);
+          await roomService.updateRooms(position);
           _lastPosition = position;
           _lastUpdateTime = DateTime.now();
         }
@@ -64,11 +69,13 @@ class LocationBroadcastService {
     return timeElapsed > _updateInterval && distance > _distanceThreshold;
   }
 
+
   double _calculateDistance(
       double startLatitude,
       double startLongitude,
       double endLatitude,
-      double endLongitude) {
+      double endLongitude,
+      ) {
     const earthRadius = 6371000; // in meters
     final dLat = _degreesToRadians(endLatitude - startLatitude);
     final dLon = _degreesToRadians(endLongitude - startLongitude);
@@ -79,8 +86,7 @@ class LocationBroadcastService {
             sin(dLon / 2) *
             sin(dLon / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    final distance = earthRadius * c;
-    return distance;
+    return earthRadius * c;
   }
 
   double _degreesToRadians(double degrees) {

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
+import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 
 class GroupInvitationModal extends StatefulWidget {
+  final RoomService roomService;
   final String groupName;
   final String roomId;
   final String inviter;
@@ -18,6 +19,7 @@ class GroupInvitationModal extends StatefulWidget {
     required this.inviter,
     required this.expiration,
     required this.refreshCallback,
+    required this.roomService,
   });
 
   @override
@@ -135,7 +137,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     });
 
     // Attempt to accept the invitation
-    final didJoin = await Provider.of<RoomProvider>(context, listen: false)
+    final didJoin = await widget.roomService
         .acceptInvitation(widget.roomId);
 
     if (!mounted) return;
@@ -189,7 +191,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
     try {
       // Decline the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false)
+      await widget.roomService
           .declineInvitation(widget.roomId);
 
       // Remove the invitation from SyncManager

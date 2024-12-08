@@ -5,7 +5,6 @@ import 'package:random_avatar/random_avatar.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '/services/location_broadcast_service.dart';
-import '/services/location_tracking_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -73,7 +72,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
-    final locationTrackingService = Provider.of<LocationTrackingService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
 
     final confirmed = await showDialog<bool>(
@@ -97,8 +95,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirmed ?? false) {
       try {
         locationBroadcastService.stopBroadcastingLocation();
-        locationTrackingService.stopService();
-        await databaseService.clearAllData();
+        await databaseService.deleteAndReinitialize();
         await sharedPreferences.clear();
         await client.logout();
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
@@ -116,7 +113,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
-    final locationTrackingService = Provider.of<LocationTrackingService>(context, listen: false);
 
     // Step 1: Prompt user to enter their phone number with IntlPhoneField
     String? phoneNumber = await showDialog<String>(
@@ -197,8 +193,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirmSuccess) {
       print("Account deactivated successfully via SMS.");
       locationBroadcastService.stopBroadcastingLocation();
-      locationTrackingService.stopService();
-      await databaseService.clearAllData();
       await sharedPreferences.remove('userId'); // double check
       await sharedPreferences.clear();
 
@@ -229,7 +223,6 @@ class _SettingsPageState extends State<SettingsPage> {
     // due to issues with SDK
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
-    final locationTrackingService = Provider.of<LocationTrackingService>(context, listen: false);
 
     // Step 1: Confirm deactivation
     final confirmed = await showDialog<bool>(
@@ -303,8 +296,6 @@ class _SettingsPageState extends State<SettingsPage> {
       if (response.statusCode == 200) {
         print("Account deactivated successfully.");
         locationBroadcastService.stopBroadcastingLocation();
-        locationTrackingService.stopService();
-        await databaseService.clearAllData();
         await sharedPreferences.clear();
 
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
@@ -452,7 +443,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       );
 
                       if (confirmed ?? false) {
-                        await Provider.of<DatabaseService>(context, listen: false).clearAllData();
+                        await Provider.of<DatabaseService>(context, listen: false).deleteAndReinitialize();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('All data has been cleared.')),
                         );
