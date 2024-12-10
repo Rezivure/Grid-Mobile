@@ -16,9 +16,8 @@ class MessageParser {
 
       final coordinates = _parseGeoUri(geoUri);
       if (coordinates != null) {
-        print('Parsed location: $coordinates');
+        return coordinates;
       }
-      return coordinates;
     } catch (e) {
       print('Error parsing location message: $e');
       return null;

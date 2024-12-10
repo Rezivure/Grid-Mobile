@@ -96,7 +96,9 @@ void main() async {
         ChangeNotifierProvider(create: (_) => syncManager..startSync()),
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
-        ChangeNotifierProvider(create: (_) => UserLocationProvider()),
+        ChangeNotifierProvider(
+          create: (context) => UserLocationProvider(context.read<LocationRepository>()),
+        ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
 
         // Provide the LocationManager
@@ -106,8 +108,8 @@ void main() async {
 
         // Provide the RoomService
         ProxyProvider<LocationManager, RoomService>(
-          update: (context, locationManager, _) {
-            return RoomService(
+          update: (context, locationManager, previousRoomService) {
+            return previousRoomService ?? RoomService(
               client,
               context.read<UserService>(),
               userRepository,
@@ -115,7 +117,7 @@ void main() async {
               roomRepository,
               locationRepository,
               sharingPreferencesRepository,
-              locationManager, // Pass LocationManager
+              locationManager,
             );
           },
         ),

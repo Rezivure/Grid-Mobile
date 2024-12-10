@@ -1,5 +1,3 @@
-// lib/widgets/contacts_subscreen.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -10,26 +8,24 @@ import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
-import 'package:grid_frontend/models/user_location.dart';
-import 'package:grid_frontend/services/database_service.dart';
-import 'package:grid_frontend/widgets/user_keys_modal.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
-import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
   final RoomService roomService;
   final UserService userService;
   final UserKeysRepository userKeysRepository;
-  final LocationRepository locationRepository;
 
-  ContactsSubscreen({required this.scrollController, Key? key,
+  const ContactsSubscreen({
+    required this.scrollController,
     required this.roomService,
     required this.userService,
-    required this.userKeysRepository, required this.locationRepository})
-      : super(key: key);
+    required this.userKeysRepository,
+    Key? key,
+  }) : super(key: key);
 
   @override
   ContactsSubscreenState createState() => ContactsSubscreenState();
@@ -38,17 +34,15 @@ class ContactsSubscreen extends StatefulWidget {
 class ContactsSubscreenState extends State<ContactsSubscreen> {
   List<User> _contacts = [];
   List<User> _filteredContacts = [];
-  Timer? _timer;
-  bool _isSyncing = false;
-  bool _isLoading = true;
-
   Map<String, String> _userRoomMap = {};
   Map<String, Map<String, dynamic>> _userStatusCache = {};
-
-  // Added to keep track of approved keys status
   Map<String, bool> _approvedKeysStatus = {};
 
   TextEditingController _searchController = TextEditingController();
+  Timer? _timer;
+
+  bool _isSyncing = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -56,52 +50,11 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     _initializeContacts();
     _startAutoSync();
 
-    // Set the selected subscreen to 'contacts'
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
     });
 
-    // Add listener to search controller
     _searchController.addListener(_onSearchChanged);
-  }
-
-  Future<void> _initializeContacts() async {
-    await _fetchContacts();
-    await _fetchApprovedKeysStatus(); // Fetch approved keys status
-    await fetchAndUpdateUserLocations('contacts');
-  }
-
-  Future<void> _fetchApprovedKeysStatus() async {
-    Map<String, bool> tempApprovedKeysStatus = {};
-    for (var user in _contacts) {
-      bool? status = await this.widget.userKeysRepository.getApprovedKeys(user.id);
-      if (status != null) {
-        // Only add to the map if the status is not null
-        tempApprovedKeysStatus[user.id] = status;
-      }
-    }
-    setState(() {
-      _approvedKeysStatus = tempApprovedKeysStatus;
-    });
-  }
-
-
-  void _startAutoSync() {
-    _timer = Timer.periodic(Duration(seconds: 30), (timer) {
-      if (mounted) {
-        setState(() {
-          _isSyncing = true;
-        });
-        refreshContacts();
-        Future.delayed(Duration(seconds: 1), () {
-          if (mounted) {
-            setState(() {
-              _isSyncing = false;
-            });
-          }
-        });
-      }
-    });
   }
 
   @override
@@ -112,20 +65,50 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     super.dispose();
   }
 
+  Future<void> _initializeContacts() async {
+    await _fetchContacts();
+    await _fetchApprovedKeysStatus();
+    setState(() {}); // Refresh UI after initial load
+  }
+
+  void _startAutoSync() {
+    // Periodic sync as a fallback
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        setState(() {
+          _isSyncing = true;
+        });
+        refreshContacts();
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            setState(() {
+              _isSyncing = false;
+            });
+          }
+        });
+      }
+    });
+  }
+
+  Future<void> refreshContacts() async {
+    await _fetchContacts();
+    await _fetchApprovedKeysStatus();
+    setState(() {}); // Update UI after refresh
+  }
+
   Future<void> _fetchContacts() async {
     setState(() {
       _isLoading = true;
     });
 
-    var result = await this.widget.roomService.getDirectRooms();
+    var result = await widget.roomService.getDirectRooms();
+
+    Map<User, String> userRoomMap = Map<User, String>.from(result['userRoomMap']);
+    Map<String, String> tempUserRoomMap =
+    userRoomMap.map<String, String>((User user, String roomId) => MapEntry(user.id, roomId));
+    List<User> contacts = result['users'];
 
     Map<String, Map<String, dynamic>> userStatusCache = {};
-
-    Map<User, String> userRoomMap =
-    Map<User, String>.from(result['userRoomMap']);
-    Map<String, String> tempUserRoomMap = userRoomMap.map<String, String>(
-            (User user, String roomId) => MapEntry(user.id, roomId));
-    List<User> contacts = result['users'];
 
     // Fetch status for all contacts
     for (User user in contacts) {
@@ -134,14 +117,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       bool isInvited = false;
 
       if (roomId != null) {
-        isInvited = await this.widget.userService.isUserInvited(roomId, user.id);
+        isInvited = await widget.userService.isUserInvited(roomId, user.id);
       }
 
-      // Only add to status cache if the current user is in a joined state or has sent an invite.
       if (isInvited || userRoomMap[user]?.isNotEmpty == true) {
         Map<String, dynamic> status = {
           'lastSeen': lastSeen,
-          'isInvited': isInvited
+          'isInvited': isInvited,
         };
         userStatusCache[user.id] = status;
       }
@@ -156,43 +138,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     });
   }
 
-  Future<void> refreshContacts() async {
-    await _fetchContacts();
-    await _fetchApprovedKeysStatus(); // Refresh approved keys status
-    await fetchAndUpdateUserLocations('contacts');
+  Future<void> _fetchApprovedKeysStatus() async {
+    Map<String, bool> tempApprovedKeysStatus = {};
+    for (var user in _contacts) {
+      bool? status = await widget.userKeysRepository.getApprovedKeys(user.id);
+      if (status != null) {
+        tempApprovedKeysStatus[user.id] = status;
+      }
+    }
+    setState(() {
+      _approvedKeysStatus = tempApprovedKeysStatus;
+    });
   }
 
   void _onSubscreenSelected(String subscreen) {
-    Provider.of<SelectedSubscreenProvider>(context, listen: false)
-        .setSelectedSubscreen(subscreen);
-  }
-
-  Future<void> fetchAndUpdateUserLocations(String subscreen) async {
-    List<UserLocation> locations = await getUserLocations(_contacts);
-    Provider.of<UserLocationProvider>(context, listen: false)
-        .updateUserLocations(subscreen, locations);
-  }
-
-  Future<List<UserLocation>> getUserLocations(List<User> users) async {
-    List<UserLocation> locations = [];
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-
-    for (var user in users) {
-      final userLocationData =
-      await this.widget.locationRepository.getLatestLocation(user.id);
-      if (userLocationData != null) {
-        locations.add(UserLocation(
-          userId: userLocationData.userId,
-          latitude: userLocationData.latitude,
-          longitude: userLocationData.longitude,
-          timestamp: userLocationData.timestamp,
-          iv: userLocationData.iv,
-        ));
-      } else {
-        print('No location data available for user: ${user.id}');
-      }
-    }
-    return locations;
+    Provider.of<SelectedSubscreenProvider>(context, listen: false).setSelectedSubscreen(subscreen);
   }
 
   void _onSearchChanged() {
@@ -201,8 +161,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       _filteredContacts = _contacts.where((user) {
         String displayName = user.displayName?.toLowerCase() ?? '';
         String userId = user.id.toLowerCase();
-        return displayName.contains(searchQuery) ||
-            userId.contains(searchQuery);
+        return displayName.contains(searchQuery) || userId.contains(searchQuery);
       }).toList();
     });
   }
@@ -212,17 +171,17 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Remove Contact'),
-          content: Text('Would you like to remove this contact?'),
+          title: const Text('Remove Contact'),
+          content: const Text('Would you like to remove this contact?'),
           actions: [
             TextButton(
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: Text('Remove'),
+              child: const Text('Remove'),
               onPressed: () {
                 Navigator.of(context).pop();
                 _removeContact(contact);
@@ -237,7 +196,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   void _removeContact(User contact) async {
     String? roomId = _userRoomMap[contact.id];
     if (roomId != null) {
-      bool success = await this.widget.roomService.leaveRoom(roomId);
+      bool success = await widget.roomService.leaveRoom(roomId);
       if (success) {
         setState(() {
           _contacts.remove(contact);
@@ -246,19 +205,18 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           _userStatusCache.remove(contact.id);
           _approvedKeysStatus.remove(contact.id);
         });
-        await fetchAndUpdateUserLocations('contacts');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Contact removed successfully')),
+          const SnackBar(content: Text('Contact removed successfully')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove contact')),
+          const SnackBar(content: Text('Failed to remove contact')),
         );
       }
     } else {
       print('No room ID found for contact: ${contact.id}');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to remove contact: No room ID found')),
+        const SnackBar(content: Text('Failed to remove contact: No room ID found')),
       );
     }
   }
@@ -267,7 +225,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
     return Column(
       children: [
         CustomSearchBar(
@@ -276,7 +233,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
         ),
         if (_isSyncing)
           Container(
-            padding: EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(8.0),
             child: Text(
               'Syncing...',
               style: TextStyle(color: colorScheme.onSurface),
@@ -284,155 +241,92 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           ),
         Expanded(
           child: _isLoading
-              ? Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator())
               : _filteredContacts.isEmpty
               ? ListView(
             controller: widget.scrollController,
-            children: [
+            children: const [
               Center(child: Text('No contacts found')),
             ],
           )
               : ListView.builder(
             controller: widget.scrollController,
             itemCount: _filteredContacts.length,
-            padding: EdgeInsets.only(top: 8.0),
-            itemBuilder: (context, index) {
-              final contact = _filteredContacts[index];
-              final data = _userStatusCache[contact.id];
+            padding: const EdgeInsets.only(top: 8.0),
+              itemBuilder: (context, index) {
+                final contact = _filteredContacts[index];
+                final userLocation = Provider.of<UserLocationProvider>(context).getUserLocation(contact.id);
 
-              String subtitleText;
-              TextStyle subtitleStyle =
-              TextStyle(color: colorScheme.onSurface);
+                String subtitleText;
+                TextStyle subtitleStyle = TextStyle(color: colorScheme.onSurface);
 
-              if (data != null) {
-                final lastSeen = data['lastSeen'] as String;
-                final isInvited = data['isInvited'] as bool;
-
-                if (isInvited) {
-                  subtitleText = 'Invitation Sent';
-                  subtitleStyle = TextStyle(color: Colors.orange);
+                if (userLocation != null) {
+                  try {
+                    final lastSeenDate = DateTime.parse(userLocation.timestamp);
+                    final timeAgoString = timeAgo(lastSeenDate);
+                    subtitleText = 'Last seen: $timeAgoString';
+                  } catch (e) {
+                    subtitleText = 'Last seen: Offline';
+                  }
                 } else {
-                  subtitleText = 'Last seen: $lastSeen';
+                  subtitleText = 'Loading...';
+                  subtitleStyle = TextStyle(color: Colors.grey);
                 }
-              } else {
-                subtitleText = 'Loading...';
-                subtitleStyle = TextStyle(color: Colors.grey);
-              }
 
-              // Use the stored approvedKeys status
-              bool approvedKeys =
-                  _approvedKeysStatus[contact.id] ?? false;
-
-              return Column(
-                children: [
-                  Slidable(
-                    key: ValueKey(contact.id),
-                    endActionPane: ActionPane(
-                      motion: const DrawerMotion(),
-                      extentRatio: 0.15,
-                      children: [
-                        SlidableAction(
-                          onPressed: (context) {
-                            _showRemoveContactDialog(contact);
-                          },
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          icon: Icons.delete,
-                          label: '',
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                    child: ListTile(
-                      leading: Stack(
+                return Column(
+                  children: [
+                    Slidable(
+                      key: ValueKey(contact.id),
+                      endActionPane: ActionPane(
+                        motion: const DrawerMotion(),
+                        extentRatio: 0.15,
                         children: [
-                          CircleAvatar(
-                            radius: 30,
-                            child: RandomAvatar(
-                              contact.id
-                                  .split(':')[0]
-                                  .replaceFirst('@', ''),
-                              height: 60,
-                              width: 60,
-                            ),
-                            backgroundColor: colorScheme.primary
-                                .withOpacity(0.2),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: () async {
-                                if (approvedKeys || _approvedKeysStatus.containsKey(contact.id)) {
-                                  bool? result = await showDialog<bool>(
-                                    context: context,
-                                    builder: (_) => UserKeysModal(
-                                      userKeysRepository: widget.userKeysRepository,
-                                      userService: widget.userService,
-                                      userId: contact.id,
-                                      approvedKeys: approvedKeys,
-                                    ),
-                                  );
-                                  if (result == true) {
-                                    setState(() {
-                                      _approvedKeysStatus[contact.id] = true;
-                                    });
-                                  }
-                                }
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: approvedKeys
-                                      ? Colors.green.withOpacity(0.8)
-                                      : (_approvedKeysStatus.containsKey(contact.id)
-                                      ? Colors.red.withOpacity(0.8)
-                                      : Colors.grey.withOpacity(0.8)), // Grey for unknown status
-                                ),
-                                padding: EdgeInsets.all(4),
-                                child: Icon(
-                                  approvedKeys
-                                      ? Icons.lock
-                                      : (_approvedKeysStatus.containsKey(contact.id)
-                                      ? Icons.lock_open
-                                      : Icons.help_rounded), // Grey question mark for unknown
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
+                          SlidableAction(
+                            onPressed: (context) {
+                              _showRemoveContactDialog(contact);
+                            },
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            icon: Icons.delete,
+                            label: '',
+                            padding: EdgeInsets.zero,
                           ),
                         ],
                       ),
-                      title: Text(
-                        contact.displayName ?? contact.id,
-                        style: TextStyle(
-                            color: colorScheme.onBackground),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 30,
+                          child: RandomAvatar(
+                            contact.id.split(':')[0].replaceFirst('@', ''),
+                            height: 60,
+                            width: 60,
+                          ),
+                          backgroundColor: colorScheme.primary.withOpacity(0.2),
+                        ),
+                        title: Text(
+                          contact.displayName ?? contact.id,
+                          style: TextStyle(color: colorScheme.onBackground),
+                        ),
+                        subtitle: Text(
+                          subtitleText,
+                          style: subtitleStyle,
+                        ),
+                        onTap: () {
+                          final selectedUserProvider = Provider.of<SelectedUserProvider>(context, listen: false);
+                          selectedUserProvider.setSelectedUserId(contact.id);
+                          print('Contact selected: ${contact.id}');
+                        },
                       ),
-                      subtitle: Text(
-                        subtitleText,
-                        style: subtitleStyle,
-                      ),
-                      onTap: () {
-                        final selectedUserProvider =
-                        Provider.of<SelectedUserProvider>(
-                            context,
-                            listen: false);
-                        selectedUserProvider
-                            .setSelectedUserId(contact.id);
-                        print('Contact selected: ${contact.id}');
-                      },
                     ),
-                  ),
-                  Divider(
-                    thickness: 1,
-                    color: colorScheme.onSurface.withOpacity(0.1),
-                    indent: 20,
-                    endIndent: 20,
-                  ),
-                ],
-              );
-            },
+                    Divider(
+                      thickness: 1,
+                      color: colorScheme.onSurface.withOpacity(0.1),
+                      indent: 20,
+                      endIndent: 20,
+                    ),
+                  ],
+                );
+              }
           ),
         ),
       ],

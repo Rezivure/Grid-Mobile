@@ -32,7 +32,7 @@ class LocationManager with ChangeNotifier {
       return;
     }
 
-    print("Initializing and starting LocationManager...");
+    print("Initializing LocationManager...");
     await bg.BackgroundGeolocation.ready(bg.Config(
       desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
       distanceFilter: 10.0,
@@ -50,15 +50,20 @@ class LocationManager with ChangeNotifier {
       _processLocation(location);
     });
 
-    // Listen to motion changes
+    /// Future use cases of background location
+    /*
     bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
       _processLocation(location);
     });
+
 
     // Listen to provider changes
     bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
       print('[providerchange] - $event');
     });
+
+    */
+
   }
 
   /// Stop tracking location

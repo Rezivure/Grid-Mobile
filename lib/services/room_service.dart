@@ -19,6 +19,11 @@ class RoomService {
   final LocationRepository locationRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
 
+  // Tracks recent messages/location updates sent to prevent redundant messages
+  final Map<String, Set<String>> _recentlySentMessages = {};
+  final int _maxMessageHistory = 50;
+
+
   RoomService(
       this.client,
       this.userService,
@@ -36,6 +41,7 @@ class RoomService {
   }
 
   void _onNewLocation(bg.Location location) {
+    print("Sending updated location to all rooms");
     updateRooms(location);
   }
 
@@ -49,7 +55,7 @@ class RoomService {
     try {
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
-        return false; // TODO
+        return false; 
       }
     } catch (e) {
       print('User $matrixUserId does not exist: $e');
@@ -308,22 +314,39 @@ class RoomService {
   void sendLocationEvent(String roomId, bg.Location location) async {
     final room = client.getRoomById(roomId);
     if (room != null) {
-      // Extract latitude and longitude from bg.Location
       final latitude = location.coords.latitude;
       final longitude = location.coords.longitude;
 
       if (latitude != null && longitude != null) {
+        // Create a unique hash for the location message
+        final messageHash = '$latitude:$longitude';
+
+        // Check if the message is already sent
+        if (_recentlySentMessages[roomId]?.contains(messageHash) == true) {
+          print("Duplicate location event skipped for room $roomId");
+          return;
+        }
+
+        // Build the event content
         final eventContent = {
           'msgtype': 'm.location',
           'body': 'Current location',
           'geo_uri': 'geo:$latitude,$longitude',
           'description': 'Current location',
-          'timestamp': DateTime.now().toUtc().toIso8601String()
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
         };
 
         try {
           await room.sendEvent(eventContent);
           print("Location event sent to room $roomId: $latitude, $longitude");
+
+          // Track the sent message
+          _recentlySentMessages.putIfAbsent(roomId, () => {}).add(messageHash);
+
+          // Trim history if needed
+          if (_recentlySentMessages[roomId]!.length > _maxMessageHistory) {
+            _recentlySentMessages[roomId]!.remove(_recentlySentMessages[roomId]!.first);
+          }
         } catch (e) {
           print("Failed to send location event: $e");
         }
@@ -335,10 +358,8 @@ class RoomService {
     }
   }
 
-
   Future<void> updateRooms(bg.Location location) async {
     List<Room> rooms = client.rooms; // Assuming `client.rooms` gives the list of rooms
-    var roomsUpdated = 0;
     for (Room room in rooms) {
       // Get all joined members of the room
       var joinedMembers = room
@@ -348,12 +369,10 @@ class RoomService {
       // Update groups
       if (joinedMembers.length > 2) {
         sendLocationEvent(room.id, location);
-        roomsUpdated += 1;
       }
       // Update contacts
       else if (joinedMembers.length == 2) {
         sendLocationEvent(room.id, location);
-        roomsUpdated += 1;
       }
       // TODO: check if approved keys to prevent sending
       // if keys have changed without user approval
@@ -361,9 +380,6 @@ class RoomService {
         // Don't update
       }
     }
-
-    final coords = location.coords;
-    print("Updated a total of $roomsUpdated rooms with my location: ${coords.latitude}, ${coords.longitude}");
   }
 
 

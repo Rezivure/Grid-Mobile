@@ -429,7 +429,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           return GroupDetailsSubscreen(
             roomService: _roomService,
             userService: _userService,
-            locationRepository: _locationRepository,
             userKeysRepository: _userKeysRepository,
             scrollController: scrollController,
             room: _selectedRoom!,
@@ -441,7 +440,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       case SubscreenOption.contacts:
       default:
         return ContactsSubscreen(
-          locationRepository: _locationRepository,
           roomService: _roomService,
           userKeysRepository: _userKeysRepository,
           userService: _userService,

@@ -22,7 +22,7 @@ class SyncManager with ChangeNotifier {
     if (_isInitialized) return; // Prevent re-initialization
     _isInitialized = true;
 
-    print("Initializing Sync Manager");
+    print("Initializing Sync Manager...");
     await fetchInitialInvites();
     await startSync();
   }
