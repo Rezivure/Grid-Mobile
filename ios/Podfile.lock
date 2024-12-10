@@ -1,5 +1,13 @@
 PODS:
+  - background_fetch (1.3.7):
+    - Flutter
+  - CocoaLumberjack (3.8.5):
+    - CocoaLumberjack/Core (= 3.8.5)
+  - CocoaLumberjack/Core (3.8.5)
   - Flutter (1.0.0)
+  - flutter_background_geolocation (4.16.5):
+    - CocoaLumberjack (~> 3.8.5)
+    - Flutter
   - flutter_compass (0.0.1):
     - Flutter
   - flutter_olm (3.2.15):
@@ -35,7 +43,9 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - background_fetch (from `.symlinks/plugins/background_fetch/ios`)
   - Flutter (from `Flutter`)
+  - flutter_background_geolocation (from `.symlinks/plugins/flutter_background_geolocation/ios`)
   - flutter_compass (from `.symlinks/plugins/flutter_compass/ios`)
   - flutter_olm (from `.symlinks/plugins/flutter_olm/ios`)
   - flutter_openssl_crypto (from `.symlinks/plugins/flutter_openssl_crypto/ios`)
@@ -52,12 +62,17 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - CocoaLumberjack
     - MTBBarcodeScanner
     - OpenSSL-Universal
 
 EXTERNAL SOURCES:
+  background_fetch:
+    :path: ".symlinks/plugins/background_fetch/ios"
   Flutter:
     :path: Flutter
+  flutter_background_geolocation:
+    :path: ".symlinks/plugins/flutter_background_geolocation/ios"
   flutter_compass:
     :path: ".symlinks/plugins/flutter_compass/ios"
   flutter_olm:
@@ -86,7 +101,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/workmanager/ios"
 
 SPEC CHECKSUMS:
+  background_fetch: 39f11371c0dce04b001c4bfd5e782bcccb0a85e2
+  CocoaLumberjack: 6a459bc897d6d80bd1b8c78482ec7ad05dffc3f0
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  flutter_background_geolocation: c0e4d97edf7770d4bfa36cc7171b5fcf7ae798ac
   flutter_compass: cbbd285cea1584c7ac9c4e0c3e1f17cbea55e855
   flutter_olm: 41bad3c821821a227ce3b793d338e9801fb8d0ae
   flutter_openssl_crypto: 636ad25f56fbe0f45b9e13b8589540b341a486a1

@@ -10,17 +10,18 @@ class SyncManager with ChangeNotifier {
   bool _isSyncing = false;
   final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
+  bool _isInitialized = false;
 
-  SyncManager(this.client, this.messageProcessor) {
-    // Automatically initialize when the SyncManager is created.
-    initialize();
-  }
+  SyncManager(this.client, this.messageProcessor);
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
   int get totalInvites => _invites.length;
 
   Future<void> initialize() async {
+    if (_isInitialized) return; // Prevent re-initialization
+    _isInitialized = true;
+
     print("Initializing Sync Manager");
     await fetchInitialInvites();
     await startSync();

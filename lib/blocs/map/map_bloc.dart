@@ -3,17 +3,17 @@ import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
-import 'package:grid_frontend/providers/location_provider.dart';
+import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/models/user_location.dart';
 
 class MapBloc extends Bloc<MapEvent, MapState> {
-  final LocationProvider locationProvider;
+  final LocationManager locationManager;
   final LocationRepository locationRepository;
   final DatabaseService databaseService;
 
   MapBloc({
-    required this.locationProvider,
+    required this.locationManager,
     required this.locationRepository,
     required this.databaseService,
   }) : super(const MapState()) {
@@ -31,7 +31,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   Future<void> _onMapCenterOnUser(MapCenterOnUser event, Emitter<MapState> emit) async {
-    final currentPosition = locationProvider.currentPosition;
+    final currentPosition = locationManager.currentLatLng;
     if (currentPosition != null) {
       final userLocation = LatLng(currentPosition.latitude!, currentPosition.longitude!);
       emit(state.copyWith(center: userLocation));

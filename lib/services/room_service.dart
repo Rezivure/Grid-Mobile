@@ -1,22 +1,14 @@
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/user_service.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:matrix/encryption/encryption.dart';
-import 'package:matrix/matrix.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
-import 'package:location/location.dart';  // Import LocationData
-
-
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
-
-
+import 'location_manager.dart';
 
 class RoomService {
   final UserService userService;
@@ -27,14 +19,25 @@ class RoomService {
   final LocationRepository locationRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
 
-  RoomService(this.client,
+  RoomService(
+      this.client,
       this.userService,
       this.userRepository,
       this.userKeysRepository,
       this.roomRepository,
       this.locationRepository,
-      this.sharingPreferencesRepository
-  );
+      this.sharingPreferencesRepository,
+      LocationManager locationManager, // Inject LocationManager
+      ) {
+    // Subscribe to location updates
+    locationManager.locationStream.listen((location) {
+      _onNewLocation(location);
+    });
+  }
+
+  void _onNewLocation(bg.Location location) {
+    updateRooms(location);
+  }
 
  /// create direct grid room (contact)
   Future<bool> createRoomAndInviteContact(String username) async {
@@ -302,12 +305,12 @@ class RoomService {
     }
   }
 
-  void sendLocationEvent(String roomId, LocationData locationData) async {
+  void sendLocationEvent(String roomId, bg.Location location) async {
     final room = client.getRoomById(roomId);
     if (room != null) {
-      // Extract latitude and longitude from LocationData
-      final latitude = locationData.latitude;
-      final longitude = locationData.longitude;
+      // Extract latitude and longitude from bg.Location
+      final latitude = location.coords.latitude;
+      final longitude = location.coords.longitude;
 
       if (latitude != null && longitude != null) {
         final eventContent = {
@@ -320,6 +323,7 @@ class RoomService {
 
         try {
           await room.sendEvent(eventContent);
+          print("Location event sent to room $roomId: $latitude, $longitude");
         } catch (e) {
           print("Failed to send location event: $e");
         }
@@ -331,48 +335,37 @@ class RoomService {
     }
   }
 
-  Future<void> updateRooms(LocationData position) async {
-    List<Room> rooms = client.rooms;
-    await updateAllUsersDeviceKeys();
+
+  Future<void> updateRooms(bg.Location location) async {
+    List<Room> rooms = client.rooms; // Assuming `client.rooms` gives the list of rooms
     var roomsUpdated = 0;
     for (Room room in rooms) {
-      // first check all keys again to be careful
+      // Get all joined members of the room
       var joinedMembers = room
           .getParticipants()
           .where((member) => member.membership == Membership.join)
           .toList();
-
-      // update groups
+      // Update groups
       if (joinedMembers.length > 2) {
-        sendLocationEvent(room.id, position);
+        sendLocationEvent(room.id, location);
         roomsUpdated += 1;
       }
-
-      // update contacts
+      // Update contacts
       else if (joinedMembers.length == 2) {
-        sendLocationEvent(room.id, position);
+        sendLocationEvent(room.id, location);
         roomsUpdated += 1;
       }
-
-      /*
-        final contactsUserId = joinedMembers
-            .firstWhere((member) => member.id != userId)
-            .id;
-        if (await databaseService.checkIfUserHasSharedPrefs(contactsUserId)) {
-          if (await databaseService.getApprovedKeys(contactsUserId) == false) {
-            print("$contactsUserId has new keys, not sending location and warning user");
-            // TODO: option to only send to approved/verified rooms
-            // right now sending regardless to prevent a standstill
-            // where nobody shares which leads to nobody verifying keys
-
-          }
-          */
+      // TODO: check if approved keys to prevent sending
+      // if keys have changed without user approval
       else {
-        // don't update and clean rooms?
+        // Don't update
       }
     }
-    print("Updated a total of $roomsUpdated rooms with my location: $position");
+
+    final coords = location.coords;
+    print("Updated a total of $roomsUpdated rooms with my location: ${coords.latitude}, ${coords.longitude}");
   }
+
 
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {

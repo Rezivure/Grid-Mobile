@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
-import 'package:provider/provider.dart'; // <--- Make sure Provider is imported
+import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
@@ -19,8 +20,9 @@ import 'package:grid_frontend/screens/settings/settings_page.dart';
 
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
-import 'package:grid_frontend/repositories/user_keys_repository.dart';
-import 'package:grid_frontend/repositories/location_repository.dart';
+
+import 'package:grid_frontend/services/location_manager.dart';
+
 
 class MapTab extends StatefulWidget {
   final LatLng? friendLocation;
@@ -33,8 +35,10 @@ class MapTab extends StatefulWidget {
 
 class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   late final MapController _mapController;
+  late final LocationManager _locationManager; // via Provider
   late final RoomService _roomService;     // Accessed via Provider
   late final UserService _userService;     // Accessed via Provider
+  late final SyncManager _syncManager;
 
   bool _isMapReady = false;
   double zoom = 18;
@@ -57,6 +61,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     // Fetch services from Provider
     _roomService = context.read<RoomService>();
     _userService = context.read<UserService>();
+    _locationManager = context.read<LocationManager>();
+    _syncManager = context.read<SyncManager>();
+
+    // Start required services
+    _syncManager.initialize();
+    // TODO being initialized twice somewhere
+    _locationManager.startTracking();
 
     _loadMapProvider();
   }
@@ -65,6 +76,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   void dispose() {
     _animationController?.dispose();
     _mapController.dispose();
+    _syncManager.stopSync();
+    _locationManager.stopTracking();
     super.dispose();
   }
 

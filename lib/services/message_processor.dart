@@ -30,9 +30,12 @@ class MessageProcessor {
     final Event finalEvent = await Event.fromMatrixEvent(matrixEvent, room);
     // Decrypt the event
     final Event decryptedEvent = await encryption.decryptRoomEvent(roomId, finalEvent);
-    print(decryptedEvent.content);
     // Check if the decrypted event is now a message
     if (decryptedEvent.type == EventTypes.Message && decryptedEvent.content['msgtype'] != null) {
+      // Skip message if originated from self
+      if (decryptedEvent.senderId == client.userID) {
+        return null;
+      }
       final messageData = {
         'eventId': decryptedEvent.eventId,
         'sender': decryptedEvent.senderId,

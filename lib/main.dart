@@ -17,11 +17,10 @@ import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
-import 'package:grid_frontend/providers/location_provider.dart';
+import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
-import 'package:grid_frontend/services/location_broadcast_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
@@ -78,86 +77,54 @@ void main() async {
 
   // Initialize services
   final userService = UserService(client, locationRepository);
-  final roomService = RoomService(
-    client,
-    userService,
-    userRepository,
-    userKeysRepository,
-    roomRepository,
-    locationRepository,
-    sharingPreferencesRepository,
-  );
 
   final messageParser = MessageParser();
   final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
   final syncManager = SyncManager(client, messageProcessor);
 
   runApp(
-    GridApp(
-      client: client,
-      databaseService: databaseService,
-      syncManager: syncManager,
-      locationRepository: locationRepository,
-      userKeysRepository: userKeysRepository,
-      userService: userService,
-      roomService: roomService,
-    ),
-  );
-}
-
-class GridApp extends StatelessWidget {
-  final Client client;
-  final DatabaseService databaseService;
-  final SyncManager syncManager;
-  final LocationRepository locationRepository;
-  final UserKeysRepository userKeysRepository;
-  final UserService userService;
-  final RoomService roomService;
-
-  const GridApp({
-    required this.client,
-    required this.databaseService,
-    required this.syncManager,
-    required this.locationRepository,
-    required this.userKeysRepository,
-    required this.userService,
-    required this.roomService,
-    Key? key,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
+    MultiProvider(
       providers: [
         Provider<Client>.value(value: client),
         Provider<DatabaseService>.value(value: databaseService),
         Provider<LocationRepository>.value(value: locationRepository),
         Provider<UserKeysRepository>.value(value: userKeysRepository),
         Provider<UserService>.value(value: userService),
-        Provider<RoomRepository>.value(value: roomService.roomRepository),
-        Provider<SharingPreferencesRepository>.value(value: roomService.sharingPreferencesRepository),
-        Provider<RoomService>.value(value: roomService),
+        Provider<RoomRepository>.value(value: roomRepository),
+        Provider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
 
         ChangeNotifierProvider(create: (_) => syncManager..startSync()),
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(create: (_) => UserLocationProvider()),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
-        ChangeNotifierProvider(create: (context) => LocationProvider()),
 
-        Provider<LocationBroadcastService>(
-          create: (context) => LocationBroadcastService(
-            context.read<LocationProvider>(),
-            context.read<LocationRepository>(),
-            context.read<RoomService>(),
-          ),
+        // Provide the LocationManager
+        ChangeNotifierProvider<LocationManager>(
+          create: (context) => LocationManager(),
+        ),
+
+        // Provide the RoomService
+        ProxyProvider<LocationManager, RoomService>(
+          update: (context, locationManager, _) {
+            return RoomService(
+              client,
+              context.read<UserService>(),
+              userRepository,
+              userKeysRepository,
+              roomRepository,
+              locationRepository,
+              sharingPreferencesRepository,
+              locationManager, // Pass LocationManager
+            );
+          },
         ),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider<MapBloc>(
             create: (context) => MapBloc(
-              locationProvider: context.read<LocationProvider>(),
+              locationManager: context.read<LocationManager>(),
               locationRepository: context.read<LocationRepository>(),
               databaseService: context.read<DatabaseService>(),
             ),
@@ -208,6 +175,6 @@ class GridApp extends StatelessWidget {
           },
         ),
       ),
-    );
-  }
+    ),
+  );
 }

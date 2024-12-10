@@ -48,6 +48,7 @@ dependencies:
   flutter_bloc: ^8.1.6
   collection: ^1.18.0
   equatable: ^2.0.7
+  flutter_background_geolocation: ^4.16.5
 
 
 flutter_launcher_icons:
@@ -64,6 +65,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/logos/Jpeg-2.jpg
     - assets/images/logo.png
     - assets/logos/png-file-2.png
     - assets/logos/Brand-Pattern-Low-color.png

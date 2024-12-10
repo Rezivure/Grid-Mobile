@@ -4,14 +4,14 @@ import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '/services/location_broadcast_service.dart';
+import 'package:grid_frontend/services/location_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
-
+import 'package:grid_frontend/services/location_manager.dart';
 
 
 class SettingsPage extends StatefulWidget {
@@ -20,6 +20,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+
   String? deviceID;
   String? identityKey;
   String _selectedProxy = 'None';
@@ -71,8 +72,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _logout() async {
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -94,9 +95,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed ?? false) {
       try {
-        locationBroadcastService.stopBroadcastingLocation();
         await databaseService.deleteAndReinitialize();
         await sharedPreferences.clear();
+        locationManager.stopTracking();
         await client.logout();
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } catch (e) {
@@ -110,9 +111,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _deactivateSMSAccount() async {
     final sharedPreferences = await SharedPreferences.getInstance();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final client = Provider.of<Client>(context, listen: false);
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
 
     // Step 1: Prompt user to enter their phone number with IntlPhoneField
     String? phoneNumber = await showDialog<String>(
@@ -192,9 +191,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
     if (confirmSuccess) {
       print("Account deactivated successfully via SMS.");
-      locationBroadcastService.stopBroadcastingLocation();
       await sharedPreferences.remove('userId'); // double check
       await sharedPreferences.clear();
+      locationManager.stopTracking();
 
       Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
     } else {
@@ -221,8 +220,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // currently uses API directly versus SDK
     // due to issues with SDK
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    final locationBroadcastService = Provider.of<LocationBroadcastService>(context, listen: false);
 
     // Step 1: Confirm deactivation
     final confirmed = await showDialog<bool>(
@@ -295,7 +292,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (response.statusCode == 200) {
         print("Account deactivated successfully.");
-        locationBroadcastService.stopBroadcastingLocation();
         await sharedPreferences.clear();
 
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
