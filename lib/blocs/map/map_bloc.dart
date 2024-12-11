@@ -41,9 +41,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   Future<void> _onMapMoveToUser(MapMoveToUser event, Emitter<MapState> emit) async {
+    print("Trying to move to a user");
     try {
       final userLocationData = await locationRepository.getLatestLocation(event.userId);
       if (userLocationData != null) {
+        print("New center: ${userLocationData.position}");
         emit(state.copyWith(center: userLocationData.position));
       } else {
         emit(state.copyWith(error: 'Location not available for this user.'));

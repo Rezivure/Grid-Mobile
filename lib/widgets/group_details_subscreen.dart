@@ -341,7 +341,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           ),
                           onTap: () {
                             final selectedUserProvider = Provider.of<SelectedUserProvider>(context, listen: false);
-                            selectedUserProvider.setSelectedUserId(user.id);
+                            selectedUserProvider.setSelectedUserId(user.id, context);
                             print('Group member selected: ${user.id}');
                           },
                         );

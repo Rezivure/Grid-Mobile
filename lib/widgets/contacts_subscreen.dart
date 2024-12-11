@@ -12,6 +12,9 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 
+import '../blocs/map/map_bloc.dart';
+import '../blocs/map/map_event.dart';
+
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
   final RoomService roomService;
@@ -224,7 +227,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     onTap: () {
                       final selectedUserProvider =
                       Provider.of<SelectedUserProvider>(context, listen: false);
-                      selectedUserProvider.setSelectedUserId(contact.userId);
+                      selectedUserProvider.setSelectedUserId(contact.userId, context);
                     },
                   );
                 },

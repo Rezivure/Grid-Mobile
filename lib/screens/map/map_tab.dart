@@ -43,6 +43,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   bool _isMapReady = false;
   double zoom = 18;
 
+  bool _followUser = true;
+
   VectorTileProvider? tileProvider;
   late vector_renderer.Theme mapTheme;
 
@@ -126,6 +128,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       return;
     }
 
+    setState(() {
+      _followUser = false;
+    });
+
     final currentCenter = _mapController.camera.center;
     final currentZoom = _mapController.camera.zoom;
 
@@ -195,8 +201,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (state.error != null) {
-          return Center(child: Text('Error: ${state.error}'));
+        if (state.center != null) {
+          print("Animating map to center: ${state.center}");
+          _animatedMapMove(state.center!, state.zoom);
         }
 
         return Scaffold(
@@ -205,6 +212,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
+                  onPositionChanged: (position, hasGesture) {
+                    if (hasGesture) {
+                      setState(() {
+                        _followUser = false; // Stop following the user when manually interacting
+                      });
+                    }
+                  },
                   initialCenter: state.center ?? LatLng(51.5, -0.09),
                   initialZoom: state.zoom,
                   initialRotation: 0.0,
@@ -226,7 +240,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                     concurrency: 5,
                   ),
                   CurrentLocationLayer(
-                    followOnLocationUpdate: FollowOnLocationUpdate.always,
+                    alignPositionOnUpdate: _followUser
+                        ? AlignOnUpdate.always
+                        : AlignOnUpdate.never,
                     style: const LocationMarkerStyle(),
                   ),
                   MarkerLayer(
@@ -300,6 +316,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                       heroTag: "centerUserBtn",
                       backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
                       onPressed: () {
+                        setState(() {
+                          _followUser = true; // Re-enable following user location
+                        });
                         context.read<MapBloc>().add(MapCenterOnUser());
                       },
                       child: Icon(Icons.my_location,

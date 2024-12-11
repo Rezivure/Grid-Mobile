@@ -55,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> {
     return Scaffold(
       body: Center(
         child: Image.asset(
-          'assets/logos/Jpeg-2.jpg',
+          'assets/logos/png-file-2.png',
           fit: BoxFit.contain,
         ),
       ),
