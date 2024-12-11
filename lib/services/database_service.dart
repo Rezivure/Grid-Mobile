@@ -30,7 +30,7 @@ class DatabaseService {
       version: 4,
       onCreate: (db, version) async {
         await _initializeEncryptionKey();
-        await UserRepository.createTable(db);
+        await UserRepository.createTables(db);
         await RoomRepository.createTables(db);
         await LocationRepository.createTable(db);
         await SharingPreferencesRepository.createTable(db);

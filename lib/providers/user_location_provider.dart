@@ -9,13 +9,19 @@ class UserLocationProvider with ChangeNotifier {
   UserLocationProvider(this.locationRepository) {
     _initializeLocations();
     _listenForDatabaseUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
+
   }
+
 
   Future<void> _initializeLocations() async {
     final locations = await locationRepository.getAllLocations();
     for (var location in locations) {
       _userLocations[location.userId] = location;
     }
+    print("End of initializeLocations: ${_userLocations}");
     notifyListeners();
   }
 
@@ -41,6 +47,10 @@ class UserLocationProvider with ChangeNotifier {
   String? getLastSeen(String userId) {
     final location = _userLocations[userId];
     return location?.timestamp;
+  }
+
+  void debugUserLocations() {
+    print("DEBUG _userLocations: ${_userLocations.keys.toList()}");
   }
 
   void clearAllLocations() {

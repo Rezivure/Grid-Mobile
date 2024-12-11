@@ -19,6 +19,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -34,6 +35,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   late final UserService _userService;
   late final LocationRepository _locationRepository;
   late final UserKeysRepository _userKeysRepository;
+  late final UserRepository _userRepository;
 
   SubscreenOption _selectedOption = SubscreenOption.contacts;
   bool _isDropdownExpanded = false;
@@ -53,6 +55,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     _userService = context.read<UserService>();
     _locationRepository = context.read<LocationRepository>();
     _userKeysRepository = context.read<UserKeysRepository>();
+    _userRepository = context.read<UserRepository>();
 
     // Set the selected subscreen to 'contacts' in SelectedSubscreenProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -441,8 +444,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       default:
         return ContactsSubscreen(
           roomService: _roomService,
-          userKeysRepository: _userKeysRepository,
-          userService: _userService,
+          userRepository: _userRepository,
           scrollController: scrollController,
         );
     }

@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/message_processor.dart';
-import 'package:grid_frontend/services/room_service.dart';
-import 'package:provider/provider.dart';
+import 'package:grid_frontend/repositories/room_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/models/room.dart' as GridRoom;
+import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 
 class SyncManager with ChangeNotifier {
   final Client client;
   final MessageProcessor messageProcessor;
+  final RoomRepository roomRepository;
+  final UserRepository userRepository;
+
   bool _isSyncing = false;
   final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
 
-  SyncManager(this.client, this.messageProcessor);
+  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository);
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
@@ -23,7 +29,7 @@ class SyncManager with ChangeNotifier {
     _isInitialized = true;
 
     print("Initializing Sync Manager...");
-    await fetchInitialInvites();
+    await fetchInitialData();
     await startSync();
   }
 
@@ -43,6 +49,8 @@ class SyncManager with ChangeNotifier {
       syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
         _processRoomMessages(roomId, joinedRoomUpdate);
       });
+
+      // TODO: Process changes to rooms/participants leave
     });
   }
 
@@ -85,17 +93,98 @@ class SyncManager with ChangeNotifier {
     }
   }
 
-  Future<void> fetchInitialInvites() async {
+
+  Future<void> fetchInitialData() async {
     try {
       final response = await client.sync(fullState: true);
+
+      // Update Invites
       response.rooms?.invite?.forEach((roomId, inviteUpdate) {
         _processInvite(roomId, inviteUpdate);
       });
+
+      // Fetch and Cache Rooms
+      for (var room in client.rooms) {
+        initialProcessRoom(room);
+      }
+
+      //
+
       notifyListeners();
     } catch (e) {
-      print("Error fetching initial invites: $e");
+      print("Error fetching initial data: $e");
     }
   }
+
+
+  Future<void> initialProcessRoom(Room room) async {
+    // Check if the room already exists
+    final existingRoom = await roomRepository.getRoomById(room.id);
+
+    final isDirect = isDirectRoom(room.name ?? '');
+    final customRoom = GridRoom.Room(
+      roomId: room.id,
+      name: room.name ?? 'Unnamed Room',
+      isGroup: !isDirect,
+      lastActivity: DateTime.now().toIso8601String(),
+      avatarUrl: room.avatar?.toString(),
+      members: room.getParticipants().map((p) => p.id).toList(),
+      expirationTimestamp: extractExpirationTimestamp(room.name ?? ''),
+    );
+
+    if (existingRoom == null) {
+      // Insert new room
+      await roomRepository.insertRoom(customRoom);
+      print('Inserted new room: ${room.id}');
+    } else {
+      // Update existing room
+      await roomRepository.updateRoom(customRoom);
+      print('Updated existing room: ${room.id}');
+    }
+
+    // Sync participants
+    final currentParticipants = customRoom.members;
+    final existingParticipants = await roomRepository.getRoomParticipants(room.id);
+
+    for (var participantId in currentParticipants) {
+      try {
+        // Fetch participant details using client.getUserProfile
+        final profileInfo = await client.getUserProfile(participantId);
+
+        // Create or update the user in the database
+        final gridUser = GridUser.GridUser(
+          userId: participantId,
+          displayName: profileInfo.displayname,
+          avatarUrl: profileInfo.avatarUrl?.toString(),
+          lastSeen: DateTime.now().toIso8601String(),
+          profileStatus: "", // Future implementations
+        );
+
+        await userRepository.insertUser(gridUser);
+
+        // Add relationship
+        await userRepository.insertUserRelationship(
+          participantId,
+          room.id,
+          isDirect,
+        );
+
+        print('Processed user ${participantId} in room ${room.id}');
+      } catch (e) {
+        print('Error fetching profile for user $participantId: $e');
+      }
+    }
+
+    // Remove participants who are no longer in the room
+    for (var participant in existingParticipants) {
+      if (!currentParticipants.contains(participant)) {
+        await roomRepository.removeRoomParticipant(room.id, participant);
+        print('Removed participant $participant from room ${room.id}');
+      }
+    }
+  }
+
+
 
   String _extractInviter(InvitedRoomUpdate inviteUpdate) {
     final inviteState = inviteUpdate.inviteState;

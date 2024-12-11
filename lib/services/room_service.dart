@@ -41,7 +41,6 @@ class RoomService {
   }
 
   void _onNewLocation(bg.Location location) {
-    print("Sending updated location to all rooms");
     updateRooms(location);
   }
 
@@ -447,6 +446,9 @@ class RoomService {
     return false;
   }
 
+  String? getMyUserId() {
+    return client.userID;
+  }
   Future<void> updateUsersInRoomKeysStatus(Room room) async {
     final members = room.getParticipants().where((member) => member.membership == Membership.join);
 

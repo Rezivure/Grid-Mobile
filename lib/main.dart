@@ -80,7 +80,7 @@ void main() async {
 
   final messageParser = MessageParser();
   final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
-  final syncManager = SyncManager(client, messageProcessor);
+  final syncManager = SyncManager(client, messageProcessor, roomRepository, userRepository);
 
   runApp(
     MultiProvider(
@@ -90,6 +90,7 @@ void main() async {
         Provider<LocationRepository>.value(value: locationRepository),
         Provider<UserKeysRepository>.value(value: userKeysRepository),
         Provider<UserService>.value(value: userService),
+        Provider<UserRepository>.value(value: userRepository),
         Provider<RoomRepository>.value(value: roomRepository),
         Provider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
 

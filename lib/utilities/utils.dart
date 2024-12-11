@@ -82,3 +82,41 @@ Map<String, String> normalizeUser(String username) {
   };
 }
 
+/// Utility function to check if a room is a direct room based on its name.
+/// Assumes direct room names follow the format: "Grid:Direct:<user1>:<user2>"
+bool isDirectRoom(String roomName) {
+  // Check if the room name starts with "Grid:Direct:"
+  if (!roomName.startsWith("Grid:Direct:")) {
+    return false;
+  }
+
+  // Extract the remaining part after "Grid:Direct:"
+  final remainingPart = roomName.substring("Grid:Direct:".length);
+
+  // Split the remaining part into users by ":"
+  final userParts = remainingPart.split(':');
+
+  // Check if there are exactly two user identifiers
+  return userParts.length == 4;
+}
+
+/// Utility to extract expiration timestamp from a room name.
+/// Room name format: "Grid:Group:<expirationTimestamp>:<groupName>:<creatorId>"
+/// Returns 0 if the room never expires or the format is invalid.
+int extractExpirationTimestamp(String roomName) {
+  final parts = roomName.split(':');
+
+  if (parts.length < 3) {
+    // If the room name doesn't have enough parts, assume no expiration.
+    return 0;
+  }
+
+  if (parts[0] == 'Grid' && parts[1] == 'Group') {
+    final expirationPart = parts[2];
+    return int.tryParse(expirationPart) ?? 0; // Default to 0 if parsing fails.
+  }
+
+  // Return 0 if the room is not a group or the format is invalid.
+  return 0;
+}
+

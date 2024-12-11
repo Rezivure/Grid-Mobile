@@ -49,6 +49,7 @@ dependencies:
   collection: ^1.18.0
   equatable: ^2.0.7
   flutter_background_geolocation: ^4.16.5
+  hive: ^2.2.3
 
 
 flutter_launcher_icons:

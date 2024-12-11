@@ -223,7 +223,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                       'protomaps': tileProvider!,
                     }),
                     fileCacheTtl: const Duration(hours: 24),
-                    concurrency: 25,
+                    concurrency: 5,
                   ),
                   CurrentLocationLayer(
                     followOnLocationUpdate: FollowOnLocationUpdate.always,
