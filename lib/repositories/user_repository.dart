@@ -115,14 +115,28 @@ class UserRepository {
     );
   }
 
-  /// Deletes a user from the database
+  /// Deletes a user and all their relationships from the database
   Future<void> deleteUser(String userId) async {
     final db = await _databaseService.database;
-    await db.delete(
-      'Users',
-      where: 'id = ?',
-      whereArgs: [userId],
-    );
+    print("Deleting user $userId from database");
+
+    await db.transaction((txn) async {
+      // Delete from UserRelationships first (due to foreign key)
+      await txn.delete(
+        'UserRelationships',
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
+
+      // Then delete from Users table
+      await txn.delete(
+        'Users',
+        where: 'userId = ?',  // Changed from 'id = ?'
+        whereArgs: [userId],
+      );
+    });
+
+    print("Deleted user and their relationships from database");
   }
 
   /// Fetches all rooms associated with a user

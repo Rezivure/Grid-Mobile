@@ -82,7 +82,6 @@ void main() async {
 
   final messageParser = MessageParser();
   final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
-  final syncManager = SyncManager(client, messageProcessor, roomRepository, userRepository, roomService);
 
   runApp(
     MultiProvider(
@@ -96,7 +95,6 @@ void main() async {
         Provider<RoomRepository>.value(value: roomRepository),
         Provider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
 
-        ChangeNotifierProvider(create: (_) => syncManager..startSync()),
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(
@@ -143,6 +141,28 @@ void main() async {
               userRepository: context.read<UserRepository>(),
               mapBloc: context.read<MapBloc>(),
             ),
+          ),
+          ChangeNotifierProxyProvider2<MapBloc, ContactsBloc, SyncManager>(
+            create: (context) => SyncManager(
+              client,
+              messageProcessor,
+              roomRepository,
+              userRepository,
+              roomService,
+              context.read<MapBloc>(),
+              context.read<ContactsBloc>(),
+              locationRepository
+            )..startSync(),
+            update: (context, mapBloc, contactsBloc, previous) => previous ?? SyncManager(
+              client,
+              messageProcessor,
+              roomRepository,
+              userRepository,
+              roomService,
+              mapBloc,
+              contactsBloc,
+              locationRepository
+            )..startSync(),
           ),
         ],
         child: MaterialApp(

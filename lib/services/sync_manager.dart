@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -8,19 +9,27 @@ import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 
+import '../blocs/map/map_bloc.dart';
+import '../blocs/contacts/contacts_bloc.dart';
+import '../blocs/contacts/contacts_event.dart';
+import '../blocs/map/map_event.dart';
+
 class SyncManager with ChangeNotifier {
   final Client client;
   final RoomService roomService;
   final MessageProcessor messageProcessor;
   final RoomRepository roomRepository;
   final UserRepository userRepository;
+  final LocationRepository locationRepository;
+  final MapBloc mapBloc;
+  final ContactsBloc contactsBloc;
 
   bool _isSyncing = false;
   final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
 
-  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository, this.roomService);
+  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository, this.roomService, this.mapBloc, this.contactsBloc, this.locationRepository);
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
@@ -47,12 +56,22 @@ class SyncManager with ChangeNotifier {
         _processInvite(roomId, inviteUpdate);
       });
 
-      // Process room messages
+      // Process room messages and joins
       syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
+        print("Got join update for room: $roomId");
         _processRoomMessages(roomId, joinedRoomUpdate);
+
+        // Check if there are any state events before processing
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+          print("Found state events, processing join");
+          _processRoomJoin(roomId, joinedRoomUpdate);
+        }
       });
 
-      // TODO: Process changes to rooms/participants leave
+      // Process room departures
+      syncUpdate.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
+        _processRoomLeave(roomId, leftRoomUpdate);
+      });
     });
   }
 
@@ -80,6 +99,45 @@ class SyncManager with ChangeNotifier {
     }
   }
 
+  Future<void> _processRoomLeave(String roomId, LeftRoomUpdate leftRoomUpdate) async {
+    try {
+      final room = await roomRepository.getRoomById(roomId);
+
+      if (room != null && !room.isGroup) {
+        final participants = await roomRepository.getRoomParticipants(roomId);
+        final otherUserId = participants.firstWhere(
+              (id) => id != client.userID,
+          orElse: () => '',
+        );
+
+        if (otherUserId.isNotEmpty) {
+          print("Processing complete removal for user: $otherUserId");
+
+          // Check if user exists in any other rooms
+          final userRooms = await roomRepository.getUserRooms(otherUserId);
+
+          // Clean up database
+          await userRepository.removeContact(otherUserId);
+          await roomRepository.deleteRoom(roomId);
+
+          // If user isn't in any other rooms, clean up all their data
+          if (userRooms.length <= 1) {  // <= 1 because current room is still counted
+            print("User not in any other rooms, removing completely");
+            await locationRepository.deleteUserLocations(otherUserId);
+            await userRepository.deleteUser(otherUserId);
+          }
+
+          // Update UI
+          mapBloc.add(RemoveUserLocation(otherUserId));
+          contactsBloc.add(RefreshContacts());
+
+          print('Completed cleanup for user $otherUserId');
+        }
+      }
+    } catch (e) {
+      print('Error processing room leave: $e');
+    }
+  }
   void _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) {
     final timelineEvents = joinedRoomUpdate.timeline?.events ?? [];
     for (var event in timelineEvents) {
@@ -95,6 +153,70 @@ class SyncManager with ChangeNotifier {
     }
   }
 
+  Future<void> _processRoomJoin(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
+    // Processes joinedRoomUpdates
+    // Can include leaving a room as well as joining a room
+    try {
+      print("Processing room join for room: $roomId");
+      final stateEvents = joinedRoomUpdate.state ?? [];
+      print("Found ${stateEvents.length} state events");
+
+      for (var event in stateEvents) {
+        print("Processing event type: ${event.type}");
+        if (event.type == 'm.room.member') {
+          print("Found member event: ${event.stateKey} with content: ${event.content}");
+
+          if (event.content['membership'] == 'leave') {
+            print("Found leave membership, processing as room leave");
+            final room = await roomRepository.getRoomById(roomId);
+            if (room != null && !room.isGroup) {
+              final leftUserId = event.stateKey;
+              if (leftUserId != null && leftUserId != client.userID) {
+                print("Processing complete removal for user: $leftUserId");
+
+                // Check if user exists in any other rooms
+                final userRooms = await roomRepository.getUserRooms(leftUserId);
+
+                // Clean up database
+                await userRepository.removeContact(leftUserId);
+                await roomRepository.deleteRoom(roomId);
+
+                // If user isn't in any other rooms, clean up all their data
+                if (userRooms.length <= 1) {  // <= 1 because current room is still counted
+                  print("User not in any other rooms, removing completely");
+                  await locationRepository.deleteUserLocations(leftUserId);
+                  await userRepository.deleteUser(leftUserId);
+                }
+
+                // Update UI
+                print("Dispatching RemoveUserLocation event for: $leftUserId");
+                mapBloc.add(RemoveUserLocation(leftUserId));
+                print("Dispatching RefreshContacts event");
+                contactsBloc.add(RefreshContacts());
+
+                print('Completed cleanup for user $leftUserId');
+              }
+            }
+            return;
+          }
+          // Handle normal join events as before
+          final matrixRoom = client.getRoomById(roomId);
+          if (matrixRoom != null) {
+            print("Found Matrix room, processing initial room data");
+            await initialProcessRoom(matrixRoom);
+            print("Room processed, triggering contacts and map refresh");
+            contactsBloc.add(RefreshContacts());
+            mapBloc.add(MapLoadUserLocations());
+          } else {
+            print("Matrix room not found");
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      print('Error processing room join: $e');
+    }
+  }
 
   Future<void> fetchInitialData() async {
     try {

@@ -59,9 +59,11 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   void _onRemoveUserLocation(RemoveUserLocation event, Emitter<MapState> emit) {
+    print("MapBloc: Removing location for user: ${event.userId}");
     final updatedLocations = state.userLocations
         .where((location) => location.userId != event.userId)
         .toList();
+    print("MapBloc: Locations before: ${state.userLocations.length}, after: ${updatedLocations.length}");
     emit(state.copyWith(userLocations: updatedLocations));
   }
 
