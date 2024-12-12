@@ -20,3 +20,8 @@ class MapMoveToUser extends MapEvent {
 }
 
 class MapLoadUserLocations extends MapEvent {}
+
+class RemoveUserLocation extends MapEvent {
+  final String userId;
+  const RemoveUserLocation(this.userId);
+}

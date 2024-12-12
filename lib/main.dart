@@ -32,6 +32,7 @@ import 'screens/onboarding/signup_screen.dart';
 import 'screens/map/map_tab.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,13 +75,14 @@ void main() async {
   final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
   final locationRepository = LocationRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
-
+  final locationManager = LocationManager();
   // Initialize services
   final userService = UserService(client, locationRepository);
+  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
   final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
-  final syncManager = SyncManager(client, messageProcessor, roomRepository, userRepository);
+  final syncManager = SyncManager(client, messageProcessor, roomRepository, userRepository, roomService);
 
   runApp(
     MultiProvider(
@@ -101,6 +103,9 @@ void main() async {
           create: (context) => UserLocationProvider(context.read<LocationRepository>()),
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
+        ChangeNotifierProvider(
+          create: (context) => UserLocationProvider(context.read<LocationRepository>()),
+        ),
 
         // Provide the LocationManager
         ChangeNotifierProvider<LocationManager>(
@@ -130,6 +135,13 @@ void main() async {
               locationManager: context.read<LocationManager>(),
               locationRepository: context.read<LocationRepository>(),
               databaseService: context.read<DatabaseService>(),
+            ),
+          ),
+          BlocProvider<ContactsBloc>(
+            create: (context) => ContactsBloc(
+              roomService: context.read<RoomService>(),
+              userRepository: context.read<UserRepository>(),
+              mapBloc: context.read<MapBloc>(),
             ),
           ),
         ],

@@ -136,4 +136,68 @@ class UserRepository {
     );
     return results.map((map) => map['roomId'] as String).toList();
   }
+
+  Future<void> removeContact(String contactUserId) async {
+    final db = await _databaseService.database;
+
+    // Start a transaction to ensure all operations complete together
+    await db.transaction((txn) async {
+      // First, find the direct room ID for this contact
+      final roomResults = await txn.rawQuery('''
+        SELECT roomId 
+        FROM UserRelationships 
+        WHERE userId = ? AND isDirect = 1
+      ''', [contactUserId]);
+
+      if (roomResults.isNotEmpty) {
+        String roomId = roomResults.first['roomId'] as String;
+
+        // Delete the user relationships
+        await txn.delete(
+          'UserRelationships',
+          where: 'roomId = ?',
+          whereArgs: [roomId],
+        );
+
+        // Delete the room
+        await txn.delete(
+          'Rooms',
+          where: 'roomId = ?',
+          whereArgs: [roomId],
+        );
+
+        // Optionally, delete the user if they're not part of any other rooms
+        final otherRooms = await txn.query(
+          'UserRelationships',
+          where: 'userId = ?',
+          whereArgs: [contactUserId],
+        );
+
+        if (otherRooms.isEmpty) {
+          await txn.delete(
+            'Users',
+            where: 'userId = ?',
+            whereArgs: [contactUserId],
+          );
+        }
+      }
+    });
+  }
+
+  Future<String?> getDirectRoomForContact(String contactUserId) async {
+    final db = await _databaseService.database;
+
+    final results = await db.rawQuery('''
+    SELECT roomId 
+    FROM UserRelationships 
+    WHERE userId = ? AND isDirect = 1
+    LIMIT 1
+  ''', [contactUserId]);
+
+    if (results.isNotEmpty) {
+      return results.first['roomId'] as String;
+    }
+
+    return null;
+  }
 }
