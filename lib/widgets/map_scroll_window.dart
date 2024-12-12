@@ -251,8 +251,14 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   }
 
   Widget _buildHorizontalScroller(ColorScheme colorScheme) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _fetchGroupRooms(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: Future.wait([
+        _fetchGroupRooms(),
+        _userService.getMyUserId(),
+      ]).then((results) => {
+        'groupRooms': results[0] as List<Map<String, dynamic>>,
+        'userId': results[1] as String?,
+      }),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -262,42 +268,50 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
         } else if (snapshot.hasError) {
           return const SizedBox(
             height: 100,
-            child: Center(child: Text('Error loading groups')),
-          );
-        } else {
-          final groupRooms = snapshot.data ?? [];
-
-          return SizedBox(
-            height: 100,
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (scrollNotification) {
-                if (scrollNotification is ScrollStartNotification ||
-                    scrollNotification is ScrollUpdateNotification ||
-                    scrollNotification is ScrollEndNotification) {
-                  return true;
-                }
-                return false;
-              },
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                physics: const AlwaysScrollableScrollPhysics(),
-                primary: false,
-                children: [
-                  _buildContactOption(colorScheme),
-                  for (var groupRoomData in groupRooms)
-                    _buildGroupOption(colorScheme, groupRoomData),
-                ],
-              ),
-            ),
+            child: Center(child: Text('Error loading content')),
           );
         }
+
+        final data = snapshot.data!;
+        final groupRooms = data['groupRooms'] as List<Map<String, dynamic>>;
+        final userId = data['userId'] as String?;
+
+        if (userId == null) {
+          return const SizedBox(
+            height: 100,
+            child: Center(child: Text('User ID not found')),
+          );
+        }
+
+        return SizedBox(
+          height: 100,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (scrollNotification) {
+              if (scrollNotification is ScrollStartNotification ||
+                  scrollNotification is ScrollUpdateNotification ||
+                  scrollNotification is ScrollEndNotification) {
+                return true;
+              }
+              return false;
+            },
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              physics: const AlwaysScrollableScrollPhysics(),
+              primary: false,
+              children: [
+                _buildContactOption(colorScheme, userId),
+                for (var groupRoomData in groupRooms)
+                  _buildGroupOption(colorScheme, groupRoomData),
+              ],
+            ),
+          ),
+        );
       },
     );
   }
 
-  Widget _buildContactOption(ColorScheme colorScheme) {
+  Widget _buildContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
-    final String userId = _userService.getMyUserId() as String;
 
     return GestureDetector(
       onTap: () {
@@ -305,7 +319,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           _selectedOption = SubscreenOption.contacts;
           _selectedLabel = 'My Contacts';
           _isDropdownExpanded = false;
-          // Update SelectedSubscreenProvider
           Provider.of<SelectedSubscreenProvider>(context, listen: false)
               .setSelectedSubscreen('contacts');
         });

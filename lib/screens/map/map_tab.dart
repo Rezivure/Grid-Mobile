@@ -109,40 +109,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     );
   }
 
-  void _animatedMapMove(LatLng destLocation, double destZoom) {
-    if (!_isMapReady) return;
-
-    // Cancel any existing animation
-    _animationController?.dispose();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-
-    final latTween = Tween(
-      begin: _mapController.camera.center.latitude,
-      end: destLocation.latitude,
-    );
-    final lngTween = Tween(
-      begin: _mapController.camera.center.longitude,
-      end: destLocation.longitude,
-    );
-    final zoomTween = Tween(
-      begin: _mapController.camera.zoom,
-      end: destZoom,
-    );
-
-    _animationController!.addListener(() {
-      if (!mounted) return;
-      _mapController.moveAndRotate(
-        LatLng(latTween.evaluate(_animationController!), lngTween.evaluate(_animationController!)),
-        zoomTween.evaluate(_animationController!),
-        0,
-      );
-    });
-
-    _animationController!.forward();
-  }
 
   void _onMarkerTap(String userId, LatLng position) {
     setState(() {
@@ -175,6 +141,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       child: Scaffold(
         body: Stack(
           children: [
+            SizedBox(
+                height: MediaQuery.of(context).size.height * 3/4,
+            child:
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
@@ -188,6 +157,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                 initialCenter: LatLng(51.5, -0.09),
                 initialZoom: _zoom,
                 initialRotation: 0.0,
+                minZoom: 12,    // Add this line
+                maxZoom: 18,
                 interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
                 onMapReady: () => setState(() => _isMapReady = true),
               ),
@@ -196,7 +167,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   theme: _mapTheme,
                   tileProviders: TileProviders({'protomaps': _tileProvider!}),
                   fileCacheTtl: const Duration(hours: 24),
-                  concurrency: 5,
+                  concurrency: 1,
                 ),
                 CurrentLocationLayer(
                   alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
@@ -221,6 +192,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   },
                 ),
               ],
+            ),
             ),
 
             if (_bubblePosition != null && _selectedUserId != null)
@@ -266,9 +238,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   FloatingActionButton(
                     heroTag: "orientNorthBtn",
                     backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                    onPressed: () => _mapController.move(
+                    onPressed: () => _mapController.moveAndRotate(
                       _mapController.camera.center,
                       _mapController.camera.zoom,
+                      0,  // Set rotation to 0 (north)
                     ),
                     child: Icon(
                         Icons.explore,

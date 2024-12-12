@@ -1,5 +1,3 @@
-// profile_modal.dart
-
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:provider/provider.dart';
@@ -19,25 +17,49 @@ class ProfileModal extends StatefulWidget {
 }
 
 class _ProfileModalState extends State<ProfileModal> {
-  bool _copied = false; // State variable to track if "Copied" should be shown
+  bool _copied = false;
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final userId = await widget.userService.getMyUserId();
+    if (mounted) {
+      setState(() {
+        _userId = userId;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final String userId = widget.userService.getMyUserId() as String;
-    final userLocalpart = localpart(userId);
+
+    if (_userId == null) {
+      return Material(
+        color: colorScheme.background,
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final userLocalpart = localpart(_userId!);
 
     return Material(
       color: colorScheme.background,
       child: SingleChildScrollView(
         child: Container(
-          height: MediaQuery.of(context).size.height * 0.7, // 70% of screen height
+          height: MediaQuery.of(context).size.height * 0.7,
           padding: EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Row with avatar, username, and copy icon
               Row(
                 children: [
                   CircleAvatar(
@@ -98,16 +120,14 @@ class _ProfileModalState extends State<ProfileModal> {
               ),
               SizedBox(height: 20),
 
-              // Spacer to push QR code lower in the modal
               Spacer(flex: 1),
 
-              // Centered QR code
               Center(
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     QrImageView(
-                      data: userId,
+                      data: _userId!,
                       version: QrVersions.auto,
                       size: 250.0,
                       backgroundColor: colorScheme.background,
@@ -117,9 +137,8 @@ class _ProfileModalState extends State<ProfileModal> {
                 ),
               ),
 
-              Spacer(flex: 2), // More space below QR code
+              Spacer(flex: 2),
 
-              // Close button at the bottom
               Center(
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(

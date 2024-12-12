@@ -23,27 +23,32 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MapLoadUserLocations>(_onMapLoadUserLocations);
   }
 
-  Future<void> _onMapInitialize(MapInitialize event, Emitter<MapState> emit) async {
+  Future<void> _onMapInitialize(MapInitialize event,
+      Emitter<MapState> emit) async {
     // Load initial data if needed, for example:
     // Maybe load user locations right away
     add(MapLoadUserLocations());
     emit(state.copyWith(isLoading: false));
   }
 
-  Future<void> _onMapCenterOnUser(MapCenterOnUser event, Emitter<MapState> emit) async {
+  Future<void> _onMapCenterOnUser(MapCenterOnUser event,
+      Emitter<MapState> emit) async {
     final currentPosition = locationManager.currentLatLng;
     if (currentPosition != null) {
-      final userLocation = LatLng(currentPosition.latitude!, currentPosition.longitude!);
+      final userLocation = LatLng(
+          currentPosition.latitude!, currentPosition.longitude!);
       emit(state.copyWith(center: userLocation));
     } else {
       emit(state.copyWith(error: 'No user location available'));
     }
   }
 
-  Future<void> _onMapMoveToUser(MapMoveToUser event, Emitter<MapState> emit) async {
+  Future<void> _onMapMoveToUser(MapMoveToUser event,
+      Emitter<MapState> emit) async {
     print("Trying to move to a user");
     try {
-      final userLocationData = await locationRepository.getLatestLocation(event.userId);
+      final userLocationData = await locationRepository.getLatestLocation(
+          event.userId);
       if (userLocationData != null) {
         print("New center: ${userLocationData.position}");
 
@@ -72,19 +77,31 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event, Emitter<MapState> emit) async {
-    // Load user locations from database
-    // If you previously used roomProvider.fetchAndUpdateLocations(), that logic can be moved to a service or handled differently.
-    // For simplicity, assume databaseService or locationRepository can fetch all locations.
-
+  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event,
+      Emitter<MapState> emit) async {
     try {
-      // If you had a method in locationRepository to get all user locations:
-      // final userLocations = await locationRepository.getAllUserLocations();
-      // For now, let's simulate with empty:
-      final userLocations = <UserLocation>[];
+      final allLocations = await locationRepository.getAllLocations();
 
-      // Update state
-      emit(state.copyWith(isLoading: false, userLocations: userLocations));
+      // Create a map to store latest location for each user
+      final Map<String, UserLocation> latestLocations = {};
+
+      // Iterate through locations, keeping only the latest for each user
+      for (final location in allLocations) {
+        final existingLocation = latestLocations[location.userId];
+        if (existingLocation == null ||
+            DateTime.parse(location.timestamp).isAfter(
+                DateTime.parse(existingLocation.timestamp))) {
+          latestLocations[location.userId] = location;
+        }
+      }
+
+      // Convert map values back to list
+      final uniqueLocations = latestLocations.values.toList();
+
+      emit(state.copyWith(
+          isLoading: false,
+          userLocations: uniqueLocations
+      ));
     } catch (e) {
       emit(state.copyWith(error: 'Error loading user locations: $e'));
     }
