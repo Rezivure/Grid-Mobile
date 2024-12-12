@@ -3,26 +3,30 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/repositories/user_keys_repository.dart';
 
 class UserKeysModal extends StatelessWidget {
   final String userId;
   final bool approvedKeys;
+  final UserService userService;
+  final UserKeysRepository userKeysRepository;
 
   UserKeysModal({
     required this.userId,
     required this.approvedKeys,
+    required this.userService,
+    required this.userKeysRepository
   });
 
   Future<Map<String, dynamic>?> _fetchDeviceKeys(BuildContext context) async {
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    return await databaseService.getDeviceKeysByUserId(userId);
+    return await userKeysRepository.getKeysByUserId(userId);
   }
 
   void approveKeys(BuildContext context) async {
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
     try {
       print("attemping to approve keys for ${this.userId}");
-      await databaseService.updateApprovedKeys(this.userId, true);
+      await userKeysRepository.updateApprovedKeys(this.userId, true);
 
       // Notify the parent widget that keys were approved
       Navigator.of(context).pop(true);

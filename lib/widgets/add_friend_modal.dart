@@ -1,17 +1,28 @@
 // add_friend_modal.dart
 
 import 'package:flutter/material.dart';
+import 'package:grid_frontend/models/room.dart';
+import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
-import '../../providers/room_provider.dart';
+import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
+
 
 class AddFriendModal extends StatefulWidget {
+  final UserService userService;
+  final RoomService roomService;
+
+  const AddFriendModal({required this.userService, Key? key, required this.roomService}) : super(key: key);
+
   @override
   _AddFriendModalState createState() => _AddFriendModalState();
 }
+
 
 class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProviderStateMixin {
   // Add Contact variables
@@ -69,19 +80,15 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   }
 
   void _addContact() async {
-    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     final inputText = _controller.text.trim();
     String username;
-
     if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
       username = _matrixUserId!;
     } else {
       username = inputText;
     }
-
-    String normalizedUserId = username.startsWith('@')
-        ? username.toLowerCase()
-        : '@$username:${dotenv.env['HOMESERVER']}'.toLowerCase();
+    var normalized = normalizeUser(username);
+    String? normalizedUserId = normalized['matrixUserId'];
 
     if (username.isNotEmpty) {
       if (mounted) {
@@ -91,8 +98,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
       try {
-        bool userExists = await roomProvider.userExists(normalizedUserId);
-
+        bool userExists = await widget.userService.userExists(normalizedUserId!);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -104,11 +110,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         }
 
         // User exists, proceed with invitation
-        await roomProvider.createAndInviteUser(normalizedUserId, context);
 
+        await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
         // Clear _matrixUserId after use
         _matrixUserId = null;
-
         // Only pop the modal if the widget is still mounted
         if (mounted) {
           Navigator.of(context).pop();
@@ -191,8 +196,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
-    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
-    final doesExist = await roomProvider.userExists('@$username:${dotenv.env['HOMESERVER']}');
+    final doesExist = await this.widget.userService.userExists('@$username:${dotenv.env['HOMESERVER']}');
 
     if (!doesExist) {
       setState(() {
@@ -231,14 +235,12 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     });
 
     try {
-      final roomProvider = Provider.of<RoomProvider>(context, listen: false);
       final groupName = _groupNameController.text.trim();
-
       final durationInHours = _isForever ? 0 : _sliderValue.toInt();
 
       // Proceed with group creation and pass the duration
-      await roomProvider.createGroup(groupName, _members, durationInHours, context);
-
+      await this.widget.roomService.createGroup(groupName, _members, durationInHours);
+      // TODO: add UI response
       // Optionally, show a success message
       Navigator.pop(context);
     } catch (e) {

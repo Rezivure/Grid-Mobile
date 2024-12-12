@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
+import 'package:grid_frontend/services/room_service.dart';
 
 class FriendRequestModal extends StatefulWidget {
+  final RoomService roomService;
   final String userId;
   final String displayName;
   final String roomId;
@@ -15,7 +16,7 @@ class FriendRequestModal extends StatefulWidget {
     required this.userId,
     required this.displayName,
     required this.roomId,
-    required this.onResponse,
+    required this.onResponse, required this.roomService,
   });
 
   @override
@@ -96,7 +97,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     });
 
     // Attempt to accept the invitation
-    final didJoin = await Provider.of<RoomProvider>(context, listen: false)
+    final didJoin = await this.widget.roomService
         .acceptInvitation(widget.roomId);
 
     if (!mounted) return; // Ensure the widget is still in the tree
@@ -144,7 +145,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
 
     try {
       // Decline the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false)
+      await this.widget.roomService
           .declineInvitation(widget.roomId);
 
       // Remove invite from SyncManager

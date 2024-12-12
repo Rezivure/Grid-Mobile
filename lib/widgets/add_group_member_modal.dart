@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
-import '../../providers/room_provider.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
 
 class AddGroupMemberModal extends StatefulWidget {
   final String roomId; // Room ID where the user will be invited
+  final UserService userService;
+  final RoomService roomService;
 
-  AddGroupMemberModal({required this.roomId});
+  AddGroupMemberModal({required this.roomId, required this.userService, required this.roomService});
 
   @override
   _AddGroupMemberModalState createState() => _AddGroupMemberModalState();
@@ -43,19 +45,16 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   }
 
   void _addMember() async {
-    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     final inputText = _controller.text.trim();
     String username;
-
     if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
       username = _matrixUserId!;
     } else {
       username = inputText;
     }
 
-    String normalizedUserId = username.startsWith('@')
-        ? username.toLowerCase()
-        : '@$username:${dotenv.env['HOMESERVER']}'.toLowerCase();
+    var normalized = normalizeUser(username);
+    String? normalizedUserId = normalized['matrixUserId'];
 
     if (username.isNotEmpty) {
       if (mounted) {
@@ -66,7 +65,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
       try {
         // Check if the user exists before sending an invite.
-        bool userExists = await roomProvider.userExists(normalizedUserId);
+        bool userExists = await this.widget.userService.userExists(normalizedUserId!);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -78,7 +77,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         }
 
         // Check if the user is already in the group.
-        bool isAlreadyInGroup = await roomProvider.isUserInRoom(
+        bool isAlreadyInGroup = await this.widget.roomService.isUserInRoom(
             widget.roomId, normalizedUserId);
         if (isAlreadyInGroup) {
           if (mounted) {
@@ -91,7 +90,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         }
 
         // Proceed with inviting the user to the group.
-        await roomProvider.client.inviteUser(widget.roomId, normalizedUserId);
+        await this.widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
 
         // Show success message and pop the modal if mounted
         if (mounted) {

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/friend_request_modal.dart';
 import 'package:grid_frontend/widgets/group_invitation_modal.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/services/room_service.dart';
 
 class InvitesModal extends StatelessWidget {
+  final RoomService roomService;
   final Future<void> Function() onInviteHandled;
 
-  InvitesModal({required this.onInviteHandled});
+  InvitesModal({required this.onInviteHandled, required this.roomService});
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +126,7 @@ class InvitesModal extends StatelessWidget {
       showDialog(
         context: context,
         builder: (context) => FriendRequestModal(
+          roomService: roomService,
           userId: inviterId,
           displayName: displayName,
           roomId: roomId,
@@ -147,6 +149,7 @@ class InvitesModal extends StatelessWidget {
       showDialog(
         context: context,
         builder: (context) => GroupInvitationModal(
+          roomService: roomService,
           groupName: groupName,
           roomId: roomId,
           inviter: inviterId,
