@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 
 class FriendRequestModal extends StatefulWidget {
   final RoomService roomService;
@@ -16,7 +19,8 @@ class FriendRequestModal extends StatefulWidget {
     required this.userId,
     required this.displayName,
     required this.roomId,
-    required this.onResponse, required this.roomService,
+    required this.onResponse,
+    required this.roomService,
   });
 
   @override
@@ -90,51 +94,43 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   }
 
   Future<void> _acceptRequest() async {
-    if (!mounted) return; // Ensure the widget is still in the tree
+    if (!mounted) return;
 
     setState(() {
       _isProcessing = true;
     });
 
-    // Attempt to accept the invitation
-    final didJoin = await this.widget.roomService
-        .acceptInvitation(widget.roomId);
+    try {
+      // Accept invitation and sync via SyncManager
+      await Provider.of<SyncManager>(context, listen: false).acceptInviteAndSync(widget.roomId);
 
-    if (!mounted) return; // Ensure the widget is still in the tree
-
-    if (didJoin) {
-      // Success: Remove invite and refresh
-      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-      Navigator.of(context).pop(); // Close FriendRequestModal
-      await widget.onResponse(); // Refresh invite list
+      print("Refreshing contacts via bloc...");
 
       if (mounted) {
+        // Dispatch RefreshContacts to update ContactsBloc
+        context.read<ContactsBloc>().add(RefreshContacts());
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the modal
+        await widget.onResponse(); // Execute callback to refresh any parent components
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Friend request accepted.")),
         );
       }
-    } else {
-      // Failure: Show the reusable error modal
-      Navigator.of(context).pop(); // Close FriendRequestModal if still open
-      // Remove invalid invite
-      Provider.of<SyncManager>(context, listen: false)
-          .removeInvite(widget.roomId);
-      await showDialog(
-        context: context,
-        builder: (context) {
-          return NoticeContinueModal(
-            message: "The invite is no longer valid. It may have been removed.",
-            onContinue: () {
-            },
-          );
-        },
-      );
-      await widget.onResponse();
-    }
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error accepting the request: $e")),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -144,28 +140,28 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     });
 
     try {
-      // Decline the invitation using RoomProvider
-      await this.widget.roomService
-          .declineInvitation(widget.roomId);
+      await widget.roomService.declineInvitation(widget.roomId);
+      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+      Navigator.of(context).pop();
+      await widget.onResponse();
 
-      // Remove invite from SyncManager
-      Provider.of<SyncManager>(context, listen: false)
-          .removeInvite(widget.roomId);
-
-      Navigator.of(context).pop(); // Close the modal
-      await widget.onResponse(); // Trigger the callback to refresh
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Friend request declined.")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Friend request declined.")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error declining the request: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error declining the request: $e")),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 }

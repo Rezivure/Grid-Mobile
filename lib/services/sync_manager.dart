@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/message_processor.dart';
+import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
@@ -9,6 +10,7 @@ import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 
 class SyncManager with ChangeNotifier {
   final Client client;
+  final RoomService roomService;
   final MessageProcessor messageProcessor;
   final RoomRepository roomRepository;
   final UserRepository userRepository;
@@ -18,7 +20,7 @@ class SyncManager with ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
 
-  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository);
+  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository, this.roomService);
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
@@ -181,6 +183,34 @@ class SyncManager with ChangeNotifier {
         await roomRepository.removeRoomParticipant(room.id, participant);
         print('Removed participant $participant from room ${room.id}');
       }
+    }
+  }
+
+  Future<void> acceptInviteAndSync(String roomId) async {
+    try {
+      // Join the room
+      final didJoin = await roomService.acceptInvitation(roomId);
+
+      if (didJoin) {
+        print('Successfully joined room $roomId');
+
+        // Process the room to ensure database updates
+        final room = client.getRoomById(roomId);
+        if (room != null) {
+          await initialProcessRoom(room);
+        }
+
+        // Trigger a full client sync to fetch all updates
+        await client.sync(timeout: 10000);
+        print('Sync completed for room $roomId');
+      } else {
+        throw Exception('Failed to join room');
+      }
+      // Remove invite since excepted
+      removeInvite(roomId);
+    } catch (e) {
+      print('Error during room join and sync: $e');
+      throw e; // Re-throw for error handling in calling code
     }
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
@@ -11,6 +13,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   final LocationManager locationManager;
   final LocationRepository locationRepository;
   final DatabaseService databaseService;
+  late final StreamSubscription<UserLocation> _locationSubscription;
+
 
   MapBloc({
     required this.locationManager,
@@ -21,6 +25,29 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MapCenterOnUser>(_onMapCenterOnUser);
     on<MapMoveToUser>(_onMapMoveToUser);
     on<MapLoadUserLocations>(_onMapLoadUserLocations);
+    on<RemoveUserLocation>(_onRemoveUserLocation);
+
+  _locationSubscription = locationRepository.locationUpdates.listen(_onLocationUpdate);
+}
+
+  @override
+  Future<void> close() {
+    _locationSubscription.cancel();
+    return super.close();
+  }
+
+  void _onLocationUpdate(UserLocation location) {
+    // Update the state with the new or updated location
+    final updatedLocations = List<UserLocation>.from(state.userLocations);
+    final index = updatedLocations.indexWhere((loc) => loc.userId == location.userId);
+
+    if (index != -1) {
+      updatedLocations[index] = location; // Update existing location
+    } else {
+      updatedLocations.add(location); // Add new location
+    }
+
+    emit(state.copyWith(userLocations: updatedLocations));
   }
 
   Future<void> _onMapInitialize(MapInitialize event,
@@ -29,6 +56,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     // Maybe load user locations right away
     add(MapLoadUserLocations());
     emit(state.copyWith(isLoading: false));
+  }
+
+  void _onRemoveUserLocation(RemoveUserLocation event, Emitter<MapState> emit) {
+    final updatedLocations = state.userLocations
+        .where((location) => location.userId != event.userId)
+        .toList();
+    emit(state.copyWith(userLocations: updatedLocations));
   }
 
   Future<void> _onMapCenterOnUser(MapCenterOnUser event,

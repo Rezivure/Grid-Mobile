@@ -32,40 +32,14 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
   // Variable to store the full phone number
   String _fullPhoneNumber = '';
 
-  // For simulating auto-typing
-  String _generatedUsername = '';
-  String _currentTypedUsername = '';
-  int _currentCharIndex = 0;
-
   @override
   void initState() {
     super.initState();
-
-    // Generate the "Awesome.[random number]" string
-    int randomNumber = Random().nextInt(100);
-    _generatedUsername = 'Awesome$randomNumber';
-
-    // Start typing the generated username
-    _startTypingUsername();
 
     // Add listeners to username controller to check username availability
     _usernameController.addListener(_onUsernameChanged);
   }
 
-  // Function to simulate typing the username
-  void _startTypingUsername() {
-    _typingTimer = Timer.periodic(const Duration(milliseconds: 200), (Timer timer) {
-      if (_currentCharIndex < _generatedUsername.length) {
-        setState(() {
-          _currentTypedUsername += _generatedUsername[_currentCharIndex];
-          _usernameController.text = _currentTypedUsername;
-          _currentCharIndex++;
-        });
-      } else {
-        _typingTimer?.cancel(); // Stop typing once the username is fully typed
-      }
-    });
-  }
 
   void _onUsernameChanged() {
     // Debounce input to prevent rapid validation calls
