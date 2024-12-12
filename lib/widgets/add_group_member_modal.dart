@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
-import '../../providers/room_provider.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
 
 class AddGroupMemberModal extends StatefulWidget {
   final String roomId; // Room ID where the user will be invited
+  final UserService userService;
+  final RoomService roomService;
 
-  AddGroupMemberModal({required this.roomId});
+  AddGroupMemberModal({required this.roomId, required this.userService, required this.roomService});
 
   @override
   _AddGroupMemberModalState createState() => _AddGroupMemberModalState();
@@ -43,19 +45,16 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   }
 
   void _addMember() async {
-    final roomProvider = Provider.of<RoomProvider>(context, listen: false);
     final inputText = _controller.text.trim();
     String username;
-
     if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
       username = _matrixUserId!;
     } else {
       username = inputText;
     }
 
-    String normalizedUserId = username.startsWith('@')
-        ? username
-        : '@$username:${dotenv.env['HOMESERVER']}';
+    var normalized = normalizeUser(username);
+    String? normalizedUserId = normalized['matrixUserId'];
 
     if (username.isNotEmpty) {
       if (mounted) {
@@ -66,7 +65,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
       try {
         // Check if the user exists before sending an invite.
-        bool userExists = await roomProvider.userExists(normalizedUserId);
+        bool userExists = await this.widget.userService.userExists(normalizedUserId!);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -78,7 +77,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         }
 
         // Check if the user is already in the group.
-        bool isAlreadyInGroup = await roomProvider.isUserInRoom(widget.roomId, normalizedUserId);
+        bool isAlreadyInGroup = await this.widget.roomService.isUserInRoom(
+            widget.roomId, normalizedUserId);
         if (isAlreadyInGroup) {
           if (mounted) {
             setState(() {
@@ -90,13 +90,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         }
 
         // Proceed with inviting the user to the group.
-        await roomProvider.client.inviteUser(widget.roomId, normalizedUserId);
+        await this.widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
 
         // Show success message and pop the modal if mounted
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invite sent successfully to $username.')),
+            SnackBar(content: Text('Invite sent successfully to $normalizedUserId.')),
           );
         }
 
@@ -145,7 +145,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           setState(() {
             _isScanning = false;
             _matrixUserId = scannedUserId;
-            _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+            _controller.text = scannedUserId
+                .split(":")
+                .first
+                .replaceFirst('@', '');
           });
           _addMember();
         } else {
@@ -171,64 +174,130 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
     return Material(
       color: Colors.transparent,
-        child: Container(
-          color: Colors.transparent,
-          padding: EdgeInsets.all(16.0),
-          child: _isScanning
-              ? Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Scan QR Code',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: theme.textTheme.bodyMedium?.color,
-                ),
-              ),
-              SizedBox(height: 10),
-              Container(
-                height: 300,
-                child: QRView(
-                  key: qrKey,
-                  onQRViewCreated: _onQRViewCreated,
-                  overlay: QrScannerOverlayShape(
-                    borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
-                    borderRadius: 36,
-                    borderLength: 30,
-                    borderWidth: 10,
-                    cutOutSize: 250,
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        // Dismiss keyboard on tap outside
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery
+                .of(context)
+                .viewInsets
+                .bottom, // Adjust for keyboard
+          ),
+          child: Container(
+            color: Colors.transparent,
+            padding: EdgeInsets.all(16.0),
+            child: _isScanning
+                ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Scan QR Code',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.textTheme.bodyMedium?.color,
                   ),
                 ),
-              ),
-              SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: () {
-                  _qrController?.pauseCamera();
-                  setState(() {
-                    _isScanning = false;
-                  });
-                },
-                child: Text('Cancel'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.onSurface,
-                  foregroundColor: colorScheme.surface,
+                SizedBox(height: 10),
+                Container(
+                  height: 300,
+                  child: QRView(
+                    key: qrKey,
+                    onQRViewCreated: _onQRViewCreated,
+                    overlay: QrScannerOverlayShape(
+                      borderColor: theme.textTheme.bodyMedium?.color ??
+                          Colors.black,
+                      borderRadius: 36,
+                      borderLength: 30,
+                      borderWidth: 10,
+                      cutOutSize: 250,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          )
-              : Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-
-              Center(
-                child: Container(
-                  width: 300, // Set a fixed width for the text field
+                SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: () {
+                    _qrController?.pauseCamera();
+                    setState(() {
+                      _isScanning = false;
+                    });
+                  },
+                  child: Text('Cancel'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.onSurface,
+                    foregroundColor: colorScheme.surface,
+                  ),
+                ),
+              ],
+            )
+                : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 300, // Set a fixed width for the text field
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(36),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _controller,
+                      decoration: InputDecoration(
+                        hintText: 'Enter username',
+                        prefixText: '@',
+                        errorText: _contactError,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(1),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 14),
+                      ),
+                      style: TextStyle(
+                          color: theme.textTheme.bodyMedium?.color),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 8), // Space between the TextField and subtext
+                Text(
+                  'Secure location sharing begins once accepted.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _isProcessing ? null : _addMember,
+                  child: _isProcessing
+                      ? CircularProgressIndicator(color: Colors.white)
+                      : Text('Send Request'),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 40, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(35),
+                    ),
+                    backgroundColor: colorScheme.onSurface,
+                    foregroundColor: colorScheme.surface,
+                  ),
+                ),
+                SizedBox(height: 20),
+                Container(
                   decoration: BoxDecoration(
                     color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(36),
+                    shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black12,
@@ -237,84 +306,32 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                       ),
                     ],
                   ),
-                  child: TextField(
-                    controller: _controller,
-                    decoration: InputDecoration(
-                      hintText: 'Enter username',
-                      prefixText: '@',
-                      errorText: _contactError,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(1),
-                        borderSide: BorderSide.none,
+                  child: ElevatedButton.icon(
+                    onPressed: _scanQRCode,
+                    icon: Icon(
+                      Icons.qr_code_scanner,
+                      color: colorScheme.primary,
+                    ),
+                    label: Text(
+                      'Scan QR Code',
+                      style: TextStyle(color: colorScheme.onSurface),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(35),
                       ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      backgroundColor: colorScheme.surface,
+                      foregroundColor: colorScheme.onSurface,
                     ),
-                    style: TextStyle(color: theme.textTheme.bodyMedium?.color),
                   ),
                 ),
-              ),
-
-              SizedBox(height: 8), // Space between the TextField and subtext
-              Text(
-                'Secure location sharing begins once accepted.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isProcessing ? null : _addMember,
-                child: _isProcessing
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text('Send Request'),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(35),
-                  ),
-                  backgroundColor: colorScheme.onSurface,
-                  foregroundColor: colorScheme.surface,
-                ),
-              ),
-              SizedBox(height: 20),
-              // Scan QR Code Button with Text and Icon
-              Container(
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: _scanQRCode,
-                  icon: Icon(
-                    Icons.qr_code_scanner,
-                    color: colorScheme.primary,
-                  ),
-                  label: Text(
-                    'Scan QR Code',
-                    style: TextStyle(color: colorScheme.onSurface),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(35),
-                    ),
-                    backgroundColor: colorScheme.surface,
-                    foregroundColor: colorScheme.onSurface,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-
+      ),
     );
   }
 }

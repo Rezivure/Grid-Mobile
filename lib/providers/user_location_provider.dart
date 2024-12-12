@@ -1,25 +1,60 @@
-// lib/providers/user_location_provider.dart
-
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/models/user_location.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
 
 class UserLocationProvider with ChangeNotifier {
-  Map<String, List<UserLocation>> _userLocationsBySubscreen = {};
+  final Map<String, UserLocation> _userLocations = {};
+  final LocationRepository locationRepository;
 
-  // Fetch locations based on the selected subscreen
-  List<UserLocation> getUserLocations(String subscreen) {
-    return _userLocationsBySubscreen[subscreen] ?? [];
+  UserLocationProvider(this.locationRepository) {
+    _initializeLocations();
+    _listenForDatabaseUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
+
   }
 
-  // Update user locations for the selected subscreen
-  void updateUserLocations(String subscreen, List<UserLocation> locations) {
-    _userLocationsBySubscreen[subscreen] = locations;
+
+  Future<void> _initializeLocations() async {
+    final locations = await locationRepository.getAllLocations();
+    for (var location in locations) {
+      _userLocations[location.userId] = location;
+    }
+    print("End of initializeLocations: ${_userLocations}");
     notifyListeners();
   }
 
-  // Optional: Clear user locations for a subscreen
-  void clearUserLocations(String subscreen) {
-    _userLocationsBySubscreen.remove(subscreen);
+  void _listenForDatabaseUpdates() {
+    locationRepository.locationUpdates.listen((location) {
+      _userLocations[location.userId] = location;
+      notifyListeners();
+    });
+  }
+
+  List<UserLocation> getAllUserLocations() => _userLocations.values.toList();
+
+  UserLocation? getUserLocation(String userId) {
+    return _userLocations[userId];
+  }
+
+  void updateUserLocation(UserLocation location) {
+    _userLocations[location.userId] = location;
+    notifyListeners();
+  }
+
+  // Get the last seen time for a user
+  String? getLastSeen(String userId) {
+    final location = _userLocations[userId];
+    return location?.timestamp;
+  }
+
+  void debugUserLocations() {
+    print("DEBUG _userLocations: ${_userLocations.keys.toList()}");
+  }
+
+  void clearAllLocations() {
+    _userLocations.clear();
     notifyListeners();
   }
 }

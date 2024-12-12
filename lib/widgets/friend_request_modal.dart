@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:grid_frontend/providers/room_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart'; // Import the random_avatar package
+import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
+import 'package:grid_frontend/services/room_service.dart';
 
 class FriendRequestModal extends StatefulWidget {
+  final RoomService roomService;
   final String userId;
   final String displayName;
   final String roomId;
-  final VoidCallback onResponse; // Callback for refreshing
+  final Future<void> Function() onResponse; // Callback for refreshing
 
   FriendRequestModal({
     required this.userId,
     required this.displayName,
     required this.roomId,
-    required this.onResponse, // Add this parameter
+    required this.onResponse, required this.roomService,
   });
 
   @override
@@ -33,17 +36,24 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         mainAxisSize: MainAxisSize.min,
         children: [
           RandomAvatar(
-            widget.userId.split(":").first.replaceFirst('@', ''), // Generate random avatar based on user ID
+            widget.userId.split(":").first.replaceFirst('@', ''),
             height: 80.0,
             width: 80.0,
           ),
           SizedBox(height: 20),
-          Text('${widget.userId.split(":").first.replaceFirst('@', '')}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(
+            widget.displayName,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           SizedBox(height: 10),
-          Text('Wants to connect with you. You will begin sharing locations once you accept.'),
+          Text(
+            'Wants to connect with you. You will begin sharing locations once you accept.',
+            textAlign: TextAlign.center,
+          ),
           SizedBox(height: 20),
-          if (_isProcessing) CircularProgressIndicator(),
-          if (!_isProcessing)
+          if (_isProcessing)
+            CircularProgressIndicator()
+          else
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -80,22 +90,48 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   }
 
   Future<void> _acceptRequest() async {
+    if (!mounted) return; // Ensure the widget is still in the tree
+
     setState(() {
       _isProcessing = true;
     });
 
-    try {
-      await Provider.of<RoomProvider>(context, listen: false).acceptInvitation(widget.roomId);
-      Navigator.of(context).pop(); // Close the modal
-      widget.onResponse(); // Trigger the callback to refresh
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Friend request accepted.")),
+    // Attempt to accept the invitation
+    final didJoin = await this.widget.roomService
+        .acceptInvitation(widget.roomId);
+
+    if (!mounted) return; // Ensure the widget is still in the tree
+
+    if (didJoin) {
+      // Success: Remove invite and refresh
+      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+      Navigator.of(context).pop(); // Close FriendRequestModal
+      await widget.onResponse(); // Refresh invite list
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Friend request accepted.")),
+        );
+      }
+    } else {
+      // Failure: Show the reusable error modal
+      Navigator.of(context).pop(); // Close FriendRequestModal if still open
+      // Remove invalid invite
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return NoticeContinueModal(
+            message: "The invite is no longer valid. It may have been removed.",
+            onContinue: () {
+            },
+          );
+        },
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error accepting the request: $e")),
-      );
-    } finally {
+      await widget.onResponse();
+    }
+    if (mounted) {
       setState(() {
         _isProcessing = false;
       });
@@ -108,9 +144,17 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     });
 
     try {
-      await Provider.of<RoomProvider>(context, listen: false).declineInvitation(widget.roomId);
+      // Decline the invitation using RoomProvider
+      await this.widget.roomService
+          .declineInvitation(widget.roomId);
+
+      // Remove invite from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
       Navigator.of(context).pop(); // Close the modal
-      widget.onResponse(); // Trigger the callback to refresh
+      await widget.onResponse(); // Trigger the callback to refresh
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Friend request declined.")),
       );

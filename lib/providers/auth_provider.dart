@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+
 class AuthProvider with ChangeNotifier {
   bool _isLoggedIn = false;
   String? _token;

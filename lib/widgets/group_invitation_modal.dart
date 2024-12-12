@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:grid_frontend/providers/room_provider.dart'; // Ensure you import your RoomProvider
-import 'dart:math';
-
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 
 class GroupInvitationModal extends StatefulWidget {
+  final RoomService roomService;
   final String groupName;
   final String roomId;
   final String inviter;
@@ -18,6 +19,7 @@ class GroupInvitationModal extends StatefulWidget {
     required this.inviter,
     required this.expiration,
     required this.refreshCallback,
+    required this.roomService,
   });
 
   @override
@@ -29,7 +31,7 @@ String calculateExpiryTime(int expiration) {
   int timeNowSeconds = now.millisecondsSinceEpoch ~/ 1000;
   int timeDifferenceInSeconds = expiration - timeNowSeconds;
 
-  if (timeDifferenceInSeconds <= 0) {
+  if (expiration == -1 || timeDifferenceInSeconds <= 0) {
     return "Permanent";
   } else {
     int minutes = (timeDifferenceInSeconds / 60).round();
@@ -37,11 +39,11 @@ String calculateExpiryTime(int expiration) {
     int days = (hours / 24).round();
 
     if (days > 0) {
-      return "$days days";
+      return "$days day${days > 1 ? 's' : ''}";
     } else if (hours > 0) {
-      return "$hours hours";
+      return "$hours hour${hours > 1 ? 's' : ''}";
     } else if (minutes > 0) {
-      return "$minutes minutes";
+      return "$minutes minute${minutes > 1 ? 's' : ''}";
     } else {
       return "a few seconds";
     }
@@ -55,7 +57,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   @override
   void initState() {
     super.initState();
-    expiry = calculateExpiryTime(widget.expiration); // Move calculation here
+    expiry = calculateExpiryTime(widget.expiration);
   }
 
   @override
@@ -66,34 +68,41 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     return AlertDialog(
       content: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center, // Center content horizontally
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          RandomAvatar(widget.inviter.split(':')[0].replaceFirst('@', ''), height: 80, width: 80), // Centered avatar
+          RandomAvatar(
+            widget.inviter.split(':')[0].replaceFirst('@', ''),
+            height: 80,
+            width: 80,
+          ),
           SizedBox(height: 16),
           Text(
             'Would you like to join the group "${widget.groupName}"?',
-            textAlign: TextAlign.center, // Center the text
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16),
           ),
           SizedBox(height: 15),
           Text(
             'Invited by: @${widget.inviter.split(":").first.replaceFirst('@', '')}',
-            textAlign: TextAlign.center, // Center the text
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey[700]),
           ),
           Text(
             'Duration: $expiry',
-            textAlign: TextAlign.center, // Center the text
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: Colors.grey[700]),
           ),
-
-          if (_isProcessing) CircularProgressIndicator(),
+          SizedBox(height: 20),
+          if (_isProcessing)
+            CircularProgressIndicator()
         ],
       ),
-      actions: [
+      actions: _isProcessing
+          ? null
+          : [
         ElevatedButton(
           onPressed: _declineGroupInvitation,
-            child: Text('Decline', style: TextStyle(color: Colors.red)),
+          child: Text('Decline', style: TextStyle(color: Colors.red)),
           style: ElevatedButton.styleFrom(
             backgroundColor: colorScheme.surface,
             foregroundColor: Colors.red,
@@ -106,10 +115,10 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         ),
         ElevatedButton(
           onPressed: _acceptGroupInvitation,
-            child: Text('Accept'),
+          child: Text('Accept'),
           style: ElevatedButton.styleFrom(
             backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.surface,
+            foregroundColor: colorScheme.onPrimary,
             minimumSize: Size(100, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(25),
@@ -121,23 +130,52 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   }
 
   Future<void> _acceptGroupInvitation() async {
+    if (!mounted) return;
+
     setState(() {
       _isProcessing = true;
     });
 
-    try {
-      // Accept the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false).acceptInvitation(widget.roomId);
+    // Attempt to accept the invitation
+    final didJoin = await widget.roomService
+        .acceptInvitation(widget.roomId);
+
+    if (!mounted) return;
+
+    if (didJoin) {
+      // Success: Remove invite and refresh
+      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
       Navigator.of(context).pop(); // Close the modal
-      widget.refreshCallback(); // Trigger the callback to refresh
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Group invitation accepted.")),
+      await widget.refreshCallback(); // Trigger the callback to refresh
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Group invitation accepted.")),
+        );
+      }
+    } else {
+      // Failure: Show an error modal
+      Navigator.of(context).pop();
+      // Remove invalid invite
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return NoticeContinueModal(
+            message: "The invite is no longer valid. It may have been removed.",
+            onContinue: () {
+            },
+          );
+        },
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to accept group invitation: $e")),
-      );
-    } finally {
+
+      if (mounted) {
+        await widget.refreshCallback();
+      }
+    }
+
+    if (mounted) {
       setState(() {
         _isProcessing = false;
       });
@@ -145,26 +183,41 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   }
 
   Future<void> _declineGroupInvitation() async {
+    if (!mounted) return;
+
     setState(() {
       _isProcessing = true;
     });
 
     try {
       // Decline the invitation using RoomProvider
-      await Provider.of<RoomProvider>(context, listen: false).declineInvitation(widget.roomId);
-      Navigator.of(context).pop(); // Close the modal
-      widget.refreshCallback(); // Trigger the callback to refresh
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Group invitation declined.")),
-      );
+      await widget.roomService
+          .declineInvitation(widget.roomId);
+
+      // Remove the invitation from SyncManager
+      Provider.of<SyncManager>(context, listen: false)
+          .removeInvite(widget.roomId);
+
+      if (mounted) {
+        Navigator.of(context).pop(); // Close the modal
+        await widget.refreshCallback(); // Trigger the callback to refresh
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Group invitation declined.")),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to decline group invitation: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to decline group invitation: $e")),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 }
