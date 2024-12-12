@@ -17,16 +17,12 @@ import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/screens/settings/settings_page.dart';
-
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
-
 import 'package:grid_frontend/services/location_manager.dart';
-
 
 class MapTab extends StatefulWidget {
   final LatLng? friendLocation;
-
   const MapTab({this.friendLocation, Key? key}) : super(key: key);
 
   @override
@@ -35,18 +31,17 @@ class MapTab extends StatefulWidget {
 
 class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   late final MapController _mapController;
-  late final LocationManager _locationManager; // via Provider
-  late final RoomService _roomService;     // Accessed via Provider
-  late final UserService _userService;     // Accessed via Provider
+  late final LocationManager _locationManager;
+  late final RoomService _roomService;
+  late final UserService _userService;
   late final SyncManager _syncManager;
 
   bool _isMapReady = false;
-  double zoom = 18;
-
   bool _followUser = true;
+  double _zoom = 18;
 
-  VectorTileProvider? tileProvider;
-  late vector_renderer.Theme mapTheme;
+  VectorTileProvider? _tileProvider;
+  late vector_renderer.Theme _mapTheme;
 
   // Bubble variables
   LatLng? _bubblePosition;
@@ -59,19 +54,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _mapController = MapController();
+    _initializeServices();
+    _loadMapProvider();
+  }
 
-    // Fetch services from Provider
+  void _initializeServices() {
     _roomService = context.read<RoomService>();
     _userService = context.read<UserService>();
     _locationManager = context.read<LocationManager>();
     _syncManager = context.read<SyncManager>();
 
-    // Start required services
     _syncManager.initialize();
-    // TODO being initialized twice somewhere
     _locationManager.startTracking();
-
-    _loadMapProvider();
   }
 
   @override
@@ -88,12 +82,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       final prefs = await SharedPreferences.getInstance();
       final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
 
-      mapTheme = ProtomapsThemes.light();
-      tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
+      _mapTheme = ProtomapsThemes.light();
+      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
 
-      // Trigger map initialization event
       context.read<MapBloc>().add(MapInitialize());
-
       setState(() {});
     } catch (e) {
       print('Error loading map provider: $e');
@@ -104,74 +96,49 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   void _showMapErrorDialog() {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Error'),
-          content: const Text('Invalid map URL. You will be logged out and redirected to login.'),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                // Handle logout and navigate to login screen
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: const Text('Invalid map URL. You will be logged out and redirected to login.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
   void _animatedMapMove(LatLng destLocation, double destZoom) {
-    if (!_isMapReady) {
-      print('Map is not ready yet.');
-      return;
-    }
+    if (!_isMapReady) return;
 
-    setState(() {
-      _followUser = false;
-    });
-
-    final currentCenter = _mapController.camera.center;
-    final currentZoom = _mapController.camera.zoom;
-
-    final latTween = Tween<double>(
-      begin: currentCenter.latitude,
-      end: destLocation.latitude,
-    );
-    final lngTween = Tween<double>(
-      begin: currentCenter.longitude,
-      end: destLocation.longitude,
-    );
-    final zoomTween = Tween<double>(
-      begin: currentZoom,
-      end: destZoom,
-    );
-
+    // Cancel any existing animation
     _animationController?.dispose();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
 
-    Animation<double> animation = CurvedAnimation(
-      parent: _animationController!,
-      curve: Curves.easeInOut,
+    final latTween = Tween(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
     );
 
     _animationController!.addListener(() {
-      final nextLat = latTween.evaluate(animation);
-      final nextLng = lngTween.evaluate(animation);
-      final nextZoom = zoomTween.evaluate(animation);
-
-      _mapController.move(LatLng(nextLat, nextLng), nextZoom);
-    });
-
-    _animationController!.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _animationController?.dispose();
-        _animationController = null;
-      }
+      if (!mounted) return;
+      _mapController.moveAndRotate(
+        LatLng(latTween.evaluate(_animationController!), lngTween.evaluate(_animationController!)),
+        zoomTween.evaluate(_animationController!),
+        0,
+      );
     });
 
     _animationController!.forward();
@@ -187,156 +154,159 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (_tileProvider == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    if (tileProvider == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return BlocBuilder<MapBloc, MapState>(
-      builder: (context, state) {
-        if (state.isLoading) {
-          return const Center(child: CircularProgressIndicator());
+    return BlocListener<MapBloc, MapState>(
+      listenWhen: (previous, current) => previous.center != current.center,
+      listener: (context, state) {
+        if (state.center != null && _isMapReady) {
+          setState(() {
+            _followUser = false;  // Turn off following when moving to new location
+          });
+          _mapController.move(state.center!, _zoom);
         }
-
-        if (state.center != null) {
-          print("Animating map to center: ${state.center}");
-          _animatedMapMove(state.center!, state.zoom);
-        }
-
-        return Scaffold(
-          body: Stack(
-            children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  onPositionChanged: (position, hasGesture) {
-                    if (hasGesture) {
-                      setState(() {
-                        _followUser = false; // Stop following the user when manually interacting
-                      });
-                    }
-                  },
-                  initialCenter: state.center ?? LatLng(51.5, -0.09),
-                  initialZoom: state.zoom,
-                  initialRotation: 0.0,
-                  interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
-                  onMapReady: () {
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                onPositionChanged: (position, hasGesture) {
+                  if (hasGesture && _followUser) {
                     setState(() {
-                      _isMapReady = true;
-                      print('Map is ready');
+                      _followUser = false;
                     });
+                  }
+                },
+                initialCenter: LatLng(51.5, -0.09),
+                initialZoom: _zoom,
+                initialRotation: 0.0,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+                onMapReady: () => setState(() => _isMapReady = true),
+              ),
+              children: [
+                VectorTileLayer(
+                  theme: _mapTheme,
+                  tileProviders: TileProviders({'protomaps': _tileProvider!}),
+                  fileCacheTtl: const Duration(hours: 24),
+                  concurrency: 5,
+                ),
+                CurrentLocationLayer(
+                  alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
+                  style: const LocationMarkerStyle(),
+                ),
+                BlocBuilder<MapBloc, MapState>(
+                  buildWhen: (previous, current) => previous.userLocations != current.userLocations,
+                  builder: (context, state) {
+                    return MarkerLayer(
+                      markers: state.userLocations.map((userLocation) =>
+                          Marker(
+                            width: 60.0,
+                            height: 70.0,
+                            point: userLocation.position,
+                            child: GestureDetector(
+                              onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
+                              child: UserMapMarker(userId: userLocation.userId),
+                            ),
+                          )
+                      ).toList(),
+                    );
                   },
                 ),
-                children: <Widget>[
-                  VectorTileLayer(
-                    theme: mapTheme,
-                    tileProviders: TileProviders({
-                      'protomaps': tileProvider!,
-                    }),
-                    fileCacheTtl: const Duration(hours: 24),
-                    concurrency: 5,
+              ],
+            ),
+
+            if (_bubblePosition != null && _selectedUserId != null)
+              UserInfoBubble(
+                userId: _selectedUserId!,
+                userName: _selectedUserName!,
+                position: _bubblePosition!,
+                onClose: () {
+                  setState(() {
+                    _bubblePosition = null;
+                    _selectedUserId = null;
+                    _selectedUserName = null;
+                  });
+                },
+              ),
+
+            Positioned(
+              top: 100,
+              left: 16,
+              child: FloatingActionButton(
+                heroTag: "settingsBtn",
+                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SettingsPage()),
+                  );
+                },
+                child: Icon(
+                    Icons.menu,
+                    color: isDarkMode ? colorScheme.primary : Colors.black
+                ),
+                mini: true,
+              ),
+            ),
+
+            Positioned(
+              right: 16,
+              top: 100,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: "orientNorthBtn",
+                    backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+                    onPressed: () => _mapController.move(
+                      _mapController.camera.center,
+                      _mapController.camera.zoom,
+                    ),
+                    child: Icon(
+                        Icons.explore,
+                        color: isDarkMode ? colorScheme.primary : Colors.black
+                    ),
+                    mini: true,
                   ),
-                  CurrentLocationLayer(
-                    alignPositionOnUpdate: _followUser
-                        ? AlignOnUpdate.always
-                        : AlignOnUpdate.never,
-                    style: const LocationMarkerStyle(),
-                  ),
-                  MarkerLayer(
-                    markers: state.userLocations.map((userLocation) {
-                      return Marker(
-                        width: 60.0,
-                        height: 70.0,
-                        point: userLocation.position,
-                        child: GestureDetector(
-                          onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
-                          child: UserMapMarker(userId: userLocation.userId),
-                        ),
-                      );
-                    }).toList(),
+                  const SizedBox(height: 10),
+                  FloatingActionButton(
+                    heroTag: "centerUserBtn",
+                    backgroundColor: _followUser
+                        ? colorScheme.primary
+                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                    onPressed: () {
+                      // can add any pre center logic here
+                      setState(() {
+                        _followUser = true;
+                      });
+                    },
+                    child: Icon(
+                        Icons.my_location,
+                        color: _followUser
+                            ? Colors.white
+                            : (isDarkMode ? colorScheme.primary : Colors.black)
+                    ),
+                    mini: true,
                   ),
                 ],
               ),
+            ),
 
-              if (_bubblePosition != null && _selectedUserId != null)
-                UserInfoBubble(
-                  userId: _selectedUserId!,
-                  userName: _selectedUserName!,
-                  position: _bubblePosition!,
-                  onClose: () {
-                    setState(() {
-                      _bubblePosition = null;
-                      _selectedUserId = null;
-                      _selectedUserName = null;
-                    });
-                  },
-                ),
-
-              Positioned(
-                top: 100,
-                left: 16,
-                child: FloatingActionButton(
-                  heroTag: "settingsBtn",
-                  backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SettingsPage()),
-                    );
-                  },
-                  child: Icon(Icons.menu,
-                      color: isDarkMode ? colorScheme.primary : Colors.black),
-                  mini: true,
-                ),
-              ),
-              Positioned(
-                right: 16,
-                top: 100,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FloatingActionButton(
-                      heroTag: "orientNorthBtn",
-                      backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                      onPressed: () {
-                        _mapController.move(
-                          _mapController.camera.center,
-                          _mapController.camera.zoom,
-                        );
-                      },
-                      child: Icon(Icons.explore,
-                          color: isDarkMode ? colorScheme.primary : Colors.black),
-                      mini: true,
-                    ),
-                    const SizedBox(height: 10),
-                    FloatingActionButton(
-                      heroTag: "centerUserBtn",
-                      backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                      onPressed: () {
-                        setState(() {
-                          _followUser = true; // Re-enable following user location
-                        });
-                        context.read<MapBloc>().add(MapCenterOnUser());
-                      },
-                      child: Icon(Icons.my_location,
-                          color: isDarkMode ? colorScheme.primary : Colors.black),
-                      mini: true,
-                    ),
-                  ],
-                ),
-              ),
-
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: MapScrollWindow(), // MapScrollWindow also uses Provider internally if needed
-              ),
-            ],
-          ),
-        );
-      },
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: MapScrollWindow(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

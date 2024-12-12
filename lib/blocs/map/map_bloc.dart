@@ -46,11 +46,28 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       final userLocationData = await locationRepository.getLatestLocation(event.userId);
       if (userLocationData != null) {
         print("New center: ${userLocationData.position}");
-        emit(state.copyWith(center: userLocationData.position));
+
+        // First emit a state with null center to force a change
+        emit(MapState(
+          isLoading: false,
+          center: null,
+          zoom: state.zoom,
+          userLocations: state.userLocations,
+        ));
+
+        // Then emit the actual location
+        emit(MapState(
+          isLoading: false,
+          center: userLocationData.position,
+          zoom: state.zoom,
+          userLocations: state.userLocations,
+        ));
       } else {
+        print("Location not available for user");
         emit(state.copyWith(error: 'Location not available for this user.'));
       }
     } catch (e) {
+      print("Error moving to user: $e");
       emit(state.copyWith(error: 'Error moving to user location: $e'));
     }
   }
