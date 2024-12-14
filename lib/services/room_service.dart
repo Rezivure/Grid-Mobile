@@ -36,12 +36,15 @@ class RoomService {
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
-      _onNewLocation(location);
+      // Check if this is a targeted update
+      if (location.extras?.containsKey('targetRoomId') == true) {
+        String roomId = location.extras!['targetRoomId'];
+        updateSingleRoom(roomId, location);
+      } else {
+        // Regular periodic update to all rooms
+        updateRooms(location);
+      }
     });
-  }
-
-  void _onNewLocation(bg.Location location) {
-    updateRooms(location);
   }
 
  /// create direct grid room (contact)
@@ -381,7 +384,20 @@ class RoomService {
     }
   }
 
+  Future<void> updateSingleRoom(String roomId, bg.Location location) async {
+    final room = client.getRoomById(roomId);
+    if (room != null) {
+      // Verify it's a valid room to send to (direct room or group)
+      var joinedMembers = room
+          .getParticipants()
+          .where((member) => member.membership == Membership.join)
+          .toList();
 
+      if (joinedMembers.length >= 2) {  // Valid room with at least 2 members
+        sendLocationEvent(roomId, location);
+      }
+    }
+  }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;

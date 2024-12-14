@@ -151,7 +151,7 @@ void main() async {
               roomService,
               context.read<MapBloc>(),
               context.read<ContactsBloc>(),
-              locationRepository
+              locationRepository,
             )..startSync(),
             update: (context, mapBloc, contactsBloc, previous) => previous ?? SyncManager(
               client,
@@ -161,7 +161,7 @@ void main() async {
               roomService,
               mapBloc,
               contactsBloc,
-              locationRepository
+              locationRepository,
             )..startSync(),
           ),
         ],

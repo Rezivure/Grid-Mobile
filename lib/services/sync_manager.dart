@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/message_processor.dart';
@@ -13,6 +14,7 @@ import '../blocs/map/map_bloc.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/map/map_event.dart';
+import '../models/pending_message.dart';
 
 class SyncManager with ChangeNotifier {
   final Client client;
@@ -23,6 +25,8 @@ class SyncManager with ChangeNotifier {
   final LocationRepository locationRepository;
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
+  final List<PendingMessage> _pendingMessages = [];
+  bool _isActive = true;
 
   bool _isSyncing = false;
   final List<Map<String, dynamic>> _invites = [];
@@ -73,6 +77,13 @@ class SyncManager with ChangeNotifier {
         _processRoomLeave(roomId, leftRoomUpdate);
       });
     });
+  }
+
+  void handleAppLifecycleState(bool isActive) {
+    _isActive = isActive;
+    if (isActive && _pendingMessages.isNotEmpty) {
+      _processPendingMessages();
+    }
   }
 
   Future<void> stopSync() async {
@@ -138,17 +149,59 @@ class SyncManager with ChangeNotifier {
       print('Error processing room leave: $e');
     }
   }
+
   void _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) {
     final timelineEvents = joinedRoomUpdate.timeline?.events ?? [];
     for (var event in timelineEvents) {
-      // Process and decrypt the event, returning a message map if applicable
+      if (!_isActive) {
+        // Queue message if app is in background
+        _pendingMessages.add(PendingMessage(
+          roomId: roomId,
+          eventId: event.eventId ?? '',
+          event: event,
+        ));
+        continue;
+      }
+
       messageProcessor.processEvent(roomId, event).then((message) {
         if (message != null) {
           _roomMessages.putIfAbsent(roomId, () => []).add(message);
           notifyListeners();
         }
       }).catchError((e) {
-        print("Error processing event ${event.eventId}: $e");
+        if (e is PlatformException && e.code == '-25308') {
+          // Queue message if we get keychain access error
+          _pendingMessages.add(PendingMessage(
+            roomId: roomId,
+            eventId: event.eventId ?? '',
+            event: event,
+          ));
+        } else {
+          print("Error processing event ${event.eventId}: $e");
+        }
+      });
+    }
+  }
+
+  Future<void> _processPendingMessages() async {
+    if (_pendingMessages.isEmpty) return;
+
+    print("Processing ${_pendingMessages.length} pending messages");
+
+    final messagesToProcess = List<PendingMessage>.from(_pendingMessages);
+    _pendingMessages.clear();
+
+    for (var pendingMessage in messagesToProcess) {
+      await messageProcessor.processEvent(
+        pendingMessage.roomId,
+        pendingMessage.event,
+      ).then((message) {
+        if (message != null) {
+          _roomMessages.putIfAbsent(pendingMessage.roomId, () => []).add(message);
+          notifyListeners();
+        }
+      }).catchError((e) {
+        print("Error processing pending event ${pendingMessage.eventId}: $e");
       });
     }
   }

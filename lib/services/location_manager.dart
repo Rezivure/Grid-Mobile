@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:latlong2/latlong.dart';
@@ -10,13 +11,66 @@ class LocationManager with ChangeNotifier {
   bg.Location? _lastPosition;
   DateTime? _lastUpdateTime;
   bool _isTracking = false;
-  final Duration _updateInterval = const Duration(seconds: 30);
-  final double _distanceThreshold = 50;
+  bool _isInForeground = true;
+  bool _isMoving = false;
 
-  /// Expose the location stream for listeners
+  bg.Location? get lastPosition => _lastPosition;
+
+
+  // Timing configurations
+  final Duration _foregroundInterval = const Duration(seconds: 30);
+  final Duration _backgroundMovingInterval = const Duration(minutes: 1);
+  final Duration _backgroundStationary = const Duration(minutes: 5);
+  final Duration _terminatedInterval = const Duration(minutes: 15);
+
+  late final AppLifecycleListener _lifecycleListener;
+
+  LocationManager() {
+    _initializeLifecycleListener();
+  }
+
+  void _initializeLifecycleListener() {
+    _lifecycleListener = AppLifecycleListener(
+        onStateChange: (state) {
+          switch (state) {
+            case AppLifecycleState.resumed:
+              _isInForeground = true;
+              _updateTrackingConfig();
+              break;
+            case AppLifecycleState.paused:
+            case AppLifecycleState.inactive:
+            case AppLifecycleState.detached:
+              _isInForeground = false;
+              _updateTrackingConfig();
+              break;
+            default:
+              break;
+          }
+        }
+    );
+  }
+
+  void _updateTrackingConfig() {
+    if (!_isTracking) return;
+
+    if (_isInForeground) {
+      bg.BackgroundGeolocation.setConfig(bg.Config(
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+        locationUpdateInterval: _foregroundInterval.inMilliseconds,
+        fastestLocationUpdateInterval: (_foregroundInterval.inMilliseconds / 2).round(),
+      ));
+    } else {
+      final interval = _isMoving ? _backgroundMovingInterval : _backgroundStationary;
+      bg.BackgroundGeolocation.setConfig(bg.Config(
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+        locationUpdateInterval: interval.inMilliseconds,
+        fastestLocationUpdateInterval: interval.inMilliseconds,
+      ));
+    }
+  }
+
   Stream<bg.Location> get locationStream => _locationStreamController.stream;
 
-  /// Getter to return the current position as LatLng
   LatLng? get currentLatLng {
     if (_lastPosition == null) return null;
     final coords = _lastPosition!.coords;
@@ -25,117 +79,119 @@ class LocationManager with ChangeNotifier {
 
   bool get isTracking => _isTracking;
 
-  /// Start tracking location
   Future<void> startTracking() async {
-    if (_isTracking) {
-      print("Location tracking already started.");
-      return;
-    }
+    if (_isTracking) return;
 
-    print("Initializing LocationManager...");
     await bg.BackgroundGeolocation.ready(bg.Config(
-      desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
-      distanceFilter: 10.0,
-      stopOnTerminate: false,
-      startOnBoot: true,
-      debug: false,
-      logLevel: bg.Config.LOG_LEVEL_VERBOSE,
+      // Location Settings
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+
+        // Activity Recognition
+        isMoving: true,
+        stopTimeout: 5,
+        activityRecognitionInterval: 10000,
+
+        // Background/Terminated Behavior
+        stopOnTerminate: false,
+        startOnBoot: true,
+        enableHeadless: false,
+
+        // iOS specific
+        stationaryRadius: 200.0,
+
+        // Motion detection settings
+        motionTriggerDelay: 30000,
+        minimumActivityRecognitionConfidence: 75,
+
+        // Update intervals
+        heartbeatInterval: Platform.isIOS ? 60 : _terminatedInterval.inMinutes,
+
+        // Notification settings
+        notification: bg.Notification(
+          title: "Grid Location Sharing",
+          text: "Sharing your location with trusted contacts",
+          sticky: true,
+        ),
+
+        preventSuspend: false,
+        debug: false,
+        logLevel: bg.Config.LOG_LEVEL_ERROR
     ));
 
-    bg.BackgroundGeolocation.start();
-    _isTracking = true;
+    _setupEventListeners();
 
-    // Listen to location updates
-    bg.BackgroundGeolocation.onLocation((bg.Location location) {
-      _processLocation(location);
-    });
-
-    /// Future use cases of background location
-    /*
-    bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
-      _processLocation(location);
-    });
-
-
-    // Listen to provider changes
-    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
-      print('[providerchange] - $event');
-    });
-
-    */
-
-  }
-
-  /// Stop tracking location
-  void stopTracking() {
-    if (!_isTracking) {
-      print("Location tracking is not active.");
-      return;
+    if (Platform.isIOS) {
+      await bg.BackgroundGeolocation.requestPermission();
     }
 
-    print("Stopping LocationManager...");
+    await bg.BackgroundGeolocation.start();
+    _isTracking = true;
+  }
+
+  void _setupEventListeners() {
+    bg.BackgroundGeolocation.onLocation((bg.Location location) {
+      if (location.coords.speed != null && location.coords.speed! > 1.4) {
+        _isMoving = true;
+      }
+      _processLocation(location);
+    });
+
+    bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
+      _isMoving = location.isMoving ?? false;
+      _updateTrackingConfig();
+      _processLocation(location);
+    });
+
+    bg.BackgroundGeolocation.onActivityChange((bg.ActivityChangeEvent event) {
+      if (event.confidence >= 75) {
+        _isMoving = event.activity != 'still';
+        _updateTrackingConfig();
+      }
+    });
+
+    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
+        startTracking();
+      }
+    });
+  }
+
+  void stopTracking() {
+    if (!_isTracking) return;
+
     bg.BackgroundGeolocation.stop();
     bg.BackgroundGeolocation.removeListeners();
     _isTracking = false;
   }
 
-  /// Process location update
   void _processLocation(bg.Location location) {
-    final currentCoords = location.coords;
+    if (!_shouldUpdateLocation(location)) return;
 
-    if (_shouldUpdateLocation(location)) {
-      print("Processing location: $currentCoords");
-      _lastPosition = location;
-      _lastUpdateTime = DateTime.now();
+    _lastPosition = location;
+    _lastUpdateTime = DateTime.now();
 
-      // Broadcast location update
-      _locationStreamController.add(location);
-
-      notifyListeners();
-    }
+    _locationStreamController.add(location);
+    notifyListeners();
   }
 
-  /// Check if location update should be processed
   bool _shouldUpdateLocation(bg.Location location) {
     if (_lastPosition == null || _lastUpdateTime == null) return true;
 
-    final lastCoords = _lastPosition!.coords;
-    final currentCoords = location.coords;
-
-    final distance = _calculateDistance(
-      lastCoords.latitude,
-      lastCoords.longitude,
-      currentCoords.latitude,
-      currentCoords.longitude,
-    );
     final timeElapsed = DateTime.now().difference(_lastUpdateTime!);
 
-    print("Time elapsed: ${timeElapsed.inSeconds}s, Distance moved: $distance meters");
-    return timeElapsed > _updateInterval && distance > _distanceThreshold;
-  }
+    // In foreground, always update every 30 seconds regardless of motion
+    if (_isInForeground) {
+      return timeElapsed > _foregroundInterval;
+    }
 
-  /// Calculate distance between two coordinates
-  double _calculateDistance(
-      double startLatitude, double startLongitude, double endLatitude, double endLongitude) {
-    const earthRadius = 6371000; // in meters
-    final dLat = _degreesToRadians(endLatitude - startLatitude);
-    final dLon = _degreesToRadians(endLongitude - startLongitude);
-
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(startLatitude)) *
-            cos(_degreesToRadians(endLatitude)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  double _degreesToRadians(double degrees) {
-    return degrees * pi / 180;
+    // In background, use motion-based intervals
+    final updateInterval = _isMoving ? _backgroundMovingInterval : _backgroundStationary;
+    return timeElapsed > updateInterval;
   }
 
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _locationStreamController.close();
     stopTracking();
     super.dispose();
