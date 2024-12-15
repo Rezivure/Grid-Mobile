@@ -76,7 +76,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   String _formatLastSeen(String? timestamp) {
     if (timestamp == null || timestamp == 'Offline') {
-      return 'Offline';
+      return 'Off the Grid';
     }
 
     try {
@@ -84,7 +84,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       return timeAgo(lastSeenDateTime);
     } catch (e) {
       print("Error parsing timestamp: $e");
-      return 'Offline';
+      return 'Off the Grid';
     }
   }
 

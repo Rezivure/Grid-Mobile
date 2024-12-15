@@ -370,6 +370,7 @@ class SyncManager with ChangeNotifier {
         print('Successfully joined room $roomId');
 
         // Process the room to ensure database updates
+        await roomService.updateSingleRoom(roomId);
         final room = client.getRoomById(roomId);
         if (room != null) {
           await initialProcessRoom(room);

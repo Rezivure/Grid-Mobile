@@ -23,6 +23,11 @@ class RoomService {
   final Map<String, Set<String>> _recentlySentMessages = {};
   final int _maxMessageHistory = 50;
 
+  bg.Location? _currentLocation;
+
+  bg.Location? get currentLocation => _currentLocation;
+
+
 
   RoomService(
       this.client,
@@ -36,10 +41,12 @@ class RoomService {
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
+      // Update current location in room service
+      _currentLocation = location;
       // Check if this is a targeted update
       if (location.extras?.containsKey('targetRoomId') == true) {
         String roomId = location.extras!['targetRoomId'];
-        updateSingleRoom(roomId, location);
+        updateSingleRoom(roomId);
       } else {
         // Regular periodic update to all rooms
         updateRooms(location);
@@ -384,7 +391,7 @@ class RoomService {
     }
   }
 
-  Future<void> updateSingleRoom(String roomId, bg.Location location) async {
+  Future<void> updateSingleRoom(String roomId) async {
     final room = client.getRoomById(roomId);
     if (room != null) {
       // Verify it's a valid room to send to (direct room or group)
@@ -394,7 +401,7 @@ class RoomService {
           .toList();
 
       if (joinedMembers.length >= 2) {  // Valid room with at least 2 members
-        sendLocationEvent(roomId, location);
+        sendLocationEvent(roomId, currentLocation!);
       }
     }
   }
