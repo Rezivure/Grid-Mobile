@@ -39,6 +39,20 @@ class LocationRepository {
     _locationUpdatesController.add(location);
   }
 
+  /// Delete all location data for a specific user
+  Future<void> deleteUserLocations(String userId) async {
+    print("Deleting location data for user: $userId");
+    final db = await _databaseService.database;
+
+    await db.delete(
+      'UserLocations',
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    print("Deleted all location data for user: $userId");
+  }
+
   /// Fetch the latest location for a given user
   Future<UserLocation?> getLatestLocation(String userId) async {
     final db = await _databaseService.database;

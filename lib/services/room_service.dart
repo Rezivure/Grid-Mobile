@@ -23,6 +23,11 @@ class RoomService {
   final Map<String, Set<String>> _recentlySentMessages = {};
   final int _maxMessageHistory = 50;
 
+  bg.Location? _currentLocation;
+
+  bg.Location? get currentLocation => _currentLocation;
+
+
 
   RoomService(
       this.client,
@@ -36,12 +41,17 @@ class RoomService {
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
-      _onNewLocation(location);
+      // Update current location in room service
+      _currentLocation = location;
+      // Check if this is a targeted update
+      if (location.extras?.containsKey('targetRoomId') == true) {
+        String roomId = location.extras!['targetRoomId'];
+        updateSingleRoom(roomId);
+      } else {
+        // Regular periodic update to all rooms
+        updateRooms(location);
+      }
     });
-  }
-
-  void _onNewLocation(bg.Location location) {
-    updateRooms(location);
   }
 
  /// create direct grid room (contact)
@@ -381,7 +391,20 @@ class RoomService {
     }
   }
 
+  Future<void> updateSingleRoom(String roomId) async {
+    final room = client.getRoomById(roomId);
+    if (room != null) {
+      // Verify it's a valid room to send to (direct room or group)
+      var joinedMembers = room
+          .getParticipants()
+          .where((member) => member.membership == Membership.join)
+          .toList();
 
+      if (joinedMembers.length >= 2) {  // Valid room with at least 2 members
+        sendLocationEvent(roomId, currentLocation!);
+      }
+    }
+  }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
