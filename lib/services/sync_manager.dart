@@ -207,67 +207,106 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> _processRoomJoin(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
-    // Processes joinedRoomUpdates
-    // Can include leaving a room as well as joining a room
     try {
       print("Processing room join for room: $roomId");
       final stateEvents = joinedRoomUpdate.state ?? [];
       print("Found ${stateEvents.length} state events");
 
+      // First pass: Check if this is an initial room join
+      bool isInitialJoin = false;
+      for (var event in stateEvents) {
+        if (event.type == 'm.room.member' &&
+            event.stateKey == client.userID &&
+            event.content['membership'] == 'join' &&
+            event.prevContent?['membership'] != 'join') {
+          isInitialJoin = true;
+          break;
+        }
+      }
+
+      // If it's an initial join, process the full room
+      if (isInitialJoin) {
+        print("Processing initial room join");
+        final matrixRoom = client.getRoomById(roomId);
+        if (matrixRoom != null) {
+          await initialProcessRoom(matrixRoom);
+          contactsBloc.add(RefreshContacts());
+          mapBloc.add(MapLoadUserLocations());
+        }
+        return;
+      }
+
+      // Second pass: Process individual state events
       for (var event in stateEvents) {
         print("Processing event type: ${event.type}");
         if (event.type == 'm.room.member') {
-          print("Found member event: ${event.stateKey} with content: ${event.content}");
-
-          if (event.content['membership'] == 'leave') {
-            print("Found leave membership, processing as room leave");
-            final room = await roomRepository.getRoomById(roomId);
-            if (room != null && !room.isGroup) {
-              final leftUserId = event.stateKey;
-              if (leftUserId != null && leftUserId != client.userID) {
-                print("Processing complete removal for user: $leftUserId");
-
-                // Check if user exists in any other rooms
-                final userRooms = await roomRepository.getUserRooms(leftUserId);
-
-                // Clean up database
-                await userRepository.removeContact(leftUserId);
-                await roomRepository.deleteRoom(roomId);
-
-                // If user isn't in any other rooms, clean up all their data
-                if (userRooms.length <= 1) {  // <= 1 because current room is still counted
-                  print("User not in any other rooms, removing completely");
-                  await locationRepository.deleteUserLocations(leftUserId);
-                  await userRepository.deleteUser(leftUserId);
-                }
-
-                // Update UI
-                print("Dispatching RemoveUserLocation event for: $leftUserId");
-                mapBloc.add(RemoveUserLocation(leftUserId));
-                print("Dispatching RefreshContacts event");
-                contactsBloc.add(RefreshContacts());
-
-                print('Completed cleanup for user $leftUserId');
-              }
+          await _processMemberStateEvent(roomId, event);
+        } else {
+          // Process other state events through message processor
+          await messageProcessor.processEvent(roomId, event).then((message) {
+            if (message != null) {
+              _roomMessages.putIfAbsent(roomId, () => []).add(message);
+              notifyListeners();
             }
-            return;
-          }
-          // Handle normal join events as before
-          final matrixRoom = client.getRoomById(roomId);
-          if (matrixRoom != null) {
-            print("Found Matrix room, processing initial room data");
-            await initialProcessRoom(matrixRoom);
-            print("Room processed, triggering contacts and map refresh");
-            contactsBloc.add(RefreshContacts());
-            mapBloc.add(MapLoadUserLocations());
-          } else {
-            print("Matrix room not found");
-          }
-          break;
+          });
         }
       }
     } catch (e) {
       print('Error processing room join: $e');
+    }
+  }
+
+  Future<void> _processMemberStateEvent(String roomId, MatrixEvent event) async {
+    print("Processing member event: ${event.stateKey} with content: ${event.content}");
+
+    if (event.content['membership'] == 'leave') {
+      await _handleMemberLeave(roomId, event.stateKey);
+    } else if (event.content['membership'] == 'join') {
+      // Handle updates to existing members (profile changes etc)
+      if (event.stateKey != null) {
+        try {
+          final profileInfo = await client.getUserProfile(event.stateKey!);
+          final gridUser = GridUser.GridUser(
+            userId: event.stateKey!,
+            displayName: profileInfo.displayname,
+            avatarUrl: profileInfo.avatarUrl?.toString(),
+            lastSeen: DateTime.now().toIso8601String(),
+            profileStatus: "",
+          );
+          await userRepository.insertUser(gridUser);
+        } catch (e) {
+          print('Error updating user profile for ${event.stateKey}: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _handleMemberLeave(String roomId, String? userId) async {
+    if (userId == null || userId == client.userID) return;
+
+    print("Processing leave for user: $userId");
+    final room = await roomRepository.getRoomById(roomId);
+
+    if (room != null && !room.isGroup) {
+      // Check if user exists in any other rooms
+      final userRooms = await roomRepository.getUserRooms(userId);
+
+      // Clean up database
+      await userRepository.removeContact(userId);
+      await roomRepository.deleteRoom(roomId);
+
+      // If user isn't in any other rooms, clean up all their data
+      if (userRooms.length <= 1) {
+        print("User not in any other rooms, removing completely");
+        await locationRepository.deleteUserLocations(userId);
+        await userRepository.deleteUser(userId);
+      }
+
+      // Update UI
+      mapBloc.add(RemoveUserLocation(userId));
+      contactsBloc.add(RefreshContacts());
+
+      print('Completed cleanup for user $userId');
     }
   }
 
