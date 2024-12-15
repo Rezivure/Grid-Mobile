@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
@@ -15,10 +14,10 @@ class LocationManager with ChangeNotifier {
   bool _isMoving = false;
 
   // Timing configurations
-  final Duration _foregroundInterval = const Duration(seconds: 30);      // Active app usage
-  final Duration _backgroundMovingInterval = const Duration(minutes: 1); // Moving in background
-  final Duration _backgroundStationary = const Duration(minutes: 5);     // Stationary in background
-  final Duration _terminatedInterval = const Duration(minutes: 15);      // App terminated
+  final Duration _foregroundInterval = const Duration(seconds: 30);
+  final Duration _backgroundMovingInterval = const Duration(minutes: 1);
+  final Duration _backgroundStationary = const Duration(minutes: 5);
+  final Duration _terminatedInterval = const Duration(minutes: 15);
 
   late final AppLifecycleListener _lifecycleListener;
 
@@ -56,18 +55,23 @@ class LocationManager with ChangeNotifier {
       print("Grid: Applying foreground config");
       bg.BackgroundGeolocation.setConfig(bg.Config(
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+        distanceFilter: 0, // Important: Allow all movement updates
         locationUpdateInterval: _foregroundInterval.inMilliseconds,
         fastestLocationUpdateInterval: (_foregroundInterval.inMilliseconds / 2).round(),
-        // Ensure updates in foreground regardless of motion
         disableStopDetection: true,
+        stopTimeout: 0,
+        isMoving: true, // Force movement detection in foreground
+        pausesLocationUpdatesAutomatically: false,
       ));
     } else {
       print("Grid: Applying background config");
       final interval = _isMoving ? _backgroundMovingInterval : _backgroundStationary;
       bg.BackgroundGeolocation.setConfig(bg.Config(
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+        distanceFilter: 10, // Minimum distance (meters) before an update
         locationUpdateInterval: interval.inMilliseconds,
         fastestLocationUpdateInterval: interval.inMilliseconds,
+        pausesLocationUpdatesAutomatically: true,
       ));
     }
   }
@@ -89,54 +93,54 @@ class LocationManager with ChangeNotifier {
     }
 
     print("Grid: Initializing LocationManager...");
+
+    // Request required permissions first
+    if (Platform.isIOS) {
+      await bg.BackgroundGeolocation.requestPermission();
+    }
+
     await bg.BackgroundGeolocation.ready(bg.Config(
-      // Location Settings
+      // Basic Configuration
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+        distanceFilter: 0,
+        stopOnTerminate: false,
+        startOnBoot: true,
+        enableHeadless: false,
 
-        // Force periodic updates regardless of motion
-        disableStopDetection: _isInForeground,  // Disable in foreground for constant updates
+        // iOS Specific
+        activityType: bg.Config.ACTIVITY_TYPE_OTHER, // Don't tie to specific activity type
+        pausesLocationUpdatesAutomatically: false,
 
-        // Activity Recognition
-        isMoving: true,
-        stopTimeout: 5,
-        activityRecognitionInterval: 10000,
+        // Motion Activity Settings
+        isMoving: true, // Start assuming movement
+        stopTimeout: 0, // Disable stop detection timeout
+        motionTriggerDelay: 0, // Disable motion trigger delay
 
-        // Background/Terminated Behavior
-        stopOnTerminate: false,  // Continue tracking after termination
-        startOnBoot: true,      // Restart tracking on device reboot
-        enableHeadless: false,  // No headless mode needed
+        // Background Operation
+        backgroundPermissionRationale: bg.PermissionRationale(
+            title: "Allow Grid to access location in background?",
+            message: "Grid needs your location in background to keep your trusted contacts updated.",
+            positiveAction: "Allow",
+            negativeAction: "Cancel"
+        ),
 
-        // iOS specific
-        stationaryRadius: 200.0,  // iOS stationary geofence radius in meters
-
-        // Motion detection settings
-        motionTriggerDelay: 30000,  // 30 second delay to confirm movement
-        minimumActivityRecognitionConfidence: 75,
-
-        // Periodic updates
-        heartbeatInterval: _terminatedInterval.inMinutes,
-
-        // Notification settings
+        // Notification Configuration
         notification: bg.Notification(
           title: "Grid Location Sharing",
           text: "Sharing your location with trusted contacts",
           sticky: true,
         ),
 
-        preventSuspend: false,
+        // Debug Settings
         debug: false,
         logLevel: bg.Config.LOG_LEVEL_ERROR
     ));
 
     _setupEventListeners();
 
-    if (Platform.isIOS) {
-      // Ensure proper permissions on iOS
-      bg.BackgroundGeolocation.requestPermission();
-    }
-
-    bg.BackgroundGeolocation.start();
+    await bg.BackgroundGeolocation.start();
     _isTracking = true;
+    _updateTrackingConfig(); // Apply initial configuration
   }
 
   void _setupEventListeners() {
@@ -151,6 +155,14 @@ class LocationManager with ChangeNotifier {
       }
 
       _processLocation(location);
+    });
+
+    // Provider changes (location services status)
+    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
+      print("Grid: Location provider changed - $event");
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
+        startTracking();
+      }
     });
 
     // Motion state changes
@@ -168,14 +180,6 @@ class LocationManager with ChangeNotifier {
       if (event.confidence >= 75) {
         _isMoving = event.activity != 'still';
         _updateTrackingConfig();
-      }
-    });
-
-    // Provider changes (location services status)
-    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
-      print("Grid: Location provider changed - $event");
-      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
-        startTracking();
       }
     });
   }
@@ -213,20 +217,14 @@ class LocationManager with ChangeNotifier {
 
     final timeElapsed = DateTime.now().difference(_lastUpdateTime!);
 
-    // In foreground, always update every 30 seconds
+    // Always update in foreground according to interval
     if (_isInForeground) {
-      print("Grid: Foreground update check - Time elapsed: ${timeElapsed.inSeconds}s");
       return timeElapsed > _foregroundInterval;
     }
 
-    // In background:
-    // If moving, update every 1 minute
-    if (_isMoving && timeElapsed > _backgroundMovingInterval) {
-      return true;
-    }
-
-    // Always update every 5 minutes regardless of motion
-    return timeElapsed > _backgroundStationary;
+    // In background, use appropriate interval based on motion state
+    final relevantInterval = _isMoving ? _backgroundMovingInterval : _backgroundStationary;
+    return timeElapsed > relevantInterval;
   }
 
   @override
