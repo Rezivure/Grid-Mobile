@@ -10,10 +10,16 @@ import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 
-import '../blocs/map/map_bloc.dart';
+
+import '../blocs/groups/groups_bloc.dart';
+import '../blocs/groups/groups_event.dart';
+
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
+
+import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
+
 import '../models/pending_message.dart';
 
 class SyncManager with ChangeNotifier {
@@ -25,6 +31,7 @@ class SyncManager with ChangeNotifier {
   final LocationRepository locationRepository;
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
+  final GroupsBloc groupsBloc;
   final List<PendingMessage> _pendingMessages = [];
   bool _isActive = true;
 
@@ -33,7 +40,17 @@ class SyncManager with ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
 
-  SyncManager(this.client, this.messageProcessor, this.roomRepository, this.userRepository, this.roomService, this.mapBloc, this.contactsBloc, this.locationRepository);
+  SyncManager(
+      this.client,
+      this.messageProcessor,
+      this.roomRepository,
+      this.userRepository,
+      this.roomService,
+      this.mapBloc,
+      this.contactsBloc,
+      this.locationRepository,
+      this.groupsBloc
+      );
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
@@ -214,6 +231,8 @@ class SyncManager with ChangeNotifier {
 
       // First pass: Check if this is an initial room join
       bool isInitialJoin = false;
+      bool isGroupRoom = false;
+
       for (var event in stateEvents) {
         if (event.type == 'm.room.member' &&
             event.stateKey == client.userID &&
@@ -229,8 +248,18 @@ class SyncManager with ChangeNotifier {
         print("Processing initial room join");
         final matrixRoom = client.getRoomById(roomId);
         if (matrixRoom != null) {
+          final room = await roomRepository.getRoomById(roomId);
+          isGroupRoom = room?.isGroup ?? false;
+
           await initialProcessRoom(matrixRoom);
-          contactsBloc.add(RefreshContacts());
+
+          // Update appropriate bloc based on room type
+          if (isGroupRoom) {
+            groupsBloc.add(RefreshGroups());
+          } else {
+            contactsBloc.add(RefreshContacts());
+          }
+
           mapBloc.add(MapLoadUserLocations());
         }
         return;
@@ -259,6 +288,42 @@ class SyncManager with ChangeNotifier {
   Future<void> _processMemberStateEvent(String roomId, MatrixEvent event) async {
     print("Processing member event: ${event.stateKey} with content: ${event.content}");
 
+    final room = await roomRepository.getRoomById(roomId);
+    if (room == null) return;
+
+    if (room.isGroup) {
+      final membershipStatus = event.content['membership'] as String? ?? 'invited';
+
+      if (event.stateKey != null) {
+        // Update membership status for group rooms
+        await userRepository.updateMembershipStatus(
+            event.stateKey!,
+            roomId,
+            membershipStatus
+        );
+
+        // Since it's a group room, update the GroupsBloc
+        groupsBloc.add(UpdateGroup(roomId));
+
+        // If this is a newly invited member, make sure their profile is in the database
+        if (membershipStatus == 'invite') {
+          try {
+            final profileInfo = await client.getUserProfile(event.stateKey!);
+            final gridUser = GridUser.GridUser(
+              userId: event.stateKey!,
+              displayName: profileInfo.displayname,
+              avatarUrl: profileInfo.avatarUrl?.toString(),
+              lastSeen: DateTime.now().toIso8601String(),
+              profileStatus: "",
+            );
+            await userRepository.insertUser(gridUser);
+          } catch (e) {
+            print('Error fetching profile for invited user ${event.stateKey}: $e');
+          }
+        }
+      }
+    }
+
     if (event.content['membership'] == 'leave') {
       await _handleMemberLeave(roomId, event.stateKey);
     } else if (event.content['membership'] == 'join') {
@@ -274,39 +339,42 @@ class SyncManager with ChangeNotifier {
             profileStatus: "",
           );
           await userRepository.insertUser(gridUser);
+
+          if (room.isGroup) {
+            groupsBloc.add(UpdateGroup(roomId));
+          }
         } catch (e) {
           print('Error updating user profile for ${event.stateKey}: $e');
         }
       }
     }
   }
-
   Future<void> _handleMemberLeave(String roomId, String? userId) async {
     if (userId == null || userId == client.userID) return;
 
     print("Processing leave for user: $userId");
     final room = await roomRepository.getRoomById(roomId);
 
-    if (room != null && !room.isGroup) {
-      // Check if user exists in any other rooms
-      final userRooms = await roomRepository.getUserRooms(userId);
+    if (room != null) {
+      if (room.isGroup) {
+        // For group rooms, just remove the user relationship and update UI
+        await userRepository.removeUserRelationship(userId, roomId);
+        groupsBloc.add(LoadGroupMembers(roomId));
+      } else {
+        // For direct rooms, handle contact cleanup
+        await userRepository.removeContact(userId);
+        await roomRepository.deleteRoom(roomId);
 
-      // Clean up database
-      await userRepository.removeContact(userId);
-      await roomRepository.deleteRoom(roomId);
+        // Check if user exists in any other rooms before cleaning up
+        final userRooms = await roomRepository.getUserRooms(userId);
+        if (userRooms.isEmpty) {
+          await locationRepository.deleteUserLocations(userId);
+          await userRepository.deleteUser(userId);
+          mapBloc.add(RemoveUserLocation(userId));
+        }
 
-      // If user isn't in any other rooms, clean up all their data
-      if (userRooms.length <= 1) {
-        print("User not in any other rooms, removing completely");
-        await locationRepository.deleteUserLocations(userId);
-        await userRepository.deleteUser(userId);
+        contactsBloc.add(RefreshContacts());
       }
-
-      // Update UI
-      mapBloc.add(RemoveUserLocation(userId));
-      contactsBloc.add(RefreshContacts());
-
-      print('Completed cleanup for user $userId');
     }
   }
 
@@ -324,7 +392,8 @@ class SyncManager with ChangeNotifier {
         initialProcessRoom(room);
       }
 
-      //
+      // Refresh contacts after sync
+      contactsBloc.add(LoadContacts());
 
       notifyListeners();
     } catch (e) {
@@ -378,13 +447,23 @@ class SyncManager with ChangeNotifier {
 
         await userRepository.insertUser(gridUser);
 
-        // Add relationship
+        String? membershipStatus;
+        if (!isDirect) {
+          membershipStatus = await roomService.getUserRoomMembership(room.id, participantId) ?? 'invited';
+        }
+
         await userRepository.insertUserRelationship(
-          participantId,
-          room.id,
-          isDirect,
+            participantId,
+            room.id,
+            isDirect,
+            membershipStatus: !isDirect ? membershipStatus : null
         );
 
+        final customRoom = await roomRepository.getRoomById(room.id);
+        if (customRoom?.isGroup ?? false) {
+          print('Updating group in bloc: ${room.id}');
+          groupsBloc.add(UpdateGroup(room.id));
+        }
         print('Processed user ${participantId} in room ${room.id}');
       } catch (e) {
         print('Error fetching profile for user $participantId: $e');

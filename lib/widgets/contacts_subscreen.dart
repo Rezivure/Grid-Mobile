@@ -76,7 +76,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   String _formatLastSeen(String? timestamp) {
     if (timestamp == null || timestamp == 'Offline') {
-      return 'Off the Grid';
+      return 'off the grid';
     }
 
     try {
@@ -84,9 +84,35 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       return timeAgo(lastSeenDateTime);
     } catch (e) {
       print("Error parsing timestamp: $e");
-      return 'Off the Grid';
+      return 'off the grid';
     }
   }
+
+  Widget _buildStatusCircle(String lastSeen, ThemeData theme) {
+    Color circleColor;
+
+    if (lastSeen == 'off the grid') {
+      circleColor = theme.colorScheme.onSurface.withOpacity(0.5); // Grey
+    } else if (lastSeen.contains('m ago') || lastSeen.contains('s ago')) {
+      circleColor = theme.colorScheme.primary; // Green
+    } else if (lastSeen.contains('h ago')) {
+      circleColor = Colors.yellow; // Yellow
+    } else if (lastSeen.contains('d ago')) {
+      circleColor = Colors.red; // Red
+    } else {
+      circleColor = theme.colorScheme.onSurface.withOpacity(0.5); // Default Grey
+    }
+
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: circleColor,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+
 
   List<ContactDisplay> _getContactsWithCurrentLocation(
       List<ContactDisplay> contacts,
@@ -179,9 +205,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                               contact.displayName,
                               style: TextStyle(color: colorScheme.onBackground),
                             ),
-                            subtitle: Text(
-                              lastSeen,
-                              style: TextStyle(color: colorScheme.onSurface),
+                            subtitle: Row(
+                              children: [
+                                _buildStatusCircle(lastSeen, theme), // Add the status circle
+                                const SizedBox(width: 8), // Spacing between circle and text
+                                Text(
+                                  lastSeen,
+                                  style: TextStyle(color: colorScheme.onSurface),
+                                ),
+                              ],
                             ),
                             onTap: () {
                               Provider.of<SelectedUserProvider>(context, listen: false)

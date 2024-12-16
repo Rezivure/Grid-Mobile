@@ -105,6 +105,23 @@ class RoomService {
   }
 
 
+  // In RoomService
+  Future<String?> getUserRoomMembership(String roomId, String userId) async {
+    Room? room = client.getRoomById(roomId);
+    if (room != null) {
+      var participants = room.getParticipants();
+      try {
+        final participant = participants.firstWhere(
+              (user) => user.id == userId,
+        );
+        return participant.membership.name;
+      } catch (e) {
+        return 'invited';  // Default to invited if user not found
+      }
+    }
+    return null;
+  }
+
   /// Leaves a room
   Future<bool> leaveRoom(String roomId) async {
     try {
