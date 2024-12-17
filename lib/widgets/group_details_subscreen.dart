@@ -104,7 +104,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     }
   }
 
-  Widget _getSubtitleText(GroupsLoaded state, GridUser user, UserLocation? userLocation) {
+  Widget _getSubtitleText(BuildContext context, GroupsLoaded state, GridUser user, UserLocation? userLocation) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final memberStatus = state.getMemberStatus(user.userId);
 
     // Determine the timeAgo text
@@ -113,26 +115,27 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
     if (memberStatus == 'invite') {
       statusText = 'Invitation Sent';
-      statusColor = Colors.orange; // Orange for invitations
+      statusColor = Colors.orange;
     } else if (userLocation == null) {
-      statusText = 'Off the Grid';
-      statusColor = Colors.grey; // Grey for offline
+      statusText = 'Off Grid';
+      statusColor =  theme.colorScheme.onSurface.withOpacity(0.5); // Default Grey
+
     } else {
       // Get timeAgo and decide color
       statusText = timeAgo(DateTime.parse(userLocation.timestamp));
 
+      // Use semantic colors from colorScheme
       if (statusText.contains('m ago') || statusText.contains('s ago')) {
-        statusColor = Colors.green; // Green for minutes
+        statusColor = colorScheme.primary; // Online/recent
       } else if (statusText.contains('h ago')) {
-        statusColor = Colors.yellow; // Yellow for hours
+        statusColor = Colors.yellow; // Away
       } else if (statusText.contains('d ago')) {
-        statusColor = Colors.red; // Red for days
+        statusColor = Colors.red; // Long time no activity
       } else {
-        statusColor = Colors.grey; // Default to grey if unrecognized
+        statusColor =  theme.colorScheme.onSurface.withOpacity(0.5); // Default Grey
       }
     }
 
-    // Combine the circle and text in the Row
     return Row(
       children: [
         Container(
@@ -143,15 +146,16 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 8), // Spacing between circle and text
+        const SizedBox(width: 8),
         Text(
           statusText,
-          style: TextStyle(color: Colors.black), // Adjust based on theme if needed
+          style: TextStyle(
+            color: colorScheme.onSurface, // Use onSurface for text color
+          ),
         ),
       ],
     );
   }
-
 
 
 
@@ -286,7 +290,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                             user.displayName ?? user.userId,
                             style: TextStyle(color: colorScheme.onBackground),
                           ),
-                          subtitle: _getSubtitleText(state, user, userLocation), // Use updated method
+                          subtitle: _getSubtitleText(context, state, user, userLocation), // Use updated method
                           onTap: () {
                             Provider.of<SelectedUserProvider>(context, listen: false)
                                 .setSelectedUserId(user.userId, context);
