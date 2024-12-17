@@ -46,6 +46,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
 
+
   final DraggableScrollableController _scrollableController =
   DraggableScrollableController();
 
@@ -159,6 +160,11 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             onTap: () {
               setState(() {
                 _isDropdownExpanded = !_isDropdownExpanded;
+                // Refresh groups when expanding the dropdown
+                if (_isDropdownExpanded) {
+                  _groupsBloc.add(RefreshGroups());
+                  _groupsBloc.add(LoadGroups()); // Double-load to ensure update
+                }
               });
             },
             child: Row(
@@ -241,8 +247,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   Widget _buildHorizontalScroller(ColorScheme colorScheme) {
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
-        print('Current GroupsState: $groupsState'); // Add this debug line
-        print('Groups length: ${(groupsState is GroupsLoaded) ? groupsState.groups.length : 0}');
         return FutureBuilder<String?>(
           future: _userService.getMyUserId(),
           builder: (context, userSnapshot) {
@@ -261,14 +265,10 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               );
             }
 
-            if (groupsState is GroupsLoading) {
-              return const SizedBox(
-                height: 100,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
 
-            final groups = (groupsState is GroupsLoaded) ? groupsState.groups : <GridRoom.Room>[];
+            final groups = (groupsState is GroupsLoaded)
+                ? groupsState.groups
+                : <GridRoom.Room>[];
 
             return SizedBox(
               height: 100,
@@ -279,6 +279,21 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                 children: [
                   _buildContactOption(colorScheme, userId),
                   ...groups.map((room) => _buildGroupOption(colorScheme, room)),
+                  // Show a subtle loading indicator at the end if loading
+                  if (groupsState is GroupsLoading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -440,6 +455,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     });
   }
 
+  // In MapScrollWindow class:
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -458,6 +474,24 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
         child: AddFriendModal(
           roomService: _roomService,
           userService: _userService,
+          groupsBloc: _groupsBloc,
+          onGroupCreated: () {
+            // Force refresh right away
+            _groupsBloc.add(RefreshGroups());
+
+            // Force dropdown to open to show new group
+            setState(() {
+              _isDropdownExpanded = true;
+            });
+
+            // Add a delayed refresh for sync completion
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) {
+                _groupsBloc.add(RefreshGroups());
+                _groupsBloc.add(LoadGroups());
+              }
+            });
+          },
         ),
       ),
     );

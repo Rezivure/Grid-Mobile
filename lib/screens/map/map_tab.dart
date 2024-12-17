@@ -174,7 +174,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   theme: _mapTheme,
                   tileProviders: TileProviders({'protomaps': _tileProvider!}),
                   fileCacheTtl: const Duration(hours: 24),
-                  concurrency: 1,
+                  concurrency: 20,
                 ),
                 CurrentLocationLayer(
                   alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,

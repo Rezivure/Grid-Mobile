@@ -223,6 +223,29 @@ class SyncManager with ChangeNotifier {
     }
   }
 
+  Future<void> handleNewGroupCreation(String roomId) async {
+    print("SyncManager: Handling new group creation for room $roomId");
+
+    final matrixRoom = client.getRoomById(roomId);
+    if (matrixRoom != null) {
+      // Process the room immediately
+      await initialProcessRoom(matrixRoom);
+
+      // Force multiple group refreshes
+      groupsBloc.add(RefreshGroups());
+
+      // Add staggered refreshes
+      Future.delayed(const Duration(milliseconds: 500), () {
+        groupsBloc.add(LoadGroups());
+      });
+
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+      });
+    }
+  }
+
   Future<void> _processRoomJoin(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
     try {
       print("Processing room join for room: $roomId");

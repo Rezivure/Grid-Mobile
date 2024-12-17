@@ -34,7 +34,8 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     emit(GroupsLoading());
     try {
       _allGroups = await _loadGroups();
-      emit(GroupsLoaded(_allGroups));
+      // Always emit a new instance of GroupsLoaded to force UI update
+      emit(GroupsLoaded(List.from(_allGroups)));
     } catch (e) {
       print("GroupsBloc: Error loading groups - $e");
       emit(GroupsError(e.toString()));
@@ -44,6 +45,9 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   Future<void> _onRefreshGroups(RefreshGroups event, Emitter<GroupsState> emit) async {
     print("GroupsBloc: Handling RefreshGroups event");
     try {
+      // First emit loading state to trigger UI update
+      emit(GroupsLoading());
+
       final updatedGroups = await _loadGroups();
       _allGroups = updatedGroups;
 
@@ -59,11 +63,16 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       } else {
         emit(GroupsLoaded(List.from(_allGroups)));
       }
+
+      // Force another load to ensure UI updates
+      add(LoadGroups());
+
     } catch (e) {
       print("GroupsBloc: Error in RefreshGroups - $e");
       emit(GroupsError(e.toString()));
     }
   }
+
 
   Future<void> _onDeleteGroup(DeleteGroup event, Emitter<GroupsState> emit) async {
     try {
@@ -282,6 +291,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     groups.sort((a, b) =>
         DateTime.parse(b.lastActivity).compareTo(DateTime.parse(a.lastActivity))
     );
+    print("Loaded ${groups.length} groups"); // Debug print
     return groups;
   }
 }

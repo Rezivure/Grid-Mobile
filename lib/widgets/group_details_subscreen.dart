@@ -71,7 +71,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
         _refreshMembers();
       }
     });
-
   }
 
   Future<void> _loadCurrentUser() async {
@@ -120,7 +119,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
   void _filterMembers() {
     if (mounted) {
-      final state = context.read<GroupsBloc>().state;
+      final state = context
+          .read<GroupsBloc>()
+          .state;
       if (state is GroupsLoaded && state.selectedRoomMembers != null) {
         final searchText = _searchController.text.toLowerCase();
         setState(() {
@@ -135,7 +136,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     }
   }
 
-  Widget _getSubtitleText(BuildContext context, GroupsLoaded state, GridUser user, UserLocation? userLocation) {
+  Widget _getSubtitleText(BuildContext context, GroupsLoaded state,
+      GridUser user, UserLocation? userLocation) {
     final memberStatus = state.getMemberStatus(user.userId);
     final timeAgoText = userLocation != null
         ? TimeAgoFormatter.format(userLocation.timestamp)
@@ -146,7 +148,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
       membershipStatus: memberStatus,
     );
   }
-
 
 
   Future<void> _showLeaveConfirmationDialog() async {
@@ -204,7 +205,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   void _showAddGroupMemberModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme
+          .of(context)
+          .colorScheme
+          .surface,
       builder: (context) {
         return AddGroupMemberModal(
           roomId: widget.room.roomId,
@@ -213,7 +217,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
           userRepository: widget.userRepository,
           onInviteSent: () {
             // Reload members when invite is sent
-            context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+            context.read<GroupsBloc>().add(
+                LoadGroupMembers(widget.room.roomId));
           },
         );
       },
@@ -224,12 +229,35 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final userLocations = Provider.of<UserLocationProvider>(context).getAllUserLocations();
+    final userLocations = Provider.of<UserLocationProvider>(context)
+        .getAllUserLocations();
 
     return BlocBuilder<GroupsBloc, GroupsState>(
+      buildWhen: (previous, current) {
+        // Only rebuild for meaningful state changes
+        if (previous is GroupsLoaded && current is GroupsLoaded) {
+          return previous.selectedRoomId != current.selectedRoomId ||
+              previous.selectedRoomMembers != current.selectedRoomMembers ||
+              previous.membershipStatuses != current.membershipStatuses;
+        }
+        return true;
+      },
       builder: (context, state) {
-        if (state is! GroupsLoaded || !state.hasMemberData) {
-          return const Center(child: CircularProgressIndicator());
+        // Show UI structure even while loading
+        if (state is! GroupsLoaded) {
+          return Column(
+            children: [
+              CustomSearchBar(
+                controller: _searchController,
+                hintText: 'Search Members',
+              ),
+              const Expanded(
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ],
+          );
         }
 
         // Always update filtered members when state changes
@@ -274,15 +302,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                               height: 60,
                               width: 60,
                             ),
-                            backgroundColor: colorScheme.primary.withOpacity(0.2),
+                            backgroundColor: colorScheme.primary.withOpacity(
+                                0.2),
                           ),
                           title: Text(
                             user.displayName ?? user.userId,
                             style: TextStyle(color: colorScheme.onBackground),
                           ),
-                          subtitle: _getSubtitleText(context, state, user, userLocation), // Use updated method
+                          subtitle: _getSubtitleText(
+                              context, state, user, userLocation),
                           onTap: () {
-                            Provider.of<SelectedUserProvider>(context, listen: false)
+                            Provider.of<SelectedUserProvider>(
+                                context, listen: false)
                                 .setSelectedUserId(user.userId, context);
                           },
                         ),
@@ -298,8 +329,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           SizedBox(
                             width: 180,
                             child: ElevatedButton(
-                              onPressed:
-                              _isProcessing ? null : _showAddGroupMemberModal,
+                              onPressed: _isProcessing
+                                  ? null
+                                  : _showAddGroupMemberModal,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.onSurface,
                                 foregroundColor: colorScheme.surface,
@@ -313,8 +345,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           SizedBox(
                             width: 180,
                             child: ElevatedButton(
-                              onPressed:
-                              _isLeaving ? null : _showLeaveConfirmationDialog,
+                              onPressed: _isLeaving
+                                  ? null
+                                  : _showLeaveConfirmationDialog,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.red,
@@ -322,7 +355,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                                 minimumSize: const Size(150, 40),
                               ),
                               child: _isLeaving
-                                  ? const CircularProgressIndicator(color: Colors.red)
+                                  ? const CircularProgressIndicator(
+                                  color: Colors.red)
                                   : const Text('Leave Group'),
                             ),
                           ),

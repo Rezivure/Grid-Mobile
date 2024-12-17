@@ -125,18 +125,34 @@ class RoomService {
   /// Leaves a room
   Future<bool> leaveRoom(String roomId) async {
     try {
-      final room = client.getRoomById(roomId);
-      if (room == null) {
-        throw Exception('Room not found');
+      final userId = await getMyUserId();
+      if (userId == null) {
+        throw Exception('User ID not found');
       }
-      await room.leave();
+
+      // Try to leave the Matrix room if it exists
+      final room = client.getRoomById(roomId);
+      if (room != null) {
+        try {
+          await room.leave();
+        } catch (e) {
+          print('Error leaving Matrix room (continuing with local cleanup): $e');
+          // Don't return false here - continue with local cleanup
+        }
+      } else {
+        print('Room not found on server (continuing with local cleanup)');
+      }
+
+      // Always clean up local database regardless of server-side success
+      await roomRepository.leaveRoom(roomId, userId);
       return true;
+
     } catch (e) {
-      print('Error leaving room: $e');
+      print('Error in leaveRoom: $e');
+      // If it was just the local cleanup that failed, we should still return false
       return false;
     }
   }
-
   List<User> getFilteredParticipants(Room room, String searchText) {
     final lowerSearchText = searchText.toLowerCase();
     return room
@@ -290,11 +306,11 @@ class RoomService {
     }
   }
 
-  Future<void> createGroup(String groupName, List<String> userIds, int durationInHours) async {
+  Future<String> createGroup(String groupName, List<String> userIds, int durationInHours) async {
     String? effectiveUserId = client.userID ?? client.userID?.localpart;
     if (effectiveUserId == null) {
 
-      return;
+      return "Error";
     }
 
     // Calculate expiration timestamp
@@ -309,9 +325,10 @@ class RoomService {
     }
 
     final roomName = "Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId";
+    var roomId = "";
     try {
       // Create the room
-      final roomId = await client.createRoom(
+      roomId = await client.createRoom(
         name: roomName,
         isDirect: false,
         visibility: matrix_model.Visibility.private,
@@ -333,8 +350,8 @@ class RoomService {
       await client.setRoomTag(client.userID!, roomId, "Grid Group");
     } catch (e) {
       // Handle errors
-      return;
     }
+    return roomId;
   }
 
   void sendLocationEvent(String roomId, bg.Location location) async {
