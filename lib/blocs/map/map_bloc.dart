@@ -79,32 +79,24 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onMapMoveToUser(MapMoveToUser event,
-      Emitter<MapState> emit) async {
-    print("Trying to move to a user");
+  Future<void> _onMapMoveToUser(MapMoveToUser event, Emitter<MapState> emit) async {
     try {
-      final userLocationData = await locationRepository.getLatestLocation(
-          event.userId);
+      // Add small delay to let any pending updates finish
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final userLocationData = await locationRepository.getLatestLocationFromHistory(event.userId);
+
       if (userLocationData != null) {
         print("New center: ${userLocationData.position}");
 
-        // First emit a state with null center to force a change
-        emit(MapState(
-          isLoading: false,
-          center: null,
-          zoom: state.zoom,
-          userLocations: state.userLocations,
-        ));
-
-        // Then emit the actual location
-        emit(MapState(
-          isLoading: false,
-          center: userLocationData.position,
-          zoom: state.zoom,
-          userLocations: state.userLocations,
+        // Force map update with two-step emit
+        emit(state.copyWith(center: null));
+        emit(state.copyWith(
+            center: userLocationData.position,
+            isLoading: false
         ));
       } else {
-        print("Location not available for user");
+        print("Latest location not available for user");
         emit(state.copyWith(error: 'Location not available for this user.'));
       }
     } catch (e) {
@@ -113,30 +105,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event,
-      Emitter<MapState> emit) async {
+  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event, Emitter<MapState> emit) async {
     try {
-      final allLocations = await locationRepository.getAllLocations();
-
-      // Create a map to store latest location for each user
-      final Map<String, UserLocation> latestLocations = {};
-
-      // Iterate through locations, keeping only the latest for each user
-      for (final location in allLocations) {
-        final existingLocation = latestLocations[location.userId];
-        if (existingLocation == null ||
-            DateTime.parse(location.timestamp).isAfter(
-                DateTime.parse(existingLocation.timestamp))) {
-          latestLocations[location.userId] = location;
-        }
-      }
-
-      // Convert map values back to list
-      final uniqueLocations = latestLocations.values.toList();
+      final latestLocations = await locationRepository.getAllLatestLocations();
 
       emit(state.copyWith(
           isLoading: false,
-          userLocations: uniqueLocations
+          userLocations: latestLocations
       ));
     } catch (e) {
       emit(state.copyWith(error: 'Error loading user locations: $e'));

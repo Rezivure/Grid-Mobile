@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
@@ -16,6 +19,7 @@ import 'package:grid_frontend/providers/selected_user_provider.dart';
 import '../blocs/groups/groups_event.dart';
 import '../blocs/groups/groups_state.dart';
 import '../services/user_service.dart';
+import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
@@ -43,9 +47,13 @@ class GroupDetailsSubscreen extends StatefulWidget {
 class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   bool _isLeaving = false;
   bool _isProcessing = false;
+  bool _isRefreshing = false;
+
   final TextEditingController _searchController = TextEditingController();
   List<GridUser> _filteredMembers = [];
   String? _currentUserId;
+  Timer? _refreshTimer;
+
 
   @override
   void initState() {
@@ -55,8 +63,15 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('group:${widget.room.roomId}');
-      context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+      _refreshMembers();
     });
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_isRefreshing) {
+        _refreshMembers();
+      }
+    });
+
   }
 
   Future<void> _loadCurrentUser() async {
@@ -69,6 +84,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -78,7 +94,22 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     if (oldWidget.room.roomId != widget.room.roomId) {
       _searchController.text = '';
       _onSubscreenSelected('group:${widget.room.roomId}');
+      _refreshMembers();
+    }
+  }
+
+  Future<void> _refreshMembers() async {
+    if (_isRefreshing) return;
+
+    _isRefreshing = true;
+    try {
       context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+      // Small delay before allowing next refresh
+      await Future.delayed(const Duration(seconds: 2));
+    } catch (e) {
+      print('Error refreshing group members: $e');
+    } finally {
+      _isRefreshing = false;
     }
   }
 
@@ -105,55 +136,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   }
 
   Widget _getSubtitleText(BuildContext context, GroupsLoaded state, GridUser user, UserLocation? userLocation) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final memberStatus = state.getMemberStatus(user.userId);
+    final timeAgoText = userLocation != null
+        ? TimeAgoFormatter.format(userLocation.timestamp)
+        : 'Off Grid';
 
-    // Determine the timeAgo text
-    String statusText;
-    Color statusColor;
-
-    if (memberStatus == 'invite') {
-      statusText = 'Invitation Sent';
-      statusColor = Colors.orange;
-    } else if (userLocation == null) {
-      statusText = 'Off Grid';
-      statusColor =  theme.colorScheme.onSurface.withOpacity(0.5); // Default Grey
-
-    } else {
-      // Get timeAgo and decide color
-      statusText = timeAgo(DateTime.parse(userLocation.timestamp));
-
-      // Use semantic colors from colorScheme
-      if (statusText.contains('m ago') || statusText.contains('s ago')) {
-        statusColor = colorScheme.primary; // Online/recent
-      } else if (statusText.contains('h ago')) {
-        statusColor = Colors.yellow; // Away
-      } else if (statusText.contains('d ago')) {
-        statusColor = Colors.red; // Long time no activity
-      } else {
-        statusColor =  theme.colorScheme.onSurface.withOpacity(0.5); // Default Grey
-      }
-    }
-
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: statusColor,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          statusText,
-          style: TextStyle(
-            color: colorScheme.onSurface, // Use onSurface for text color
-          ),
-        ),
-      ],
+    return StatusIndicator(
+      timeAgo: timeAgoText,
+      membershipStatus: memberStatus,
     );
   }
 
