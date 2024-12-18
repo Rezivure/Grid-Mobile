@@ -4,6 +4,11 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_event.dart';
+import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map/map_event.dart';
 
 class GroupInvitationModal extends StatefulWidget {
   final RoomService roomService;
@@ -11,7 +16,7 @@ class GroupInvitationModal extends StatefulWidget {
   final String roomId;
   final String inviter;
   final int expiration;
-  final Future<void> Function() refreshCallback; // Callback for refreshing after action
+  final Future<void> Function() refreshCallback;
 
   GroupInvitationModal({
     required this.groupName,
@@ -136,49 +141,81 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       _isProcessing = true;
     });
 
-    // Attempt to accept the invitation
-    final didJoin = await widget.roomService
-        .acceptInvitation(widget.roomId);
+    try {
+      final syncManager = Provider.of<SyncManager>(context, listen: false);
+      final groupsBloc = context.read<GroupsBloc>();
+      final mapBloc = context.read<MapBloc>();
 
-    if (!mounted) return;
+      // Accept the invitation through SyncManager to ensure proper syncing
+      await syncManager.acceptInviteAndSync(widget.roomId);
 
-    if (didJoin) {
-      // Success: Remove invite and refresh
-      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-      Navigator.of(context).pop(); // Close the modal
-      await widget.refreshCallback(); // Trigger the callback to refresh
+      // Wait briefly for room creation to complete
+      await Future.delayed(const Duration(milliseconds: 500));
 
+      // Remove invite and update UI
+      syncManager.removeInvite(widget.roomId);
+
+      // Multiple updates to ensure UI synchronization
+      groupsBloc.add(RefreshGroups());
+      groupsBloc.add(LoadGroups());
+      mapBloc.add(MapLoadUserLocations());
+
+      // Close the modal
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Staggered updates to ensure everything syncs properly
+      Future.delayed(const Duration(milliseconds: 750), () {
+        if (mounted) {
+          groupsBloc.add(RefreshGroups());
+          groupsBloc.add(LoadGroups());
+          groupsBloc.add(LoadGroupMembers(widget.roomId));
+        }
+      });
+
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          groupsBloc.add(RefreshGroups());
+          groupsBloc.add(LoadGroups());
+          mapBloc.add(MapLoadUserLocations());
+        }
+      });
+
+      // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Group invitation accepted.")),
         );
       }
-    } else {
-      // Failure: Show an error modal
-      Navigator.of(context).pop();
-      // Remove invalid invite
-      Provider.of<SyncManager>(context, listen: false)
-          .removeInvite(widget.roomId);
-      await showDialog(
-        context: context,
-        builder: (context) {
-          return NoticeContinueModal(
-            message: "The invite is no longer valid. It may have been removed.",
-            onContinue: () {
-            },
-          );
-        },
-      );
 
+      // Call the refresh callback
+      await widget.refreshCallback();
+    } catch (e) {
       if (mounted) {
-        await widget.refreshCallback();
-      }
-    }
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error accepting invitation: $e")),
+        );
 
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-      });
+        // Close modal and show invalid invite notice if appropriate
+        Navigator.of(context).pop();
+        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+
+        await showDialog(
+          context: context,
+          builder: (context) => NoticeContinueModal(
+            message: "The invite is no longer valid. It may have been removed.",
+            onContinue: () {},
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -190,13 +227,11 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     });
 
     try {
-      // Decline the invitation using RoomProvider
-      await widget.roomService
-          .declineInvitation(widget.roomId);
+      // Decline the invitation using RoomService
+      await widget.roomService.declineInvitation(widget.roomId);
 
       // Remove the invitation from SyncManager
-      Provider.of<SyncManager>(context, listen: false)
-          .removeInvite(widget.roomId);
+      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
 
       if (mounted) {
         Navigator.of(context).pop(); // Close the modal

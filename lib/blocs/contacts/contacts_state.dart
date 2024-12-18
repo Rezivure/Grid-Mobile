@@ -28,3 +28,4 @@ class ContactsError extends ContactsState {
   @override
   List<Object> get props => [message];
 }
+

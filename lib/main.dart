@@ -33,6 +33,7 @@ import 'screens/map/map_tab.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -142,7 +143,16 @@ void main() async {
               mapBloc: context.read<MapBloc>(),
             ),
           ),
-          ChangeNotifierProxyProvider2<MapBloc, ContactsBloc, SyncManager>(
+          BlocProvider<GroupsBloc>(
+            create: (context) => GroupsBloc(
+              roomService: context.read<RoomService>(),
+              roomRepository: context.read<RoomRepository>(),
+              userRepository: context.read<UserRepository>(),
+              mapBloc: context.read<MapBloc>(),
+              locationRepository: context.read<LocationRepository>(),
+            ),
+          ),
+          ChangeNotifierProxyProvider3<MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
             create: (context) => SyncManager(
               client,
               messageProcessor,
@@ -152,8 +162,10 @@ void main() async {
               context.read<MapBloc>(),
               context.read<ContactsBloc>(),
               locationRepository,
+              context.read<GroupsBloc>(),
             )..startSync(),
-            update: (context, mapBloc, contactsBloc, previous) => previous ?? SyncManager(
+            update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
+            previous ?? SyncManager(
               client,
               messageProcessor,
               roomRepository,
@@ -162,6 +174,7 @@ void main() async {
               mapBloc,
               contactsBloc,
               locationRepository,
+              groupsBloc,
             )..startSync(),
           ),
         ],

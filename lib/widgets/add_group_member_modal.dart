@@ -3,13 +3,23 @@ import 'package:grid_frontend/utilities/utils.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_event.dart';
+
+import '../models/grid_user.dart' as GridUser;
+
+import '../repositories/user_repository.dart';
+
 
 class AddGroupMemberModal extends StatefulWidget {
-  final String roomId; // Room ID where the user will be invited
+  final String roomId;
   final UserService userService;
   final RoomService roomService;
+  final UserRepository userRepository;
+  final VoidCallback? onInviteSent;
 
-  AddGroupMemberModal({required this.roomId, required this.userService, required this.roomService});
+  AddGroupMemberModal({required this.roomId, required this.userService, required this.roomService, required this.userRepository, required this.onInviteSent});
 
   @override
   _AddGroupMemberModalState createState() => _AddGroupMemberModalState();
@@ -60,11 +70,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       if (mounted) {
         setState(() {
           _isProcessing = true;
-          _contactError = null; // Reset error before trying to add
+          _contactError = null;
         });
       }
       try {
-        // Check if the user exists before sending an invite.
         bool userExists = await this.widget.userService.userExists(normalizedUserId!);
         if (!userExists) {
           if (mounted) {
@@ -76,7 +85,6 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           return;
         }
 
-        // Check if the user is already in the group.
         bool isAlreadyInGroup = await this.widget.roomService.isUserInRoom(
             widget.roomId, normalizedUserId);
         if (isAlreadyInGroup) {
@@ -89,18 +97,40 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           return;
         }
 
-        // Proceed with inviting the user to the group.
+        // Send the invite
         await this.widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
 
-        // Show success message and pop the modal if mounted
+        // Fetch user profile and add to database
+        final profileInfo = await widget.userService.client.getUserProfile(normalizedUserId);
+        final gridUser = GridUser.GridUser(
+          userId: normalizedUserId,
+          displayName: profileInfo.displayname,
+          avatarUrl: profileInfo.avatarUrl?.toString(),
+          lastSeen: DateTime.now().toIso8601String(),
+          profileStatus: "",
+        );
+        await widget.userRepository.insertUser(gridUser);
+
+        // Manually insert the user relationship with 'invite' status
+        await widget.userRepository.insertUserRelationship(
+            normalizedUserId,
+            widget.roomId,
+            false, // not a direct room
+            membershipStatus: 'invite'
+        );
+
+        // Call the callback if provided
+        if (widget.onInviteSent != null) {
+          widget.onInviteSent!();
+        }
+
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invite sent successfully to $normalizedUserId.')),
+            SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
           );
         }
 
-        // Clear _matrixUserId after use
         _matrixUserId = null;
       } catch (e) {
         if (mounted) {

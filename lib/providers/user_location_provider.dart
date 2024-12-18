@@ -17,12 +17,26 @@ class UserLocationProvider with ChangeNotifier {
 
 
   Future<void> _initializeLocations() async {
-    final locations = await locationRepository.getAllLocations();
+    final locations = await locationRepository.getAllLatestLocations(); // Use getAllLatestLocations instead
     for (var location in locations) {
       _userLocations[location.userId] = location;
     }
-    print("End of initializeLocations: ${_userLocations}");
     notifyListeners();
+  }
+
+  // Modify getLastSeen to return the most recent timestamp
+  String? getLastSeen(String userId) {
+    final location = _userLocations[userId];
+    if (location == null || location.timestamp == null) return null;
+
+    // Ensure the timestamp is valid
+    try {
+      DateTime.parse(location.timestamp!);
+      return location.timestamp;
+    } catch (e) {
+      print("Invalid timestamp for user $userId: ${location.timestamp}");
+      return null;
+    }
   }
 
   void _listenForDatabaseUpdates() {
@@ -41,12 +55,6 @@ class UserLocationProvider with ChangeNotifier {
   void updateUserLocation(UserLocation location) {
     _userLocations[location.userId] = location;
     notifyListeners();
-  }
-
-  // Get the last seen time for a user
-  String? getLastSeen(String userId) {
-    final location = _userLocations[userId];
-    return location?.timestamp;
   }
 
   void debugUserLocations() {

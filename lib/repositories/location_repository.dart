@@ -70,6 +70,43 @@ class LocationRepository {
     return null;
   }
 
+  Future<UserLocation?> getLatestLocationFromHistory(String userId) async {
+    final db = await _databaseService.database;
+    final encryptionKey = await _databaseService.getEncryptionKey();
+
+    // Modified query to handle ISO8601 timestamps correctly
+    final results = await db.rawQuery('''
+      SELECT * FROM UserLocations 
+      WHERE userId = ? 
+      ORDER BY strftime('%s', timestamp) DESC 
+      LIMIT 1
+    ''', [userId]);
+
+    if (results.isNotEmpty) {
+      return UserLocation.fromMap(results.first, encryptionKey);
+    }
+    return null;
+  }
+
+  Future<List<UserLocation>> getAllLatestLocations() async {
+    final db = await _databaseService.database;
+    final encryptionKey = await _databaseService.getEncryptionKey();
+
+    // Modified query to handle ISO8601 timestamps correctly
+    final results = await db.rawQuery('''
+      SELECT l.* FROM UserLocations l
+      INNER JOIN (
+        SELECT userId, MAX(strftime('%s', timestamp)) as maxTime
+        FROM UserLocations
+        GROUP BY userId
+      ) latest ON l.userId = latest.userId 
+      AND strftime('%s', l.timestamp) = latest.maxTime
+    ''');
+
+    return results.map((row) => UserLocation.fromMap(row, encryptionKey)).toList();
+  }
+
+
   /// Fetch all locations for all users
   Future<List<UserLocation>> getAllLocations() async {
     final db = await _databaseService.database;

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:random_avatar/random_avatar.dart';
 
+import '../utilities/utils.dart';
+
 class TwoUserAvatars extends StatelessWidget {
   final List<String> userIds;
 
-  TwoUserAvatars({required this.userIds});
+  const TwoUserAvatars({super.key, required this.userIds});
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     // Ensure there are at least two distinct avatars
     List<String> displayedUserIds = userIds.toSet().toList();
     if (displayedUserIds.length < 2) {
@@ -16,25 +20,27 @@ class TwoUserAvatars extends StatelessWidget {
     displayedUserIds = displayedUserIds.take(2).toList();
 
     return CircleAvatar(
-      radius: 30, // Adjust the size of the avatar
-      backgroundColor: Colors.grey.shade200, // Background of the circle
+      radius: 30,
+      backgroundColor: colorScheme.primary.withOpacity(0.1),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Positioned(
-            left: 8, // Position the first avatar to the left
+            top: 6,
+            left: 6,
             child: RandomAvatar(
-              displayedUserIds[0],
-              height: 35,
-              width: 35,
+              localpart(displayedUserIds[0]),
+              height: 32,
+              width: 32,
             ),
           ),
           Positioned(
-            right: 8, // Position the second avatar to the right
+            bottom: 6,
+            right: 6,
             child: RandomAvatar(
-              displayedUserIds[1],
-              height: 35,
-              width: 35,
+              localpart(displayedUserIds[1]),
+              height: 32,
+              width: 32,
             ),
           ),
         ],

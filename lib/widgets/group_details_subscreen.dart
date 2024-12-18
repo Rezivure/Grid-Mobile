@@ -1,35 +1,45 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:matrix/matrix.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
-import 'add_group_member_modal.dart';
-import 'package:grid_frontend/providers/selected_user_provider.dart';
-import 'package:grid_frontend/widgets/user_keys_modal.dart';
+import 'package:grid_frontend/models/room.dart' as GridRoom;
+import 'package:grid_frontend/models/grid_user.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
-import 'package:grid_frontend/repositories/user_keys_repository.dart';
-import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/providers/selected_user_provider.dart';
+import '../blocs/groups/groups_event.dart';
+import '../blocs/groups/groups_state.dart';
+import '../services/user_service.dart';
+import '../utilities/time_ago_formatter.dart';
+import 'add_group_member_modal.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
   final RoomService roomService;
-  final UserKeysRepository userKeysRepository;
+  final UserRepository userRepository;
   final ScrollController scrollController;
-  final Room room;
+  final GridRoom.Room room;
   final VoidCallback onGroupLeft;
 
-  GroupDetailsSubscreen({
+  const GroupDetailsSubscreen({
+    Key? key,
     required this.scrollController,
     required this.room,
     required this.onGroupLeft,
     required this.roomService,
-    required this.userKeysRepository,
+    required this.userRepository,
     required this.userService,
-  });
+  }) : super(key: key);
 
   @override
   _GroupDetailsSubscreenState createState() => _GroupDetailsSubscreenState();
@@ -38,111 +48,137 @@ class GroupDetailsSubscreen extends StatefulWidget {
 class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   bool _isLeaving = false;
   bool _isProcessing = false;
-  TextEditingController _searchController = TextEditingController();
-  List<User> _filteredParticipants = [];
-  Map<String, bool> _approvedKeysStatus = {};
+  bool _isRefreshing = false;
 
-  Timer? _timer;
-  bool _isSyncing = false;
+  final TextEditingController _searchController = TextEditingController();
+  List<GridUser> _filteredMembers = [];
+  String? _currentUserId;
+  Timer? _refreshTimer;
+
 
   @override
   void initState() {
     super.initState();
-    _filteredParticipants = _getFilteredParticipants();
-    _searchController.addListener(_filterParticipants);
-    _startAutoSync();
-    _fetchApprovedKeysStatus();
+    _searchController.addListener(_filterMembers);
+    _loadCurrentUser();
 
-    // Set the selected subscreen to the current group
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _onSubscreenSelected('group:${widget.room.id}');
+      _onSubscreenSelected('group:${widget.room.roomId}');
+      _refreshMembers();
     });
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_isRefreshing) {
+        _refreshMembers();
+      }
+    });
+  }
+
+  Future<void> _loadCurrentUser() async {
+    _currentUserId = await widget.userService.getMyUserId();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _timer?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(GroupDetailsSubscreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.room.id != widget.room.id) {
-      // The room has changed, refresh participants and reset search
-      setState(() {
-        _filteredParticipants = _getFilteredParticipants();
-        _searchController.text = '';
-      });
+    if (oldWidget.room.roomId != widget.room.roomId) {
+      _searchController.text = '';
+      _onSubscreenSelected('group:${widget.room.roomId}');
+      _refreshMembers();
+    }
+  }
 
-      _onSubscreenSelected('group:${widget.room.id}');
-      _timer?.cancel();
-      _startAutoSync();
+  Future<void> _refreshMembers() async {
+    if (_isRefreshing) return;
+
+    _isRefreshing = true;
+    try {
+      context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+      // Small delay before allowing next refresh
+      await Future.delayed(const Duration(seconds: 2));
+    } catch (e) {
+      print('Error refreshing group members: $e');
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+
+  Future<void> _kickMember(String userId) async {
+    try {
+      final success = await widget.roomService.kickMemberFromRoom(
+          widget.room.roomId, userId);
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User kicked from group')),
+          );
+          // Handle state updates through GroupsBloc
+          await context.read<GroupsBloc>().handleMemberKicked(
+              widget.room.roomId, userId);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to kick. Only group creator can kick.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error kicking user: $e')),
+        );
+      }
     }
   }
 
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
-    // No direct fetching of locations needed, the UserLocationProvider is reactive
   }
 
-  void _startAutoSync() {
-    // Periodic sync as a fallback for participants list (not needed for location)
-    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (mounted) {
+  void _filterMembers() {
+    if (mounted) {
+      final state = context
+          .read<GroupsBloc>()
+          .state;
+      if (state is GroupsLoaded && state.selectedRoomMembers != null) {
+        final searchText = _searchController.text.toLowerCase();
         setState(() {
-          _isSyncing = true;
+          _filteredMembers = state.selectedRoomMembers!
+              .where((user) => user.userId != _currentUserId)
+              .where((user) =>
+          (user.displayName?.toLowerCase().contains(searchText) ?? false) ||
+              user.userId.toLowerCase().contains(searchText))
+              .toList();
         });
-        _refreshParticipants();
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            setState(() {
-              _isSyncing = false;
-            });
-          }
-        });
-      }
-    });
-  }
-
-  Future<void> _refreshParticipants() async {
-    // Just refresh participants list filtering
-    setState(() {
-      _filteredParticipants = _getFilteredParticipants();
-    });
-    // No need to manually fetch locations; they update via UserLocationProvider
-  }
-
-  Future<void> _fetchApprovedKeysStatus() async {
-    Map<String, bool> tempApprovedKeysStatus = {};
-    for (var user in _filteredParticipants) {
-      bool? status = await widget.userKeysRepository.getApprovedKeys(user.id);
-      if (status != null) {
-        tempApprovedKeysStatus[user.id] = status;
       }
     }
-    setState(() {
-      _approvedKeysStatus = tempApprovedKeysStatus;
-    });
   }
 
-  List<User> _getFilteredParticipants() {
-    final searchText = _searchController.text.toLowerCase();
-    return widget.room
-        .getParticipants()
-        .where((user) =>
-    user.id != widget.room.client?.userID &&
-        (user.displayName ?? user.id).toLowerCase().contains(searchText))
-        .toList();
+  Widget _getSubtitleText(BuildContext context, GroupsLoaded state,
+      GridUser user, UserLocation? userLocation) {
+    final memberStatus = state.getMemberStatus(user.userId);
+    final timeAgoText = userLocation != null
+        ? TimeAgoFormatter.format(userLocation.timestamp)
+        : 'Off Grid';
+
+    return StatusIndicator(
+      timeAgo: timeAgoText,
+      membershipStatus: memberStatus,
+    );
   }
 
-  void _filterParticipants() {
-    setState(() {
-      _filteredParticipants = _getFilteredParticipants();
-    });
-  }
 
   Future<void> _showLeaveConfirmationDialog() async {
     final shouldLeave = await showDialog<bool>(
@@ -176,34 +212,44 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     });
 
     try {
-      await widget.roomService.leaveRoom(widget.room.id);
+      await widget.roomService.leaveRoom(widget.room.roomId);
+      if (mounted) {
+        context.read<GroupsBloc>().add(RefreshGroups());
+      }
       widget.onGroupLeft();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error leaving group: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error leaving group: $e')),
+        );
+      }
     } finally {
-      setState(() {
-        _isLeaving = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLeaving = false;
+        });
+      }
     }
-  }
-
-  // Retrieve a user's last seen time
-  Future<String> _getLastSeen(User user) async {
-    final lastSeen = await widget.userService.getLastSeenTime(user.id);
-    return lastSeen;
   }
 
   void _showAddGroupMemberModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme
+          .of(context)
+          .colorScheme
+          .surface,
       builder: (context) {
         return AddGroupMemberModal(
-          roomId: widget.room.id,
+          roomId: widget.room.roomId,
           userService: widget.userService,
           roomService: widget.roomService,
+          userRepository: widget.userRepository,
+          onInviteSent: () {
+            // Reload members when invite is sent
+            context.read<GroupsBloc>().add(
+                LoadGroupMembers(widget.room.roomId));
+          },
         );
       },
     );
@@ -213,192 +259,161 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final userLocations = Provider.of<UserLocationProvider>(context)
+        .getAllUserLocations();
 
-    // Get all user locations from the provider
-    final userLocations = Provider.of<UserLocationProvider>(context).getAllUserLocations();
+    return BlocBuilder<GroupsBloc, GroupsState>(
+      buildWhen: (previous, current) {
+        if (previous is GroupsLoaded && current is GroupsLoaded) {
+          return previous.selectedRoomId != current.selectedRoomId ||
+              previous.selectedRoomMembers != current.selectedRoomMembers ||
+              previous.membershipStatuses != current.membershipStatuses;
+        }
+        return true;
+      },
+      builder: (context, state) {
+        if (state is! GroupsLoaded) {
+          return Column(
+            children: [
+              CustomSearchBar(
+                controller: _searchController,
+                hintText: 'Search Members',
+              ),
+              const Expanded(
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ],
+          );
+        }
 
-    return Column(
-      children: [
-        CustomSearchBar(
-          controller: _searchController,
-          hintText: 'Search Members',
-        ),
-        if (_isSyncing)
-          Container(
-            padding: const EdgeInsets.all(8.0),
-            child: const Text(
-              'Syncing...',
-              style: TextStyle(color: Colors.black),
+        if (state.selectedRoomMembers != null && _currentUserId != null) {
+          final searchText = _searchController.text.toLowerCase();
+          _filteredMembers = state.selectedRoomMembers!
+              .where((user) => user.userId != _currentUserId)
+              .where((user) =>
+          (user.displayName?.toLowerCase().contains(searchText) ?? false) ||
+              user.userId.toLowerCase().contains(searchText))
+              .toList();
+        }
+
+        return Column(
+          children: [
+            CustomSearchBar(
+              controller: _searchController,
+              hintText: 'Search Members',
             ),
-          ),
-        Expanded(
-          child: ListView.builder(
-            controller: widget.scrollController,
-            padding: EdgeInsets.zero,
-            itemCount: _filteredParticipants.length + 1,
-            itemBuilder: (context, index) {
-              if (index < _filteredParticipants.length) {
-                final user = _filteredParticipants[index];
-
-                return Column(
-                  children: [
-                    FutureBuilder<String>(
-                      future: _getLastSeen(user),
-                      builder: (context, snapshot) {
-                        final lastSeen = snapshot.data ?? 'Unknown';
-                        final membership = user.membership;
-
-                        // Find the user's latest location from the provider
-                        final userLocation = userLocations.firstWhere(
-                              (loc) => loc.userId == user.id,
-                          orElse: () => UserLocation(
-                            userId: user.id,
-                            latitude: 0.0,
-                            longitude: 0.0,
-                            timestamp: 'Loading...',
-                            iv: '',
-                          ),
-                        );
-
-                        String subtitleText;
-                        TextStyle subtitleStyle = TextStyle(color: colorScheme.onSurface);
-
-                        if (membership == Membership.invite) {
-                          subtitleText = 'Invitation Sent';
-                          subtitleStyle = const TextStyle(color: Colors.orange);
-                        } else {
-                          // Display last seen and location info together
-                          subtitleText = 'Last seen: $lastSeen | Loc: ${userLocation.latitude}, ${userLocation.longitude}';
-                        }
-
-                        bool approvedKeys = _approvedKeysStatus[user.id] ?? false;
-
-                        return ListTile(
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 30,
-                                child: RandomAvatar(
-                                  user.id.split(':')[0].replaceFirst('@', ''),
-                                  height: 60,
-                                  width: 60,
-                                ),
-                                backgroundColor: colorScheme.primary.withOpacity(0.2),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: GestureDetector(
-                                  onTap: () async {
-                                    if (_approvedKeysStatus.containsKey(user.id)) {
-                                      bool? result = await showDialog<bool>(
-                                        context: context,
-                                        builder: (_) => UserKeysModal(
-                                          userService: widget.userService,
-                                          userKeysRepository: widget.userKeysRepository,
-                                          userId: user.id,
-                                          approvedKeys: approvedKeys,
-                                        ),
-                                      );
-                                      if (result == true) {
-                                        setState(() {
-                                          _approvedKeysStatus[user.id] = true;
-                                        });
-                                      }
-                                    }
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: approvedKeys
-                                          ? Colors.green.withOpacity(0.8)
-                                          : (_approvedKeysStatus.containsKey(user.id)
-                                          ? Colors.red.withOpacity(0.8)
-                                          : Colors.grey.withOpacity(0.8)),
-                                    ),
-                                    padding: const EdgeInsets.all(4),
-                                    child: Icon(
-                                      approvedKeys
-                                          ? Icons.lock
-                                          : (_approvedKeysStatus.containsKey(user.id)
-                                          ? Icons.lock_open
-                                          : Icons.help_rounded),
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          title: Text(
-                            user.displayName ?? user.id,
-                            style: TextStyle(color: colorScheme.onBackground),
-                          ),
-                          subtitle: Text(
-                            subtitleText,
-                            style: subtitleStyle,
-                          ),
-                          onTap: () {
-                            final selectedUserProvider = Provider.of<SelectedUserProvider>(context, listen: false);
-                            selectedUserProvider.setSelectedUserId(user.id, context);
-                            print('Group member selected: ${user.id}');
-                          },
-                        );
-                      },
-                    ),
-                    if (index != _filteredParticipants.length - 1)
-                      Divider(
-                        thickness: 1,
-                        color: colorScheme.onSurface.withOpacity(0.1),
-                        indent: 20,
-                        endIndent: 20,
-                      ),
-                  ],
-                );
-              } else {
-                // The last item shows buttons
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0).copyWith(top: 20.0),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: 180,
-                        child: ElevatedButton(
-                          onPressed: _isProcessing ? null : _showAddGroupMemberModal,
-                          child: const Text('Add Member'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colorScheme.onSurface,
-                            foregroundColor: colorScheme.surface,
-                            side: BorderSide(color: colorScheme.onSurface),
-                            minimumSize: const Size(150, 40),
+            Expanded(
+              child: ListView.builder(
+                controller: widget.scrollController,
+                padding: EdgeInsets.zero,
+                itemCount: _filteredMembers.isEmpty ? 2 : _filteredMembers.length + 1,
+                itemBuilder: (context, index) {
+                  if (_filteredMembers.isEmpty && index == 0) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Text(
+                          "It's lonely here. Invite someone!",
+                          style: TextStyle(
+                            color: colorScheme.onBackground,
+                            fontSize: 16,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: 180,
-                        child: ElevatedButton(
-                          onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
-                          child: _isLeaving
-                              ? const CircularProgressIndicator(color: Colors.red)
-                              : const Text('Leave Group'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.red,
-                            side: const BorderSide(color: Colors.red),
-                            minimumSize: const Size(150, 40),
+                    );
+                  }
+
+                  if (index < _filteredMembers.length) {
+                    final user = _filteredMembers[index];
+                    final userLocation = userLocations
+                        .cast<UserLocation?>()
+                        .firstWhere(
+                          (loc) => loc?.userId == user.userId,
+                      orElse: () => null,
+                    );
+
+                    return Slidable(
+                      key: ValueKey(user.userId),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        children: [
+                          SlidableAction(
+                            onPressed: (_) => _kickMember(user.userId),
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            icon: Icons.person_remove,
+                            label: 'Kick',
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              }
-            },
-          ),
-        ),
-      ],
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 30,
+                          child: RandomAvatar(
+                            user.userId.split(':')[0].replaceFirst('@', ''),
+                            height: 60,
+                            width: 60,
+                          ),
+                          backgroundColor: colorScheme.primary.withOpacity(0.2),
+                        ),
+                        title: Text(
+                          user.displayName ?? user.userId,
+                          style: TextStyle(color: colorScheme.onBackground),
+                        ),
+                        subtitle: _getSubtitleText(context, state, user, userLocation),
+                        onTap: () {
+                          Provider.of<SelectedUserProvider>(context, listen: false)
+                              .setSelectedUserId(user.userId, context);
+                        },
+                      ),
+                    );
+                  } else {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0)
+                          .copyWith(top: 20.0),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: 180,
+                            child: ElevatedButton(
+                              onPressed: _isProcessing ? null : _showAddGroupMemberModal,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: colorScheme.onSurface,
+                                foregroundColor: colorScheme.surface,
+                                side: BorderSide(color: colorScheme.onSurface),
+                                minimumSize: const Size(150, 40),
+                              ),
+                              child: const Text('Add Member'),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: 180,
+                            child: ElevatedButton(
+                              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                                minimumSize: const Size(150, 40),
+                              ),
+                              child: _isLeaving
+                                  ? const CircularProgressIndicator(color: Colors.red)
+                                  : const Text('Leave Group'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
