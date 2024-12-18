@@ -61,6 +61,7 @@ class SyncManager with ChangeNotifier {
     _isInitialized = true;
 
     print("Initializing Sync Manager...");
+    await roomService.cleanRooms();
     await fetchInitialData();
     await startSync();
   }
@@ -70,6 +71,7 @@ class SyncManager with ChangeNotifier {
 
     _isSyncing = true;
     client.sync();
+
 
     client.onSync.stream.listen((SyncUpdate syncUpdate) {
       // Process invites

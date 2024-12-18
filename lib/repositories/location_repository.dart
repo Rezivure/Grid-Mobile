@@ -11,18 +11,18 @@ class LocationRepository {
 
   static Future<void> createTable(Database db) async {
     await db.execute('''
-      CREATE TABLE UserLocations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId TEXT,
-        latitude TEXT,
-        longitude TEXT,
-        timestamp TEXT,
-        iv TEXT,
-        FOREIGN KEY (userId) REFERENCES Users (id)
-      );
-    ''');
+    CREATE TABLE UserLocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT,
+      latitude TEXT,
+      longitude TEXT,
+      timestamp TEXT,
+      iv TEXT,
+      FOREIGN KEY (userId) REFERENCES Users (id),
+      UNIQUE(userId) ON CONFLICT REPLACE
+    );
+  ''');
   }
-
   /// Stream of location updates, emits a UserLocation whenever one is inserted or updated
   Stream<UserLocation> get locationUpdates => _locationUpdatesController.stream;
 

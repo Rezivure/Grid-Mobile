@@ -116,19 +116,31 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         }
 
         // User exists, proceed with invitation
+        bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
 
-        await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
-        // Clear _matrixUserId after use
-        _matrixUserId = null;
-        // Only pop the modal if the widget is still mounted
-        if (mounted) {
-          Navigator.of(context).pop();
+        if (success) {
+          // Clear _matrixUserId after successful use
+          _matrixUserId = null;
+          if (mounted) {
+            setState(() {
+              _contactError = 'Friend request sent!';
+            });
+            // Give user a moment to see the success message
+            await Future.delayed(Duration(seconds: 1));
+            Navigator.of(context).pop();
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _contactError = 'Already friends or request pending';
+            });
+          }
         }
       } catch (e) {
         // Catch any other errors
         if (mounted) {
           setState(() {
-            _contactError = 'Error adding user: ${e.toString()}';
+            _contactError = 'Error sending friend request';
           });
         }
       } finally {

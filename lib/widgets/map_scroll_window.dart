@@ -6,11 +6,9 @@ import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/widgets/profile_modal.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
-
-
-import '../blocs/groups/groups_state.dart';
-import '../services/sync_manager.dart';
-import '../utilities/utils.dart';
+import 'package:grid_frontend/blocs/groups/groups_state.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
@@ -45,7 +43,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   bool _isDropdownExpanded = false;
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
-
+  bool _isScrollingContent = false;
 
   final DraggableScrollableController _scrollableController =
   DraggableScrollableController();
@@ -61,7 +59,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     _groupsBloc = context.read<GroupsBloc>();
 
     _groupsBloc.add(LoadGroups());
-
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
@@ -107,8 +104,15 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       minChildSize: 0.3,
       maxChildSize: 0.7,
       builder: (BuildContext context, ScrollController scrollController) {
-        return NotificationListener<DraggableScrollableNotification>(
-          onNotification: (notification) => true,
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollStartNotification) {
+              _isScrollingContent = true;
+            } else if (notification is ScrollEndNotification) {
+              _isScrollingContent = false;
+            }
+            return true;
+          },
           child: Container(
             decoration: BoxDecoration(
               color: colorScheme.background,
@@ -126,21 +130,51 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             ),
             child: Column(
               children: [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 5),
-                    width: 50,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: colorScheme.onBackground.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                GestureDetector(
+                  onVerticalDragUpdate: (details) {
+                    final delta = details.delta.dy / MediaQuery.of(context).size.height;
+                    final newSize = (_scrollableController.size - delta)
+                        .clamp(0.3, 0.7);
+                    _scrollableController.jumpTo(newSize);
+                  },
+                  behavior: HitTestBehavior.translucent,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Center(
+                          child: Container(
+                            width: 50,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: colorScheme.onBackground.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      _buildDropdownHeader(colorScheme),
+                      if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
+                    ],
                   ),
                 ),
-                _buildDropdownHeader(colorScheme),
-                if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
                 Expanded(
-                  child: _buildSubscreen(scrollController),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.metrics.pixels <= 0 &&
+                          notification is ScrollUpdateNotification &&
+                          notification.dragDetails != null &&
+                          !_isScrollingContent) {
+                        final delta = notification.dragDetails!.delta.dy / MediaQuery.of(context).size.height;
+                        final newSize = (_scrollableController.size - delta)
+                            .clamp(0.3, 0.7);
+                        _scrollableController.jumpTo(newSize);
+                        return true;
+                      }
+                      return false;
+                    },
+                    child: _buildSubscreen(scrollController),
+                  ),
                 ),
               ],
             ),
@@ -160,10 +194,9 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             onTap: () {
               setState(() {
                 _isDropdownExpanded = !_isDropdownExpanded;
-                // Refresh groups when expanding the dropdown
                 if (_isDropdownExpanded) {
                   _groupsBloc.add(RefreshGroups());
-                  _groupsBloc.add(LoadGroups()); // Double-load to ensure update
+                  _groupsBloc.add(LoadGroups());
                 }
               });
             },
@@ -265,7 +298,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               );
             }
 
-
             final groups = (groupsState is GroupsLoaded)
                 ? groupsState.groups
                 : <GridRoom.Room>[];
@@ -279,7 +311,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                 children: [
                   _buildContactOption(colorScheme, userId),
                   ...groups.map((room) => _buildGroupOption(colorScheme, room)),
-                  // Show a subtle loading indicator at the end if loading
                   if (groupsState is GroupsLoading)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10.0),
@@ -348,7 +379,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
 
   Widget _buildGroupOption(ColorScheme colorScheme, GridRoom.Room room) {
     final parts = room.name.split(':');
-    print('Room name parts: $parts');
     if (parts.length >= 5) {
       final groupName = parts[3];
       final remainingTimeStr = room.expirationTimestamp == 0
@@ -377,14 +407,14 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               Stack(
                 children: [
                   TriangleAvatars(userIds: room.members),
-                  if (room.expirationTimestamp > 0)  // Only show bubble if not infinite
+                  if (room.expirationTimestamp > 0)
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary,  // Always primary color when shown
+                          color: colorScheme.primary,
                           shape: BoxShape.circle,
                         ),
                         child: Text(
@@ -452,7 +482,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     });
   }
 
-  // In MapScrollWindow class:
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -497,25 +526,25 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   void _showProfileModal(BuildContext context) {
     var theme = Theme.of(context).colorScheme;
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: theme.surface,
-        shape: const RoundedRectangleBorder(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.surface,
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (context) => Padding(
+      ),
+      builder: (context) => Padding(
         padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16,
         ),
         child: ProfileModal(
-        userService: _userService,
+          userService: _userService,
         ),
-        ),
-        );
-      }
+      ),
+    );
+  }
 
   String _formatDuration(Duration duration) {
     if (duration.inDays > 0) {

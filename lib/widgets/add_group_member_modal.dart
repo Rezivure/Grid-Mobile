@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:matrix/matrix_api_lite/generated/model.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -55,6 +56,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   }
 
   void _addMember() async {
+    const int MAX_GROUP_MEMBERS = 15;
+
     final inputText = _controller.text.trim();
     String username;
     if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
@@ -73,8 +76,45 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           _contactError = null;
         });
       }
+
       try {
-        bool userExists = await this.widget.userService.userExists(normalizedUserId!);
+        // Check member limit first
+        final room = widget.roomService.client.getRoomById(widget.roomId);
+        if (room == null) {
+          throw Exception('Room not found');
+        }
+
+        // Check if user has permission to invite
+        final canInvite = room.canInvite;
+
+        if (!canInvite) {
+          if (mounted) {
+            setState(() {
+              _contactError = 'You do not have permission to invite members to this group.';
+              _isProcessing = false;
+            });
+          }
+          return;
+        }
+
+        final memberCount = room
+            .getParticipants()
+            .where((member) =>
+        member.membership == Membership.join ||
+            member.membership == Membership.invite)
+            .length;
+
+        if (memberCount >= MAX_GROUP_MEMBERS) {
+          if (mounted) {
+            setState(() {
+              _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
+              _isProcessing = false;
+            });
+          }
+          return;
+        }
+
+        bool userExists = await widget.userService.userExists(normalizedUserId!);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -85,7 +125,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           return;
         }
 
-        bool isAlreadyInGroup = await this.widget.roomService.isUserInRoom(
+        bool isAlreadyInGroup = await widget.roomService.isUserInRoom(
             widget.roomId, normalizedUserId);
         if (isAlreadyInGroup) {
           if (mounted) {
@@ -98,9 +138,9 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         }
 
         // Send the invite
-        await this.widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
+        await widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
 
-        // Fetch user profile and add to database
+        // Rest of the code remains the same...
         final profileInfo = await widget.userService.client.getUserProfile(normalizedUserId);
         final gridUser = GridUser.GridUser(
           userId: normalizedUserId,
@@ -111,15 +151,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         );
         await widget.userRepository.insertUser(gridUser);
 
-        // Manually insert the user relationship with 'invite' status
         await widget.userRepository.insertUserRelationship(
             normalizedUserId,
             widget.roomId,
-            false, // not a direct room
+            false,
             membershipStatus: 'invite'
         );
 
-        // Call the callback if provided
         if (widget.onInviteSent != null) {
           widget.onInviteSent!();
         }
@@ -135,7 +173,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       } catch (e) {
         if (mounted) {
           setState(() {
-            _contactError = 'Failed to send invite: $e';
+            _contactError = 'Failed to send invite. Do you have permissions?';
             _isProcessing = false;
           });
         }

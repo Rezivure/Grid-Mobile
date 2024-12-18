@@ -56,27 +56,42 @@ class RoomService {
 
  /// create direct grid room (contact)
   Future<bool> createRoomAndInviteContact(String username) async {
-    // Use the normalizeUser utility function
     final normalizedData = normalizeUser(username);
     final String matrixUserId = normalizedData['matrixUserId']!;
 
-    // Check if the user exists
+    // Check if user exists
     try {
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
-        return false; 
+        return false;
       }
     } catch (e) {
       print('User $matrixUserId does not exist: $e');
       return false;
     }
-    // Check if direct grid contact already exists
-    final myUserId = client.userID?.localpart ?? 'error';
-    final contactUserId = matrixUserId?.localpart ?? 'error';
-    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, contactUserId);
 
-    if (status == RelationshipStatus.canInvite) {
-      String? myUserId = client.userID;
+    final myUserId = client.userID?.localpart ?? 'error';
+    final contactUserId = matrixUserId.split(':')[0].substring(1);
+
+    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, contactUserId);
+    if (status != RelationshipStatus.canInvite) {
+      return false;
+    }
+
+    // Check for existing direct rooms by looking at room names
+    for (final room in client.rooms) {
+      if (room.name != null) {
+        final roomName = room.name!;
+        // Check both possible orderings of the IDs in the room name
+        if (roomName == "Grid:Direct:$myUserId:$matrixUserId" ||
+            roomName == "Grid:Direct:$matrixUserId:$myUserId") {
+          print('Found existing direct room: $roomName');
+          return false;
+        }
+      }
+    }
+
+    try {
       final roomName = "Grid:Direct:$myUserId:$matrixUserId";
       final roomId = await client.createRoom(
         name: roomName,
@@ -90,9 +105,11 @@ class RoomService {
           ),
         ],
       );
-      return true; // success
+      return true;
+    } catch (e) {
+      print('Failed to create direct room: $e');
+      return false;
     }
-    return false; // failed
   }
 
   Future<bool> isUserInRoom(String roomId, String userId) async {
@@ -130,29 +147,24 @@ class RoomService {
         throw Exception('User ID not found');
       }
 
-      // Try to leave the Matrix room if it exists
       final room = client.getRoomById(roomId);
       if (room != null) {
         try {
           await room.leave();
+          await client.forgetRoom(roomId); // Add this line
         } catch (e) {
           print('Error leaving Matrix room (continuing with local cleanup): $e');
-          // Don't return false here - continue with local cleanup
         }
-      } else {
-        print('Room not found on server (continuing with local cleanup)');
       }
 
-      // Always clean up local database regardless of server-side success
       await roomRepository.leaveRoom(roomId, userId);
       return true;
-
     } catch (e) {
       print('Error in leaveRoom: $e');
-      // If it was just the local cleanup that failed, we should still return false
       return false;
     }
   }
+
   List<User> getFilteredParticipants(Room room, String searchText) {
     final lowerSearchText = searchText.toLowerCase();
     return room
@@ -273,43 +285,83 @@ class RoomService {
   }
 
   Future<void> cleanRooms() async {
-    // removes expired rooms and rooms that are basically
-    // abandoned, could probably use api/sdk to better detect
-    // abandoned rooms
     try {
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current timestamp in Unix format
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final myUserId = client.userID;
+      print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
         final participants = await room.getParticipants();
+        bool shouldLeave = false;
+        String leaveReason = '';
 
-        // If the room name matches the group room pattern and contains a timestamp
-        if (room.name.contains("Grid:Group:")) {
-          final roomNameParts = room.name.split(":");
+        // Check if it's a Grid room (direct or group)
+        if (room.name.startsWith("Grid:")) {
+          print("Checking Grid room: ${room.name}");
 
-          if (roomNameParts.length >= 4) {
-            final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
+          if (room.name.contains("Grid:Group:")) {
+            // Handle group rooms
+            final roomNameParts = room.name.split(":");
+            if (roomNameParts.length >= 4) {
+              final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
+              print("Group room ${room.id} expiration: $expirationTimestamp");
 
-            // Check if the room has expired
-            if (expirationTimestamp > 0 && expirationTimestamp < now) {
-              await room.leave();
-              print('Left expired room: ${room.name} (${room.id})');
+              if (expirationTimestamp > 0 && expirationTimestamp < now) {
+                shouldLeave = true;
+                leaveReason = 'expired group';
+              }
+            }
+          } else if (room.name.contains("Grid:Direct:")) {
+            // Handle direct rooms
+            print("Checking direct room: ${room.id} with ${participants.length} participants");
+
+            if (participants.length <= 1) {
+              shouldLeave = true;
+              leaveReason = 'solo direct room';
+            } else if (participants.length == 2 &&
+                participants.every((p) => p.membership != Membership.join)) {
+              shouldLeave = true;
+              leaveReason = 'no active participants in direct room';
             }
           }
-        } else if (participants.length == 1 && participants.first.id == client.userID && participants.first.membership == Membership.join) {
-          // Leave the room if you're the only participant left
-          await room.leave();
-          print('Left room: ${room.name} (${room.id}) because you were the only participant left.');
+        } else {
+          // Non-Grid rooms should be left
+          print("Found non-Grid room: ${room.name}");
+          shouldLeave = true;
+          leaveReason = 'non-Grid room';
+        }
+
+        // Extra checks for any room type
+        if (!shouldLeave && participants.length == 1 &&
+            participants.first.id == myUserId &&
+            participants.first.membership == Membership.join) {
+          shouldLeave = true;
+          leaveReason = 'solo member room';
+        }
+
+        if (shouldLeave) {
+          try {
+            print("Leaving room ${room.id} (${room.name}) - Reason: $leaveReason");
+            await room.leave();
+            await client.forgetRoom(room.id);
+            print('Successfully left and forgot room: ${room.id}');
+          } catch (e) {
+            print('Error leaving room ${room.id}: $e');
+          }
+        } else {
+          print("Keeping room ${room.id} (${room.name})");
         }
       }
+      print("Room cleanup completed");
     } catch (e) {
-      print("Error cleaning rooms: $e");
+      print("Error during room cleanup: $e");
     }
   }
+
 
   Future<String> createGroup(String groupName, List<String> userIds, int durationInHours) async {
     String? effectiveUserId = client.userID ?? client.userID?.localpart;
     if (effectiveUserId == null) {
-
       return "Error";
     }
 
@@ -327,7 +379,34 @@ class RoomService {
     final roomName = "Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId";
     var roomId = "";
     try {
-      // Create the room
+      // Create power levels content that restricts invites to admin only
+      final powerLevelsContent = {
+        "ban": 50,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100,
+        },
+        "events_default": 0,
+        "invite": 100,
+        "kick": 100,
+        "notifications": {
+          "room": 50
+        },
+        "redact": 50,
+        "state_default": 50,
+        "users": {
+          effectiveUserId: 100,
+        },
+        "users_default": 0
+      };
+
+      // Create the room with power levels and encryption
       roomId = await client.createRoom(
         name: roomName,
         isDirect: false,
@@ -337,8 +416,13 @@ class RoomService {
             type: EventTypes.Encryption,
             content: {"algorithm": "m.megolm.v1.aes-sha2"},
           ),
+          StateEvent(
+            type: EventTypes.RoomPowerLevels,
+            content: powerLevelsContent,
+          ),
         ],
       );
+
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
@@ -346,16 +430,23 @@ class RoomService {
           await client.inviteUser(roomId, fullUsername);
         }
       }
+
       // Add the "Grid Group" tag to the room
       await client.setRoomTag(client.userID!, roomId, "Grid Group");
     } catch (e) {
       // Handle errors
+      print('Error creating room: $e');
+      return "Error";
     }
     return roomId;
   }
 
   void sendLocationEvent(String roomId, bg.Location location) async {
     final room = client.getRoomById(roomId);
+    if (room == null || room.membership != Membership.join) {
+      print("Skipping location update for room $roomId - no longer a member");
+      return;
+    }
     if (room != null) {
       final latitude = location.coords.latitude;
       final longitude = location.coords.longitude;
@@ -401,30 +492,82 @@ class RoomService {
     }
   }
 
+  Future<int> getRoomMemberCount(String roomId) async {
+    final room = client.getRoomById(roomId);
+    if (room == null) return 0;
+
+    return room
+        .getParticipants()
+        .where((member) =>
+    member.membership == Membership.join ||
+        member.membership == Membership.invite)
+        .length;
+  }
+
   Future<void> updateRooms(bg.Location location) async {
-    List<Room> rooms = client.rooms; // Assuming `client.rooms` gives the list of rooms
+    List<Room> rooms = client.rooms;
+    final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current Unix timestamp
+
     for (Room room in rooms) {
-      // Get all joined members of the room
-      var joinedMembers = room
-          .getParticipants()
-          .where((member) => member.membership == Membership.join)
-          .toList();
-      // Update groups
-      if (joinedMembers.length > 2) {
-        sendLocationEvent(room.id, location);
-      }
-      // Update contacts
-      else if (joinedMembers.length == 2) {
-        sendLocationEvent(room.id, location);
-      }
-      // TODO: check if approved keys to prevent sending
-      // if keys have changed without user approval
-      else {
-        // Don't update
+      try {
+        // Skip if room name doesn't follow Grid format
+        String? roomName = room.name;
+        if (roomName == null || !roomName.startsWith('Grid:Group:')) {
+          continue;
+        }
+
+        // Parse expiration timestamp from room name
+        final parts = roomName.split(':');
+        if (parts.length < 3) continue;
+
+        final expirationStr = parts[2];
+        final expirationTimestamp = int.tryParse(expirationStr);
+
+        // Skip if can't parse timestamp or room has expired
+        // Note: expiration of 0 means no expiration
+        if (expirationTimestamp == null ||
+            (expirationTimestamp != 0 && expirationTimestamp < currentTimestamp)) {
+          continue;
+        }
+
+        // Get all joined members of the room
+        var joinedMembers = room
+            .getParticipants()
+            .where((member) => member.membership == Membership.join)
+            .toList();
+
+        // Update groups and contacts if room is still valid
+        if (joinedMembers.length > 1) {  // Only send if there are other members
+          sendLocationEvent(room.id, location);
+        }
+
+      } catch (e) {
+        print('Error processing room ${room.name}: $e');
+        continue; // Skip to next room if there's an error
       }
     }
   }
 
+// Helper method to check if a room is expired
+  bool isRoomExpired(String roomName) {
+    try {
+      if (!roomName.startsWith('Grid:Group:')) return true;
+
+      final parts = roomName.split(':');
+      if (parts.length < 3) return true;
+
+      final expirationStr = parts[2];
+      final expirationTimestamp = int.tryParse(expirationStr);
+
+      if (expirationTimestamp == null) return true;
+      if (expirationTimestamp == 0) return false; // 0 means no expiration
+
+      final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return expirationTimestamp < currentTimestamp;
+    } catch (e) {
+      return true; // If there's any error parsing, consider the room expired
+    }
+  }
 
   Future<bool> kickMemberFromRoom(String roomId, String userId) async {
     final room = client.getRoomById(roomId);
