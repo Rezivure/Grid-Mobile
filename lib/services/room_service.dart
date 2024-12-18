@@ -425,6 +425,21 @@ class RoomService {
     }
   }
 
+
+  Future<bool> kickMemberFromRoom(String roomId, String userId) async {
+    final room = client.getRoomById(roomId);
+    if (room != null && room.canKick) {
+      try {
+        room.kick(userId);
+      } catch (e) {
+        print("Failed to remove member");
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
   Future<void> updateSingleRoom(String roomId) async {
     final room = client.getRoomById(roomId);
     if (room != null) {

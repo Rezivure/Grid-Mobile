@@ -149,6 +149,7 @@ void main() async {
               roomRepository: context.read<RoomRepository>(),
               userRepository: context.read<UserRepository>(),
               mapBloc: context.read<MapBloc>(),
+              locationRepository: context.read<LocationRepository>(),
             ),
           ),
           ChangeNotifierProxyProvider3<MapBloc, ContactsBloc, GroupsBloc, SyncManager>(

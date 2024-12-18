@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -12,6 +13,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   final RoomService roomService;
   final RoomRepository roomRepository;
   final UserRepository userRepository;
+  final LocationRepository locationRepository;
   final MapBloc mapBloc;
   List<Room> _allGroups = [];
 
@@ -20,6 +22,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     required this.roomRepository,
     required this.userRepository,
     required this.mapBloc,
+    required this.locationRepository,
   }) : super(GroupsInitial()) {
     on<LoadGroups>(_onLoadGroups);
     on<RefreshGroups>(_onRefreshGroups);
@@ -283,6 +286,80 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       }
     } catch (e) {
       print("GroupsBloc: Error updating member status - $e");
+    }
+  }
+
+  Future<void> handleMemberKicked(String roomId, String userId) async {
+    print("Processing kick for user: $userId in room: $roomId");
+
+    try {
+      // Start with removing all user relationships
+      await userRepository.removeUserRelationship(userId, roomId);
+
+      // Get and update membership status to explicitly mark as left
+      await userRepository.updateMembershipStatus(userId, roomId, 'leave');
+
+      // Get the room
+      final room = await roomRepository.getRoomById(roomId);
+      if (room != null) {
+        // Remove from room members list
+        final updatedMembers = room.members.where((id) => id != userId).toList();
+        final updatedRoom = Room(
+          roomId: room.roomId,
+          name: room.name,
+          isGroup: room.isGroup,
+          lastActivity: DateTime.now().toIso8601String(),
+          avatarUrl: room.avatarUrl,
+          members: updatedMembers,
+          expirationTimestamp: room.expirationTimestamp,
+        );
+
+        // Update room in database
+        await roomRepository.updateRoom(updatedRoom);
+
+        // Explicitly remove from room participants
+        await roomRepository.removeRoomParticipant(roomId, userId);
+
+        // Get all relationships to check user's status
+        final relationships = await userRepository.getUserRelationshipsForRoom(roomId);
+
+        // Remove all traces of this user's relationship with this room
+        for (var relationship in relationships) {
+          if (relationship['userId'] == userId) {
+            await userRepository.deleteUserRelationship(userId, roomId);
+          }
+        }
+
+        // Check if user should be completely cleaned up
+        final userRooms = await roomRepository.getUserRooms(userId);
+        final directRoom = await userRepository.getDirectRoomForContact(userId);
+
+        if (userRooms.isEmpty && directRoom == null) {
+          print("User not in any rooms or contacts, cleaning up completely");
+          await locationRepository.deleteUserLocations(userId);
+          await userRepository.deleteUser(userId);
+          mapBloc.add(RemoveUserLocation(userId));
+        }
+
+        // Force immediate UI updates
+        add(LoadGroupMembers(roomId));
+        add(RefreshGroups());
+
+        // Add delayed updates to ensure sync
+        Future.delayed(const Duration(milliseconds: 500), () {
+          add(UpdateGroup(roomId));
+          add(LoadGroups());
+          add(LoadGroupMembers(roomId));
+        });
+
+        Future.delayed(const Duration(seconds: 1), () {
+          add(RefreshGroups());
+          add(LoadGroupMembers(roomId));
+        });
+      }
+    } catch (e) {
+      print("Error handling kicked member: $e");
+      rethrow;
     }
   }
 

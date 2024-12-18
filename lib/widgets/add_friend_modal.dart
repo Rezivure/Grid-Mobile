@@ -413,8 +413,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     hintText: 'Enter username',
                                     prefixText: '@',
                                     errorText: _contactError,
+                                    filled: true,
+                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(1),
+                                      borderRadius: BorderRadius.circular(24), // increased radius for rounded corners
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -506,15 +508,31 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 ),
                                 child: TextField(
                                   controller: _groupNameController,
+                                  maxLength: 14,
                                   decoration: InputDecoration(
-                                    hintText: 'Enter group name',
+                                    hintText: 'Enter Group Name',
+                                    filled: true,
+                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(1),
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    counterText: '',
                                   ),
-                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                  style: TextStyle(
+                                    color: theme.textTheme.bodyMedium?.color,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -581,11 +599,29 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                       child: TextField(
                                         controller: _memberInputController,
                                         decoration: InputDecoration(
-                                          hintText: 'Enter username to add',
+                                          hintText: 'Enter username',
                                           prefixText: '@',
                                           errorText: _usernameError ?? _memberLimitError,
+                                          filled: true,
+                                          fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          errorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          focusedErrorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
                                             borderSide: BorderSide.none,
                                           ),
                                           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),

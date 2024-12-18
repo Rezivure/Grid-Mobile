@@ -89,9 +89,9 @@ class SyncManager with ChangeNotifier {
         }
       });
 
-      // Process room departures
+      // Process room departures and kicks
       syncUpdate.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
-        _processRoomLeave(roomId, leftRoomUpdate);
+        _processRoomLeaveOrKick(roomId, leftRoomUpdate);
       });
     });
   }
@@ -164,6 +164,110 @@ class SyncManager with ChangeNotifier {
       }
     } catch (e) {
       print('Error processing room leave: $e');
+    }
+  }
+
+  Future<void> _handleKickedFromRoom(GridRoom.Room room) async {
+    try {
+      final roomId = room.roomId;
+      final participants = room.members;
+
+      // First, remove any UserRelationships for this room
+      for (final participantId in participants) {
+        await userRepository.removeUserRelationship(participantId, roomId);
+      }
+
+      // Remove all RoomParticipants
+      await roomRepository.removeAllParticipants(roomId);
+
+      // Delete the room itself
+      await roomRepository.deleteRoom(roomId);
+
+      // For each participant, check if they need complete cleanup
+      for (final participantId in participants) {
+        final userRooms = await roomRepository.getUserRooms(participantId);
+        final hasDirectRoom = await userRepository.getDirectRoomForContact(participantId);
+
+        if (userRooms.isEmpty && hasDirectRoom == null) {
+          print("Cleaning up user completely: $participantId");
+          await locationRepository.deleteUserLocations(participantId);
+          await userRepository.deleteUser(participantId);
+          mapBloc.add(RemoveUserLocation(participantId));
+        }
+      }
+
+      // Update UI with staggered refreshes to ensure everything updates
+      groupsBloc.add(RefreshGroups());
+      groupsBloc.add(LoadGroups());
+      mapBloc.add(MapLoadUserLocations());
+
+      // Force additional updates after a delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+      });
+
+      Future.delayed(const Duration(seconds: 1), () {
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+        mapBloc.add(MapLoadUserLocations());
+      });
+
+      print("Completed kick cleanup for room: $roomId");
+    } catch (e) {
+      print('Error handling kicked from room: $e');
+    }
+  }
+
+  Future<void> _processRoomLeaveOrKick(String roomId, LeftRoomUpdate leftRoomUpdate) async {
+    try {
+      // First check if this was a kick by examining state events
+      bool wasKicked = false;
+      String? kickedBy;
+
+      for (var event in (leftRoomUpdate.timeline?.events ?? [])) {
+        if (event.type == 'm.room.member' &&
+            event.stateKey == client.userID &&
+            event.content['membership'] == 'leave' &&
+            event.senderId != client.userID) {
+          wasKicked = true;
+          kickedBy = event.senderId;
+          break;
+        }
+      }
+
+      final room = await roomRepository.getRoomById(roomId);
+      if (room == null) return;
+
+      if (wasKicked) {
+        print("User was kicked from room $roomId by $kickedBy");
+
+        // Immediately clear from local storage
+        await roomRepository.deleteRoom(roomId);
+        await roomRepository.removeAllParticipants(roomId);
+
+        // Then do full cleanup
+        await _handleKickedFromRoom(room);
+
+        // Force UI refresh
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+      } else {
+        // Handle normal leave/departure
+        await _processRoomLeave(roomId, leftRoomUpdate);
+      }
+    } catch (e) {
+      print('Error processing room leave/kick: $e');
+
+      // Even if we get an error, try to clean up local data
+      try {
+        await roomRepository.deleteRoom(roomId);
+        await roomRepository.removeAllParticipants(roomId);
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+      } catch (cleanupError) {
+        print('Error during emergency cleanup: $cleanupError');
+      }
     }
   }
 
@@ -372,23 +476,68 @@ class SyncManager with ChangeNotifier {
       }
     }
   }
+
   Future<void> _handleMemberLeave(String roomId, String? userId) async {
     if (userId == null || userId == client.userID) return;
 
-    print("Processing leave for user: $userId");
+    print("Processing leave for user: $userId in room: $roomId");
     final room = await roomRepository.getRoomById(roomId);
 
     if (room != null) {
       if (room.isGroup) {
-        // For group rooms, just remove the user relationship and update UI
-        await userRepository.removeUserRelationship(userId, roomId);
-        groupsBloc.add(LoadGroupMembers(roomId));
+        try {
+          // Remove the user from room members list
+          final updatedMembers = room.members.where((id) => id != userId).toList();
+          final updatedRoom = GridRoom.Room(
+            roomId: room.roomId,
+            name: room.name,
+            isGroup: room.isGroup,
+            lastActivity: DateTime.now().toIso8601String(),
+            avatarUrl: room.avatarUrl,
+            members: updatedMembers,
+            expirationTimestamp: room.expirationTimestamp,
+          );
+
+          // Update the room with new member list
+          await roomRepository.updateRoom(updatedRoom);
+
+          // Remove all relationships for this user in this room
+          await userRepository.removeUserRelationship(userId, roomId);
+          await roomRepository.removeRoomParticipant(roomId, userId);
+
+          // Update membership status to 'leave'
+          await userRepository.updateMembershipStatus(userId, roomId, 'leave');
+
+          // Check if user should be completely cleaned up
+          final userRooms = await roomRepository.getUserRooms(userId);
+          final hasDirectRoom = await userRepository.getDirectRoomForContact(userId);
+
+          if (userRooms.isEmpty && hasDirectRoom == null) {
+            print("User not in any other rooms/contacts, cleaning up completely");
+            await locationRepository.deleteUserLocations(userId);
+            await userRepository.deleteUser(userId);
+            mapBloc.add(RemoveUserLocation(userId));
+          }
+
+          // Update UI with staggered refreshes
+          groupsBloc.add(LoadGroupMembers(roomId));
+          groupsBloc.add(UpdateGroup(roomId));
+          groupsBloc.add(RefreshGroups());
+
+          // Additional delayed updates to ensure sync
+          Future.delayed(const Duration(milliseconds: 500), () {
+            groupsBloc.add(LoadGroups());
+            groupsBloc.add(LoadGroupMembers(roomId));
+          });
+
+        } catch (e) {
+          print('Error processing group member leave: $e');
+        }
       } else {
-        // For direct rooms, handle contact cleanup
+        // Handle direct room cleanup
         await userRepository.removeContact(userId);
         await roomRepository.deleteRoom(roomId);
 
-        // Check if user exists in any other rooms before cleaning up
         final userRooms = await roomRepository.getUserRooms(userId);
         if (userRooms.isEmpty) {
           await locationRepository.deleteUserLocations(userId);
@@ -400,7 +549,6 @@ class SyncManager with ChangeNotifier {
       }
     }
   }
-
   Future<void> fetchInitialData() async {
     try {
       final response = await client.sync(fullState: true);

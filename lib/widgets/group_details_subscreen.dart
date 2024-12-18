@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -109,6 +110,35 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
       print('Error refreshing group members: $e');
     } finally {
       _isRefreshing = false;
+    }
+  }
+
+
+  Future<void> _kickMember(String userId) async {
+    try {
+      final success = await widget.roomService.kickMemberFromRoom(
+          widget.room.roomId, userId);
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User kicked from group')),
+          );
+          // Handle state updates through GroupsBloc
+          await context.read<GroupsBloc>().handleMemberKicked(
+              widget.room.roomId, userId);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to kick. Only group creator can kick.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error kicking user: $e')),
+        );
+      }
     }
   }
 
@@ -234,7 +264,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
     return BlocBuilder<GroupsBloc, GroupsState>(
       buildWhen: (previous, current) {
-        // Only rebuild for meaningful state changes
         if (previous is GroupsLoaded && current is GroupsLoaded) {
           return previous.selectedRoomId != current.selectedRoomId ||
               previous.selectedRoomMembers != current.selectedRoomMembers ||
@@ -243,7 +272,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
         return true;
       },
       builder: (context, state) {
-        // Show UI structure even while loading
         if (state is! GroupsLoaded) {
           return Column(
             children: [
@@ -260,7 +288,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
           );
         }
 
-        // Always update filtered members when state changes
         if (state.selectedRoomMembers != null && _currentUserId != null) {
           final searchText = _searchController.text.toLowerCase();
           _filteredMembers = state.selectedRoomMembers!
@@ -281,8 +308,23 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
               child: ListView.builder(
                 controller: widget.scrollController,
                 padding: EdgeInsets.zero,
-                itemCount: _filteredMembers.length + 1,
+                itemCount: _filteredMembers.isEmpty ? 2 : _filteredMembers.length + 1,
                 itemBuilder: (context, index) {
+                  if (_filteredMembers.isEmpty && index == 0) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Text(
+                          "It's lonely here. Invite someone!",
+                          style: TextStyle(
+                            color: colorScheme.onBackground,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
                   if (index < _filteredMembers.length) {
                     final user = _filteredMembers[index];
                     final userLocation = userLocations
@@ -292,35 +334,42 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                       orElse: () => null,
                     );
 
-                    return Column(
-                      children: [
-                        ListTile(
-                          leading: CircleAvatar(
-                            radius: 30,
-                            child: RandomAvatar(
-                              user.userId.split(':')[0].replaceFirst('@', ''),
-                              height: 60,
-                              width: 60,
-                            ),
-                            backgroundColor: colorScheme.primary.withOpacity(
-                                0.2),
+                    return Slidable(
+                      key: ValueKey(user.userId),
+                      endActionPane: ActionPane(
+                        motion: const ScrollMotion(),
+                        children: [
+                          SlidableAction(
+                            onPressed: (_) => _kickMember(user.userId),
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            icon: Icons.person_remove,
+                            label: 'Kick',
                           ),
-                          title: Text(
-                            user.displayName ?? user.userId,
-                            style: TextStyle(color: colorScheme.onBackground),
+                        ],
+                      ),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 30,
+                          child: RandomAvatar(
+                            user.userId.split(':')[0].replaceFirst('@', ''),
+                            height: 60,
+                            width: 60,
                           ),
-                          subtitle: _getSubtitleText(
-                              context, state, user, userLocation),
-                          onTap: () {
-                            Provider.of<SelectedUserProvider>(
-                                context, listen: false)
-                                .setSelectedUserId(user.userId, context);
-                          },
+                          backgroundColor: colorScheme.primary.withOpacity(0.2),
                         ),
-                      ],
+                        title: Text(
+                          user.displayName ?? user.userId,
+                          style: TextStyle(color: colorScheme.onBackground),
+                        ),
+                        subtitle: _getSubtitleText(context, state, user, userLocation),
+                        onTap: () {
+                          Provider.of<SelectedUserProvider>(context, listen: false)
+                              .setSelectedUserId(user.userId, context);
+                        },
+                      ),
                     );
                   } else {
-                    // Add Member and Leave Group buttons at the end of the list
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0)
                           .copyWith(top: 20.0),
@@ -329,9 +378,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           SizedBox(
                             width: 180,
                             child: ElevatedButton(
-                              onPressed: _isProcessing
-                                  ? null
-                                  : _showAddGroupMemberModal,
+                              onPressed: _isProcessing ? null : _showAddGroupMemberModal,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.onSurface,
                                 foregroundColor: colorScheme.surface,
@@ -345,9 +392,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           SizedBox(
                             width: 180,
                             child: ElevatedButton(
-                              onPressed: _isLeaving
-                                  ? null
-                                  : _showLeaveConfirmationDialog,
+                              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.red,
@@ -355,8 +400,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                                 minimumSize: const Size(150, 40),
                               ),
                               child: _isLeaving
-                                  ? const CircularProgressIndicator(
-                                  color: Colors.red)
+                                  ? const CircularProgressIndicator(color: Colors.red)
                                   : const Text('Leave Group'),
                             ),
                           ),

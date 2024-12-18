@@ -377,17 +377,14 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
               Stack(
                 children: [
                   TriangleAvatars(userIds: room.members),
-                  if (room.expirationTimestamp > 0)
+                  if (room.expirationTimestamp > 0)  // Only show bubble if not infinite
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: room.expirationTimestamp <
-                              DateTime.now().millisecondsSinceEpoch ~/ 1000
-                              ? colorScheme.primary
-                              : colorScheme.secondary,
+                          color: colorScheme.primary,  // Always primary color when shown
                           shape: BoxShape.circle,
                         ),
                         child: Text(
