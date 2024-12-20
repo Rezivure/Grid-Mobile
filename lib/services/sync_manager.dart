@@ -129,6 +129,19 @@ class SyncManager with ChangeNotifier {
     }
   }
 
+  Future<void> clearAllState() async {
+    _invites.clear();
+    _roomMessages.clear();
+    _pendingMessages.clear();
+    _isInitialized = false;
+    _isSyncing = false;
+
+    // Stop syncing
+    await stopSync();
+    // Notify listeners of the changes
+    notifyListeners();
+  }
+
   Future<void> _processRoomLeave(String roomId, LeftRoomUpdate leftRoomUpdate) async {
     try {
       final room = await roomRepository.getRoomById(roomId);
@@ -424,17 +437,14 @@ class SyncManager with ChangeNotifier {
       final membershipStatus = event.content['membership'] as String? ?? 'invited';
 
       if (event.stateKey != null) {
-        // Update membership status for group rooms
         await userRepository.updateMembershipStatus(
             event.stateKey!,
             roomId,
             membershipStatus
         );
 
-        // Since it's a group room, update the GroupsBloc
         groupsBloc.add(UpdateGroup(roomId));
 
-        // If this is a newly invited member, make sure their profile is in the database
         if (membershipStatus == 'invite') {
           try {
             final profileInfo = await client.getUserProfile(event.stateKey!);
@@ -453,12 +463,12 @@ class SyncManager with ChangeNotifier {
       }
     }
 
-    if (event.content['membership'] == 'leave') {
-      await _handleMemberLeave(roomId, event.stateKey);
-    } else if (event.content['membership'] == 'join') {
-      // Handle updates to existing members (profile changes etc)
-      if (event.stateKey != null) {
+    if (event.stateKey != null) {
+      final membershipStatus = event.content['membership'] as String?;
+
+      if (membershipStatus == 'join') {
         try {
+          // Update or create user profile
           final profileInfo = await client.getUserProfile(event.stateKey!);
           final gridUser = GridUser.GridUser(
             userId: event.stateKey!,
@@ -469,12 +479,25 @@ class SyncManager with ChangeNotifier {
           );
           await userRepository.insertUser(gridUser);
 
+          // Update relationship
+          await userRepository.insertUserRelationship(
+            event.stateKey!,
+            roomId,
+            !room.isGroup, // isDirect
+          );
+
+          // Update UI based on room type
           if (room.isGroup) {
             groupsBloc.add(UpdateGroup(roomId));
+          } else {
+            print("Direct room join detected, refreshing contacts");
+            contactsBloc.add(RefreshContacts());
           }
         } catch (e) {
           print('Error updating user profile for ${event.stateKey}: $e');
         }
+      } else if (membershipStatus == 'leave') {
+        await _handleMemberLeave(roomId, event.stateKey);
       }
     }
   }

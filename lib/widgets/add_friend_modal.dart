@@ -122,11 +122,9 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
           // Clear _matrixUserId after successful use
           _matrixUserId = null;
           if (mounted) {
-            setState(() {
-              _contactError = 'Friend request sent!';
-            });
-            // Give user a moment to see the success message
-            await Future.delayed(Duration(seconds: 1));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Request sent.')),
+            );
             Navigator.of(context).pop();
           }
         } else {
@@ -463,8 +461,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               // Scan QR Code Icon
                               Container(
                                 decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  shape: BoxShape.circle,
+                                  color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
+                                  borderRadius: BorderRadius.circular(35),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -473,27 +471,33 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ),
                                   ],
                                 ),
-                                child: // "Scan QR Code" Button with Text and Icon
-                                ElevatedButton.icon(
+                                child: ElevatedButton.icon(
                                   onPressed: _scanQRCode,
                                   icon: Icon(
                                     Icons.qr_code_scanner,
-                                    color: colorScheme.primary,
+                                    color: Theme.of(context).brightness == Brightness.light
+                                        ? colorScheme.primary
+                                        : colorScheme.surface,
                                   ),
                                   label: Text(
                                     'Scan QR Code',
-                                    style: TextStyle(color: colorScheme.onSurface),
+                                    style: TextStyle(
+                                      color: Theme.of(context).brightness == Brightness.light
+                                          ? colorScheme.onSurface
+                                          : colorScheme.surface,
+                                    ),
                                   ),
                                   style: ElevatedButton.styleFrom(
                                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(35),
                                     ),
-                                    iconColor: colorScheme.primary, // Set the button color if needed
-                                    backgroundColor: colorScheme.surface,
+                                    backgroundColor: Theme.of(context).brightness == Brightness.light
+                                        ? colorScheme.surface
+                                        : colorScheme.primary,
+                                    elevation: 0,
                                   ),
                                 ),
-
                               ),
                             ],
                           ),

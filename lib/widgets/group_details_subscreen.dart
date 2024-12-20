@@ -380,9 +380,15 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                             child: ElevatedButton(
                               onPressed: _isProcessing ? null : _showAddGroupMemberModal,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.onSurface,
+                                backgroundColor: Theme.of(context).brightness == Brightness.light
+                                    ? colorScheme.onSurface
+                                    : colorScheme.primary,  // Green in dark mode
                                 foregroundColor: colorScheme.surface,
-                                side: BorderSide(color: colorScheme.onSurface),
+                                side: BorderSide(
+                                  color: Theme.of(context).brightness == Brightness.light
+                                      ? colorScheme.onSurface
+                                      : colorScheme.primary,
+                                ),
                                 minimumSize: const Size(150, 40),
                               ),
                               child: const Text('Add Member'),
@@ -394,13 +400,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                             child: ElevatedButton(
                               onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.red,
+                                backgroundColor: Theme.of(context).brightness == Brightness.light
+                                    ? Colors.white
+                                    : Colors.red,
+                                foregroundColor: Theme.of(context).brightness == Brightness.light
+                                    ? Colors.red
+                                    : Colors.white,
                                 side: const BorderSide(color: Colors.red),
                                 minimumSize: const Size(150, 40),
                               ),
                               child: _isLeaving
-                                  ? const CircularProgressIndicator(color: Colors.red)
+                                  ? CircularProgressIndicator(
+                                  color: Theme.of(context).brightness == Brightness.light
+                                      ? Colors.red
+                                      : Colors.white
+                              )
                                   : const Text('Leave Group'),
                             ),
                           ),

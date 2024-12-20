@@ -9,6 +9,7 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'location_manager.dart';
+import 'package:grid_frontend/models/room.dart' as GridRoom;
 
 class RoomService {
   final UserService userService;
@@ -56,10 +57,11 @@ class RoomService {
 
  /// create direct grid room (contact)
   Future<bool> createRoomAndInviteContact(String username) async {
+    // Use the normalizeUser utility function
     final normalizedData = normalizeUser(username);
     final String matrixUserId = normalizedData['matrixUserId']!;
 
-    // Check if user exists
+    // Check if the user exists
     try {
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
@@ -70,28 +72,13 @@ class RoomService {
       return false;
     }
 
-    final myUserId = client.userID?.localpart ?? 'error';
-    final contactUserId = matrixUserId.split(':')[0].substring(1);
+    // Check if direct grid contact already exists
+    final myUserId = client.userID ?? 'error';
 
-    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, contactUserId);
-    if (status != RelationshipStatus.canInvite) {
-      return false;
-    }
+    // Use full Matrix IDs for relationship check to match getRelationshipStatus
+    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, matrixUserId);
 
-    // Check for existing direct rooms by looking at room names
-    for (final room in client.rooms) {
-      if (room.name != null) {
-        final roomName = room.name!;
-        // Check both possible orderings of the IDs in the room name
-        if (roomName == "Grid:Direct:$myUserId:$matrixUserId" ||
-            roomName == "Grid:Direct:$matrixUserId:$myUserId") {
-          print('Found existing direct room: $roomName');
-          return false;
-        }
-      }
-    }
-
-    try {
+    if (status == RelationshipStatus.canInvite) {
       final roomName = "Grid:Direct:$myUserId:$matrixUserId";
       final roomId = await client.createRoom(
         name: roomName,
@@ -105,18 +92,15 @@ class RoomService {
           ),
         ],
       );
-      return true;
-    } catch (e) {
-      print('Failed to create direct room: $e');
-      return false;
+      return true; // success
     }
+    return false; // failed
   }
-
   Future<bool> isUserInRoom(String roomId, String userId) async {
     Room? room = client.getRoomById(roomId);
     if (room != null) {
       var participants = room.getParticipants();
-      return participants.any((user) => user.id == userId && user.membership == Membership.join);
+      return participants.any((user) => user.id == userId);
     }
     return false;
   }
@@ -342,6 +326,11 @@ class RoomService {
         if (shouldLeave) {
           try {
             print("Leaving room ${room.id} (${room.name}) - Reason: $leaveReason");
+
+            // Perform local cleanup before leaving the room
+            await _cleanupLocalData(room.id, participants);
+
+            // Leave and forget the room on the server
             await room.leave();
             await client.forgetRoom(room.id);
             print('Successfully left and forgot room: ${room.id}');
@@ -355,6 +344,59 @@ class RoomService {
       print("Room cleanup completed");
     } catch (e) {
       print("Error during room cleanup: $e");
+    }
+  }
+
+  /// Handles cleanup of local data when leaving a room
+  Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+    try {
+      print("Starting local cleanup for room: $roomId");
+
+      // Get all user IDs in the room before deletion
+      final userIds = matrixUsers.map((p) => p.id).toList();
+
+      // Get list of direct contacts (these are already GridUsers)
+      final directContacts = await userRepository.getDirectContacts();
+      final directContactIds = directContacts.map((contact) => contact.userId).toSet();
+
+      // Start with removing room participants
+      await roomRepository.removeAllParticipants(roomId);
+
+      // For each user in the room
+      for (final userId in userIds) {
+        // Skip if user is a direct contact
+        if (directContactIds.contains(userId)) {
+          print("User $userId is a direct contact, preserving user data");
+          // Just remove the relationship for this room
+          await userRepository.removeUserRelationship(userId, roomId);
+          continue;
+        }
+
+        // Check if user has any other rooms
+        final otherRooms = await userRepository.getUserRooms(userId);
+        otherRooms.remove(roomId); // Remove current room from list
+
+        if (otherRooms.isEmpty) {
+          print("User $userId has no other rooms and is not a contact, cleaning up user data");
+          // Remove user's location data
+          await locationRepository.deleteUserLocations(userId);
+          // Remove user and their relationships (this handles both GridUser and relationships)
+          await userRepository.deleteUser(userId);
+        } else {
+          print("User $userId exists in other rooms, keeping user data");
+          // Just remove the relationship for this room
+          await userRepository.removeUserRelationship(userId, roomId);
+        }
+      }
+
+      // Finally delete the room itself
+      await roomRepository.deleteRoom(roomId);
+
+      print("Completed local cleanup for room: $roomId");
+    } catch (e) {
+      print("Error during local cleanup for room $roomId: $e");
+      // Re-throw the error to be handled by the calling function
+      rethrow;
     }
   }
 

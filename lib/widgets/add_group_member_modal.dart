@@ -309,8 +309,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                   child: Container(
                     width: 300, // Set a fixed width for the text field
                     decoration: BoxDecoration(
-                      color: theme.cardColor,
+                      color: Theme.of(context).brightness == Brightness.light
+                          ? theme.cardColor
+                          : theme.colorScheme.surface.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(36),
+                      border: Theme.of(context).brightness == Brightness.dark
+                          ? Border.all(color: theme.colorScheme.surface.withOpacity(0.15), width: 1)
+                          : null,
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black12,
@@ -325,15 +330,23 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                         hintText: 'Enter username',
                         prefixText: '@',
                         errorText: _contactError,
+                        filled: true,
+                        fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(1),
+                          borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 14),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       ),
-                      style: TextStyle(
-                          color: theme.textTheme.bodyMedium?.color),
+                      style: TextStyle(color: theme.textTheme.bodyMedium?.color),
                     ),
                   ),
                 ),
@@ -364,8 +377,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                 SizedBox(height: 20),
                 Container(
                   decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    shape: BoxShape.circle,
+                    color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
+                    borderRadius: BorderRadius.circular(35),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black12,
@@ -378,20 +391,27 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                     onPressed: _scanQRCode,
                     icon: Icon(
                       Icons.qr_code_scanner,
-                      color: colorScheme.primary,
+                      color: Theme.of(context).brightness == Brightness.light
+                          ? colorScheme.primary
+                          : colorScheme.surface,
                     ),
                     label: Text(
                       'Scan QR Code',
-                      style: TextStyle(color: colorScheme.onSurface),
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? colorScheme.onSurface
+                            : colorScheme.surface,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 15),
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(35),
                       ),
-                      backgroundColor: colorScheme.surface,
-                      foregroundColor: colorScheme.onSurface,
+                      backgroundColor: Theme.of(context).brightness == Brightness.light
+                          ? colorScheme.surface
+                          : colorScheme.primary,
+                      elevation: 0,
                     ),
                   ),
                 ),

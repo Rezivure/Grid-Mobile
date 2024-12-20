@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
+import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
@@ -69,11 +70,14 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // In SettingsPage, update the _logout method:
+
   Future<void> _logout() async {
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
     final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -95,10 +99,22 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed ?? false) {
       try {
-        await databaseService.deleteAndReinitialize();
-        await sharedPreferences.clear();
+        // Stop location tracking first
         locationManager.stopTracking();
+
+        // Clear sync manager state
+        await syncManager.clearAllState();
+
+        // Clear database
+        await databaseService.deleteAndReinitialize();
+
+        // Clear shared preferences
+        await sharedPreferences.clear();
+
+        // Logout from Matrix client
         await client.logout();
+
+        // Navigate to welcome screen
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
