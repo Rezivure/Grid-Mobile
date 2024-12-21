@@ -52,6 +52,12 @@
             android:foregroundServiceType="location"
             android:permission="android.permission.FOREGROUND_SERVICE"/>
 
+        <!-- Add this for URL launcher -->
+        <activity
+            android:name="io.flutter.plugins.urllauncher.WebViewActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"/>
+
     </application>
 
     <!-- Required to query activities that can process text -->

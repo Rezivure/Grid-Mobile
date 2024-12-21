@@ -35,6 +35,8 @@ import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 
+import 'package:grid_frontend/widgets/version_wrapper.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -213,7 +215,10 @@ void main() async {
             ),
           ),
           themeMode: ThemeMode.system,
-          home: client.isLogged() ? const MapTab() : SplashScreen(),
+          home: VersionWrapper(
+            client: client,
+            child: client.isLogged() ? const MapTab() : SplashScreen(),
+          ),
           routes: {
             '/welcome': (context) => WelcomeScreen(),
             '/server_select': (context) => ServerSelectScreen(),

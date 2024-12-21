@@ -47,6 +47,7 @@ dependencies:
   flutter_background_geolocation: ^4.16.5
   hive: ^2.2.3
   qr_code_scanner_plus: ^2.0.6
+  package_info_plus: ^8.1.2
 
 
 flutter_launcher_icons:
@@ -64,7 +65,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logos/Jpeg-2.jpg
-    - assets/images/logo.png
     - assets/logos/png-file-2.png
     - assets/logos/Brand-Pattern-Full-Color.png
     - assets/logos/Brand-Pattern-Low-color.png
