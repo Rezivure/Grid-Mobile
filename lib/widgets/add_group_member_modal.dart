@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
@@ -86,9 +87,12 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     }
 
     try {
-      // Check if trying to invite self
-      final currentUserId = widget.roomService.getMyUserId();
-      if (normalizedUserId == currentUserId) {
+
+
+      // check if inviting self
+      final usernameLowercase = username.toLowerCase();
+      final isSelf = (await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}'));
+      if (isSelf) {
         if (mounted) {
           setState(() {
             _contactError = 'You cannot invite yourself to the group.';

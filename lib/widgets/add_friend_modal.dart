@@ -214,8 +214,9 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
 
     final usernameLowercase = username.toLowerCase();
     final doesExist = await this.widget.userService.userExists('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
+    final isSelf = await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
 
-    if (!doesExist) {
+    if (!doesExist || isSelf) {
       setState(() {
         _usernameError = 'Invalid username: @$username';
       });
@@ -675,14 +676,14 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                             CircleAvatar(
                                               radius: 20,
                                               child: RandomAvatar(
-                                                username,
+                                                username.toLowerCase(),
                                                 height: 40,
                                                 width: 40,
                                               ),
                                             ),
                                             SizedBox(height: 5),
                                             Text(
-                                              username,
+                                              username.toLowerCase(),
                                               style: TextStyle(
                                                 fontSize: 14,
                                                 color: theme.textTheme.bodyMedium?.color,

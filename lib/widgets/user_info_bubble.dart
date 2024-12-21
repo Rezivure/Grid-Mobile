@@ -5,13 +5,13 @@ class UserInfoBubble extends StatelessWidget {
   final String userId;
   final String userName;
   final LatLng position;
-  final VoidCallback? onClose; // Add this line
+  final VoidCallback? onClose;
 
   UserInfoBubble({
     required this.userId,
     required this.userName,
     required this.position,
-    this.onClose, // Add this line
+    this.onClose,
   });
 
   @override

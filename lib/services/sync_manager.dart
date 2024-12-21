@@ -57,13 +57,18 @@ class SyncManager with ChangeNotifier {
   int get totalInvites => _invites.length;
 
   Future<void> initialize() async {
-    if (_isInitialized) return; // Prevent re-initialization
-    _isInitialized = true;
+    if (_isInitialized) return;
 
     print("Initializing Sync Manager...");
-    await roomService.cleanRooms();
-    await fetchInitialData();
-    await startSync();
+    try {
+      await roomService.cleanRooms();
+      await fetchInitialData();
+      await startSync();
+      _isInitialized = true; // Only set after successful completion
+    } catch (e) {
+      print("Error during initialization: $e");
+      // Maybe add some retry logic here
+    }
   }
 
   Future<void> startSync() async {
@@ -100,8 +105,16 @@ class SyncManager with ChangeNotifier {
 
   void handleAppLifecycleState(bool isActive) {
     _isActive = isActive;
-    if (isActive && _pendingMessages.isNotEmpty) {
-      _processPendingMessages();
+    if (isActive) {
+      if (_pendingMessages.isNotEmpty) {
+        _processPendingMessages();
+      }
+      // full refresh as well
+      client.sync(timeout: 10000).then((_) {
+        mapBloc.add(MapLoadUserLocations()); // Refresh locations
+      }).catchError((e) {
+        print('Error during resume sync: $e');
+      });
     }
   }
 
@@ -576,8 +589,7 @@ class SyncManager with ChangeNotifier {
   }
   Future<void> fetchInitialData() async {
     try {
-      final response = await client.sync(fullState: true);
-
+      final response = await client.sync(fullState: true, timeout: 15000);
       // Update Invites
       response.rooms?.invite?.forEach((roomId, inviteUpdate) {
         _processInvite(roomId, inviteUpdate);

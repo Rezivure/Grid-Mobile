@@ -657,6 +657,7 @@ class RoomService {
   }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
+    // used in UserInfoBubble
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
     Map<String, Map<String, String>> deviceKeysMap = {};
 
