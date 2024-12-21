@@ -49,6 +49,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   bool _isLeaving = false;
   bool _isProcessing = false;
   bool _isRefreshing = false;
+  bool _isInitialLoad = true;
+
 
   final TextEditingController _searchController = TextEditingController();
   List<GridUser> _filteredMembers = [];
@@ -64,15 +66,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('group:${widget.room.roomId}');
-      _refreshMembers();
+      context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
     });
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && !_isRefreshing) {
-        _refreshMembers();
-      }
-    });
   }
+
 
   Future<void> _loadCurrentUser() async {
     _currentUserId = await widget.userService.getMyUserId();
@@ -89,30 +87,24 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refreshMembers();
+  }
+
+  Future<void> _refreshMembers() async {
+    if (!mounted) return;
+    context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+  }
+
+  @override
   void didUpdateWidget(GroupDetailsSubscreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.room.roomId != widget.room.roomId) {
-      _searchController.text = '';
       _onSubscreenSelected('group:${widget.room.roomId}');
       _refreshMembers();
     }
   }
-
-  Future<void> _refreshMembers() async {
-    if (_isRefreshing) return;
-
-    _isRefreshing = true;
-    try {
-      context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
-      // Small delay before allowing next refresh
-      await Future.delayed(const Duration(seconds: 2));
-    } catch (e) {
-      print('Error refreshing group members: $e');
-    } finally {
-      _isRefreshing = false;
-    }
-  }
-
 
   Future<void> _kickMember(String userId) async {
     try {

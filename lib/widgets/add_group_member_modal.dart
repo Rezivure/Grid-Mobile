@@ -69,139 +69,123 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     var normalized = normalizeUser(username);
     String? normalizedUserId = normalized['matrixUserId'];
 
-    if (username.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _isProcessing = true;
-          _contactError = null;
-        });
-      }
-
-      try {
-
-        // make sure not self
-        final currentUserId = widget.roomService.getMyUserId();
-        print(normalizedUserId);
-        if (normalizedUserId == currentUserId) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'You cannot invite yourself to the group.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        // Check member limit first
-        final room = widget.roomService.client.getRoomById(widget.roomId);
-        if (room == null) {
-          throw Exception('Room not found');
-        }
-
-        // Check if user has permission to invite
-        final canInvite = room.canInvite;
-
-        if (!canInvite) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'You do not have permission to invite members to this group.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        final memberCount = room
-            .getParticipants()
-            .where((member) =>
-        member.membership == Membership.join ||
-            member.membership == Membership.invite)
-            .length;
-
-        if (memberCount >= MAX_GROUP_MEMBERS) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        bool userExists = await widget.userService.userExists(normalizedUserId!);
-        if (!userExists) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'The user $username does not exist.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        bool isAlreadyInGroup = await widget.roomService.isUserInRoom(
-            widget.roomId, normalizedUserId);
-        if (isAlreadyInGroup) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'The user $username is already in the group.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        // Send the invite
-        await widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
-
-        // Rest of the code remains the same...
-        final profileInfo = await widget.userService.client.getUserProfile(normalizedUserId);
-        final gridUser = GridUser.GridUser(
-          userId: normalizedUserId,
-          displayName: profileInfo.displayname,
-          avatarUrl: profileInfo.avatarUrl?.toString(),
-          lastSeen: DateTime.now().toIso8601String(),
-          profileStatus: "",
-        );
-        await widget.userRepository.insertUser(gridUser);
-
-        await widget.userRepository.insertUserRelationship(
-            normalizedUserId,
-            widget.roomId,
-            false,
-            membershipStatus: 'invite'
-        );
-
-        if (widget.onInviteSent != null) {
-          widget.onInviteSent!();
-        }
-
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
-          );
-        }
-
-        _matrixUserId = null;
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _contactError = 'Failed to send invite. Do you have permissions?';
-            _isProcessing = false;
-          });
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
-        }
-      }
-    } else {
+    if (username.isEmpty) {
       if (mounted) {
         setState(() {
           _contactError = 'Please enter a valid username';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = true;
+        _contactError = null;
+      });
+    }
+
+    try {
+      // Check if trying to invite self
+      final currentUserId = widget.roomService.getMyUserId();
+      if (normalizedUserId == currentUserId) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'You cannot invite yourself to the group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Get and validate room
+      final room = widget.roomService.client.getRoomById(widget.roomId);
+      if (room == null) {
+        throw Exception('Room not found');
+      }
+
+      // Check invite permissions
+      if (!room.canInvite) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'You do not have permission to invite members to this group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Check member limit
+      final memberCount = room
+          .getParticipants()
+          .where((member) =>
+      member.membership == Membership.join ||
+          member.membership == Membership.invite)
+          .length;
+
+      if (memberCount >= MAX_GROUP_MEMBERS) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Verify user exists
+      if (!await widget.userService.userExists(normalizedUserId!)) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'The user $username does not exist.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Check if already in group
+      if (await widget.roomService.isUserInRoom(widget.roomId, normalizedUserId)) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'The user $username is already in the group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Send the matrix invite
+      await widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
+
+      // Let GroupsBloc handle the state updates
+      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, normalizedUserId);
+
+      if (widget.onInviteSent != null) {
+        widget.onInviteSent!();
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
+        );
+      }
+
+      _matrixUserId = null;
+
+    } catch (e) {
+      print('Error adding member: $e');
+      if (mounted) {
+        setState(() {
+          _contactError = 'Failed to send invite. Do you have permissions?';
+          _isProcessing = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
         });
       }
     }

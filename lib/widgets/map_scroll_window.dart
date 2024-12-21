@@ -196,7 +196,6 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                 _isDropdownExpanded = !_isDropdownExpanded;
                 if (_isDropdownExpanded) {
                   _groupsBloc.add(RefreshGroups());
-                  _groupsBloc.add(LoadGroups());
                 }
               });
             },
