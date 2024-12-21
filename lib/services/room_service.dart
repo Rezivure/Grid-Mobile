@@ -548,44 +548,60 @@ class RoomService {
 
   Future<void> updateRooms(bg.Location location) async {
     List<Room> rooms = client.rooms;
-    final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current Unix timestamp
+    print("Grid: Found ${rooms.length} total rooms to process");
+
+    final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
     for (Room room in rooms) {
       try {
-        // Skip if room name doesn't follow Grid format
-        String? roomName = room.name;
-        if (roomName == null || !roomName.startsWith('Grid:Group:')) {
+        print("Grid: Processing room ${room.name} (${room.id})");
+
+        // Skip non-Grid rooms
+        if (!room.name.startsWith('Grid:')) {
+          print("Grid: Skipping non-Grid room: ${room.name}");
           continue;
         }
 
-        // Parse expiration timestamp from room name
-        final parts = roomName.split(':');
-        if (parts.length < 3) continue;
+        // Handle different room types
+        if (room.name.startsWith('Grid:Group:')) {
+          // Process group rooms
+          final parts = room.name.split(':');
+          if (parts.length < 3) continue;
 
-        final expirationStr = parts[2];
-        final expirationTimestamp = int.tryParse(expirationStr);
+          final expirationStr = parts[2];
+          final expirationTimestamp = int.tryParse(expirationStr);
+          print("Grid: Group room expiration: $expirationTimestamp, current: $currentTimestamp");
 
-        // Skip if can't parse timestamp or room has expired
-        // Note: expiration of 0 means no expiration
-        if (expirationTimestamp == null ||
-            (expirationTimestamp != 0 && expirationTimestamp < currentTimestamp)) {
+          // Skip expired group rooms
+          if (expirationTimestamp != null &&
+              expirationTimestamp != 0 &&
+              expirationTimestamp < currentTimestamp) {
+            print("Grid: Skipping expired group room");
+            continue;
+          }
+        } else if (!room.name.startsWith('Grid:Direct:')) {
+          print("Grid: Skipping unknown Grid room type: ${room.name}");
           continue;
         }
 
-        // Get all joined members of the room
+        // Get joined members and log
         var joinedMembers = room
             .getParticipants()
             .where((member) => member.membership == Membership.join)
             .toList();
+        print("Grid: Room has ${joinedMembers.length} joined members");
 
-        // Update groups and contacts if room is still valid
-        if (joinedMembers.length > 1) {  // Only send if there are other members
+        if (joinedMembers.length > 1) {
+          print("Grid: Sending location event to room ${room.id}");
           sendLocationEvent(room.id, location);
+          print("Grid: Location event sent successfully");
+        } else {
+          print("Grid: Skipping room ${room.id} - insufficient members");
         }
 
       } catch (e) {
         print('Error processing room ${room.name}: $e');
-        continue; // Skip to next room if there's an error
+        continue;
       }
     }
   }

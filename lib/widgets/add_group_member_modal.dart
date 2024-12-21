@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -78,6 +78,20 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       try {
+
+        // make sure not self
+        final currentUserId = widget.roomService.getMyUserId();
+        print(normalizedUserId);
+        if (normalizedUserId == currentUserId) {
+          if (mounted) {
+            setState(() {
+              _contactError = 'You cannot invite yourself to the group.';
+              _isProcessing = false;
+            });
+          }
+          return;
+        }
+
         // Check member limit first
         final room = widget.roomService.client.getRoomById(widget.roomId);
         if (room == null) {

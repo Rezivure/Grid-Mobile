@@ -5,7 +5,7 @@ import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/utilities/utils.dart';
