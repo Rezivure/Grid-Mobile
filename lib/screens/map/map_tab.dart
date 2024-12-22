@@ -29,7 +29,7 @@ class MapTab extends StatefulWidget {
   State<MapTab> createState() => _MapTabState();
 }
 
-class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
+class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsBindingObserver {
   late final MapController _mapController;
   late final LocationManager _locationManager;
   late final RoomService _roomService;
@@ -53,6 +53,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mapController = MapController();
     _initializeServices();
     _loadMapProvider();
@@ -71,10 +72,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   @override
   void dispose() {
     _animationController?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     _syncManager.stopSync();
     _locationManager.stopTracking();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _syncManager.handleAppLifecycleState(state == AppLifecycleState.resumed);
   }
 
   Future<void> _loadMapProvider() async {
@@ -167,7 +174,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                   theme: _mapTheme,
                   tileProviders: TileProviders({'protomaps': _tileProvider!}),
                   fileCacheTtl: const Duration(hours: 24),
-                  concurrency: 1,
+                  concurrency: 20,
                 ),
                 CurrentLocationLayer(
                   alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
@@ -257,6 +264,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                         : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
                     onPressed: () {
                       // can add any pre center logic here
+                      _mapController.move(_locationManager.currentLatLng ?? _mapController.camera.center, _zoom);
                       setState(() {
                         _followUser = true;
                       });

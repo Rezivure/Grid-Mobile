@@ -45,6 +45,26 @@ class Room {
     };
   }
 
+  Room copyWith({
+    String? roomId,
+    String? name,
+    bool? isGroup,
+    String? lastActivity,
+    String? avatarUrl,
+    List<String>? members,
+    int? expirationTimestamp,
+  }) {
+    return Room(
+      roomId: roomId ?? this.roomId,
+      name: name ?? this.name,
+      isGroup: isGroup ?? this.isGroup,
+      lastActivity: lastActivity ?? this.lastActivity,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      members: members ?? List.from(this.members),
+      expirationTimestamp: expirationTimestamp ?? this.expirationTimestamp,
+    );
+  }
+
   // Method to serialize the room object to JSON
   String toJson() => jsonEncode(toMap());
 

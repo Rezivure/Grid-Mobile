@@ -5,19 +5,25 @@ import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
+import '../blocs/groups/groups_bloc.dart';
+import '../blocs/groups/groups_event.dart';
+import '../services/sync_manager.dart';
+
 
 class AddFriendModal extends StatefulWidget {
   final UserService userService;
   final RoomService roomService;
+  final GroupsBloc groupsBloc;
+  final VoidCallback? onGroupCreated;
 
-  const AddFriendModal({required this.userService, Key? key, required this.roomService}) : super(key: key);
+  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated}) : super(key: key);
 
   @override
   _AddFriendModalState createState() => _AddFriendModalState();
@@ -110,19 +116,29 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         }
 
         // User exists, proceed with invitation
+        bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
 
-        await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
-        // Clear _matrixUserId after use
-        _matrixUserId = null;
-        // Only pop the modal if the widget is still mounted
-        if (mounted) {
-          Navigator.of(context).pop();
+        if (success) {
+          // Clear _matrixUserId after successful use
+          _matrixUserId = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Request sent.')),
+            );
+            Navigator.of(context).pop();
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _contactError = 'Already friends or request pending';
+            });
+          }
         }
       } catch (e) {
         // Catch any other errors
         if (mounted) {
           setState(() {
-            _contactError = 'Error adding user: ${e.toString()}';
+            _contactError = 'Error sending friend request';
           });
         }
       } finally {
@@ -196,9 +212,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
-    final doesExist = await this.widget.userService.userExists('@$username:${dotenv.env['HOMESERVER']}');
+    final usernameLowercase = username.toLowerCase();
+    final doesExist = await this.widget.userService.userExists('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
+    final isSelf = await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
 
-    if (!doesExist) {
+    if (!doesExist || isSelf) {
       setState(() {
         _usernameError = 'Invalid username: @$username';
       });
@@ -225,7 +243,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   Future<void> _createGroup() async {
     if (_groupNameController.text.trim().isEmpty || _members.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter a group name and add members.')),
+        const SnackBar(content: Text('Please enter a group name and add members.')),
       );
       return;
     }
@@ -238,17 +256,58 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       final groupName = _groupNameController.text.trim();
       final durationInHours = _isForever ? 0 : _sliderValue.toInt();
 
-      // Proceed with group creation and pass the duration
-      await this.widget.roomService.createGroup(groupName, _members, durationInHours);
-      // TODO: add UI response
-      // Optionally, show a success message
-      Navigator.pop(context);
+      // Create the group and get the room ID
+      final roomId = await widget.roomService.createGroup(groupName, _members, durationInHours);
+
+
+      if (mounted) {
+        // Wait briefly for room creation to complete
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        final syncManager = Provider.of<SyncManager>(context, listen: false);
+        await syncManager.handleNewGroupCreation(roomId);
+
+
+        // Notify parent that group was created
+        widget.onGroupCreated?.call();
+
+        // Trigger multiple refreshes to ensure UI updates
+        widget.groupsBloc.add(RefreshGroups());
+
+        // Close the modal
+        Navigator.pop(context);
+
+        // After modal is closed, trigger more refreshes with delays
+        Future.delayed(const Duration(milliseconds: 750), () {
+          if (mounted) {
+            widget.groupsBloc.add(RefreshGroups());
+          }
+        });
+
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            widget.groupsBloc.add(RefreshGroups());
+            widget.groupsBloc.add(LoadGroups());
+          }
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Group created successfully')),
+        );
+      }
     } catch (e) {
-      // Handle exceptions if necessary
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating group: $e')),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -365,8 +424,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     hintText: 'Enter username',
                                     prefixText: '@',
                                     errorText: _contactError,
+                                    filled: true,
+                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(1),
+                                      borderRadius: BorderRadius.circular(24), // increased radius for rounded corners
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -401,8 +462,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                               // Scan QR Code Icon
                               Container(
                                 decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  shape: BoxShape.circle,
+                                  color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
+                                  borderRadius: BorderRadius.circular(35),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black12,
@@ -411,27 +472,33 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                     ),
                                   ],
                                 ),
-                                child: // "Scan QR Code" Button with Text and Icon
-                                ElevatedButton.icon(
+                                child: ElevatedButton.icon(
                                   onPressed: _scanQRCode,
                                   icon: Icon(
                                     Icons.qr_code_scanner,
-                                    color: colorScheme.primary,
+                                    color: Theme.of(context).brightness == Brightness.light
+                                        ? colorScheme.primary
+                                        : colorScheme.surface,
                                   ),
                                   label: Text(
                                     'Scan QR Code',
-                                    style: TextStyle(color: colorScheme.onSurface),
+                                    style: TextStyle(
+                                      color: Theme.of(context).brightness == Brightness.light
+                                          ? colorScheme.onSurface
+                                          : colorScheme.surface,
+                                    ),
                                   ),
                                   style: ElevatedButton.styleFrom(
                                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(35),
                                     ),
-                                    iconColor: colorScheme.primary, // Set the button color if needed
-                                    backgroundColor: colorScheme.surface,
+                                    backgroundColor: Theme.of(context).brightness == Brightness.light
+                                        ? colorScheme.surface
+                                        : colorScheme.primary,
+                                    elevation: 0,
                                   ),
                                 ),
-
                               ),
                             ],
                           ),
@@ -458,15 +525,31 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 ),
                                 child: TextField(
                                   controller: _groupNameController,
+                                  maxLength: 14,
                                   decoration: InputDecoration(
-                                    hintText: 'Enter group name',
+                                    hintText: 'Enter Group Name',
+                                    filled: true,
+                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(1),
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
                                       borderSide: BorderSide.none,
                                     ),
                                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    counterText: '',
                                   ),
-                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                                  style: TextStyle(
+                                    color: theme.textTheme.bodyMedium?.color,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                               SizedBox(height: 20),
@@ -533,11 +616,29 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                       child: TextField(
                                         controller: _memberInputController,
                                         decoration: InputDecoration(
-                                          hintText: 'Enter username to add',
+                                          hintText: 'Enter username',
                                           prefixText: '@',
                                           errorText: _usernameError ?? _memberLimitError,
+                                          filled: true,
+                                          fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          errorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          focusedErrorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(24),
                                             borderSide: BorderSide.none,
                                           ),
                                           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -575,14 +676,14 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                             CircleAvatar(
                                               radius: 20,
                                               child: RandomAvatar(
-                                                username,
+                                                username.toLowerCase(),
                                                 height: 40,
                                                 width: 40,
                                               ),
                                             ),
                                             SizedBox(height: 5),
                                             Text(
-                                              username,
+                                              username.toLowerCase(),
                                               style: TextStyle(
                                                 fontSize: 14,
                                                 color: theme.textTheme.bodyMedium?.color,

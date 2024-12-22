@@ -69,7 +69,7 @@ class UserService {
 
   Future<String> getLastSeenTime(String userId) async {
     try {
-      final location = await locationRepository.getLatestLocation(userId);
+      final location = await locationRepository.getLatestLocationFromHistory(userId);
       if (location == null) return 'Offline';
       final lastTimestamp = location.timestamp;
       if (lastTimestamp == "null") return 'Offline';

@@ -30,7 +30,7 @@ class InvitesModal extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'Invites',
+                'Notifications',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -41,7 +41,7 @@ class InvitesModal extends StatelessWidget {
                 child: syncManager.invites.isEmpty
                     ? Center(
                   child: Text(
-                    'No invitations found',
+                    'No notifications found',
                     style: TextStyle(color: colorScheme.onSurface),
                   ),
                 )

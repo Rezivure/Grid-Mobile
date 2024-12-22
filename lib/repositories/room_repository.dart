@@ -104,6 +104,100 @@ class RoomRepository {
     );
   }
 
+  Future<void> leaveRoom(String roomId, String userId) async {
+    final db = await _databaseService.database;
+
+    await db.transaction((txn) async {
+      // First get the room to check number of members
+      final result = await txn.query(
+        'Rooms',
+        where: 'roomId = ?',
+        whereArgs: [roomId],
+      );
+      final room = result.isNotEmpty ? Room.fromMap(result.first) : null;
+      if (room == null) return;
+
+      // Get all users in the room before removing relationships
+      final usersInRoom = await txn.query(
+        'RoomParticipants',
+        where: 'roomId = ?',
+        whereArgs: [roomId],
+        columns: ['userId'],
+      );
+      final userIds = usersInRoom.map((u) => u['userId'] as String).toList();
+
+      // Remove user from room participants
+      await txn.delete(
+        'RoomParticipants',
+        where: 'roomId = ? AND userId = ?',
+        whereArgs: [roomId, userId],
+      );
+
+      // Get remaining participants using transaction
+      final remainingParticipants = await txn.query(
+        'RoomParticipants',
+        where: 'roomId = ?',
+        whereArgs: [roomId],
+      );
+
+      // If no participants left, delete the room entirely
+      if (remainingParticipants.isEmpty) {
+        await txn.delete(
+          'Rooms',
+          where: 'roomId = ?',
+          whereArgs: [roomId],
+        );
+
+        await txn.delete(
+          'UserRelationships',
+          where: 'roomId = ?',
+          whereArgs: [roomId],
+        );
+      } else {
+        // Update room members list
+        final updatedMembers = room.members.where((m) => m != userId).toList();
+        await txn.update(
+          'Rooms',
+          {'members': updatedMembers.join(',')},
+          where: 'roomId = ?',
+          whereArgs: [roomId],
+        );
+      }
+
+      // Check each user in the room and delete if they have no other relationships
+      for (final affectedUserId in userIds) {
+        if (affectedUserId == userId) continue;
+
+        // Check if user is in any other rooms using transaction
+        final otherRooms = await txn.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM RoomParticipants 
+        WHERE userId = ? AND roomId != ?
+      ''', [affectedUserId, roomId]);
+
+        final int roomCount = Sqflite.firstIntValue(otherRooms) ?? 0;
+
+        if (roomCount == 0) {
+          // Delete from Users table using transaction
+          await txn.delete(
+            'Users',
+            where: 'userId = ?',
+            whereArgs: [affectedUserId],
+          );
+
+          // Delete relationships using transaction
+          await txn.delete(
+            'UserRelationships',
+            where: 'userId = ?',
+            whereArgs: [affectedUserId],
+          );
+
+          print('Deleted orphaned user: $affectedUserId');
+        }
+      }
+    });
+  }
+
   /// Delete a Room by its ID
   Future<void> deleteRoom(String roomId) async {
     final db = await _databaseService.database;

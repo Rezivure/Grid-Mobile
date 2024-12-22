@@ -9,6 +9,7 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'location_manager.dart';
+import 'package:grid_frontend/models/room.dart' as GridRoom;
 
 class RoomService {
   final UserService userService;
@@ -23,6 +24,11 @@ class RoomService {
   final Map<String, Set<String>> _recentlySentMessages = {};
   final int _maxMessageHistory = 50;
 
+  bg.Location? _currentLocation;
+
+  bg.Location? get currentLocation => _currentLocation;
+
+
 
   RoomService(
       this.client,
@@ -36,12 +42,17 @@ class RoomService {
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
-      _onNewLocation(location);
+      // Update current location in room service
+      _currentLocation = location;
+      // Check if this is a targeted update
+      if (location.extras?.containsKey('targetRoomId') == true) {
+        String roomId = location.extras!['targetRoomId'];
+        updateSingleRoom(roomId);
+      } else {
+        // Regular periodic update to all rooms
+        updateRooms(location);
+      }
     });
-  }
-
-  void _onNewLocation(bg.Location location) {
-    updateRooms(location);
   }
 
  /// create direct grid room (contact)
@@ -54,19 +65,20 @@ class RoomService {
     try {
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
-        return false; 
+        return false;
       }
     } catch (e) {
       print('User $matrixUserId does not exist: $e');
       return false;
     }
+
     // Check if direct grid contact already exists
-    final myUserId = client.userID?.localpart ?? 'error';
-    final contactUserId = matrixUserId?.localpart ?? 'error';
-    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, contactUserId);
+    final myUserId = client.userID ?? 'error';
+
+    // Use full Matrix IDs for relationship check to match getRelationshipStatus
+    RelationshipStatus status = await userService.getRelationshipStatus(myUserId, matrixUserId);
 
     if (status == RelationshipStatus.canInvite) {
-      String? myUserId = client.userID;
       final roomName = "Grid:Direct:$myUserId:$matrixUserId";
       final roomId = await client.createRoom(
         name: roomName,
@@ -84,28 +96,55 @@ class RoomService {
     }
     return false; // failed
   }
-
   Future<bool> isUserInRoom(String roomId, String userId) async {
     Room? room = client.getRoomById(roomId);
     if (room != null) {
       var participants = room.getParticipants();
-      return participants.any((user) => user.id == userId && user.membership == Membership.join);
+      return participants.any((user) => user.id == userId);
     }
     return false;
   }
 
 
+  // In RoomService
+  Future<String?> getUserRoomMembership(String roomId, String userId) async {
+    Room? room = client.getRoomById(roomId);
+    if (room != null) {
+      var participants = room.getParticipants();
+      try {
+        final participant = participants.firstWhere(
+              (user) => user.id == userId,
+        );
+        return participant.membership.name;
+      } catch (e) {
+        return 'invited';  // Default to invited if user not found
+      }
+    }
+    return null;
+  }
+
   /// Leaves a room
   Future<bool> leaveRoom(String roomId) async {
     try {
-      final room = client.getRoomById(roomId);
-      if (room == null) {
-        throw Exception('Room not found');
+      final userId = await getMyUserId();
+      if (userId == null) {
+        throw Exception('User ID not found');
       }
-      await room.leave();
+
+      final room = client.getRoomById(roomId);
+      if (room != null) {
+        try {
+          await room.leave();
+          await client.forgetRoom(roomId); // Add this line
+        } catch (e) {
+          print('Error leaving Matrix room (continuing with local cleanup): $e');
+        }
+      }
+
+      await roomRepository.leaveRoom(roomId, userId);
       return true;
     } catch (e) {
-      print('Error leaving room: $e');
+      print('Error in leaveRoom: $e');
       return false;
     }
   }
@@ -230,44 +269,142 @@ class RoomService {
   }
 
   Future<void> cleanRooms() async {
-    // removes expired rooms and rooms that are basically
-    // abandoned, could probably use api/sdk to better detect
-    // abandoned rooms
     try {
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000; // Current timestamp in Unix format
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final myUserId = client.userID;
+      print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
         final participants = await room.getParticipants();
+        bool shouldLeave = false;
+        String leaveReason = '';
 
-        // If the room name matches the group room pattern and contains a timestamp
-        if (room.name.contains("Grid:Group:")) {
-          final roomNameParts = room.name.split(":");
+        // Check if it's a Grid room (direct or group)
+        if (room.name.startsWith("Grid:")) {
+          print("Checking Grid room: ${room.name}");
 
-          if (roomNameParts.length >= 4) {
-            final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
+          if (room.name.contains("Grid:Group:")) {
+            // Handle group rooms
+            final roomNameParts = room.name.split(":");
+            if (roomNameParts.length >= 4) {
+              final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
+              print("Group room ${room.id} expiration: $expirationTimestamp");
 
-            // Check if the room has expired
-            if (expirationTimestamp > 0 && expirationTimestamp < now) {
-              await room.leave();
-              print('Left expired room: ${room.name} (${room.id})');
+              if (expirationTimestamp > 0 && expirationTimestamp < now) {
+                shouldLeave = true;
+                leaveReason = 'expired group';
+              }
+            }
+          } else if (room.name.contains("Grid:Direct:")) {
+            // Handle direct rooms
+            print("Checking direct room: ${room.id} with ${participants.length} participants");
+
+            if (participants.length <= 1) {
+              shouldLeave = true;
+              leaveReason = 'solo direct room';
+            } else if (participants.length == 2 &&
+                participants.every((p) => p.membership != Membership.join)) {
+              shouldLeave = true;
+              leaveReason = 'no active participants in direct room';
             }
           }
-        } else if (participants.length == 1 && participants.first.id == client.userID && participants.first.membership == Membership.join) {
-          // Leave the room if you're the only participant left
-          await room.leave();
-          print('Left room: ${room.name} (${room.id}) because you were the only participant left.');
+        } else {
+          // Non-Grid rooms should be left
+          print("Found non-Grid room: ${room.name}");
+          shouldLeave = true;
+          leaveReason = 'non-Grid room';
+        }
+
+        // Extra checks for any room type
+        if (!shouldLeave && participants.length == 1 &&
+            participants.first.id == myUserId &&
+            participants.first.membership == Membership.join) {
+          shouldLeave = true;
+          leaveReason = 'solo member room';
+        }
+
+        if (shouldLeave) {
+          try {
+            print("Leaving room ${room.id} (${room.name}) - Reason: $leaveReason");
+
+            // Perform local cleanup before leaving the room
+            await _cleanupLocalData(room.id, participants);
+
+            // Leave and forget the room on the server
+            await room.leave();
+            await client.forgetRoom(room.id);
+            print('Successfully left and forgot room: ${room.id}');
+          } catch (e) {
+            print('Error leaving room ${room.id}: $e');
+          }
+        } else {
+          print("Keeping room ${room.id} (${room.name})");
         }
       }
+      print("Room cleanup completed");
     } catch (e) {
-      print("Error cleaning rooms: $e");
+      print("Error during room cleanup: $e");
     }
   }
 
-  Future<void> createGroup(String groupName, List<String> userIds, int durationInHours) async {
+  /// Handles cleanup of local data when leaving a room
+  Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+    try {
+      print("Starting local cleanup for room: $roomId");
+
+      // Get all user IDs in the room before deletion
+      final userIds = matrixUsers.map((p) => p.id).toList();
+
+      // Get list of direct contacts (these are already GridUsers)
+      final directContacts = await userRepository.getDirectContacts();
+      final directContactIds = directContacts.map((contact) => contact.userId).toSet();
+
+      // Start with removing room participants
+      await roomRepository.removeAllParticipants(roomId);
+
+      // For each user in the room
+      for (final userId in userIds) {
+        // Skip if user is a direct contact
+        if (directContactIds.contains(userId)) {
+          print("User $userId is a direct contact, preserving user data");
+          // Just remove the relationship for this room
+          await userRepository.removeUserRelationship(userId, roomId);
+          continue;
+        }
+
+        // Check if user has any other rooms
+        final otherRooms = await userRepository.getUserRooms(userId);
+        otherRooms.remove(roomId); // Remove current room from list
+
+        if (otherRooms.isEmpty) {
+          print("User $userId has no other rooms and is not a contact, cleaning up user data");
+          // Remove user's location data
+          await locationRepository.deleteUserLocations(userId);
+          // Remove user and their relationships (this handles both GridUser and relationships)
+          await userRepository.deleteUser(userId);
+        } else {
+          print("User $userId exists in other rooms, keeping user data");
+          // Just remove the relationship for this room
+          await userRepository.removeUserRelationship(userId, roomId);
+        }
+      }
+
+      // Finally delete the room itself
+      await roomRepository.deleteRoom(roomId);
+
+      print("Completed local cleanup for room: $roomId");
+    } catch (e) {
+      print("Error during local cleanup for room $roomId: $e");
+      // Re-throw the error to be handled by the calling function
+      rethrow;
+    }
+  }
+
+
+  Future<String> createGroup(String groupName, List<String> userIds, int durationInHours) async {
     String? effectiveUserId = client.userID ?? client.userID?.localpart;
     if (effectiveUserId == null) {
-
-      return;
+      return "Error";
     }
 
     // Calculate expiration timestamp
@@ -282,9 +419,37 @@ class RoomService {
     }
 
     final roomName = "Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId";
+    var roomId = "";
     try {
-      // Create the room
-      final roomId = await client.createRoom(
+      // Create power levels content that restricts invites to admin only
+      final powerLevelsContent = {
+        "ban": 50,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100,
+        },
+        "events_default": 0,
+        "invite": 100,
+        "kick": 100,
+        "notifications": {
+          "room": 50
+        },
+        "redact": 50,
+        "state_default": 50,
+        "users": {
+          effectiveUserId: 100,
+        },
+        "users_default": 0
+      };
+
+      // Create the room with power levels and encryption
+      roomId = await client.createRoom(
         name: roomName,
         isDirect: false,
         visibility: matrix_model.Visibility.private,
@@ -293,8 +458,13 @@ class RoomService {
             type: EventTypes.Encryption,
             content: {"algorithm": "m.megolm.v1.aes-sha2"},
           ),
+          StateEvent(
+            type: EventTypes.RoomPowerLevels,
+            content: powerLevelsContent,
+          ),
         ],
       );
+
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
@@ -302,16 +472,23 @@ class RoomService {
           await client.inviteUser(roomId, fullUsername);
         }
       }
+
       // Add the "Grid Group" tag to the room
       await client.setRoomTag(client.userID!, roomId, "Grid Group");
     } catch (e) {
       // Handle errors
-      return;
+      print('Error creating room: $e');
+      return "Error";
     }
+    return roomId;
   }
 
   void sendLocationEvent(String roomId, bg.Location location) async {
     final room = client.getRoomById(roomId);
+    if (room == null || room.membership != Membership.join) {
+      print("Skipping location update for room $roomId - no longer a member");
+      return;
+    }
     if (room != null) {
       final latitude = location.coords.latitude;
       final longitude = location.coords.longitude;
@@ -357,33 +534,130 @@ class RoomService {
     }
   }
 
+  Future<int> getRoomMemberCount(String roomId) async {
+    final room = client.getRoomById(roomId);
+    if (room == null) return 0;
+
+    return room
+        .getParticipants()
+        .where((member) =>
+    member.membership == Membership.join ||
+        member.membership == Membership.invite)
+        .length;
+  }
+
   Future<void> updateRooms(bg.Location location) async {
-    List<Room> rooms = client.rooms; // Assuming `client.rooms` gives the list of rooms
+    List<Room> rooms = client.rooms;
+    print("Grid: Found ${rooms.length} total rooms to process");
+
+    final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
     for (Room room in rooms) {
-      // Get all joined members of the room
-      var joinedMembers = room
-          .getParticipants()
-          .where((member) => member.membership == Membership.join)
-          .toList();
-      // Update groups
-      if (joinedMembers.length > 2) {
-        sendLocationEvent(room.id, location);
-      }
-      // Update contacts
-      else if (joinedMembers.length == 2) {
-        sendLocationEvent(room.id, location);
-      }
-      // TODO: check if approved keys to prevent sending
-      // if keys have changed without user approval
-      else {
-        // Don't update
+      try {
+        print("Grid: Processing room ${room.name} (${room.id})");
+
+        // Skip non-Grid rooms
+        if (!room.name.startsWith('Grid:')) {
+          print("Grid: Skipping non-Grid room: ${room.name}");
+          continue;
+        }
+
+        // Handle different room types
+        if (room.name.startsWith('Grid:Group:')) {
+          // Process group rooms
+          final parts = room.name.split(':');
+          if (parts.length < 3) continue;
+
+          final expirationStr = parts[2];
+          final expirationTimestamp = int.tryParse(expirationStr);
+          print("Grid: Group room expiration: $expirationTimestamp, current: $currentTimestamp");
+
+          // Skip expired group rooms
+          if (expirationTimestamp != null &&
+              expirationTimestamp != 0 &&
+              expirationTimestamp < currentTimestamp) {
+            print("Grid: Skipping expired group room");
+            continue;
+          }
+        } else if (!room.name.startsWith('Grid:Direct:')) {
+          print("Grid: Skipping unknown Grid room type: ${room.name}");
+          continue;
+        }
+
+        // Get joined members and log
+        var joinedMembers = room
+            .getParticipants()
+            .where((member) => member.membership == Membership.join)
+            .toList();
+        print("Grid: Room has ${joinedMembers.length} joined members");
+
+        if (joinedMembers.length > 1) {
+          print("Grid: Sending location event to room ${room.id}");
+          sendLocationEvent(room.id, location);
+          print("Grid: Location event sent successfully");
+        } else {
+          print("Grid: Skipping room ${room.id} - insufficient members");
+        }
+
+      } catch (e) {
+        print('Error processing room ${room.name}: $e');
+        continue;
       }
     }
   }
 
+// Helper method to check if a room is expired
+  bool isRoomExpired(String roomName) {
+    try {
+      if (!roomName.startsWith('Grid:Group:')) return true;
 
+      final parts = roomName.split(':');
+      if (parts.length < 3) return true;
+
+      final expirationStr = parts[2];
+      final expirationTimestamp = int.tryParse(expirationStr);
+
+      if (expirationTimestamp == null) return true;
+      if (expirationTimestamp == 0) return false; // 0 means no expiration
+
+      final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return expirationTimestamp < currentTimestamp;
+    } catch (e) {
+      return true; // If there's any error parsing, consider the room expired
+    }
+  }
+
+  Future<bool> kickMemberFromRoom(String roomId, String userId) async {
+    final room = client.getRoomById(roomId);
+    if (room != null && room.canKick) {
+      try {
+        room.kick(userId);
+      } catch (e) {
+        print("Failed to remove member");
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> updateSingleRoom(String roomId) async {
+    final room = client.getRoomById(roomId);
+    if (room != null) {
+      // Verify it's a valid room to send to (direct room or group)
+      var joinedMembers = room
+          .getParticipants()
+          .where((member) => member.membership == Membership.join)
+          .toList();
+
+      if (joinedMembers.length >= 2) {  // Valid room with at least 2 members
+        sendLocationEvent(roomId, currentLocation!);
+      }
+    }
+  }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
+    // used in UserInfoBubble
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
     Map<String, Map<String, String>> deviceKeysMap = {};
 

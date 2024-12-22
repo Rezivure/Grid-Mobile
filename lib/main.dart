@@ -32,6 +32,10 @@ import 'screens/onboarding/signup_screen.dart';
 import 'screens/map/map_tab.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+
+import 'package:grid_frontend/widgets/version_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,13 +78,13 @@ void main() async {
   final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
   final locationRepository = LocationRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
-
+  final locationManager = LocationManager();
   // Initialize services
   final userService = UserService(client, locationRepository);
+  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
   final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
-  final syncManager = SyncManager(client, messageProcessor, roomRepository, userRepository);
 
   runApp(
     MultiProvider(
@@ -94,13 +98,15 @@ void main() async {
         Provider<RoomRepository>.value(value: roomRepository),
         Provider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
 
-        ChangeNotifierProvider(create: (_) => syncManager..startSync()),
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(
           create: (context) => UserLocationProvider(context.read<LocationRepository>()),
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
+        ChangeNotifierProvider(
+          create: (context) => UserLocationProvider(context.read<LocationRepository>()),
+        ),
 
         // Provide the LocationManager
         ChangeNotifierProvider<LocationManager>(
@@ -131,6 +137,47 @@ void main() async {
               locationRepository: context.read<LocationRepository>(),
               databaseService: context.read<DatabaseService>(),
             ),
+          ),
+          BlocProvider<ContactsBloc>(
+            create: (context) => ContactsBloc(
+              roomService: context.read<RoomService>(),
+              userRepository: context.read<UserRepository>(),
+              mapBloc: context.read<MapBloc>(),
+            ),
+          ),
+          BlocProvider<GroupsBloc>(
+            create: (context) => GroupsBloc(
+              roomService: context.read<RoomService>(),
+              roomRepository: context.read<RoomRepository>(),
+              userRepository: context.read<UserRepository>(),
+              mapBloc: context.read<MapBloc>(),
+              locationRepository: context.read<LocationRepository>(),
+            ),
+          ),
+          ChangeNotifierProxyProvider3<MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
+            create: (context) => SyncManager(
+              client,
+              messageProcessor,
+              roomRepository,
+              userRepository,
+              roomService,
+              context.read<MapBloc>(),
+              context.read<ContactsBloc>(),
+              locationRepository,
+              context.read<GroupsBloc>(),
+            )..startSync(),
+            update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
+            previous ?? SyncManager(
+              client,
+              messageProcessor,
+              roomRepository,
+              userRepository,
+              roomService,
+              mapBloc,
+              contactsBloc,
+              locationRepository,
+              groupsBloc,
+            )..startSync(),
           ),
         ],
         child: MaterialApp(
@@ -168,7 +215,10 @@ void main() async {
             ),
           ),
           themeMode: ThemeMode.system,
-          home: client.isLogged() ? const MapTab() : SplashScreen(),
+          home: VersionWrapper(
+            client: client,
+            child: client.isLogged() ? const MapTab() : SplashScreen(),
+          ),
           routes: {
             '/welcome': (context) => WelcomeScreen(),
             '/server_select': (context) => ServerSelectScreen(),

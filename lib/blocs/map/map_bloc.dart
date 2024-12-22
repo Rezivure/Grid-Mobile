@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
@@ -11,6 +13,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   final LocationManager locationManager;
   final LocationRepository locationRepository;
   final DatabaseService databaseService;
+  late final StreamSubscription<UserLocation> _locationSubscription;
+  final Set<String> _processedLocationIds = {};
+
 
   MapBloc({
     required this.locationManager,
@@ -21,6 +26,39 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MapCenterOnUser>(_onMapCenterOnUser);
     on<MapMoveToUser>(_onMapMoveToUser);
     on<MapLoadUserLocations>(_onMapLoadUserLocations);
+    on<RemoveUserLocation>(_onRemoveUserLocation);
+
+  _locationSubscription = locationRepository.locationUpdates.listen(_onLocationUpdate);
+}
+
+  @override
+  Future<void> close() {
+    _locationSubscription.cancel();
+    return super.close();
+  }
+
+  void _onLocationUpdate(UserLocation location) {
+    // Create a unique identifier for this location update
+    final locationId = '${location.userId}:${location.timestamp}';
+
+    // Skip if we've already processed this exact location
+    if (_processedLocationIds.contains(locationId)) {
+      return;
+    }
+
+    final updatedLocations = List<UserLocation>.from(state.userLocations);
+    // Remove any existing location for this user
+    updatedLocations.removeWhere((loc) => loc.userId == location.userId);
+    // Add the new location
+    updatedLocations.add(location);
+
+    _processedLocationIds.add(locationId);
+    // Keep set size manageable
+    if (_processedLocationIds.length > 1000) {
+      _processedLocationIds.clear();
+    }
+
+    emit(state.copyWith(userLocations: updatedLocations));
   }
 
   Future<void> _onMapInitialize(MapInitialize event,
@@ -29,6 +67,15 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     // Maybe load user locations right away
     add(MapLoadUserLocations());
     emit(state.copyWith(isLoading: false));
+  }
+
+  void _onRemoveUserLocation(RemoveUserLocation event, Emitter<MapState> emit) {
+    print("MapBloc: Removing location for user: ${event.userId}");
+    final updatedLocations = state.userLocations
+        .where((location) => location.userId != event.userId)
+        .toList();
+    print("MapBloc: Locations before: ${state.userLocations.length}, after: ${updatedLocations.length}");
+    emit(state.copyWith(userLocations: updatedLocations));
   }
 
   Future<void> _onMapCenterOnUser(MapCenterOnUser event,
@@ -43,32 +90,24 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onMapMoveToUser(MapMoveToUser event,
-      Emitter<MapState> emit) async {
-    print("Trying to move to a user");
+  Future<void> _onMapMoveToUser(MapMoveToUser event, Emitter<MapState> emit) async {
     try {
-      final userLocationData = await locationRepository.getLatestLocation(
-          event.userId);
+      // Add small delay to let any pending updates finish
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final userLocationData = await locationRepository.getLatestLocationFromHistory(event.userId);
+
       if (userLocationData != null) {
         print("New center: ${userLocationData.position}");
 
-        // First emit a state with null center to force a change
-        emit(MapState(
-          isLoading: false,
-          center: null,
-          zoom: state.zoom,
-          userLocations: state.userLocations,
-        ));
-
-        // Then emit the actual location
-        emit(MapState(
-          isLoading: false,
-          center: userLocationData.position,
-          zoom: state.zoom,
-          userLocations: state.userLocations,
+        // Force map update with two-step emit
+        emit(state.copyWith(center: null));
+        emit(state.copyWith(
+            center: userLocationData.position,
+            isLoading: false
         ));
       } else {
-        print("Location not available for user");
+        print("Latest location not available for user");
         emit(state.copyWith(error: 'Location not available for this user.'));
       }
     } catch (e) {
@@ -77,30 +116,18 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     }
   }
 
-  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event,
-      Emitter<MapState> emit) async {
+  Future<void> _onMapLoadUserLocations(MapLoadUserLocations event, Emitter<MapState> emit) async {
     try {
-      final allLocations = await locationRepository.getAllLocations();
+      final latestLocations = await locationRepository.getAllLatestLocations();
 
-      // Create a map to store latest location for each user
-      final Map<String, UserLocation> latestLocations = {};
-
-      // Iterate through locations, keeping only the latest for each user
-      for (final location in allLocations) {
-        final existingLocation = latestLocations[location.userId];
-        if (existingLocation == null ||
-            DateTime.parse(location.timestamp).isAfter(
-                DateTime.parse(existingLocation.timestamp))) {
-          latestLocations[location.userId] = location;
-        }
-      }
-
-      // Convert map values back to list
-      final uniqueLocations = latestLocations.values.toList();
+      // Ensure no duplicates by using a Map keyed by userId
+      final locationMap = Map<String, UserLocation>.fromEntries(
+          latestLocations.map((loc) => MapEntry(loc.userId, loc))
+      );
 
       emit(state.copyWith(
           isLoading: false,
-          userLocations: uniqueLocations
+          userLocations: locationMap.values.toList()
       ));
     } catch (e) {
       emit(state.copyWith(error: 'Error loading user locations: $e'));
