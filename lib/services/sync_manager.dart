@@ -9,6 +9,7 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -21,6 +22,8 @@ import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
 
 import '../models/pending_message.dart';
+
+
 
 class SyncManager with ChangeNotifier {
   final Client client;
@@ -39,6 +42,8 @@ class SyncManager with ChangeNotifier {
   final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
+  String? _sinceToken;
+
 
   SyncManager(
       this.client,
@@ -56,13 +61,38 @@ class SyncManager with ChangeNotifier {
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
   int get totalInvites => _invites.length;
 
+  Future<void> _loadSinceToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    _sinceToken = prefs.getString('syncSinceToken');
+    print('[SyncManager] Loaded since token: $_sinceToken');
+  }
+
+  Future<void> _saveSinceToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('syncSinceToken', token);
+    print('[SyncManager] Saved since token: $token');
+  }
+
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     print("Initializing Sync Manager...");
     try {
+      await _loadSinceToken();
       await roomService.cleanRooms();
-      await fetchInitialData();
+
+      final response = await client.sync(
+        since: _sinceToken,
+        fullState: _sinceToken == null,
+        timeout: 15000,
+      );
+
+      if (response.nextBatch != null) {
+        await _saveSinceToken(response.nextBatch!);
+        _sinceToken = response.nextBatch;
+      }
+
+      _processInitialSync(response);
       await startSync();
       _isInitialized = true; // Only set after successful completion
     } catch (e) {
@@ -75,7 +105,7 @@ class SyncManager with ChangeNotifier {
     if (_isSyncing) return;
 
     _isSyncing = true;
-    client.sync();
+    client.sync(fullState: true);
 
 
     client.onSync.stream.listen((SyncUpdate syncUpdate) {
@@ -110,7 +140,7 @@ class SyncManager with ChangeNotifier {
         _processPendingMessages();
       }
       // full refresh as well
-      client.sync(timeout: 10000).then((_) {
+      client.sync(fullState: true, timeout: 10000).then((_) {
         mapBloc.add(MapLoadUserLocations()); // Refresh locations
       }).catchError((e) {
         print('Error during resume sync: $e');
@@ -587,28 +617,34 @@ class SyncManager with ChangeNotifier {
       }
     }
   }
-  Future<void> fetchInitialData() async {
-    try {
-      final response = await client.sync(fullState: true, timeout: 15000);
-      // Update Invites
-      response.rooms?.invite?.forEach((roomId, inviteUpdate) {
-        _processInvite(roomId, inviteUpdate);
-      });
 
-      // Fetch and Cache Rooms
-      for (var room in client.rooms) {
-        initialProcessRoom(room);
+  void _processInitialSync(SyncUpdate response) {
+    // Update Invites
+    response.rooms?.invite?.forEach((roomId, inviteUpdate) {
+      _processInvite(roomId, inviteUpdate);
+    });
+
+    // If needed, process the joined/left rooms in the response
+    response.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
+      _processRoomMessages(roomId, joinedRoomUpdate);
+      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+        _processRoomJoin(roomId, joinedRoomUpdate);
       }
+    });
+    response.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
+      _processRoomLeaveOrKick(roomId, leftRoomUpdate);
+    });
 
-      // Refresh contacts after sync
-      contactsBloc.add(LoadContacts());
-
-      notifyListeners();
-    } catch (e) {
-      print("Error fetching initial data: $e");
+    // Finally, process the full client.rooms if you like
+    for (var room in client.rooms) {
+      initialProcessRoom(room);
     }
-  }
 
+    // Refresh contacts
+    contactsBloc.add(LoadContacts());
+
+    notifyListeners();
+  }
 
   Future<void> initialProcessRoom(Room room) async {
     // Check if the room already exists

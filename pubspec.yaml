@@ -51,10 +51,13 @@ dependencies:
 
 
 flutter_launcher_icons:
-  android: "assets/appIcons/playstore.png"
+  android: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/appIcons/playstore.png"
+  adaptive_icon_padding: false #
   ios: true
   image_path: "assets/appIcons/appstore.png"
-  min_sdk_android: 21 # android min sdk min:16, default 21
+  min_sdk_android: 21
 
 dev_dependencies:
   flutter_test:
