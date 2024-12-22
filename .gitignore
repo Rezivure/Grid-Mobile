@@ -51,3 +51,4 @@ ios/build*
 #Android Builds
 android/build/*
 android/build
+*.jks
