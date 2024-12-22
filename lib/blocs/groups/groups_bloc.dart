@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -9,6 +11,8 @@ import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 
+import '../../models/grid_user.dart';
+
 class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   final RoomService roomService;
   final RoomRepository roomRepository;
@@ -16,6 +20,8 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   final LocationRepository locationRepository;
   final MapBloc mapBloc;
   List<Room> _allGroups = [];
+  Timer? _memberUpdateDebouncer;
+  bool _isUpdatingMembers = false;
 
   GroupsBloc({
     required this.roomService,
@@ -45,6 +51,41 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     }
   }
 
+  Future<void> refreshGroupMembers(String roomId) async {
+    try {
+      final room = await roomRepository.getRoomById(roomId);
+      if (room == null) return;
+
+      // Get all relationships and membership statuses in a single call
+      final relationships = await userRepository.getUserRelationshipsForRoom(roomId);
+      final memberIds = relationships.map((r) => r['userId'] as String).toSet();
+
+      final members = await userRepository.getGroupParticipants();
+      final filteredMembers = members.where(
+              (user) => memberIds.contains(user.userId)
+      ).toList();
+
+      final membershipStatuses = Map.fromEntries(
+          relationships.map((r) => MapEntry(
+              r['userId'] as String,
+              r['membershipStatus'] as String? ?? 'join'
+          ))
+      );
+
+      if (state is GroupsLoaded) {
+        final currentState = state as GroupsLoaded;
+        emit(GroupsLoaded(
+          currentState.groups,
+          selectedRoomId: roomId,
+          selectedRoomMembers: filteredMembers,
+          membershipStatuses: membershipStatuses,
+        ));
+      }
+    } catch (e) {
+      print("Error refreshing group members: $e");
+    }
+  }
+
   Future<void> _onRefreshGroups(RefreshGroups event, Emitter<GroupsState> emit) async {
     print("GroupsBloc: Handling RefreshGroups event");
     try {
@@ -66,9 +107,6 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       } else {
         emit(GroupsLoaded(List.from(_allGroups)));
       }
-
-      // Force another load to ensure UI updates
-      add(LoadGroups());
 
     } catch (e) {
       print("GroupsBloc: Error in RefreshGroups - $e");
@@ -203,10 +241,8 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       LoadGroupMembers event,
       Emitter<GroupsState> emit,
       ) async {
-    if (state is GroupsLoaded) {
-      final currentState = state as GroupsLoaded;
-      emit(GroupsLoaded(currentState.groups));
-    }
+    if (_isUpdatingMembers) return;
+    _isUpdatingMembers = true;
 
     try {
       final room = await roomRepository.getRoomById(event.roomId);
@@ -214,33 +250,97 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         throw Exception('Room not found');
       }
 
-      // Get all relationships for this room
-      final relationships = await userRepository.getUserRelationshipsForRoom(event.roomId);
-      final memberIds = relationships.map((r) => r['userId'] as String).toSet();
+      // Get current state to preserve existing statuses
+      final currentState = state as GroupsLoaded?;
+      final existingStatuses = currentState?.membershipStatuses ?? {};
 
+      // Get all relationships and current members
+      final relationships = await userRepository.getUserRelationshipsForRoom(event.roomId);
       final members = await userRepository.getGroupParticipants();
+
+      // Build status map starting with existing statuses
+      final Map<String, String> membershipStatuses = Map.from(existingStatuses);
+
+      // Process each relationship and update status
+      for (var relationship in relationships) {
+        final userId = relationship['userId'] as String;
+
+        // First check Matrix status
+        final matrixStatus = await roomService.getUserRoomMembership(
+          event.roomId,
+          userId,
+        );
+
+        if (matrixStatus != null) {
+          // Use Matrix status if available
+          membershipStatuses[userId] = matrixStatus;
+        } else {
+          // Fall back to stored status
+          membershipStatuses[userId] = relationship['membershipStatus'] as String? ?? 'join';
+        }
+      }
+
+      // Filter members based on relationships
+      final memberIds = relationships.map((r) => r['userId'] as String).toSet();
       final filteredMembers = members.where(
               (user) => memberIds.contains(user.userId)
       ).toList();
 
-      final Map<String, String> membershipStatuses = {};
-      for (var relationship in relationships) {
-        membershipStatuses[relationship['userId'] as String] =
-            relationship['membershipStatus'] as String? ?? 'join';
+      emit(GroupsLoaded(
+        currentState?.groups ?? [],
+        selectedRoomId: event.roomId,
+        selectedRoomMembers: filteredMembers,
+        membershipStatuses: membershipStatuses,
+      ));
+
+    } catch (e) {
+      print("Error loading group members: $e");
+    } finally {
+      _isUpdatingMembers = false;
+    }
+  }
+  // In GroupsBloc class
+  Future<void> handleNewMemberInvited(String roomId, String userId) async {
+    if (_isUpdatingMembers) return;
+    _isUpdatingMembers = true;
+
+    try {
+      // First wait for Matrix sync to ensure we have latest state
+      await roomService.client.sync();
+
+      // Verify invite status from Matrix
+      final inviteStatus = await roomService.getUserRoomMembership(roomId, userId);
+      if (inviteStatus != 'invite') {
+        // Wait briefly and check again in case of sync delay
+        await Future.delayed(const Duration(milliseconds: 500));
+        await roomService.client.sync();
       }
 
-      if (state is GroupsLoaded) {
-        final currentState = state as GroupsLoaded;
-        emit(GroupsLoaded(
-          currentState.groups,
-          selectedRoomId: event.roomId,
-          selectedRoomMembers: filteredMembers,
-          membershipStatuses: membershipStatuses,
-        ));
-      }
+      // Get user profile and update/insert user
+      final profileInfo = await roomService.client.getUserProfile(userId);
+      final newUser = GridUser(
+        userId: userId,
+        displayName: profileInfo.displayname,
+        avatarUrl: profileInfo.avatarUrl?.toString(),
+        lastSeen: DateTime.now().toIso8601String(),
+        profileStatus: "",
+      );
+      await userRepository.insertUser(newUser);
+
+      // Update relationship with invite status
+      await userRepository.insertUserRelationship(
+          userId,
+          roomId,
+          false,
+          membershipStatus: 'invite'
+      );
+
+      // Force a full member list refresh
+      add(LoadGroupMembers(roomId));
     } catch (e) {
-      print("Error in LoadGroupMembers: $e");
-      emit(GroupsError(e.toString()));
+      print("Error handling new member invite: $e");
+    } finally {
+      _isUpdatingMembers = false;
     }
   }
 
@@ -290,76 +390,56 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   }
 
   Future<void> handleMemberKicked(String roomId, String userId) async {
-    print("Processing kick for user: $userId in room: $roomId");
-
     try {
-      // Start with removing all user relationships
-      await userRepository.removeUserRelationship(userId, roomId);
+      // Get current state to preserve existing statuses
+      final currentState = state as GroupsLoaded?;
+      if (currentState == null) return;
 
-      // Get and update membership status to explicitly mark as left
-      await userRepository.updateMembershipStatus(userId, roomId, 'leave');
+      // Create a copy of existing status map and update kicked user
+      final Map<String, String> updatedStatuses = Map.from(currentState.membershipStatuses ?? {});
+      updatedStatuses[userId] = 'leave';
 
-      // Get the room
+      // Emit immediate update for kicked user
+      emit(GroupsLoaded(
+        currentState.groups,
+        selectedRoomId: currentState.selectedRoomId,
+        selectedRoomMembers: currentState.selectedRoomMembers?.where((m) => m.userId != userId).toList(),
+        membershipStatuses: updatedStatuses,
+      ));
+
+      // Now perform actual cleanup
+      await Future.wait([
+        userRepository.removeUserRelationship(userId, roomId),
+        userRepository.updateMembershipStatus(userId, roomId, 'leave'),
+        roomRepository.removeRoomParticipant(roomId, userId)
+      ]);
+
       final room = await roomRepository.getRoomById(roomId);
       if (room != null) {
-        // Remove from room members list
+        // Update room with new member list
         final updatedMembers = room.members.where((id) => id != userId).toList();
-        final updatedRoom = Room(
-          roomId: room.roomId,
-          name: room.name,
-          isGroup: room.isGroup,
-          lastActivity: DateTime.now().toIso8601String(),
-          avatarUrl: room.avatarUrl,
-          members: updatedMembers,
-          expirationTimestamp: room.expirationTimestamp,
+        final updatedRoom = room.copyWith(
+            members: updatedMembers,
+            lastActivity: DateTime.now().toIso8601String()
         );
-
-        // Update room in database
         await roomRepository.updateRoom(updatedRoom);
-
-        // Explicitly remove from room participants
-        await roomRepository.removeRoomParticipant(roomId, userId);
-
-        // Get all relationships to check user's status
-        final relationships = await userRepository.getUserRelationshipsForRoom(roomId);
-
-        // Remove all traces of this user's relationship with this room
-        for (var relationship in relationships) {
-          if (relationship['userId'] == userId) {
-            await userRepository.deleteUserRelationship(userId, roomId);
-          }
-        }
-
-        // Check if user should be completely cleaned up
-        final userRooms = await roomRepository.getUserRooms(userId);
-        final directRoom = await userRepository.getDirectRoomForContact(userId);
-
-        if (userRooms.isEmpty && directRoom == null) {
-          print("User not in any rooms or contacts, cleaning up completely");
-          await locationRepository.deleteUserLocations(userId);
-          await userRepository.deleteUser(userId);
-          mapBloc.add(RemoveUserLocation(userId));
-        }
-
-        // Force immediate UI updates
-        add(LoadGroupMembers(roomId));
-        add(RefreshGroups());
-
-        // Add delayed updates to ensure sync
-        Future.delayed(const Duration(milliseconds: 500), () {
-          add(UpdateGroup(roomId));
-          add(LoadGroups());
-          add(LoadGroupMembers(roomId));
-        });
-
-        Future.delayed(const Duration(seconds: 1), () {
-          add(RefreshGroups());
-          add(LoadGroupMembers(roomId));
-        });
       }
+
+      // Check if user should be cleaned up
+      final userRooms = await roomRepository.getUserRooms(userId);
+      final directRoom = await userRepository.getDirectRoomForContact(userId);
+      if (userRooms.isEmpty && directRoom == null) {
+        await Future.wait([
+          locationRepository.deleteUserLocations(userId),
+          userRepository.deleteUser(userId)
+        ]);
+        mapBloc.add(RemoveUserLocation(userId));
+      }
+
+      // Final refresh to ensure everything is in sync
+      add(LoadGroupMembers(roomId));
     } catch (e) {
       print("Error handling kicked member: $e");
-      rethrow;
     }
   }
 

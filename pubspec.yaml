@@ -1,5 +1,5 @@
 name: grid_frontend
-description: "Grid - Encrypted Location Sharing"
+description: "Grid: Private Location Sharing"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -12,7 +12,6 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_map: ^7.0.2
   timeago: ^3.1.0
-  geolocator: ^13.0.2
   latlong2: ^0.9.1
   flutter_map_marker_popup: ^7.0.0
   flutter_map_location_marker: ^9.1.1
@@ -27,7 +26,6 @@ dependencies:
   path_provider: ^2.1.4
   sqflite: ^2.3.3+1
   crypto: ^3.0.4
-  workmanager: ^0.5.2
   encrypt: ^5.0.3
   flutter_map_cancellable_tile_provider: ^3.0.2  # Downgraded to a compatible version
   flutter_launcher_icons: ^0.14.2
@@ -41,22 +39,25 @@ dependencies:
   sleek_circular_slider: ^2.0.1
   flutter_slidable: ^3.1.1
   flutter_dotenv: ^5.1.0
-  location: ^7.0.1
   permission_handler: ^11.3.1
   qr_flutter: ^4.1.0
-  qr_code_scanner: ^1.0.1
   flutter_bloc: ^8.1.6
   collection: ^1.18.0
   equatable: ^2.0.7
   flutter_background_geolocation: ^4.16.5
   hive: ^2.2.3
+  qr_code_scanner_plus: ^2.0.6
+  package_info_plus: ^8.1.2
 
 
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/appIcons/playstore.png"
+  adaptive_icon_padding: false #
   ios: true
   image_path: "assets/appIcons/appstore.png"
-  min_sdk_android: 21 # android min sdk min:16, default 21
+  min_sdk_android: 21
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +68,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logos/Jpeg-2.jpg
-    - assets/images/logo.png
     - assets/logos/png-file-2.png
     - assets/logos/Brand-Pattern-Full-Color.png
     - assets/logos/Brand-Pattern-Low-color.png

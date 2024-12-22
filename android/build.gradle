@@ -1,12 +1,19 @@
 buildscript {
-    ext.kotlin_version = '2.0.0'
+    ext.kotlin_version = '1.9.10' // Keep it stable and known-working
+    ext {
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        minSdkVersion = 21
+        appCompatVersion = "1.4.2"
+        playServicesLocationVersion = "21.0.1"
+    }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath "com.android.tools.build:gradle:8.0.0" // Update to a newer version
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.android.tools.build:gradle:8.2.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10"
     }
 }
 
@@ -14,16 +21,13 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-    }
-
-    configurations.all {
-        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-            if (details.requested.group == 'org.jetbrains.kotlin') {
-                details.useVersion kotlin_version
-            }
-        }
+        maven { url "${project(':flutter_background_geolocation').projectDir}/libs" }
+        maven { url 'https://developer.huawei.com/repo/' }
+        maven { url "${project(':background_fetch').projectDir}/libs" }
+        maven { url "https://storage.googleapis.com/download.flutter.io" }
     }
 }
+
 
 rootProject.buildDir = '../build'
 subprojects {

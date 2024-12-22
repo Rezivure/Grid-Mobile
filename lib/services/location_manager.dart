@@ -219,6 +219,7 @@ class LocationManager with ChangeNotifier {
 
     // Always update in foreground according to interval
     if (_isInForeground) {
+      print(timeElapsed > _foregroundInterval);
       return timeElapsed > _foregroundInterval;
     }
 

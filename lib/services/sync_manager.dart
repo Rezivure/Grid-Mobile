@@ -9,6 +9,7 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -21,6 +22,8 @@ import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
 
 import '../models/pending_message.dart';
+
+
 
 class SyncManager with ChangeNotifier {
   final Client client;
@@ -39,6 +42,8 @@ class SyncManager with ChangeNotifier {
   final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
+  String? _sinceToken;
+
 
   SyncManager(
       this.client,
@@ -56,20 +61,52 @@ class SyncManager with ChangeNotifier {
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
   int get totalInvites => _invites.length;
 
+  Future<void> _loadSinceToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    _sinceToken = prefs.getString('syncSinceToken');
+    print('[SyncManager] Loaded since token: $_sinceToken');
+  }
+
+  Future<void> _saveSinceToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('syncSinceToken', token);
+    print('[SyncManager] Saved since token: $token');
+  }
+
   Future<void> initialize() async {
-    if (_isInitialized) return; // Prevent re-initialization
-    _isInitialized = true;
+    if (_isInitialized) return;
 
     print("Initializing Sync Manager...");
-    await fetchInitialData();
-    await startSync();
+    try {
+      await _loadSinceToken();
+      await roomService.cleanRooms();
+
+      final response = await client.sync(
+        since: _sinceToken,
+        fullState: _sinceToken == null,
+        timeout: 15000,
+      );
+
+      if (response.nextBatch != null) {
+        await _saveSinceToken(response.nextBatch!);
+        _sinceToken = response.nextBatch;
+      }
+
+      _processInitialSync(response);
+      await startSync();
+      _isInitialized = true; // Only set after successful completion
+    } catch (e) {
+      print("Error during initialization: $e");
+      // Maybe add some retry logic here
+    }
   }
 
   Future<void> startSync() async {
     if (_isSyncing) return;
 
     _isSyncing = true;
-    client.sync();
+    client.sync(fullState: true);
+
 
     client.onSync.stream.listen((SyncUpdate syncUpdate) {
       // Process invites
@@ -98,8 +135,16 @@ class SyncManager with ChangeNotifier {
 
   void handleAppLifecycleState(bool isActive) {
     _isActive = isActive;
-    if (isActive && _pendingMessages.isNotEmpty) {
-      _processPendingMessages();
+    if (isActive) {
+      if (_pendingMessages.isNotEmpty) {
+        _processPendingMessages();
+      }
+      // full refresh as well
+      client.sync(fullState: true, timeout: 10000).then((_) {
+        mapBloc.add(MapLoadUserLocations()); // Refresh locations
+      }).catchError((e) {
+        print('Error during resume sync: $e');
+      });
     }
   }
 
@@ -125,6 +170,19 @@ class SyncManager with ChangeNotifier {
       _invites.add(inviteData);
       notifyListeners();
     }
+  }
+
+  Future<void> clearAllState() async {
+    _invites.clear();
+    _roomMessages.clear();
+    _pendingMessages.clear();
+    _isInitialized = false;
+    _isSyncing = false;
+
+    // Stop syncing
+    await stopSync();
+    // Notify listeners of the changes
+    notifyListeners();
   }
 
   Future<void> _processRoomLeave(String roomId, LeftRoomUpdate leftRoomUpdate) async {
@@ -422,17 +480,14 @@ class SyncManager with ChangeNotifier {
       final membershipStatus = event.content['membership'] as String? ?? 'invited';
 
       if (event.stateKey != null) {
-        // Update membership status for group rooms
         await userRepository.updateMembershipStatus(
             event.stateKey!,
             roomId,
             membershipStatus
         );
 
-        // Since it's a group room, update the GroupsBloc
         groupsBloc.add(UpdateGroup(roomId));
 
-        // If this is a newly invited member, make sure their profile is in the database
         if (membershipStatus == 'invite') {
           try {
             final profileInfo = await client.getUserProfile(event.stateKey!);
@@ -451,12 +506,12 @@ class SyncManager with ChangeNotifier {
       }
     }
 
-    if (event.content['membership'] == 'leave') {
-      await _handleMemberLeave(roomId, event.stateKey);
-    } else if (event.content['membership'] == 'join') {
-      // Handle updates to existing members (profile changes etc)
-      if (event.stateKey != null) {
+    if (event.stateKey != null) {
+      final membershipStatus = event.content['membership'] as String?;
+
+      if (membershipStatus == 'join') {
         try {
+          // Update or create user profile
           final profileInfo = await client.getUserProfile(event.stateKey!);
           final gridUser = GridUser.GridUser(
             userId: event.stateKey!,
@@ -467,12 +522,25 @@ class SyncManager with ChangeNotifier {
           );
           await userRepository.insertUser(gridUser);
 
+          // Update relationship
+          await userRepository.insertUserRelationship(
+            event.stateKey!,
+            roomId,
+            !room.isGroup, // isDirect
+          );
+
+          // Update UI based on room type
           if (room.isGroup) {
             groupsBloc.add(UpdateGroup(roomId));
+          } else {
+            print("Direct room join detected, refreshing contacts");
+            contactsBloc.add(RefreshContacts());
           }
         } catch (e) {
           print('Error updating user profile for ${event.stateKey}: $e');
         }
+      } else if (membershipStatus == 'leave') {
+        await _handleMemberLeave(roomId, event.stateKey);
       }
     }
   }
@@ -549,29 +617,34 @@ class SyncManager with ChangeNotifier {
       }
     }
   }
-  Future<void> fetchInitialData() async {
-    try {
-      final response = await client.sync(fullState: true);
 
-      // Update Invites
-      response.rooms?.invite?.forEach((roomId, inviteUpdate) {
-        _processInvite(roomId, inviteUpdate);
-      });
+  void _processInitialSync(SyncUpdate response) {
+    // Update Invites
+    response.rooms?.invite?.forEach((roomId, inviteUpdate) {
+      _processInvite(roomId, inviteUpdate);
+    });
 
-      // Fetch and Cache Rooms
-      for (var room in client.rooms) {
-        initialProcessRoom(room);
+    // If needed, process the joined/left rooms in the response
+    response.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
+      _processRoomMessages(roomId, joinedRoomUpdate);
+      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+        _processRoomJoin(roomId, joinedRoomUpdate);
       }
+    });
+    response.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
+      _processRoomLeaveOrKick(roomId, leftRoomUpdate);
+    });
 
-      // Refresh contacts after sync
-      contactsBloc.add(LoadContacts());
-
-      notifyListeners();
-    } catch (e) {
-      print("Error fetching initial data: $e");
+    // Finally, process the full client.rooms if you like
+    for (var room in client.rooms) {
+      initialProcessRoom(room);
     }
-  }
 
+    // Refresh contacts
+    contactsBloc.add(LoadContacts());
+
+    notifyListeners();
+  }
 
   Future<void> initialProcessRoom(Room room) async {
     // Check if the room already exists

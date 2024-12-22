@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 *.env
 # IntelliJ related
@@ -44,3 +46,8 @@ app.*.map.json
 
 #iOS Builds
 ios/build
+ios/build*
+
+#Android Builds
+android/build/*
+android/build

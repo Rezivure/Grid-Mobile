@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:matrix/matrix_api_lite/generated/model.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -55,6 +57,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   }
 
   void _addMember() async {
+    const int MAX_GROUP_MEMBERS = 15;
+
     final inputText = _controller.text.trim();
     String username;
     if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
@@ -66,90 +70,126 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     var normalized = normalizeUser(username);
     String? normalizedUserId = normalized['matrixUserId'];
 
-    if (username.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _isProcessing = true;
-          _contactError = null;
-        });
-      }
-      try {
-        bool userExists = await this.widget.userService.userExists(normalizedUserId!);
-        if (!userExists) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'The user $username does not exist.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        bool isAlreadyInGroup = await this.widget.roomService.isUserInRoom(
-            widget.roomId, normalizedUserId);
-        if (isAlreadyInGroup) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'The user $username is already in the group.';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
-
-        // Send the invite
-        await this.widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
-
-        // Fetch user profile and add to database
-        final profileInfo = await widget.userService.client.getUserProfile(normalizedUserId);
-        final gridUser = GridUser.GridUser(
-          userId: normalizedUserId,
-          displayName: profileInfo.displayname,
-          avatarUrl: profileInfo.avatarUrl?.toString(),
-          lastSeen: DateTime.now().toIso8601String(),
-          profileStatus: "",
-        );
-        await widget.userRepository.insertUser(gridUser);
-
-        // Manually insert the user relationship with 'invite' status
-        await widget.userRepository.insertUserRelationship(
-            normalizedUserId,
-            widget.roomId,
-            false, // not a direct room
-            membershipStatus: 'invite'
-        );
-
-        // Call the callback if provided
-        if (widget.onInviteSent != null) {
-          widget.onInviteSent!();
-        }
-
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
-          );
-        }
-
-        _matrixUserId = null;
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _contactError = 'Failed to send invite: $e';
-            _isProcessing = false;
-          });
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
-        }
-      }
-    } else {
+    if (username.isEmpty) {
       if (mounted) {
         setState(() {
           _contactError = 'Please enter a valid username';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isProcessing = true;
+        _contactError = null;
+      });
+    }
+
+    try {
+
+
+      // check if inviting self
+      final usernameLowercase = username.toLowerCase();
+      final isSelf = (await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}'));
+      if (isSelf) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'You cannot invite yourself to the group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Get and validate room
+      final room = widget.roomService.client.getRoomById(widget.roomId);
+      if (room == null) {
+        throw Exception('Room not found');
+      }
+
+      // Check invite permissions
+      if (!room.canInvite) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'You do not have permission to invite members to this group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Check member limit
+      final memberCount = room
+          .getParticipants()
+          .where((member) =>
+      member.membership == Membership.join ||
+          member.membership == Membership.invite)
+          .length;
+
+      if (memberCount >= MAX_GROUP_MEMBERS) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Verify user exists
+      if (!await widget.userService.userExists(normalizedUserId!)) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'The user $username does not exist.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Check if already in group
+      if (await widget.roomService.isUserInRoom(widget.roomId, normalizedUserId)) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'The user $username is already in the group.';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
+
+      // Send the matrix invite
+      await widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
+
+      // Let GroupsBloc handle the state updates
+      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, normalizedUserId);
+
+      if (widget.onInviteSent != null) {
+        widget.onInviteSent!();
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
+        );
+      }
+
+      _matrixUserId = null;
+
+    } catch (e) {
+      print('Error adding member: $e');
+      if (mounted) {
+        setState(() {
+          _contactError = 'Failed to send invite. Do you have permissions?';
+          _isProcessing = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
         });
       }
     }
@@ -271,8 +311,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                   child: Container(
                     width: 300, // Set a fixed width for the text field
                     decoration: BoxDecoration(
-                      color: theme.cardColor,
+                      color: Theme.of(context).brightness == Brightness.light
+                          ? theme.cardColor
+                          : theme.colorScheme.surface.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(36),
+                      border: Theme.of(context).brightness == Brightness.dark
+                          ? Border.all(color: theme.colorScheme.surface.withOpacity(0.15), width: 1)
+                          : null,
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black12,
@@ -287,15 +332,23 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                         hintText: 'Enter username',
                         prefixText: '@',
                         errorText: _contactError,
+                        filled: true,
+                        fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(1),
+                          borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 14),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       ),
-                      style: TextStyle(
-                          color: theme.textTheme.bodyMedium?.color),
+                      style: TextStyle(color: theme.textTheme.bodyMedium?.color),
                     ),
                   ),
                 ),
@@ -326,8 +379,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                 SizedBox(height: 20),
                 Container(
                   decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    shape: BoxShape.circle,
+                    color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
+                    borderRadius: BorderRadius.circular(35),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black12,
@@ -340,20 +393,27 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                     onPressed: _scanQRCode,
                     icon: Icon(
                       Icons.qr_code_scanner,
-                      color: colorScheme.primary,
+                      color: Theme.of(context).brightness == Brightness.light
+                          ? colorScheme.primary
+                          : colorScheme.surface,
                     ),
                     label: Text(
                       'Scan QR Code',
-                      style: TextStyle(color: colorScheme.onSurface),
+                      style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? colorScheme.onSurface
+                            : colorScheme.surface,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 15),
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(35),
                       ),
-                      backgroundColor: colorScheme.surface,
-                      foregroundColor: colorScheme.onSurface,
+                      backgroundColor: Theme.of(context).brightness == Brightness.light
+                          ? colorScheme.surface
+                          : colorScheme.primary,
+                      elevation: 0,
                     ),
                   ),
                 ),

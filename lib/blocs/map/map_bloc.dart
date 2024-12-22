@@ -14,6 +14,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   final LocationRepository locationRepository;
   final DatabaseService databaseService;
   late final StreamSubscription<UserLocation> _locationSubscription;
+  final Set<String> _processedLocationIds = {};
 
 
   MapBloc({
@@ -37,14 +38,24 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   }
 
   void _onLocationUpdate(UserLocation location) {
-    // Update the state with the new or updated location
-    final updatedLocations = List<UserLocation>.from(state.userLocations);
-    final index = updatedLocations.indexWhere((loc) => loc.userId == location.userId);
+    // Create a unique identifier for this location update
+    final locationId = '${location.userId}:${location.timestamp}';
 
-    if (index != -1) {
-      updatedLocations[index] = location; // Update existing location
-    } else {
-      updatedLocations.add(location); // Add new location
+    // Skip if we've already processed this exact location
+    if (_processedLocationIds.contains(locationId)) {
+      return;
+    }
+
+    final updatedLocations = List<UserLocation>.from(state.userLocations);
+    // Remove any existing location for this user
+    updatedLocations.removeWhere((loc) => loc.userId == location.userId);
+    // Add the new location
+    updatedLocations.add(location);
+
+    _processedLocationIds.add(locationId);
+    // Keep set size manageable
+    if (_processedLocationIds.length > 1000) {
+      _processedLocationIds.clear();
     }
 
     emit(state.copyWith(userLocations: updatedLocations));
@@ -109,9 +120,14 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     try {
       final latestLocations = await locationRepository.getAllLatestLocations();
 
+      // Ensure no duplicates by using a Map keyed by userId
+      final locationMap = Map<String, UserLocation>.fromEntries(
+          latestLocations.map((loc) => MapEntry(loc.userId, loc))
+      );
+
       emit(state.copyWith(
           isLoading: false,
-          userLocations: latestLocations
+          userLocations: locationMap.values.toList()
       ));
     } catch (e) {
       emit(state.copyWith(error: 'Error loading user locations: $e'));
