@@ -430,6 +430,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: colorScheme.onBackground,
                     onTap: () => _launchURL('https://mygrid.app/feedback'),
                   ),
+                  _buildSettingsOption(
+                    icon: Icons.report,
+                    title: 'Report Abuse',
+                    color: colorScheme.onBackground,
+                    onTap: () => _launchURL('https://mygrid.app/report'),
+                  ),
                   Divider(color: colorScheme.onBackground), // Divider uses theme
                   _buildSettingsOption(
                     icon: Icons.delete,
