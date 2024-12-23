@@ -500,6 +500,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: colorScheme.onBackground,
                     onTap: () => _launchURL('https://mygrid.app/report'),
                   ),
+                  /*
+                  TODO: reimplement clear cache
                   Divider(color: colorScheme.onBackground), // Divider uses theme
                   _buildSettingsOption(
                     icon: Icons.delete,
@@ -532,6 +534,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       }
                     },
                   ),
+                  */
                   _buildSettingsOption(
                     icon: Icons.logout,
                     title: 'Sign Out',
