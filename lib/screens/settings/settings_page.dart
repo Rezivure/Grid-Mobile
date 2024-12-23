@@ -104,6 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         // Clear sync manager state
         await syncManager.clearAllState();
+        await syncManager.stopSync();
 
         // Clear database
         await databaseService.deleteAndReinitialize();
@@ -111,8 +112,17 @@ class _SettingsPageState extends State<SettingsPage> {
         // Clear shared preferences
         await sharedPreferences.clear();
 
-        // Logout from Matrix client
-        await client.logout();
+        try {
+          if (client.isLogged()) {
+            await client.logout();
+            print("Logout successful");
+          } else {
+            print("Client already logged out");
+          }
+        } catch (e) {
+          print("Error during logout: $e");
+        }
+
 
         // Navigate to welcome screen
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
@@ -128,20 +138,68 @@ class _SettingsPageState extends State<SettingsPage> {
     final sharedPreferences = await SharedPreferences.getInstance();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final client = Provider.of<Client>(context, listen: false);
+    final databaseService = Provider.of<DatabaseService>(context, listen: false);
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
 
-    // Step 1: Prompt user to enter their phone number with IntlPhoneField
-    String? phoneNumber = await showDialog<String>(
+    // Confirm deletion with a simple dialog
+    final shouldDelete = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        String formattedPhoneNumber = ''; // Will store the formatted phone number with country code
-        return AlertDialog(
-          title: Text('Confirm Phone Number'),
-          content: IntlPhoneField(
-            decoration: InputDecoration(labelText: 'Enter your phone number'),
-            initialCountryCode: 'US', // Change this to a default country code
-            onChanged: (phone) {
-              formattedPhoneNumber = phone.completeNumber; // Capture full phone number with country code
-            },
+      builder: (_) => AlertDialog(
+        title: Text('Delete Account'),
+        content: Text('Are you sure you want to delete your account? This will permanently delete your account and remove you from all contacts and groups.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete Account', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    // If user canceled or chose "No," just return
+    if (shouldDelete != true) {
+      return;
+    }
+
+    // Grab the phone number from shared prefs
+    final phoneNumber = sharedPreferences.getString('phone_number');
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Phone number not found, is this a beta/test account?')),
+      );
+      return;
+    }
+
+    try {
+      // Attempt to request deactivation
+      final requestSuccess = await authProvider.requestDeactivateAccount(phoneNumber);
+      if (!requestSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to request account deactivation')),
+        );
+        return;
+      }
+
+      // Prompt user for the confirmation code that was just sent
+      final codeController = TextEditingController();
+      final smsCode = await showDialog<String>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text('Confirm Deletion'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Enter the confirmation code sent to your phone'),
+              TextField(
+                controller: codeController,
+                decoration: InputDecoration(labelText: 'SMS Code'),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -149,78 +207,65 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Text('Cancel'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, formattedPhoneNumber),
-              child: Text('Continue'),
+              onPressed: () => Navigator.pop(context, codeController.text),
+              child: Text('Delete Account', style: TextStyle(color: Colors.red)),
             ),
           ],
-        );
-      },
-    );
-
-    if (phoneNumber == null || phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Phone number is required for account deactivation')),
-      );
-      return;
-    }
-
-    // Step 2: Request deactivation via SMS
-    final requestSuccess = await authProvider.requestDeactivateAccount(phoneNumber);
-    if (!requestSuccess) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to request account deactivation')),
-      );
-      return;
-    }
-
-    // Step 3: Prompt user to enter the SMS code
-    final codeController = TextEditingController();
-    final smsCode = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Confirm Deactivation'),
-        content: TextField(
-          controller: codeController,
-          decoration: InputDecoration(labelText: 'Enter SMS code'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, codeController.text),
-            child: Text('Delete (Permanently)', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (smsCode == null || smsCode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('SMS code is required to confirm deactivation')),
       );
-      return;
-    }
 
-    // Step 4: Confirm deactivation with the entered code
-    final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
-    if (confirmSuccess) {
-      print("Account deactivated successfully via SMS.");
-      await sharedPreferences.remove('userId'); // double check
-      await sharedPreferences.clear();
+      // If user canceled or code is empty, abort
+      if (smsCode == null || smsCode.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Confirmation code was not entered')),
+        );
+        return;
+      }
+
+      // Try confirming account deactivation
+      final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
+      if (!confirmSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to confirm account deactivation. Please try again.')),
+        );
+        return;
+      }
+
+      // If successful, stop location tracking, syncing, etc.
       locationManager.stopTracking();
+      await syncManager.clearAllState();
+      await syncManager.stopSync();
 
+      // Clear your local database
+      await databaseService.deleteAndReinitialize();
+
+      // Clear all shared preferences
+      await sharedPreferences.clear();
+
+      try {
+        if (client.isLogged()) {
+          await client.logout();
+          print("Logout successful");
+        } else {
+          print("Client already logged out");
+        }
+      } catch (e) {
+        print("Error during logout: $e");
+      }
+
+      // Navigate the user back to the welcome screen
       Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
-    } else {
+
+    } catch (e) {
+      print('Error during deactivation request: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to confirm account deactivation')),
+        SnackBar(content: Text('Failed to start account deactivation process')),
       );
     }
   }
 
 
-  Future<void> _deactivateAccount() async {
+  Future<void> _deleteAccount() async {
 
     // first check which server in use
     final client = Provider.of<Client>(context, listen: false);
@@ -241,8 +286,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Deactivate Account'),
-        content: Text('Are you sure you want to deactivate your account? This will attempt to erase all locations ever sent, and permanently deactivate your account. This action is irreversible.'),
+        title: Text('Delete Account'),
+        content: Text('Are you sure you want to delete your account? This will permanently delete your account, remove you from all groups and contacts, and delete your account information. This action is irreversible.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -250,7 +295,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Deactivate Account', style: TextStyle(color: Colors.red)),
+            child: Text('Delete Account', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -263,7 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final password = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Confirm Deactivation', style: TextStyle(color: Colors.red)),
+        title: Text('Confirm Deletion', style: TextStyle(color: Colors.red)),
         content: TextField(
           controller: passwordController,
           obscureText: true,
@@ -276,7 +321,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, passwordController.text),
-            child: Text('Deactivate', style: TextStyle(color: Colors.red)),
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -307,14 +352,33 @@ class _SettingsPageState extends State<SettingsPage> {
       );
 
       if (response.statusCode == 200) {
-        print("Account deactivated successfully.");
+        print("Account successfull deleted.");
+        final client = Provider.of<Client>(context, listen: false);
+        final databaseService = Provider.of<DatabaseService>(context, listen: false);
+        final syncManager = Provider.of<SyncManager>(context, listen: false);
+
+        final locationManager = Provider.of<LocationManager>(context, listen: false);
+        locationManager.stopTracking();
+        syncManager.stopSync();
+        databaseService.deleteAndReinitialize();
         await sharedPreferences.clear();
+
+
+        try {
+          if (client.isLogged()) {
+            client.logout();
+          } else {
+            // do nothing
+          }
+        } catch (e) {
+          print("error logging out post account deletion: $e");
+        }
 
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } else {
-        print("Failed to deactivate account: ${response.body}");
+        print("Failed to delete account: ${response.body}");
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to deactivate account: ${response.body}')),
+          SnackBar(content: Text('Failed to delete account: ${response.body}')),
         );
       }
     } catch (e) {
@@ -476,9 +540,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   Center(
                     child: TextButton(
-                      onPressed: _deactivateAccount,
+                      onPressed: _deleteAccount,
                       child: Text(
-                        'Deactivate Account',
+                        'Delete Account',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.red,
