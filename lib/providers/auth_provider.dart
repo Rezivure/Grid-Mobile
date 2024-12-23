@@ -36,9 +36,9 @@ class AuthProvider with ChangeNotifier {
     _isLoggedIn = true;
 
 
-    //final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     //await prefs.setBool('isLoggedIn', _isLoggedIn);
-    //await prefs.setString('token', _token!);
+    await prefs.setString('token', jwt);
 
     try {
       // Check if we can communicate with the Matrix server
@@ -85,7 +85,12 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> requestDeactivateAccount(String phoneNumber) async {
-    var curUser = localpart(_userId!);
+    var clientID = client.userID;
+    if (clientID == null) {
+      print("Error");
+      return false;
+    }
+    var curUser = localpart(clientID);
     try {
       final response = await http.post(
         Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/request'),
@@ -116,7 +121,12 @@ class AuthProvider with ChangeNotifier {
 
 
   Future<bool> confirmDeactivateAccount(String phoneNumber, String code) async {
-    var username = localpart(_userId!);
+    var clientID = client.userID;
+    if (clientID == null) {
+      print("Error");
+      return false;
+    }
+    var username = localpart(clientID);
     try {
       final response = await http.post(
         Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/verify'),
@@ -158,9 +168,9 @@ class AuthProvider with ChangeNotifier {
 
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
-        String jwt = data['jwt'];  // Get the JWT from the middleware
-
-        // Authenticate using the JWT instead of a regular token
+        String jwt = data['jwt'];
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('phone_number', phoneNumber);
         await authenticateWithJWT(jwt);
       } else {
         throw Exception('Login verification failed');
@@ -188,7 +198,8 @@ class AuthProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
         String jwt = data['jwt'];
-
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('phone_number', phoneNumber);
         await authenticateWithJWT(jwt);
       } else {
         throw Exception('Verification failed');
