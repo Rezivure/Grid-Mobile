@@ -38,7 +38,7 @@ class AuthProvider with ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     //await prefs.setBool('isLoggedIn', _isLoggedIn);
-    await prefs.setString('token', jwt);
+    //await prefs.setString('token', jwt);
 
     try {
       // Check if we can communicate with the Matrix server
