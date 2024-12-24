@@ -28,14 +28,14 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
     <string>We need camera access to scan QR codes.</string>
-    <key>NSMotionUsageDescription</key>
-    <string>Grid needs access to your motion to efficiently update your location. Your location data is end-to-end encrypted.</string>
+     <key>NSMotionUsageDescription</key>
+    <string>Grid needs access to your motion to efficiently update your location, such as determining whether you are walking, driving, or stationary to optimize battery usage and location updates. Your location data is end-to-end encrypted and never stored.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Grid needs access to your location to send updates to your Grid in the background. Your location data is end-to-end encrypted.</string>
+	<string>Grid needs access to your location to send updates to your Grid in the background, such as sharing your real-time location with family during a trip or updating group members on your current position. Your location data is end-to-end encrypted and never stored.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Grid needs access to your location to send updates to your Grid in the background. Your location data is end-to-end encrypted.</string>
+	<string>Grid uses your location to continuously share your location with your selected contacts or groups, even when the app is not open, such as allowing friends to follow your trip in real time. Your location is end-to-end encrypted and never stored.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Grid needs access to your location when the app is open. Your location data is end-to-end encrypted.</string>
+	<string>Grid uses your location to share your current location with your selected contacts or groups, such as letting your family know where you are during an outing. Your location is end-to-end encrypted and never stored.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
