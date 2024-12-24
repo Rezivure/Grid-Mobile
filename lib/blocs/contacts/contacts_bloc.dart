@@ -89,7 +89,7 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
         .where((contact) => contact.userId != currentUserId)
         .map((contact) => ContactDisplay(
       userId: contact.userId,
-      displayName: contact.displayName ?? 'Unknown User',
+      displayName: contact.displayName ?? 'Deleted User',
       avatarUrl: contact.avatarUrl,
       lastSeen: 'Offline',
     ))

@@ -282,8 +282,20 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
       // Filter members based on relationships
       final memberIds = relationships.map((r) => r['userId'] as String).toSet();
-      final filteredMembers = members.where(
+      var filteredMembers = members.where(
               (user) => memberIds.contains(user.userId)
+      ).toList();
+
+      filteredMembers = filteredMembers.map((u) =>
+      (u.displayName?.isEmpty ?? true)
+          ? GridUser(
+        userId: u.userId,
+        displayName: 'Deleted User',
+        avatarUrl: u.avatarUrl,
+        lastSeen: u.lastSeen,
+        profileStatus: u.profileStatus,
+      )
+          : u
       ).toList();
 
       emit(GroupsLoaded(
