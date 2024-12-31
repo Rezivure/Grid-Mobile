@@ -10,6 +10,7 @@ import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -32,6 +33,7 @@ class SyncManager with ChangeNotifier {
   final RoomRepository roomRepository;
   final UserRepository userRepository;
   final LocationRepository locationRepository;
+  final UserLocationProvider userLocationProvider;
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
   final GroupsBloc groupsBloc;
@@ -54,7 +56,8 @@ class SyncManager with ChangeNotifier {
       this.mapBloc,
       this.contactsBloc,
       this.locationRepository,
-      this.groupsBloc
+      this.groupsBloc,
+      this.userLocationProvider
       );
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
@@ -250,6 +253,7 @@ class SyncManager with ChangeNotifier {
           print("Cleaning up user completely: $participantId");
           await locationRepository.deleteUserLocations(participantId);
           await userRepository.deleteUser(participantId);
+          userLocationProvider.removeUserLocation(participantId);
           mapBloc.add(RemoveUserLocation(participantId));
         }
       }
@@ -388,23 +392,41 @@ class SyncManager with ChangeNotifier {
   Future<void> handleNewGroupCreation(String roomId) async {
     print("SyncManager: Handling new group creation for room $roomId");
 
-    final matrixRoom = client.getRoomById(roomId);
-    if (matrixRoom != null) {
-      // Process the room immediately
-      await initialProcessRoom(matrixRoom);
+    try {
+      final matrixRoom = client.getRoomById(roomId);
+      if (matrixRoom != null) {
+        // First sync to ensure we have latest state
+        await client.sync(timeout: 10000);
 
-      // Force multiple group refreshes
-      groupsBloc.add(RefreshGroups());
+        // Process the room and wait for completion
+        await initialProcessRoom(matrixRoom);
 
-      // Add staggered refreshes
-      Future.delayed(const Duration(milliseconds: 500), () {
-        groupsBloc.add(LoadGroups());
-      });
+        // Verify room was processed
+        final processedRoom = await roomRepository.getRoomById(roomId);
+        print("Room processed status: ${processedRoom != null}");
 
-      Future.delayed(const Duration(milliseconds: 1000), () {
+        // Force immediate refresh
         groupsBloc.add(RefreshGroups());
-        groupsBloc.add(LoadGroups());
-      });
+
+        // Staggered refreshes with verification
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          final room = await roomRepository.getRoomById(roomId);
+          if (room != null) {
+            groupsBloc.add(LoadGroups());
+            groupsBloc.add(RefreshGroups());
+          }
+        });
+
+        Future.delayed(const Duration(seconds: 1), () async {
+          final room = await roomRepository.getRoomById(roomId);
+          if (room != null) {
+            groupsBloc.add(LoadGroups());
+            groupsBloc.add(RefreshGroups());
+          }
+        });
+      }
+    } catch (e) {
+      print("Error in handleNewGroupCreation: $e");
     }
   }
 
@@ -418,13 +440,24 @@ class SyncManager with ChangeNotifier {
       bool isInitialJoin = false;
       bool isGroupRoom = false;
 
+      final room = await roomRepository.getRoomById(roomId);
+      isInitialJoin = room == null;  // Keep this for immediate contact inserts
+
+      // Also check for actual join events (e.g., accepting invite)
       for (var event in stateEvents) {
-        if (event.type == 'm.room.member' &&
-            event.stateKey == client.userID &&
-            event.content['membership'] == 'join' &&
-            event.prevContent?['membership'] != 'join') {
-          isInitialJoin = true;
-          break;
+        if (event.type == 'm.room.member') {
+          final membershipStatus = event.content['membership'] as String?;
+          final prevMembership = event.prevContent?['membership'] as String?;
+
+          // Consider it a join if:
+          // 1. New member joining (membership = join, prev != join)
+          // 2. NOT someone being kicked (prev = join, membership = leave)
+          if (membershipStatus == 'join' &&
+              prevMembership != 'join' &&
+              !(prevMembership == 'join' && membershipStatus == 'leave')) {
+            isInitialJoin = true;
+            break;
+          }
         }
       }
 
@@ -454,7 +487,13 @@ class SyncManager with ChangeNotifier {
       for (var event in stateEvents) {
         print("Processing event type: ${event.type}");
         if (event.type == 'm.room.member') {
-          await _processMemberStateEvent(roomId, event);
+          // Don't process member events for kicked users
+          final membershipStatus = event.content['membership'] as String?;
+          final prevMembership = event.prevContent?['membership'] as String?;
+
+          if (!(prevMembership == 'join' && membershipStatus == 'leave')) {
+            await _processMemberStateEvent(roomId, event);
+          }
         } else {
           // Process other state events through message processor
           await messageProcessor.processEvent(roomId, event).then((message) {

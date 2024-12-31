@@ -275,6 +275,7 @@ class RoomService {
       print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
+        print("trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
         String leaveReason = '';

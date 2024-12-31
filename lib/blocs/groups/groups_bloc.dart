@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
@@ -11,6 +12,7 @@ import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 
+
 import '../../models/grid_user.dart';
 
 class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
@@ -18,6 +20,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   final RoomRepository roomRepository;
   final UserRepository userRepository;
   final LocationRepository locationRepository;
+  final UserLocationProvider userLocationProvider;
   final MapBloc mapBloc;
   List<Room> _allGroups = [];
   Timer? _memberUpdateDebouncer;
@@ -29,6 +32,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     required this.userRepository,
     required this.mapBloc,
     required this.locationRepository,
+    required this.userLocationProvider,
   }) : super(GroupsInitial()) {
     on<LoadGroups>(_onLoadGroups);
     on<RefreshGroups>(_onRefreshGroups);
@@ -254,16 +258,20 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       final currentState = state as GroupsLoaded?;
       final existingStatuses = currentState?.membershipStatuses ?? {};
 
-      // Get all relationships and current members
+      // Get all relationships including invited members
       final relationships = await userRepository.getUserRelationshipsForRoom(event.roomId);
       final members = await userRepository.getGroupParticipants();
 
       // Build status map starting with existing statuses
       final Map<String, String> membershipStatuses = Map.from(existingStatuses);
 
+      // Keep track of all member IDs including invited ones
+      final Set<String> allMemberIds = {};
+
       // Process each relationship and update status
       for (var relationship in relationships) {
         final userId = relationship['userId'] as String;
+        allMemberIds.add(userId);  // Add to our tracking set
 
         // First check Matrix status
         final matrixStatus = await roomService.getUserRoomMembership(
@@ -280,12 +288,38 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         }
       }
 
-      // Filter members based on relationships
-      final memberIds = relationships.map((r) => r['userId'] as String).toSet();
+      // Filter members based on all relationships (including invites)
       var filteredMembers = members.where(
-              (user) => memberIds.contains(user.userId)
+              (user) => allMemberIds.contains(user.userId)
       ).toList();
 
+      // Add any invited users that might not be in the members list yet
+      for (var userId in allMemberIds) {
+        if (!filteredMembers.any((m) => m.userId == userId)) {
+          // Try to get user profile for invited user
+          try {
+            final profileInfo = await roomService.client.getUserProfile(userId);
+            filteredMembers.add(GridUser(
+              userId: userId,
+              displayName: profileInfo.displayname ?? userId,
+              avatarUrl: profileInfo.avatarUrl?.toString(),
+              lastSeen: DateTime.now().toIso8601String(),
+              profileStatus: "",
+            ));
+          } catch (e) {
+            print('Error fetching profile for invited user $userId: $e');
+            // Add basic user info if profile fetch fails
+            filteredMembers.add(GridUser(
+              userId: userId,
+              displayName: userId,
+              lastSeen: DateTime.now().toIso8601String(),
+              profileStatus: "",
+            ));
+          }
+        }
+      }
+
+      // Handle deleted users
       filteredMembers = filteredMembers.map((u) =>
       (u.displayName?.isEmpty ?? true)
           ? GridUser(
@@ -403,17 +437,28 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
   Future<void> handleMemberKicked(String roomId, String userId) async {
     try {
-      // Get current state to preserve existing statuses
       final currentState = state as GroupsLoaded?;
       if (currentState == null) return;
 
-      // Create a copy of existing status map and update kicked user
-      final Map<String, String> updatedStatuses = Map.from(currentState.membershipStatuses ?? {});
+      // Create a copy of groups and update the specific room
+      final updatedGroups = List<Room>.from(currentState.groups);
+      final roomIndex = updatedGroups.indexWhere((r) => r.roomId == roomId);
+      if (roomIndex != -1) {
+        final room = updatedGroups[roomIndex];
+        final updatedMembers = room.members.where((id) => id != userId).toList();
+        updatedGroups[roomIndex] = room.copyWith(
+            members: updatedMembers,
+            lastActivity: DateTime.now().toIso8601String()
+        );
+      }
+
+      // Update status map
+      final updatedStatuses = Map<String, String>.from(currentState.membershipStatuses ?? {});
       updatedStatuses[userId] = 'leave';
 
       // Emit immediate update for kicked user
       emit(GroupsLoaded(
-        currentState.groups,
+        updatedGroups,
         selectedRoomId: currentState.selectedRoomId,
         selectedRoomMembers: currentState.selectedRoomMembers?.where((m) => m.userId != userId).toList(),
         membershipStatuses: updatedStatuses,
@@ -441,11 +486,12 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       final userRooms = await roomRepository.getUserRooms(userId);
       final directRoom = await userRepository.getDirectRoomForContact(userId);
       if (userRooms.isEmpty && directRoom == null) {
-        await Future.wait([
-          locationRepository.deleteUserLocations(userId),
-          userRepository.deleteUser(userId)
-        ]);
-        mapBloc.add(RemoveUserLocation(userId));
+        final wasDeleted = await locationRepository.deleteUserLocationsIfNotInRooms(userId);
+        if (wasDeleted) {
+          userLocationProvider.removeUserLocation(userId);
+          mapBloc.add(RemoveUserLocation(userId));
+        }
+        await userRepository.deleteUser(userId);
       }
 
       // Final refresh to ensure everything is in sync
