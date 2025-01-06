@@ -21,7 +21,10 @@ class UserService {
   UserService(this.client, this.locationRepository);
 
   Future<bool> userExists(String userId) async {
+    print("IN USER EXISTS");
+    print(userId);
     try {
+      print("Checking if $userId exists.");
       final response = await client.getUserProfile(userId);
       return response != null;
     } catch (e) {

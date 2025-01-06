@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -93,8 +92,13 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } else {
       username = inputText;
     }
-    var normalized = normalizeUser(username);
-    String? normalizedUserId = normalized['matrixUserId'];
+
+
+    var usernameLowercase = username.toLowerCase();
+    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    print(homeserver);
+    final normalizedUserId = '@$usernameLowercase:$homeserver';
+    print(normalizedUserId);
 
     if (username.isNotEmpty) {
       if (mounted) {
@@ -212,9 +216,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
-    final usernameLowercase = username.toLowerCase();
-    final doesExist = await this.widget.userService.userExists('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
-    final isSelf = await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}');
+    var usernameLowercase = username.toLowerCase();
+    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    final fullMatrixId = '@$usernameLowercase:$homeserver';
+    final doesExist = await this.widget.userService.userExists(fullMatrixId);
+    final isSelf = await widget.roomService.getMyUserId() == (fullMatrixId);
 
     if (!doesExist || isSelf) {
       setState(() {
