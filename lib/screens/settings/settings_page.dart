@@ -503,6 +503,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            Divider(height: 16),
             Container(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
