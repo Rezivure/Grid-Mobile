@@ -136,7 +136,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final isDarkMode = theme.brightness == Brightness.dark;
 
     return BlocListener<MapBloc, MapState>(
-      listenWhen: (previous, current) => previous.center != current.center,
+      listenWhen: (previous, current) =>
+      previous.moveCount != current.moveCount && current.center != null,
       listener: (context, state) {
         if (state.center != null && _isMapReady) {
           setState(() {
@@ -164,7 +165,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 initialCenter: LatLng(51.5, -0.09),
                 initialZoom: _zoom,
                 initialRotation: 0.0,
-                minZoom: 12,    // Add this line
+                minZoom: 7,
                 maxZoom: 18,
                 interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
                 onMapReady: () => setState(() => _isMapReady = true),
