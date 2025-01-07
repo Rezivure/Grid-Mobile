@@ -21,6 +21,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 
+
 class MapTab extends StatefulWidget {
   final LatLng? friendLocation;
   const MapTab({this.friendLocation, Key? key}) : super(key: key);
@@ -59,14 +60,20 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _loadMapProvider();
   }
 
-  void _initializeServices() {
+  Future<void> _initializeServices() async {
     _roomService = context.read<RoomService>();
     _userService = context.read<UserService>();
     _locationManager = context.read<LocationManager>();
     _syncManager = context.read<SyncManager>();
 
     _syncManager.initialize();
-    _locationManager.startTracking();
+
+    final prefs = await SharedPreferences.getInstance();
+    final isIncognitoMode = prefs.getBool('incognito_mode') ?? false;
+
+    if (!isIncognitoMode) {
+      _locationManager.startTracking();
+    }
   }
 
   @override
@@ -136,7 +143,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final isDarkMode = theme.brightness == Brightness.dark;
 
     return BlocListener<MapBloc, MapState>(
-      listenWhen: (previous, current) => previous.center != current.center,
+      listenWhen: (previous, current) =>
+      previous.moveCount != current.moveCount && current.center != null,
       listener: (context, state) {
         if (state.center != null && _isMapReady) {
           setState(() {
@@ -164,7 +172,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 initialCenter: LatLng(51.5, -0.09),
                 initialZoom: _zoom,
                 initialRotation: 0.0,
-                minZoom: 12,    // Add this line
+                minZoom: 5,
                 maxZoom: 18,
                 interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
                 onMapReady: () => setState(() => _isMapReady = true),

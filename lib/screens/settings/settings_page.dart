@@ -26,11 +26,44 @@ class _SettingsPageState extends State<SettingsPage> {
   String? identityKey;
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
+  bool _incognitoMode = false;
+
 
   @override
   void initState() {
     super.initState();
     _getDeviceAndIdentityKey();
+    _loadIncognitoState();
+  }
+
+  Future<void> _loadIncognitoState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _incognitoMode = prefs.getBool('incognito_mode') ?? false;
+    });
+  }
+
+  Future<void> _toggleIncognitoMode(bool value) async {
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      _incognitoMode = value;
+    });
+
+    await prefs.setBool('incognito_mode', value);
+
+    if (value) {
+      locationManager.stopTracking();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Your location is no longer being shared.')),
+      );
+    } else {
+      locationManager.startTracking();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Your location is being shared with trusted contacts.')),
+      );
+    }
   }
 
   Future<void> _getDeviceAndIdentityKey() async {
@@ -352,7 +385,7 @@ class _SettingsPageState extends State<SettingsPage> {
       );
 
       if (response.statusCode == 200) {
-        print("Account successfull deleted.");
+        print("Account successfully deleted.");
         final client = Provider.of<Client>(context, listen: false);
         final databaseService = Provider.of<DatabaseService>(context, listen: false);
         final syncManager = Provider.of<SyncManager>(context, listen: false);
@@ -468,6 +501,59 @@ class _SettingsPageState extends State<SettingsPage> {
                 fontSize: 20,
                 color: colorScheme.onBackground,
                 fontWeight: FontWeight.bold,
+              ),
+            ),
+            Divider(height: 16),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.visibility_off,
+                        color: _incognitoMode
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Incognito Mode',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            'Stop sharing location.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _incognitoMode,
+                    onChanged: _toggleIncognitoMode,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
               ),
             ),
             _buildInfoBubble('Device ID ', deviceID ?? 'Loading...'),

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
 
 class UserLocationProvider with ChangeNotifier {
   final Map<String, UserLocation> _userLocations = {};
   final LocationRepository locationRepository;
+  final UserRepository userRepository;
 
-  UserLocationProvider(this.locationRepository) {
+  UserLocationProvider(this.locationRepository, this.userRepository) {
     _initializeLocations();
     _listenForDatabaseUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -40,9 +42,23 @@ class UserLocationProvider with ChangeNotifier {
   }
 
   void _listenForDatabaseUpdates() {
-    locationRepository.locationUpdates.listen((location) {
-      _userLocations[location.userId] = location;
-      notifyListeners();
+    locationRepository.locationUpdates.listen((location) async {
+      try {
+        // Check if user exists in any rooms before updating location
+        final userRooms = await userRepository.getUserRooms(location.userId);
+        final directRoom = await userRepository.getDirectRoomForContact(location.userId);
+
+        if (userRooms.isNotEmpty || directRoom != null) {
+          _userLocations[location.userId] = location;
+          notifyListeners();
+        } else {
+          // If user doesn't exist in any rooms, remove from cache
+          _userLocations.remove(location.userId);
+          notifyListeners();
+        }
+      } catch (e) {
+        print("Error in location update listener: $e");
+      }
     });
   }
 
@@ -59,6 +75,11 @@ class UserLocationProvider with ChangeNotifier {
 
   void debugUserLocations() {
     print("DEBUG _userLocations: ${_userLocations.keys.toList()}");
+  }
+
+  void removeUserLocation(String userId) {
+    _userLocations.remove(userId);
+    notifyListeners();
   }
 
   void clearAllLocations() {
