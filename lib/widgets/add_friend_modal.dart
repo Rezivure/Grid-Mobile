@@ -96,9 +96,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
 
     var usernameLowercase = username.toLowerCase();
     final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    print(homeserver);
     final normalizedUserId = '@$usernameLowercase:$homeserver';
-    print(normalizedUserId);
 
     if (username.isNotEmpty) {
       if (mounted) {
