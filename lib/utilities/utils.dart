@@ -59,28 +59,7 @@ String timeAgo(DateTime lastSeen) {
   }
 }
 
-/// Normalizes a username and constructs a Matrix-compatible user ID.
-///
-/// Returns a Map with `matrixUserId` and `displayUsername`.
-Map<String, String> normalizeUser(String username) {
-  // Ensure the username is trimmed and lowercase
-  String normalizedUserId = username.trim().toLowerCase();
 
-  // Construct the Matrix-compatible user ID
-  String matrixUserId = normalizedUserId.startsWith('@')
-      ? normalizedUserId
-      : '@$normalizedUserId:${dotenv.env['HOMESERVER']}';
-
-  // Extract the display username
-  String displayUsername = normalizedUserId.startsWith('@')
-      ? normalizedUserId.substring(1).split(':').first
-      : normalizedUserId;
-
-  return {
-    'matrixUserId': matrixUserId,
-    'displayUsername': displayUsername,
-  };
-}
 
 /// Utility function to check if a room is a direct room based on its name.
 /// Assumes direct room names follow the format: "Grid:Direct:<user1>:<user2>"

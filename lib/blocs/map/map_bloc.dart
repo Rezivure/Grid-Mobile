@@ -100,10 +100,13 @@ class MapBloc extends Bloc<MapEvent, MapState> {
       if (userLocationData != null) {
         print("New center: ${userLocationData.position}");
 
+
+
         // Force map update with two-step emit
         emit(state.copyWith(center: null));
         emit(state.copyWith(
             center: userLocationData.position,
+            moveCount: state.moveCount + 1,
             isLoading: false
         ));
       } else {

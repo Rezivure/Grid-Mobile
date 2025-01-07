@@ -101,11 +101,11 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),
         ChangeNotifierProvider(
-          create: (context) => UserLocationProvider(context.read<LocationRepository>()),
+          create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
         ChangeNotifierProvider(
-          create: (context) => UserLocationProvider(context.read<LocationRepository>()),
+          create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
         ),
 
         // Provide the LocationManager
@@ -143,6 +143,8 @@ void main() async {
               roomService: context.read<RoomService>(),
               userRepository: context.read<UserRepository>(),
               mapBloc: context.read<MapBloc>(),
+              locationRepository: context.read<LocationRepository>(),
+              userLocationProvider: context.read<UserLocationProvider>(),
             ),
           ),
           BlocProvider<GroupsBloc>(
@@ -152,6 +154,7 @@ void main() async {
               userRepository: context.read<UserRepository>(),
               mapBloc: context.read<MapBloc>(),
               locationRepository: context.read<LocationRepository>(),
+              userLocationProvider: context.read<UserLocationProvider>(),
             ),
           ),
           ChangeNotifierProxyProvider3<MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
@@ -165,6 +168,7 @@ void main() async {
               context.read<ContactsBloc>(),
               locationRepository,
               context.read<GroupsBloc>(),
+              context.read<UserLocationProvider>(),
             )..startSync(),
             update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
             previous ?? SyncManager(
@@ -177,6 +181,7 @@ void main() async {
               contactsBloc,
               locationRepository,
               groupsBloc,
+              context.read<UserLocationProvider>(),
             )..startSync(),
           ),
         ],

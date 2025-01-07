@@ -67,8 +67,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       username = inputText;
     }
 
-    var normalized = normalizeUser(username);
-    String? normalizedUserId = normalized['matrixUserId'];
+
+    var usernameLowercase = username.toLowerCase();
+    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    final fullMatrixId = '@$usernameLowercase:$homeserver';
 
     if (username.isEmpty) {
       if (mounted) {
@@ -91,7 +93,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
 
       // check if inviting self
       final usernameLowercase = username.toLowerCase();
-      final isSelf = (await widget.roomService.getMyUserId() == ('@$usernameLowercase:${dotenv.env['HOMESERVER']}'));
+      final isSelf = (await widget.roomService.getMyUserId() == fullMatrixId);
       if (isSelf) {
         if (mounted) {
           setState(() {
@@ -138,7 +140,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Verify user exists
-      if (!await widget.userService.userExists(normalizedUserId!)) {
+      if (!await widget.userService.userExists(fullMatrixId!)) {
         if (mounted) {
           setState(() {
             _contactError = 'The user $username does not exist.';
@@ -149,7 +151,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Check if already in group
-      if (await widget.roomService.isUserInRoom(widget.roomId, normalizedUserId)) {
+      if (await widget.roomService.isUserInRoom(widget.roomId, fullMatrixId)) {
         if (mounted) {
           setState(() {
             _contactError = 'The user $username is already in the group.';
@@ -160,10 +162,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Send the matrix invite
-      await widget.roomService.client.inviteUser(widget.roomId, normalizedUserId);
+      await widget.roomService.client.inviteUser(widget.roomId, fullMatrixId);
 
       // Let GroupsBloc handle the state updates
-      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, normalizedUserId);
+      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, fullMatrixId);
 
       if (widget.onInviteSent != null) {
         widget.onInviteSent!();
@@ -172,7 +174,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invite sent successfully to ${localpart(normalizedUserId)}.')),
+          SnackBar(content: Text('Invite sent successfully to ${localpart(fullMatrixId)}.')),
         );
       }
 

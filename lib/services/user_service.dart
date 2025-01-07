@@ -22,6 +22,7 @@ class UserService {
 
   Future<bool> userExists(String userId) async {
     try {
+      print("Checking if $userId exists.");
       final response = await client.getUserProfile(userId);
       return response != null;
     } catch (e) {

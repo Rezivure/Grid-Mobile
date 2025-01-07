@@ -55,14 +55,19 @@ class RoomService {
     });
   }
 
+
+  String getMyHomeserver() {
+    return client.homeserver.toString();
+  }
+
  /// create direct grid room (contact)
-  Future<bool> createRoomAndInviteContact(String username) async {
-    // Use the normalizeUser utility function
-    final normalizedData = normalizeUser(username);
-    final String matrixUserId = normalizedData['matrixUserId']!;
+  Future<bool> createRoomAndInviteContact(String matrixUserId) async {
+
+
 
     // Check if the user exists
     try {
+      print(matrixUserId);
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
         return false;
@@ -275,6 +280,7 @@ class RoomService {
       print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
+        print("trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
         String leaveReason = '';
@@ -468,7 +474,8 @@ class RoomService {
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
-          final fullUsername = '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
+          id = id.toLowerCase();
+          var fullUsername = '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
           await client.inviteUser(roomId, fullUsername);
         }
       }

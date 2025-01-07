@@ -53,6 +53,33 @@ class LocationRepository {
     print("Deleted all location data for user: $userId");
   }
 
+  /// Delete location data for a user, but only if they're not in any other rooms
+  // In LocationRepository
+  Future<bool> deleteUserLocationsIfNotInRooms(String userId) async {
+    print("Checking if we should delete location data for user: $userId");
+    final db = await _databaseService.database;
+
+    final otherRooms = await db.query(
+      'UserRelationships',
+      where: 'userId = ?',
+      whereArgs: [userId],
+    );
+
+    if (otherRooms.isEmpty) {
+      print("User $userId not in any rooms, deleting location data");
+      await db.delete(
+        'UserLocations',
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
+      print("Deleted all location data for user: $userId");
+      return true;  // Return true if we deleted
+    } else {
+      print("User $userId still in ${otherRooms.length} rooms, keeping location data");
+      return false;  // Return false if we kept the data
+    }
+  }
+
   /// Fetch the latest location for a given user
   Future<UserLocation?> getLatestLocation(String userId) async {
     final db = await _databaseService.database;
