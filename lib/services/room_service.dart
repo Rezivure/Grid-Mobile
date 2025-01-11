@@ -8,6 +8,7 @@ import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 
@@ -488,6 +489,16 @@ class RoomService {
       return "Error";
     }
     return roomId;
+  }
+
+  void getAndUpdateDisplayName() async {
+
+    final prefs = await SharedPreferences.getInstance();
+    var userID = client.userID ?? "";
+    var displayName = await client.getDisplayName(userID) ?? '';
+    if (displayName != null) {
+      prefs.setString('displayName', displayName);
+    }
   }
 
   void sendLocationEvent(String roomId, bg.Location location) async {
