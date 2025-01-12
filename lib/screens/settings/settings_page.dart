@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:matrix/fake_matrix_api.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -12,8 +11,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:grid_frontend/services/location_manager.dart';
+
 
 
 class SettingsPage extends StatefulWidget {
@@ -31,6 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _userID;
   String? _username;
   String? _displayName;
+  bool _isEditingDisplayName = false;
 
 
   @override
@@ -338,56 +337,18 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: theme.cardColor,
-          title: Text(
-            'Edit Display Name',
-            style: TextStyle(
-              color: theme.textTheme.bodyMedium?.color,
-              fontWeight: FontWeight.bold,
+          title: Text('Edit Display Name'),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: 'Enter your display name',
+              helperText: '- 3-14 characters\n- no special characters',
             ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                decoration: InputDecoration(
-                  hintText: 'Enter your display name',
-                  hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.15)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.15)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: colorScheme.onSurface),
-                  ),
-                  filled: true,
-                  fillColor: theme.cardColor,
-                  helperText: '3-14 characters (no special characters)',
-                  helperStyle: TextStyle(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7)),
-                  errorStyle: TextStyle(color: colorScheme.error),
-                ),
-                autofocus: true,
-                onChanged: (value) {
-                  (context as Element).markNeedsBuild();
-                },
-              ),
-            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                ),
-              ),
+              child: Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -396,34 +357,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Please enter a valid display name (3-14 characters, using only letters, numbers, and _-.)'),
-                      backgroundColor: colorScheme.error,
+                      content: Text(
+                        'Please enter a valid display name (3-14 characters, using only letters, numbers, and _-.).',
+                      ),
                     ),
                   );
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.onSurface,
-                foregroundColor: colorScheme.surface,
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
               child: Text('Save'),
             ),
           ],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: Theme.of(context).brightness == Brightness.dark
-                ? BorderSide(color: theme.colorScheme.surface.withOpacity(0.15))
-                : BorderSide.none,
-          ),
         );
       },
     );
 
     if (newDisplayName != null && newDisplayName.isNotEmpty && isValidName(newDisplayName)) {
+      setState(() {
+        _isEditingDisplayName = true; // Show spinner
+      });
+
       try {
         final client = Provider.of<Client>(context, listen: false);
         final id = client.userID ?? '';
@@ -432,6 +384,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('displayName', newDisplayName);
         }
+
         setState(() {
           _displayName = newDisplayName;
         });
@@ -443,6 +396,10 @@ class _SettingsPageState extends State<SettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to update display name: $e')),
         );
+      } finally {
+        setState(() {
+          _isEditingDisplayName = false; // Hide spinner
+        });
       }
     }
   }
@@ -676,7 +633,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       Positioned(
                         left: (constraints.maxWidth / 2) + (textPainter.width / 2) + 8,
                         top: 4,
-                        child: GestureDetector(
+                        child: _isEditingDisplayName
+                            ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        )
+                            : GestureDetector(
                           onTap: _editDisplayName,
                           child: Icon(
                             Icons.edit,
@@ -685,6 +651,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ),
                       ),
+
                     ],
                   ),
                 );
