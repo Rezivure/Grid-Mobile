@@ -21,6 +21,7 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -38,6 +39,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   late final UserRepository _userRepository;
   late final RoomRepository _roomRepository;
   late final GroupsBloc _groupsBloc;
+  late final SharingPreferencesRepository sharingPreferencesRepository;
 
   SubscreenOption _selectedOption = SubscreenOption.contacts;
   bool _isDropdownExpanded = false;
@@ -57,6 +59,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     _userRepository = context.read<UserRepository>();
     _roomRepository = context.read<RoomRepository>();
     _groupsBloc = context.read<GroupsBloc>();
+    sharingPreferencesRepository = context.read<SharingPreferencesRepository>();
 
     _groupsBloc.add(LoadGroups());
 
@@ -466,6 +469,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
         return ContactsSubscreen(
           roomService: _roomService,
           userRepository: _userRepository,
+          sharingPreferencesRepository: sharingPreferencesRepository,
           scrollController: scrollController,
         );
     }

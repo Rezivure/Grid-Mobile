@@ -16,16 +16,20 @@ import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/contacts/contacts_state.dart';
+import 'contact_profile_modal.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
   final RoomService roomService;
   final UserRepository userRepository;
+  final SharingPreferencesRepository sharingPreferencesRepository;
 
   const ContactsSubscreen({
     required this.scrollController,
     required this.roomService,
     required this.userRepository,
+    required this.sharingPreferencesRepository,
     Key? key,
   }) : super(key: key);
 
@@ -83,6 +87,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   void _onSearchChanged() {
     context.read<ContactsBloc>().add(SearchContacts(_searchController.text));
+  }
+
+  void _showOptionsDialog(ContactDisplay contact) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ContactProfileModal(contact: contact, roomService: widget.roomService, sharingPreferencesRepo: widget.sharingPreferencesRepository),
+    );
   }
 
   List<ContactDisplay> _getContactsWithCurrentLocation(
@@ -147,17 +160,51 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
                         return Slidable(
                           key: ValueKey(contact.userId),
+                          // Swiping right (startActionPane) for "Options"
+                          startActionPane: ActionPane(
+                            motion: const ScrollMotion(),
+                            extentRatio: 0.25,
+                            children: [
+                              CustomSlidableAction(  // Change to CustomSlidableAction
+                                onPressed: (_) {
+                                  _showOptionsDialog(contact);
+                                },
+                                backgroundColor: theme.colorScheme.primary,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.person, color: Colors.white), // Explicitly set icon color
+                                    const SizedBox(height: 4),
+                                    Text('Profile',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                                flex: 1,
+                              ),
+                            ],
+                          ),
+                          // Swiping left (endActionPane) for "Delete"
                           endActionPane: ActionPane(
                             motion: const ScrollMotion(),
+                            extentRatio: 0.25,
                             children: [
-                              SlidableAction(
-                                onPressed: (_) => context
-                                    .read<ContactsBloc>()
-                                    .add(DeleteContact(contact.userId)),
+                              CustomSlidableAction(
+                                onPressed: (_) {
+                                  context.read<ContactsBloc>().add(DeleteContact(contact.userId));
+                                },
                                 backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                icon: Icons.delete,
-                                label: 'Delete',
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.delete, color: Colors.white),
+                                    const SizedBox(height: 4),
+                                    Text('Delete',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                                flex: 1,
                               ),
                             ],
                           ),
@@ -184,6 +231,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                             },
                           ),
                         );
+
                       },
                     );
                   },

@@ -80,7 +80,7 @@ void main() async {
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
   // Initialize services
-  final userService = UserService(client, locationRepository);
+  final userService = UserService(client, locationRepository, sharingPreferencesRepository);
   final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
@@ -145,6 +145,7 @@ void main() async {
               mapBloc: context.read<MapBloc>(),
               locationRepository: context.read<LocationRepository>(),
               userLocationProvider: context.read<UserLocationProvider>(),
+              sharingPreferencesRepository: context.read<SharingPreferencesRepository>(),
             ),
           ),
           BlocProvider<GroupsBloc>(
@@ -169,6 +170,7 @@ void main() async {
               locationRepository,
               context.read<GroupsBloc>(),
               context.read<UserLocationProvider>(),
+              context.read<SharingPreferencesRepository>(),
             )..startSync(),
             update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
             previous ?? SyncManager(
@@ -182,6 +184,7 @@ void main() async {
               locationRepository,
               groupsBloc,
               context.read<UserLocationProvider>(),
+              sharingPreferencesRepository,
             )..startSync(),
           ),
         ],

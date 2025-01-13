@@ -599,6 +599,20 @@ class RoomService {
         print("Grid: Room has ${joinedMembers.length} joined members");
 
         if (joinedMembers.length > 1) {
+
+          if (joinedMembers.length == 2 && room.name.startsWith('Grid:Direct:')) {
+            final myUserId = getMyUserId();
+            var otherUsers = joinedMembers.where((member) =>
+            member.id != myUserId);
+            var otherUser = otherUsers.first.id;
+            final isSharing = await userService.isInSharingWindow(otherUser);
+            if (!isSharing) {
+              print("Grid: Skipping direct room ${room
+                  .id} - not in sharing window with $otherUser");
+              continue;
+            }
+          }
+
           print("Grid: Sending location event to room ${room.id}");
           sendLocationEvent(room.id, location);
           print("Grid: Location event sent successfully");
@@ -664,28 +678,21 @@ class RoomService {
   }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
-    // used in UserInfoBubble
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
     Map<String, Map<String, String>> deviceKeysMap = {};
 
     if (userDeviceKeys != null) {
       for (final deviceKeyEntry in userDeviceKeys) {
         final deviceId = deviceKeyEntry.deviceId;
-
-        // Ensure deviceId is not null before proceeding
         if (deviceId != null) {
-          // Collect all keys for this device, using an empty string if the key is null
-          final deviceKeys = {
+          deviceKeysMap[deviceId] = {
             "curve25519": deviceKeyEntry.keys['curve25519:$deviceId'] ?? "",
             "ed25519": deviceKeyEntry.keys['ed25519:$deviceId'] ?? ""
           };
-
-          // Add this device's keys to the map with deviceId as the key
-          deviceKeysMap[deviceId] = deviceKeys;
         }
       }
     }
-    return deviceKeysMap; // Returns a map of device IDs to their key maps
+    return deviceKeysMap;
   }
 
   Future<void> updateAllUsersDeviceKeys() async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
@@ -21,6 +23,8 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 
+import '../../services/backwards_compatibility_service.dart';
+
 
 class MapTab extends StatefulWidget {
   final LatLng? friendLocation;
@@ -36,6 +40,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   late final RoomService _roomService;
   late final UserService _userService;
   late final SyncManager _syncManager;
+  late final UserRepository userRepository;
+  late final SharingPreferencesRepository sharingPreferencesRepository;
 
   bool _isMapReady = false;
   bool _followUser = true;
@@ -65,6 +71,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _userService = context.read<UserService>();
     _locationManager = context.read<LocationManager>();
     _syncManager = context.read<SyncManager>();
+    userRepository = context.read<UserRepository>();
+    sharingPreferencesRepository = context.read<SharingPreferencesRepository>();
 
     _syncManager.initialize();
 
@@ -89,6 +97,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _syncManager.handleAppLifecycleState(state == AppLifecycleState.resumed);
+  }
+
+  void _backwardsCompatibilityUpdate() async {
+    final backwardsService = BackwardsCompatibilityService(
+      userRepository,
+      sharingPreferencesRepository,
+    );
+
+    await backwardsService.runBackfillIfNeeded();
   }
 
   Future<void> _loadMapProvider() async {
