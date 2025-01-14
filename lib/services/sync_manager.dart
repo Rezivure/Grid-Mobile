@@ -100,6 +100,8 @@ class SyncManager with ChangeNotifier {
         _sinceToken = response.nextBatch;
       }
 
+
+      roomService.getAndUpdateDisplayName();
       _processInitialSync(response);
       await startSync();
       _isInitialized = true; // Only set after successful completion
@@ -108,6 +110,8 @@ class SyncManager with ChangeNotifier {
       // Maybe add some retry logic here
     }
   }
+
+
 
   Future<void> startSync() async {
     if (_isSyncing) return;

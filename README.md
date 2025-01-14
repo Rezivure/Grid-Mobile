@@ -19,7 +19,14 @@
 </div>
 <br/>
 
-Grid is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
+***Grid*** is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
+
+
+
+<div align="center">
+  <img src="https://i.imgur.com/1r3A978.png" alt="appstore" width="75%" />
+</div>
+
 
 ## Features
 
@@ -28,6 +35,13 @@ Grid is a secure, end-to-end encrypted (E2EE) location sharing application integ
 - **Cross-Platform**: Developed with Flutter, Grid runs seamlessly on both Android and iOS devices.
 - **Real-Time Location Sharing**: Share your real-time location with friends or groups, with fine-grained control over who can see your location.
 - **Self-Hosted Capability** Grid is designed to enable users to easily self host their own backend server and map tile provider for complete control over how they share.
+
+
+## Roadmap
+
+<div align="center">
+  <img src="https://i.imgur.com/aKcrMmu.jpeg" alt="appstore" width="75%" />
+</div>
 
 ## Getting Started With the App
 If you wish to develop/contribute PRs to application, follow the steps below:

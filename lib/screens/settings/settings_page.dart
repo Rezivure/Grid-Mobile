@@ -11,8 +11,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:grid_frontend/services/location_manager.dart';
+
 
 
 class SettingsPage extends StatefulWidget {
@@ -27,13 +26,36 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
   bool _incognitoMode = false;
+  String? _userID;
+  String? _username;
+  String? _displayName;
+  bool _isEditingDisplayName = false;
 
 
   @override
   void initState() {
     super.initState();
     _getDeviceAndIdentityKey();
+    _loadUser();
     _loadIncognitoState();
+  }
+
+  Future<void> _loadUser() async {
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _userID = client.userID;
+        _username = _userID?.split(':')[0].replaceAll('@', '') ?? 'Unknown User';
+        _displayName = prefs.getString('displayName') ?? _username;
+      });
+    } catch (e) {
+      print('Error loading user: $e');
+      setState(() {
+        _username = 'Unknown User';
+        _displayName = 'Unknown User';
+      });
+    }
   }
 
   Future<void> _loadIncognitoState() async {
@@ -297,6 +319,91 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _editDisplayName() async {
+    final TextEditingController controller = TextEditingController(text: _displayName ?? _username);
+    final RegExp validCharacters = RegExp(r'^[a-zA-Z0-9_\-\.\s]+$');
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    bool isValidName(String name) {
+      final trimmedName = name.trim();
+      return trimmedName.length >= 3 &&
+          trimmedName.length <= 14 &&
+          validCharacters.hasMatch(name);
+    }
+
+    final String? newDisplayName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: theme.cardColor,
+          title: Text('Edit Display Name'),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: 'Enter your display name',
+              helperText: '- 3-14 characters\n- no special characters',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (isValidName(controller.text)) {
+                  Navigator.pop(context, controller.text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Please enter a valid display name (3-14 characters, using only letters, numbers, and _-.).',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newDisplayName != null && newDisplayName.isNotEmpty && isValidName(newDisplayName)) {
+      setState(() {
+        _isEditingDisplayName = true; // Show spinner
+      });
+
+      try {
+        final client = Provider.of<Client>(context, listen: false);
+        final id = client.userID ?? '';
+        if (id.isNotEmpty) {
+          await client.setDisplayName(id, newDisplayName);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('displayName', newDisplayName);
+        }
+
+        setState(() {
+          _displayName = newDisplayName;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Display name updated successfully')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update display name: $e')),
+        );
+      } finally {
+        setState(() {
+          _isEditingDisplayName = false; // Hide spinner
+        });
+      }
+    }
+  }
+
 
   Future<void> _deleteAccount() async {
 
@@ -476,8 +583,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final client = Provider.of<Client>(context, listen: false);
-    final userName = client.userID?.localpart ?? 'Unknown User';
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -493,14 +599,70 @@ class _SettingsPageState extends State<SettingsPage> {
         color: colorScheme.background,
         child: Column(
           children: [
-            _buildAvatar(userName),
+            _buildAvatar(_username ?? 'Unknown User'),
             SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final textSpan = TextSpan(
+                  text: _displayName ?? 'Unknown User',
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+                final textPainter = TextPainter(
+                  text: textSpan,
+                  textDirection: TextDirection.ltr,
+                );
+                textPainter.layout();
+                return Container(
+                  width: double.infinity,
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Text(
+                          _displayName ?? 'Unknown User',
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: (constraints.maxWidth / 2) + (textPainter.width / 2) + 8,
+                        top: 4,
+                        child: _isEditingDisplayName
+                            ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        )
+                            : GestureDetector(
+                          onTap: _editDisplayName,
+                          child: Icon(
+                            Icons.edit,
+                            size: 20,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+
+                    ],
+                  ),
+                );
+              },
+            ),
             Text(
-              '@$userName',
+              '@$_username',
               style: TextStyle(
-                fontSize: 20,
-                color: colorScheme.onBackground,
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.normal,
               ),
             ),
             Divider(height: 16),
