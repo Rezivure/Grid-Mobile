@@ -307,11 +307,21 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                                     color: colorScheme.onBackground,
                                   ),
                                   onPressed: () {
-                                    Clipboard.setData(
-                                      ClipboardData(
-                                        text: widget.contact.userId.substring(1),
-                                      ),
-                                    );
+
+                                    if (formatUserId(widget.contact.userId).contains(":")) {
+                                      Clipboard.setData(
+                                          ClipboardData(
+                                            text: widget.contact.userId.substring(1),
+                                          ),
+                                      );
+                                    } else {
+                                      Clipboard.setData(
+                                        ClipboardData(
+                                          text: userLocalpart,
+                                        ),
+                                      );
+                                    }
+
                                     setState(() => _copied = true);
                                     Future.delayed(const Duration(seconds: 2), () {
                                       if (mounted) {

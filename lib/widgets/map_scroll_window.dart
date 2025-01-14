@@ -458,6 +458,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             roomService: _roomService,
             userService: _userService,
             userRepository: _userRepository,
+            sharingPreferencesRepository: sharingPreferencesRepository,
             scrollController: scrollController,
             room: _selectedRoom!,
             onGroupLeft: _navigateToContacts,

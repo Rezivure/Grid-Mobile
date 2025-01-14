@@ -224,6 +224,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                             ),
                             subtitle: StatusIndicator(
                               timeAgo: contact.lastSeen,
+                              // TODO: add membership status for invited contacts
                             ),
                             onTap: () {
                               Provider.of<SelectedUserProvider>(context, listen: false)

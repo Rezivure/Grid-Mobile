@@ -113,6 +113,39 @@ class UserService {
     }
   }
 
+  Future<bool> isGroupInSharingWindow(String roomId) async {
+    final sharingPreferences = await sharingPreferencesRepository.getSharingPreferences(roomId, 'group');
+
+    if (sharingPreferences == null) {
+      // If no preferences are set, assume user is not sharing
+      return false;
+    }
+
+    // If "Always Share" is active, no need to check windows
+    if (sharingPreferences.activeSharing) {
+      return true;
+    }
+
+    // Get the current time and day of the week
+    final now = DateTime.now();
+    final currentDay = now.weekday - 1; // Convert to 0=Monday, 6=Sunday
+    final currentTime = TimeOfDay.fromDateTime(now);
+
+    // Check if current time falls within any active sharing windows
+    for (final window in sharingPreferences.shareWindows ?? []) {
+      if (window.isActive && window.days.contains(currentDay)) {
+        if (window.isAllDay ||
+            (window.startTime != null &&
+                window.endTime != null &&
+                isTimeInRange(currentTime, window.startTime!, window.endTime!))) {
+          return true;
+        }
+      }
+    }
+
+    // If no valid sharing window is found
+    return false;
+  }
 
   Future<bool> isInSharingWindow(String userId) async {
     final sharingPreferences = await sharingPreferencesRepository.getSharingPreferences(userId, 'user');

@@ -763,6 +763,20 @@ class SyncManager with ChangeNotifier {
 
         final customRoom = await roomRepository.getRoomById(room.id);
         if (customRoom?.isGroup ?? false) {
+
+          final existingGroupPrefs =
+          await sharingPreferencesRepository.getSharingPreferences(room.id, 'group');
+          if (existingGroupPrefs == null) {
+            final defaultGroupPrefs = SharingPreferences(
+              targetId: room.id,
+              targetType: 'group',
+              activeSharing: true,
+              shareWindows: [],
+            );
+            await sharingPreferencesRepository.setSharingPreferences(
+                defaultGroupPrefs);
+          }
+
           print('Updating group in bloc: ${room.id}');
           groupsBloc.add(UpdateGroup(room.id));
         }

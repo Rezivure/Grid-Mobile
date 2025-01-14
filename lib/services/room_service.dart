@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart';
@@ -152,6 +154,15 @@ class RoomService {
       print('Error in leaveRoom: $e');
       return false;
     }
+  }
+
+  int getUserPowerLevel(String roomId, String userId) {
+    final room = client.getRoomById(roomId);
+    if (room != null) {
+      final powerLevel = room.getPowerLevelByUserId(userId);
+      return powerLevel;
+    }
+    return 0;
   }
 
   List<User> getFilteredParticipants(Room room, String searchText) {
@@ -598,6 +609,11 @@ class RoomService {
             .toList();
         print("Grid: Room has ${joinedMembers.length} joined members");
 
+        if (!joinedMembers.any((member) => member.id == getMyUserId())) {
+          print("Grid: Skipping room ${room.id} - I am not a joined member");
+          continue;
+        }
+
         if (joinedMembers.length > 1) {
 
           if (joinedMembers.length == 2 && room.name.startsWith('Grid:Direct:')) {
@@ -610,10 +626,25 @@ class RoomService {
               print("Grid: Skipping direct room ${room
                   .id} - not in sharing window with $otherUser");
               continue;
+            } else {
+              print("In sharing window");
             }
           }
 
-          print("Grid: Sending location event to room ${room.id}");
+          if (joinedMembers.length >= 2 && room.name.startsWith('Grid:Group:')) {
+
+            final isSharing = await userService.isGroupInSharingWindow(room.id);
+            if (!isSharing) {
+              print("Grid: Skipping group room ${room
+                  .id} - not in sharing window.");
+              continue;
+            } else {
+              print("In sharing window");
+            }
+          }
+
+
+          print("Grid: Sending location event to room ${room.id} / ${room.name}");
           sendLocationEvent(room.id, location);
           print("Grid: Location event sent successfully");
         } else {
