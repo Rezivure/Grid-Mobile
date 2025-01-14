@@ -1,7 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/models/contact_display.dart';
@@ -17,6 +19,7 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
   List<ContactDisplay> _allContacts = []; // Cache for search filtering
   final MapBloc mapBloc;
   final UserLocationProvider userLocationProvider;
+  final SharingPreferencesRepository sharingPreferencesRepository;
 
   ContactsBloc({
     required this.roomService,
@@ -24,6 +27,8 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
     required this.mapBloc,
     required this.locationRepository,
     required this.userLocationProvider,
+    required this.sharingPreferencesRepository,
+
   }) : super(ContactsInitial()) {
     on<LoadContacts>(_onLoadContacts);
     on<RefreshContacts>(_onRefreshContacts);
@@ -66,6 +71,7 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
           userLocationProvider.removeUserLocation(event.userId);
           mapBloc.add(RemoveUserLocation(event.userId));
         }
+        await sharingPreferencesRepository.deleteSharingPreferences(event.userId, 'user');
         _allContacts = await _loadContacts();
         emit(ContactsLoaded(_allContacts));
       }

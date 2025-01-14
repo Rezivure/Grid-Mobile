@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart';
@@ -153,6 +155,15 @@ class RoomService {
       print('Error in leaveRoom: $e');
       return false;
     }
+  }
+
+  int getUserPowerLevel(String roomId, String userId) {
+    final room = client.getRoomById(roomId);
+    if (room != null) {
+      final powerLevel = room.getPowerLevelByUserId(userId);
+      return powerLevel;
+    }
+    return 0;
   }
 
   List<User> getFilteredParticipants(Room room, String searchText) {
@@ -609,8 +620,42 @@ class RoomService {
             .toList();
         print("Grid: Room has ${joinedMembers.length} joined members");
 
+        if (!joinedMembers.any((member) => member.id == getMyUserId())) {
+          print("Grid: Skipping room ${room.id} - I am not a joined member");
+          continue;
+        }
+
         if (joinedMembers.length > 1) {
-          print("Grid: Sending location event to room ${room.id}");
+
+          if (joinedMembers.length == 2 && room.name.startsWith('Grid:Direct:')) {
+            final myUserId = getMyUserId();
+            var otherUsers = joinedMembers.where((member) =>
+            member.id != myUserId);
+            var otherUser = otherUsers.first.id;
+            final isSharing = await userService.isInSharingWindow(otherUser);
+            if (!isSharing) {
+              print("Grid: Skipping direct room ${room
+                  .id} - not in sharing window with $otherUser");
+              continue;
+            } else {
+              print("In sharing window");
+            }
+          }
+
+          if (joinedMembers.length >= 2 && room.name.startsWith('Grid:Group:')) {
+
+            final isSharing = await userService.isGroupInSharingWindow(room.id);
+            if (!isSharing) {
+              print("Grid: Skipping group room ${room
+                  .id} - not in sharing window.");
+              continue;
+            } else {
+              print("In sharing window");
+            }
+          }
+
+
+          print("Grid: Sending location event to room ${room.id} / ${room.name}");
           sendLocationEvent(room.id, location);
           print("Grid: Location event sent successfully");
         } else {
@@ -675,28 +720,21 @@ class RoomService {
   }
 
   Map<String, Map<String, String>> getUserDeviceKeys(String userId) {
-    // used in UserInfoBubble
     final userDeviceKeys = client.userDeviceKeys[userId]?.deviceKeys.values;
     Map<String, Map<String, String>> deviceKeysMap = {};
 
     if (userDeviceKeys != null) {
       for (final deviceKeyEntry in userDeviceKeys) {
         final deviceId = deviceKeyEntry.deviceId;
-
-        // Ensure deviceId is not null before proceeding
         if (deviceId != null) {
-          // Collect all keys for this device, using an empty string if the key is null
-          final deviceKeys = {
+          deviceKeysMap[deviceId] = {
             "curve25519": deviceKeyEntry.keys['curve25519:$deviceId'] ?? "",
             "ed25519": deviceKeyEntry.keys['ed25519:$deviceId'] ?? ""
           };
-
-          // Add this device's keys to the map with deviceId as the key
-          deviceKeysMap[deviceId] = deviceKeys;
         }
       }
     }
-    return deviceKeysMap; // Returns a map of device IDs to their key maps
+    return deviceKeysMap;
   }
 
   Future<void> updateAllUsersDeviceKeys() async {

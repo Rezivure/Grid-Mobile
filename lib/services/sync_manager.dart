@@ -12,6 +12,8 @@ import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+
 
 import '../blocs/groups/groups_bloc.dart';
 import '../blocs/groups/groups_event.dart';
@@ -23,6 +25,7 @@ import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
 
 import '../models/pending_message.dart';
+import '../models/sharing_preferences.dart';
 
 
 
@@ -33,6 +36,7 @@ class SyncManager with ChangeNotifier {
   final RoomRepository roomRepository;
   final UserRepository userRepository;
   final LocationRepository locationRepository;
+  final SharingPreferencesRepository sharingPreferencesRepository;
   final UserLocationProvider userLocationProvider;
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
@@ -57,7 +61,8 @@ class SyncManager with ChangeNotifier {
       this.contactsBloc,
       this.locationRepository,
       this.groupsBloc,
-      this.userLocationProvider
+      this.userLocationProvider,
+      this.sharingPreferencesRepository,
       );
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
@@ -746,8 +751,36 @@ class SyncManager with ChangeNotifier {
             membershipStatus: !isDirect ? membershipStatus : null
         );
 
+        if (isDirect) {
+          final existingPrefs =
+          await sharingPreferencesRepository.getSharingPreferences(participantId, 'user');
+          if (existingPrefs == null) {
+            final defaultPrefs = SharingPreferences(
+              targetId: participantId,
+              targetType: 'user',
+              activeSharing: true,
+              shareWindows: [],
+            );
+            await sharingPreferencesRepository.setSharingPreferences(defaultPrefs);
+          }
+        }
+
         final customRoom = await roomRepository.getRoomById(room.id);
         if (customRoom?.isGroup ?? false) {
+
+          final existingGroupPrefs =
+          await sharingPreferencesRepository.getSharingPreferences(room.id, 'group');
+          if (existingGroupPrefs == null) {
+            final defaultGroupPrefs = SharingPreferences(
+              targetId: room.id,
+              targetType: 'group',
+              activeSharing: true,
+              shareWindows: [],
+            );
+            await sharingPreferencesRepository.setSharingPreferences(
+                defaultGroupPrefs);
+          }
+
           print('Updating group in bloc: ${room.id}');
           groupsBloc.add(UpdateGroup(room.id));
         }

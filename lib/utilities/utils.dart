@@ -112,3 +112,4 @@ String formatUserId(String userId) {
   // Otherwise return full userId
   return domain == homeserver ? parts[0] : userId;
 }
+
