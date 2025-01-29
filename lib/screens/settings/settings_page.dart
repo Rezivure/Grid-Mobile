@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 
 
 
@@ -26,6 +27,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
   bool _incognitoMode = false;
+  bool _batterySaver = false;
   String? _userID;
   String? _username;
   String? _displayName;
@@ -38,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _getDeviceAndIdentityKey();
     _loadUser();
     _loadIncognitoState();
+    _loadBatterySaverState();
   }
 
   Future<void> _loadUser() async {
@@ -65,6 +68,37 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _loadBatterySaverState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _batterySaver = prefs.getBool('battery_saver') ?? false;
+    });
+  }
+
+  Future<void> _toggleBatterySaver(bool value) async {
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      _batterySaver = value;
+    });
+
+    await prefs.setBool('battery_saver', value);
+
+    if (value) {
+      // enable incognito
+      locationManager.toggleBatterySaverMode(value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Battery Saver Mode: Enabled')),
+      );
+    } else {
+      locationManager.toggleBatterySaverMode(value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Battery Saver Mode: Disabled')),
+      );
+    }
+  }
+
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final prefs = await SharedPreferences.getInstance();
@@ -77,11 +111,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (value) {
       locationManager.stopTracking();
+      await bg.BackgroundGeolocation.stop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is no longer being shared.')),
       );
     } else {
       locationManager.startTracking();
+      await bg.BackgroundGeolocation.start();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is being shared with trusted contacts.')),
       );
@@ -595,7 +631,7 @@ class _SettingsPageState extends State<SettingsPage> {
         leading: BackButton(color: colorScheme.onBackground),
       ),
       body: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         color: colorScheme.background,
         child: Column(
           children: [
@@ -700,7 +736,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           ),
                           Text(
-                            'Stop sharing location.',
+                            'Stops all location sharing services.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
@@ -718,6 +754,60 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.battery_saver,
+                        color: _batterySaver
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Battery Saver Mode',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            'Less accurate, but less power.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _batterySaver,
+                    onChanged: _toggleBatterySaver,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+
             _buildInfoBubble('Device ID ', deviceID ?? 'Loading...'),
             _buildInfoBubble('Identity Key ', identityKey ?? 'Loading...'),
             Expanded(

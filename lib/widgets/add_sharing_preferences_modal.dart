@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AddSharingPreferenceModal extends StatefulWidget {
-  final Function(String label, List<bool> selectedDays, bool isAllDay, TimeOfDay? startTime, TimeOfDay? endTime) onSave;
+  // 1) Callback uses TimeOfDay
+  final Function(
+      String label,
+      List<bool> selectedDays,
+      bool isAllDay,
+      TimeOfDay? startTime,
+      TimeOfDay? endTime,
+      ) onSave;
 
   const AddSharingPreferenceModal({
     Key? key,
@@ -16,6 +23,7 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
   final TextEditingController _labelController = TextEditingController();
   final List<bool> _selectedDays = List.generate(7, (_) => false);
   final List<String> _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   bool _isAllDay = false;
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
@@ -27,7 +35,7 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
   }
 
   Future<void> _selectTime(BuildContext context, bool isStart) async {
-    final TimeOfDay? picked = await showTimePicker(
+    final picked = await showTimePicker(
       context: context,
       initialTime: isStart ? _startTime : _endTime,
     );
@@ -43,10 +51,18 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
   }
 
   bool get isValid {
-    return _labelController.text.isNotEmpty &&
-        _selectedDays.contains(true) &&
-        (_isAllDay || (_startTime.hour < _endTime.hour ||
-            (_startTime.hour == _endTime.hour && _startTime.minute < _endTime.minute)));
+    if (_labelController.text.isEmpty) return false;
+    if (!_selectedDays.contains(true)) return false;
+
+    // If not all day, ensure start < end
+    if (!_isAllDay) {
+      if (_startTime.hour > _endTime.hour) return false;
+      if (_startTime.hour == _endTime.hour &&
+          _startTime.minute >= _endTime.minute) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @override
@@ -62,7 +78,12 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
           topRight: Radius.circular(16),
         ),
       ),
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,9 +152,7 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
               Checkbox(
                 value: _isAllDay,
                 onChanged: (value) {
-                  setState(() {
-                    _isAllDay = value ?? false;
-                  });
+                  setState(() => _isAllDay = value ?? false);
                 },
               ),
               const Text('All Day'),
@@ -165,14 +184,13 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+                onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel'),
               ),
               const SizedBox(width: 16),
               ElevatedButton(
-                onPressed: isValid ? () {
+                onPressed: isValid
+                    ? () {
                   widget.onSave(
                     _labelController.text,
                     _selectedDays,
@@ -181,7 +199,8 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
                     _isAllDay ? null : _endTime,
                   );
                   Navigator.pop(context);
-                } : null,
+                }
+                    : null,
                 child: const Text('Save'),
               ),
             ],

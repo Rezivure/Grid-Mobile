@@ -205,8 +205,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               label: label,
               days: _daysToIntList(selectedDays),
               isAllDay: isAllDay,
-              startTime: startTime != null ? startTime.format(context) : null,
-              endTime: endTime != null ? endTime.format(context) : null,
+              // Convert TimeOfDay to "HH:mm" if not all-day
+              startTime: (isAllDay || startTime == null)
+                  ? null
+                  : '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+              endTime: (isAllDay || endTime == null)
+                  ? null
+                  : '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
               isActive: true,
             );
 
@@ -215,6 +220,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             });
             await _saveToDatabase();
           },
+
         );
       },
     );

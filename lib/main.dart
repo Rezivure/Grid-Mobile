@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/services/android_background_task.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,9 +37,15 @@ import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
 
   // Load .env file
   await dotenv.load(fileName: ".env");
@@ -60,6 +67,7 @@ void main() async {
   await client.init();
 
   // Attempt to restore session
+  // TODO: this code chunk may do nothing actually
   final prefs = await SharedPreferences.getInstance();
   String? token = prefs.getString('token');
 
@@ -71,6 +79,7 @@ void main() async {
       print('Error restoring session with token: $e');
     }
   }
+
 
   // Initialize repositories
   final userRepository = UserRepository(databaseService);
