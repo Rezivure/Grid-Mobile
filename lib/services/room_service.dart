@@ -48,13 +48,13 @@ class RoomService {
       // Update current location in room service
       _currentLocation = location;
       // Check if this is a targeted update
-      if (location.extras?.containsKey('targetRoomId') == true) {
-        String roomId = location.extras!['targetRoomId'];
-        updateSingleRoom(roomId);
-      } else {
+      // if (location.extras?.containsKey('targetRoomId') == true) {
+       // String roomId = location.extras!['targetRoomId'];
+       // updateSingleRoom(roomId);
+     // } else {
         // Regular periodic update to all rooms
-        updateRooms(location);
-      }
+      updateRooms(location);
+    //  }
     });
   }
 
@@ -543,7 +543,7 @@ class RoomService {
 
         try {
           await room.sendEvent(eventContent);
-          print("Location event sent to room $roomId: $latitude, $longitude");
+          print("Location event sent to room $roomId: ${room.name}  $latitude, $longitude");
 
           // Track the sent message
           _recentlySentMessages.putIfAbsent(roomId, () => {}).add(messageHash);

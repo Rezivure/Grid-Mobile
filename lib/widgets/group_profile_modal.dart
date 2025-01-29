@@ -114,8 +114,13 @@ class _GroupProfileModalState extends State<GroupProfileModal> {
               label: label,
               days: _daysToIntList(selectedDays),
               isAllDay: isAllDay,
-              startTime: startTime?.format(context),
-              endTime: endTime?.format(context),
+              // Convert TimeOfDay to "HH:mm" if not all-day
+              startTime: (isAllDay || startTime == null)
+                  ? null
+                  : '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+              endTime: (isAllDay || endTime == null)
+                  ? null
+                  : '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
               isActive: true,
             );
 
@@ -280,8 +285,18 @@ class _GroupProfileModalState extends State<GroupProfileModal> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-
+                      // Subtitle text
+                      if (_alwaysShare)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 16.0, top: 4.0),
+                          child: Text(
+                            'Turn off "Always Share" to set custom sharing preferences.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey, // Subtle color for subtitle
+                            ),
+                          ),
+                        ),
                       // Sharing Windows Section
                       if (!_alwaysShare) ...[
                         Row(
@@ -345,21 +360,17 @@ class _GroupProfileModalState extends State<GroupProfileModal> {
                   ),
                 ),
               ),
-
-              // Add Member button
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
                     foregroundColor: colorScheme.onPrimary,
-                    minimumSize: const Size(double.infinity, 40),
                   ),
                   onPressed: widget.onMemberAdded,
                   child: const Text('Add Member'),
                 ),
               ),
-
               // Close button
               Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -367,7 +378,6 @@ class _GroupProfileModalState extends State<GroupProfileModal> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.onSurface,
                     foregroundColor: colorScheme.surface,
-                    minimumSize: const Size(double.infinity, 40),
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Close'),
