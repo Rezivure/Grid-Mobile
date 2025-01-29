@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 
 class UserInfoBubble extends StatelessWidget {
   final String userId;
@@ -43,9 +44,9 @@ class UserInfoBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                userName,
+                formatUserId(userId),
                 style: TextStyle(
-                  fontSize: 16.0,
+                  fontSize: 14.0,
                   fontWeight: FontWeight.bold,
                   color: colorScheme.onSurface, // Adapt text color to theme
                 ),
@@ -54,7 +55,7 @@ class UserInfoBubble extends StatelessWidget {
               Text(
                 'Position: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
                 style: TextStyle(
-                  fontSize: 14.0,
+                  fontSize: 13.0,
                   color: colorScheme.onSurface.withOpacity(0.7), // Adapt text color to theme
                 ),
               ),

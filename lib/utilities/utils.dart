@@ -99,3 +99,17 @@ int extractExpirationTimestamp(String roomName) {
   return 0;
 }
 
+String formatUserId(String userId) {
+  final homeserver = dotenv.env['HOMESERVER'] ?? '';
+
+  // Split the userId into localpart and domain
+  final parts = userId.split(':');
+  if (parts.length != 2) return userId;
+
+  final domain = parts[1];
+
+  // If domain matches homeserver from .env, return only localpart
+  // Otherwise return full userId
+  return domain == homeserver ? parts[0] : userId;
+}
+

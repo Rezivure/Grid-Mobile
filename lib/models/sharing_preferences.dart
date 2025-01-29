@@ -1,18 +1,20 @@
 import 'dart:convert';
 
+import 'package:grid_frontend/models/sharing_window.dart';
+
 class SharingPreferences {
   final int? id;
-  final String targetId; // ID of the user or group
-  final String targetType; // Type: 'user' or 'group'
-  final bool activeSharing; // Whether sharing is currently active
-  final Map<String, dynamic>? sharePeriods; // Custom sharing periods (optional)
+  final String targetId;
+  final String targetType;
+  final bool activeSharing;
+  final List<SharingWindow>? shareWindows;
 
   SharingPreferences({
     this.id,
     required this.targetId,
     required this.targetType,
     required this.activeSharing,
-    this.sharePeriods,
+    this.shareWindows,
   });
 
   // Convert model to a map for database insertion
@@ -21,21 +23,30 @@ class SharingPreferences {
       'id': id,
       'targetId': targetId,
       'targetType': targetType,
-      'activeSharing': activeSharing ? 1 : 0, // Convert bool to integer
-      'sharePeriods': sharePeriods != null ? jsonEncode(sharePeriods) : null, // Encode as JSON
+      'activeSharing': activeSharing ? 1 : 0,
+      // Encode the list of windows as JSON (or null if no windows)
+      'sharePeriods': shareWindows != null
+          ? jsonEncode(shareWindows!.map((w) => w.toJson()).toList())
+          : null,
     };
   }
 
-  // Create an instance from a database map
+
   factory SharingPreferences.fromMap(Map<String, dynamic> map) {
+    // If 'sharePeriods' is not null, decode it and parse each window
+    final rawJson = map['sharePeriods'] as String?;
+    List<SharingWindow>? windows;
+    if (rawJson != null && rawJson.isNotEmpty) {
+      final List decoded = jsonDecode(rawJson);
+      windows = decoded.map((item) => SharingWindow.fromJson(item)).toList().cast<SharingWindow>();
+    }
+
     return SharingPreferences(
       id: map['id'] as int?,
       targetId: map['targetId'] as String,
       targetType: map['targetType'] as String,
-      activeSharing: (map['activeSharing'] as int) == 1, // Convert integer to bool
-      sharePeriods: map['sharePeriods'] != null
-          ? jsonDecode(map['sharePeriods'] as String) as Map<String, dynamic>
-          : null, // Decode JSON if not null
+      activeSharing: (map['activeSharing'] as int) == 1,
+      shareWindows: windows,
     );
   }
 }

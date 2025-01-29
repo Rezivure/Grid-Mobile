@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/services/android_background_task.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,9 +37,15 @@ import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
 
   // Load .env file
   await dotenv.load(fileName: ".env");
@@ -60,6 +67,7 @@ void main() async {
   await client.init();
 
   // Attempt to restore session
+  // TODO: this code chunk may do nothing actually
   final prefs = await SharedPreferences.getInstance();
   String? token = prefs.getString('token');
 
@@ -72,6 +80,7 @@ void main() async {
     }
   }
 
+
   // Initialize repositories
   final userRepository = UserRepository(databaseService);
   final roomRepository = RoomRepository(databaseService);
@@ -80,7 +89,7 @@ void main() async {
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
   // Initialize services
-  final userService = UserService(client, locationRepository);
+  final userService = UserService(client, locationRepository, sharingPreferencesRepository);
   final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
@@ -145,6 +154,7 @@ void main() async {
               mapBloc: context.read<MapBloc>(),
               locationRepository: context.read<LocationRepository>(),
               userLocationProvider: context.read<UserLocationProvider>(),
+              sharingPreferencesRepository: context.read<SharingPreferencesRepository>(),
             ),
           ),
           BlocProvider<GroupsBloc>(
@@ -169,6 +179,7 @@ void main() async {
               locationRepository,
               context.read<GroupsBloc>(),
               context.read<UserLocationProvider>(),
+              context.read<SharingPreferencesRepository>(),
             )..startSync(),
             update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
             previous ?? SyncManager(
@@ -182,6 +193,7 @@ void main() async {
               locationRepository,
               groupsBloc,
               context.read<UserLocationProvider>(),
+              sharingPreferencesRepository,
             )..startSync(),
           ),
         ],

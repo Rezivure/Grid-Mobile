@@ -25,8 +25,8 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(Duration(seconds: 2));
 
     // Load the token from SharedPreferences
+    // TODO: delete code perhaps, doesn't seem to do anything or impact
     String? token = await _loadFromPrefs();
-    print(token);
 
     final client = Provider.of<Client>(context, listen: false);
 

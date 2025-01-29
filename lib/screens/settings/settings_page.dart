@@ -11,8 +11,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
-import 'package:grid_frontend/services/location_manager.dart';
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+
 
 
 class SettingsPage extends StatefulWidget {
@@ -27,13 +27,38 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
   bool _incognitoMode = false;
+  bool _batterySaver = false;
+  String? _userID;
+  String? _username;
+  String? _displayName;
+  bool _isEditingDisplayName = false;
 
 
   @override
   void initState() {
     super.initState();
     _getDeviceAndIdentityKey();
+    _loadUser();
     _loadIncognitoState();
+    _loadBatterySaverState();
+  }
+
+  Future<void> _loadUser() async {
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _userID = client.userID;
+        _username = _userID?.split(':')[0].replaceAll('@', '') ?? 'Unknown User';
+        _displayName = prefs.getString('displayName') ?? _username;
+      });
+    } catch (e) {
+      print('Error loading user: $e');
+      setState(() {
+        _username = 'Unknown User';
+        _displayName = 'Unknown User';
+      });
+    }
   }
 
   Future<void> _loadIncognitoState() async {
@@ -41,6 +66,37 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _incognitoMode = prefs.getBool('incognito_mode') ?? false;
     });
+  }
+
+  Future<void> _loadBatterySaverState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _batterySaver = prefs.getBool('battery_saver') ?? false;
+    });
+  }
+
+  Future<void> _toggleBatterySaver(bool value) async {
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      _batterySaver = value;
+    });
+
+    await prefs.setBool('battery_saver', value);
+
+    if (value) {
+      // enable incognito
+      locationManager.toggleBatterySaverMode(value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Battery Saver Mode: Enabled')),
+      );
+    } else {
+      locationManager.toggleBatterySaverMode(value);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Battery Saver Mode: Disabled')),
+      );
+    }
   }
 
   Future<void> _toggleIncognitoMode(bool value) async {
@@ -55,11 +111,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (value) {
       locationManager.stopTracking();
+      await bg.BackgroundGeolocation.stop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is no longer being shared.')),
       );
     } else {
       locationManager.startTracking();
+      await bg.BackgroundGeolocation.start();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is being shared with trusted contacts.')),
       );
@@ -297,6 +355,91 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _editDisplayName() async {
+    final TextEditingController controller = TextEditingController(text: _displayName ?? _username);
+    final RegExp validCharacters = RegExp(r'^[a-zA-Z0-9_\-\.\s]+$');
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    bool isValidName(String name) {
+      final trimmedName = name.trim();
+      return trimmedName.length >= 3 &&
+          trimmedName.length <= 14 &&
+          validCharacters.hasMatch(name);
+    }
+
+    final String? newDisplayName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: theme.cardColor,
+          title: Text('Edit Display Name'),
+          content: TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: 'Enter your display name',
+              helperText: '- 3-14 characters\n- no special characters',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (isValidName(controller.text)) {
+                  Navigator.pop(context, controller.text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Please enter a valid display name (3-14 characters, using only letters, numbers, and _-.).',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newDisplayName != null && newDisplayName.isNotEmpty && isValidName(newDisplayName)) {
+      setState(() {
+        _isEditingDisplayName = true; // Show spinner
+      });
+
+      try {
+        final client = Provider.of<Client>(context, listen: false);
+        final id = client.userID ?? '';
+        if (id.isNotEmpty) {
+          await client.setDisplayName(id, newDisplayName);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('displayName', newDisplayName);
+        }
+
+        setState(() {
+          _displayName = newDisplayName;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Display name updated successfully')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update display name: $e')),
+        );
+      } finally {
+        setState(() {
+          _isEditingDisplayName = false; // Hide spinner
+        });
+      }
+    }
+  }
+
 
   Future<void> _deleteAccount() async {
 
@@ -476,8 +619,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final client = Provider.of<Client>(context, listen: false);
-    final userName = client.userID?.localpart ?? 'Unknown User';
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -489,18 +631,74 @@ class _SettingsPageState extends State<SettingsPage> {
         leading: BackButton(color: colorScheme.onBackground),
       ),
       body: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         color: colorScheme.background,
         child: Column(
           children: [
-            _buildAvatar(userName),
+            _buildAvatar(_username ?? 'Unknown User'),
             SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final textSpan = TextSpan(
+                  text: _displayName ?? 'Unknown User',
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+                final textPainter = TextPainter(
+                  text: textSpan,
+                  textDirection: TextDirection.ltr,
+                );
+                textPainter.layout();
+                return Container(
+                  width: double.infinity,
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Text(
+                          _displayName ?? 'Unknown User',
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: (constraints.maxWidth / 2) + (textPainter.width / 2) + 8,
+                        top: 4,
+                        child: _isEditingDisplayName
+                            ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        )
+                            : GestureDetector(
+                          onTap: _editDisplayName,
+                          child: Icon(
+                            Icons.edit,
+                            size: 20,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+
+                    ],
+                  ),
+                );
+              },
+            ),
             Text(
-              '@$userName',
+              '@$_username',
               style: TextStyle(
-                fontSize: 20,
-                color: colorScheme.onBackground,
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.normal,
               ),
             ),
             Divider(height: 16),
@@ -538,7 +736,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           ),
                           Text(
-                            'Stop sharing location.',
+                            'Stops all location sharing services.',
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
@@ -556,6 +754,60 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.battery_saver,
+                        color: _batterySaver
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                      SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Battery Saver Mode',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            'Less accurate, but less power.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _batterySaver,
+                    onChanged: _toggleBatterySaver,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ),
+            ),
+
             _buildInfoBubble('Device ID ', deviceID ?? 'Loading...'),
             _buildInfoBubble('Identity Key ', identityKey ?? 'Loading...'),
             Expanded(

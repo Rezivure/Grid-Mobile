@@ -22,14 +22,18 @@ import '../blocs/groups/groups_state.dart';
 import '../services/user_service.dart';
 import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
+import 'group_profile_modal.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
   final RoomService roomService;
   final UserRepository userRepository;
+  final SharingPreferencesRepository sharingPreferencesRepository;
   final ScrollController scrollController;
   final GridRoom.Room room;
   final VoidCallback onGroupLeft;
+
 
   const GroupDetailsSubscreen({
     Key? key,
@@ -38,6 +42,7 @@ class GroupDetailsSubscreen extends StatefulWidget {
     required this.onGroupLeft,
     required this.roomService,
     required this.userRepository,
+    required this.sharingPreferencesRepository,
     required this.userService,
   }) : super(key: key);
 
@@ -370,7 +375,24 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                           SizedBox(
                             width: 180,
                             child: ElevatedButton(
-                              onPressed: _isProcessing ? null : _showAddGroupMemberModal,
+                              onPressed: _isProcessing ? null : () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => GroupProfileModal(
+                                    room: widget.room,
+                                    roomService: widget.roomService,
+                                    sharingPreferencesRepo: widget.sharingPreferencesRepository,
+                                    onMemberAdded: () {
+                                      // Close the modal first
+                                      Navigator.pop(context);
+                                      // Then show the add member modal
+                                      _showAddGroupMemberModal();
+                                    },
+                                  ),
+                                );
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Theme.of(context).brightness == Brightness.light
                                     ? colorScheme.onSurface
@@ -383,7 +405,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                                 ),
                                 minimumSize: const Size(150, 40),
                               ),
-                              child: const Text('Add Member'),
+                              child: const Text('Group Settings'),
                             ),
                           ),
                           const SizedBox(height: 10),
