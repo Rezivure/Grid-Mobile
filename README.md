@@ -134,7 +134,7 @@ Before you begin, ensure you have the following installed:
   
 ## Contributing
 
-We welcome contributions! Please submit a pull request or open an issue to discuss any changes.
+We welcome contributions! To do so, please reference our Contribution Guidelines [here](https://docs.mygrid.app/docs/category/contributing-to-grid)!
 
 ## License
 
