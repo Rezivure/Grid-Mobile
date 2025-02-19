@@ -40,7 +40,7 @@
 ## Roadmap
 
 <div align="center">
-  <img src="https://i.imgur.com/aKcrMmu.jpeg" alt="appstore" width="75%" />
+  <img src="https://i.imgur.com/61Q26Ih.png" alt="appstore" width="75%" />
 </div>
 
 ## Getting Started With the App
