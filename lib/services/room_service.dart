@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:math';
 
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:matrix/matrix.dart';
@@ -524,7 +525,9 @@ class RoomService {
 
       if (latitude != null && longitude != null) {
         // Create a unique hash for the location message
-        final messageHash = '$latitude:$longitude';
+        var timestamp = DateTime.now().millisecondsSinceEpoch;
+
+        final messageHash = '$latitude:$longitude:$timestamp';
 
         // Check if the message is already sent
         if (_recentlySentMessages[roomId]?.contains(messageHash) == true) {
