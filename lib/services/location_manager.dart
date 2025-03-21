@@ -156,6 +156,11 @@ class LocationManager with ChangeNotifier {
     _updateTrackingConfig(); // Apply initial configuration
   }
 
+  Future<void> grabLocationAndPing() async {
+    var currentPos = await bg.BackgroundGeolocation.getCurrentPosition();
+    _locationStreamController.add(currentPos);
+  }
+
   void _setupEventListeners() {
     // Regular location updates
     bg.BackgroundGeolocation.onLocation((bg.Location location) {
