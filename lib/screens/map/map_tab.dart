@@ -117,7 +117,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void _sendPing() {
     _locationManager.grabLocationAndPing();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Location sent to all active contacts and groups.')),
+      SnackBar(content: Text('Location pinged to all active contacts and groups.')),
     );
 
 
