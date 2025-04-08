@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -30,6 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _batterySaver = false;
   String? _userID;
   String? _username;
+  String? _localpart;
   String? _displayName;
   bool _isEditingDisplayName = false;
 
@@ -43,13 +45,24 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadBatterySaverState();
   }
 
+  bool isCustomHomeserver() {
+    final roomService = Provider.of<RoomService>(context, listen: false);
+    final homeserver = roomService.getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _loadUser() async {
     try {
       final client = Provider.of<Client>(context, listen: false);
       final prefs = await SharedPreferences.getInstance();
+      bool isCustomServer = isCustomHomeserver();
       setState(() {
-        _userID = client.userID;
-        _username = _userID?.split(':')[0].replaceAll('@', '') ?? 'Unknown User';
+        _userID = client.userID?.replaceAll('@', '');
+        _localpart = _userID?.split(':')[0].replaceAll('@', '') ?? 'Unknown User';
+        _username =  isCustomServer ? _userID : _userID?.split(':')[0].replaceAll('@', '') ?? 'Unknown User';
         _displayName = prefs.getString('displayName') ?? _username;
       });
     } catch (e) {
@@ -156,7 +169,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildAvatar(String username) {
     return CircleAvatar(
       backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-      child: RandomAvatar(username, height: 80.0, width: 80.0), // Increased size
+      child: RandomAvatar(_localpart!, height: 80.0, width: 80.0), // Increased size
       radius: 50,  // Slightly larger radius
     );
   }
@@ -635,7 +648,7 @@ class _SettingsPageState extends State<SettingsPage> {
         color: colorScheme.background,
         child: Column(
           children: [
-            _buildAvatar(_username ?? 'Unknown User'),
+            _buildAvatar(_localpart ?? 'Unknown User'),
             SizedBox(height: 10),
             LayoutBuilder(
               builder: (context, constraints) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -6,6 +7,8 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/services/user_service.dart';
+
+import '../services/room_service.dart';
 
 class ProfileModal extends StatefulWidget {
   final UserService userService;
@@ -19,6 +22,9 @@ class ProfileModal extends StatefulWidget {
 class _ProfileModalState extends State<ProfileModal> {
   bool _copied = false;
   String? _userId;
+  String? _relativeUserId;
+  String? _userLocalpart;
+
 
   @override
   void initState() {
@@ -26,11 +32,35 @@ class _ProfileModalState extends State<ProfileModal> {
     _loadUserId();
   }
 
+  Future<bool> isCustomServer() async {
+    final roomService = Provider.of<RoomService>(context, listen: false);
+    final homeserver = roomService.getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      // is grid server
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _loadUserId() async {
-    final userId = await widget.userService.getMyUserId();
+    final client = Provider.of<Client>(context, listen: false);
+    var userId = client.userID;
+    _userLocalpart = localpart(userId!);
+
+    bool isCustomServ = await isCustomServer();
+    String relativeUserId;
+
+    if (!isCustomServ) {
+      // is grid server
+      relativeUserId = '@${localpart(userId)}';
+    } else {
+      relativeUserId = userId;
+    }
+
     if (mounted) {
       setState(() {
         _userId = userId;
+        _relativeUserId = relativeUserId;
       });
     }
   }
@@ -49,7 +79,6 @@ class _ProfileModalState extends State<ProfileModal> {
       );
     }
 
-    final userLocalpart = localpart(_userId!);
 
     return Material(
       color: colorScheme.background,
@@ -65,7 +94,7 @@ class _ProfileModalState extends State<ProfileModal> {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: colorScheme.primary.withOpacity(0.1),
-                    child: RandomAvatar(userLocalpart),
+                    child: RandomAvatar(_userLocalpart!),
                   ),
                   SizedBox(width: 10),
                   Expanded(
@@ -74,22 +103,24 @@ class _ProfileModalState extends State<ProfileModal> {
                       children: [
                         Expanded(
                           child: Text(
-                            userLocalpart,
+                            _relativeUserId!,
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                               color: colorScheme.onBackground,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+
+
                         IconButton(
                           icon: Icon(
                             Icons.copy,
                             color: colorScheme.onBackground,
                           ),
                           onPressed: () {
-                            Clipboard.setData(ClipboardData(text: userLocalpart));
+                            Clipboard.setData(ClipboardData(text: _relativeUserId!));
                             setState(() {
                               _copied = true;
                             });
@@ -127,7 +158,7 @@ class _ProfileModalState extends State<ProfileModal> {
                   alignment: Alignment.center,
                   children: [
                     QrImageView(
-                      data: _userId!,
+                      data: _relativeUserId!,
                       version: QrVersions.auto,
                       size: 250.0,
                       backgroundColor: colorScheme.background,
