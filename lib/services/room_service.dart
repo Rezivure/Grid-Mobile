@@ -1,6 +1,7 @@
 import 'dart:ffi';
 
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -486,8 +487,12 @@ class RoomService {
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
-          id = id.toLowerCase();
+          id = '@${id.toLowerCase()}';
           var fullUsername = '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
+          bool isCustomServer = isCustomHomeserver();
+          if (isCustomServer) {
+            fullUsername = id;
+          }
           await client.inviteUser(roomId, fullUsername);
         }
       }
@@ -500,6 +505,14 @@ class RoomService {
       return "Error";
     }
     return roomId;
+  }
+
+  bool isCustomHomeserver() {
+    final homeserver = getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return false;
+    }
+    return true;
   }
 
   void getAndUpdateDisplayName() async {
