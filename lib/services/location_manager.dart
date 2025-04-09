@@ -46,6 +46,8 @@ class LocationManager with ChangeNotifier {
     );
   }
 
+
+
   void _loadBatterySaverState() async {
     final prefs = await SharedPreferences.getInstance();
     _batterySaverEnabled = prefs.getBool('battery_saver') ?? false;
@@ -55,6 +57,7 @@ class LocationManager with ChangeNotifier {
     _batterySaverEnabled = value;
     _updateTrackingConfig();
   }
+
   void _updateTrackingConfig() {
     print("Updating Tracking Config");
     if (!_isTracking) return;
@@ -64,12 +67,12 @@ class LocationManager with ChangeNotifier {
       bg.BackgroundGeolocation.setConfig(bg.Config(
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
         distanceFilter: 200,
-        stopTimeout: 1,
+        stopTimeout: 5,
         disableStopDetection: false,
         pausesLocationUpdatesAutomatically: true,
+        stationaryRadius: 100,
       ));
     }
-
     else if (_isInForeground) {
       print("Grid: Applying foreground config");
       bg.BackgroundGeolocation.setConfig(bg.Config(
@@ -78,17 +81,16 @@ class LocationManager with ChangeNotifier {
         disableStopDetection: true,
         pausesLocationUpdatesAutomatically: false,
         isMoving: true, // Force movement detection in foreground
-
       ));
     } else {
       print("Grid: Applying background config");
       bg.BackgroundGeolocation.setConfig(bg.Config(
         desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
-        distanceFilter: 50,
-        stopTimeout: 3,
+        distanceFilter: 100,
+        stopTimeout: 5,
         pausesLocationUpdatesAutomatically: true,
         disableStopDetection: false,
-        stationaryRadius: 50,
+        stationaryRadius: 100,
         isMoving: _isMoving,
       ));
     }
@@ -160,13 +162,6 @@ class LocationManager with ChangeNotifier {
     // Regular location updates
     bg.BackgroundGeolocation.onLocation((bg.Location location) {
       print("Grid: Location update - speed: ${location.coords.speed?.toStringAsFixed(2) ?? 'unknown'} m/s");
-
-      // Update motion state based on speed (walking speed ~1.4 m/s)
-      if (location.coords.speed != null && location.coords.speed! > 1.4) {
-        _isMoving = true;
-        print("Grid: Movement detected - speed: ${location.coords.speed} m/s");
-      }
-
       _processLocation(location);
     });
 
@@ -177,6 +172,7 @@ class LocationManager with ChangeNotifier {
         startTracking();
       }
     });
+
   }
 
   Future<void> stopTracking() async {  // Make async
@@ -196,21 +192,40 @@ class LocationManager with ChangeNotifier {
     _isTracking = false;
   }
 
+
+
   void _processLocation(bg.Location location) {
     final currentCoords = location.coords;
     print("Grid: Processing location update (${_isInForeground ? 'Foreground' : 'Background'}, Moving: $_isMoving)");
     _lastPosition = location;
+
+    if (location.coords.speed != null) {
+      if (location.coords.speed! < 0.8) {
+        if (_isMoving) {
+          _isMoving = false;
+          print("Grid: Movement stopped - speed: ${location.coords.speed} m/s");
+          _updateTrackingConfig();
+        }
+      }
+      else if (location.coords.speed! > 1.1) {
+        if (!_isMoving) {
+          _isMoving = true;
+          print("Grid: Movement detected - speed: ${location.coords.speed} m/s");
+          _updateTrackingConfig();
+        }
+      }
+    }
 
     if (_shouldUpdateBuffer()) {
       _lastUpdateTime = DateTime.now();
       _locationStreamController.add(location);
       notifyListeners();
     } else {
-      // wait
       print("Grid: Did not update...throttling.");
     }
-
   }
+
+
 
   bool _shouldUpdateBuffer() {
     final now = DateTime.now();
@@ -224,8 +239,6 @@ class LocationManager with ChangeNotifier {
     }
     return true;
   }
-
-
 
   @override
   void dispose() async {
