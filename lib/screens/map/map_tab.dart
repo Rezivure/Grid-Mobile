@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,6 +48,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _isMapReady = false;
   bool _followUser = true;
   double _zoom = 18;
+
+  bool _isPingOnCooldown = false;
+  int _pingCooldownSeconds = 5;
+  Timer? _pingCooldownTimer;
 
   VectorTileProvider? _tileProvider;
   late vector_renderer.Theme _mapTheme;
@@ -106,6 +112,32 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     );
 
     await backwardsService.runBackfillIfNeeded();
+  }
+
+  void _sendPing() {
+    _locationManager.grabLocationAndPing();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Location pinged to all active contacts and groups.')),
+    );
+
+
+    setState(() {
+      _isPingOnCooldown = true;
+      _pingCooldownSeconds = 10; // sets ping rate max
+    });
+
+    _pingCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _pingCooldownSeconds--;
+      });
+
+      if (_pingCooldownSeconds <= 0) {
+        setState(() {
+          _isPingOnCooldown = false;
+        });
+        timer.cancel();
+      }
+    });
   }
 
   Future<void> _loadMapProvider() async {
@@ -262,6 +294,26 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             ),
 
             Positioned(
+              top: 100,
+              left: 16,
+              child: FloatingActionButton(
+                heroTag: "settingsBtn",
+                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SettingsPage()),
+                  );
+                },
+                child: Icon(
+                    Icons.menu,
+                    color: isDarkMode ? colorScheme.primary : Colors.black
+                ),
+                mini: true,
+              ),
+            ),
+
+            Positioned(
               right: 16,
               top: 100,
               child: Column(
@@ -302,6 +354,51 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     ),
                     mini: true,
                   ),
+                  const SizedBox(height: 10),
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      FloatingActionButton(
+                        heroTag: "pingBtn",
+                        backgroundColor: _isPingOnCooldown
+                            ? Colors.grey
+                            : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                        onPressed: _isPingOnCooldown ? null : _sendPing,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            if (_isPingOnCooldown)
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  value: _pingCooldownSeconds / 5,
+                                  strokeWidth: 2,
+                                  color: isDarkMode ? colorScheme.primary : Colors.black,
+                                  backgroundColor: isDarkMode ? colorScheme.surfaceVariant : Colors.grey.withOpacity(0.3),
+                                ),
+                              )
+                            else
+                              Icon(
+                                Icons.sensors,
+                                color: isDarkMode ? colorScheme.primary : Colors.black,
+                                size: 24,
+                              ),
+                            if (_isPingOnCooldown)
+                              Text(
+                                '$_pingCooldownSeconds',
+                                style: TextStyle(
+                                  color: isDarkMode ? colorScheme.primary : Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                          ],
+                        ),
+                        mini: true,
+                      ),
+                    ],
+                  )
                 ],
               ),
             ),

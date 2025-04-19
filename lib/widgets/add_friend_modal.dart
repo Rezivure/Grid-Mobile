@@ -1,6 +1,7 @@
 // add_friend_modal.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
@@ -43,6 +44,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   String? _usernameError;
   String? _contactError;
   String? _matrixUserId = "";
+  String? _friendQrCodeScan;
 
   // New variable for member limit error
   String? _memberLimitError;
@@ -84,21 +86,32 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     });
   }
 
+  bool isCustomHomeserver() {
+    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return false;
+    }
+    return true;
+  }
+
   void _addContact() async {
     final inputText = _controller.text.trim();
-    String username;
-    if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
-      username = _matrixUserId!;
-    } else {
-      username = inputText;
+    bool isCustomServer = isCustomHomeserver();
+
+    String? rawInput = _friendQrCodeScan ?? _controller.text.trim();
+    if (rawInput.isEmpty) {
+      setState(() {
+        _contactError = 'Please enter a username.';
+      });
+      return;
     }
-
-
-    var usernameLowercase = username.toLowerCase();
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    final normalizedUserId = '@$usernameLowercase:$homeserver';
-
-    if (username.isNotEmpty) {
+    var normalizedUserId = rawInput.toLowerCase();
+    print(normalizedUserId);
+    if (!isCustomServer) {
+      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+      normalizedUserId = '@$normalizedUserId:$homeserver';
+    }
+    if (normalizedUserId.isNotEmpty) {
       if (mounted) {
         setState(() {
           _isProcessing = true;
@@ -106,16 +119,16 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
       try {
-        bool userExists = await widget.userService.userExists(normalizedUserId!);
-        if (!userExists) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'Invalid username: @$inputText';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
+        // bool userExists = await widget.userService.userExists(normalizedUserId!);
+        // if (!userExists) {
+        //   if (mounted) {
+        //     setState(() {
+        //       _contactError = 'Invalid username: @$inputText';
+        //       _isProcessing = false;
+        //     });
+        //   }
+        //   return;
+        // }
 
         // User exists, proceed with invitation
         bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
@@ -174,8 +187,9 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
             _isScanning = false;
             _matrixUserId = scannedUserId;
             _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+            _friendQrCodeScan = scannedUserId;
+            _addContact();
           });
-          _addContact();
         } else {
           print('QR Code data is empty');
         }
@@ -214,10 +228,16 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
-    var usernameLowercase = username.toLowerCase();
+    var usernameLowercase = '${username.toLowerCase()}';
+    var fullMatrixId = usernameLowercase;
     final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    final fullMatrixId = '@$usernameLowercase:$homeserver';
-    final doesExist = await this.widget.userService.userExists(fullMatrixId);
+    bool isCustomServer = isCustomHomeserver();
+    if (isCustomServer) {
+      fullMatrixId = '$usernameLowercase:$homeserver';
+    }
+
+    print(fullMatrixId);
+    final doesExist = true; // await this.widget.userService.userExists(fullMatrixId);
     final isSelf = await widget.roomService.getMyUserId() == (fullMatrixId);
 
     if (!doesExist || isSelf) {
@@ -227,6 +247,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } else {
       setState(() {
         _members.add(username);
+        print(_members);
         _usernameError = null; // Clear error on successful add
         _memberLimitError = null; // Clear limit error if member added successfully
         _memberInputController.clear();
@@ -425,7 +446,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 child: TextField(
                                   controller: _controller,
                                   decoration: InputDecoration(
-                                    hintText: 'Enter username',
+                                    hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
                                     prefixText: '@',
                                     errorText: _contactError,
                                     filled: true,
@@ -552,7 +573,6 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                   style: TextStyle(
                                     color: theme.textTheme.bodyMedium?.color,
                                     fontSize: 18,
-                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -620,7 +640,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                       child: TextField(
                                         controller: _memberInputController,
                                         decoration: InputDecoration(
-                                          hintText: 'Enter username',
+                                          hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
                                           prefixText: '@',
                                           errorText: _usernameError ?? _memberLimitError,
                                           filled: true,

@@ -63,6 +63,41 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<bool> _showLoginWarningDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+
+        return AlertDialog(
+          title: Text('Heads Up!', style: theme.textTheme.titleLarge),
+          content: Text(
+            'If you use a homeserver that is also connected to other apps (like chat clients), your chat history could be wiped. Grid works best with a dedicated homeserver—don’t mix and match.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Close', style: TextStyle(color: colorScheme.onSurface)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                'I Understand, Login',
+                style: TextStyle(color: colorScheme.onPrimary),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+              ),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -189,7 +224,12 @@ class _LoginScreenState extends State<LoginScreen> {
               _isLoading
                   ? CircularProgressIndicator(color: colorScheme.primary)
                   : ElevatedButton(
-                onPressed: _login,
+                onPressed: () async {
+                  final confirmed = await _showLoginWarningDialog();
+                  if (confirmed) {
+                    await _login();
+                  }
+                },
                 child: Text(
                   'Continue',
                   style: theme.textTheme.labelLarge?.copyWith(

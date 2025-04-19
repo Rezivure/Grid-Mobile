@@ -351,15 +351,12 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     _isUpdatingMembers = true;
 
     try {
-      // First wait for Matrix sync to ensure we have latest state
-      await roomService.client.sync();
 
       // Verify invite status from Matrix
       final inviteStatus = await roomService.getUserRoomMembership(roomId, userId);
       if (inviteStatus != 'invite') {
         // Wait briefly and check again in case of sync delay
         await Future.delayed(const Duration(milliseconds: 500));
-        await roomService.client.sync();
       }
 
       // Get user profile and update/insert user

@@ -34,7 +34,6 @@ class _SplashScreenState extends State<SplashScreen> {
       // If token exists, set it to the client and sync
       try {
         client.accessToken = token;
-        await client.sync();
         var stat = client.isLogged();
         print("print stat of client log:{$stat} ");
         if (client.isLogged()) {

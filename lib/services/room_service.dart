@@ -1,6 +1,8 @@
 import 'dart:ffi';
+import 'dart:math';
 
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -196,7 +198,6 @@ class RoomService {
 
   Future<List<Map<String, dynamic>>> getGroupRooms() async {
     try {
-      await client.sync();
       List<Map<String, dynamic>> groupRooms = [];
 
       for (var room in client.rooms) {
@@ -219,7 +220,6 @@ class RoomService {
 
   Future<int> getNumInvites() async {
     try {
-      await client.sync();
       List<Room> invitedRooms = client.rooms.where((room) =>
       room.membership == Membership.invite).toList();
       return invitedRooms.length;
@@ -486,8 +486,15 @@ class RoomService {
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
-          id = id.toLowerCase();
-          var fullUsername = '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
+          bool isCustomServer = isCustomHomeserver();
+          print("IS CUSTOM SERVER:");
+          print(isCustomServer);
+
+          if (isCustomServer) {
+            id =  '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
+          }
+          var fullUsername = id;
+          print(fullUsername);
           await client.inviteUser(roomId, fullUsername);
         }
       }
@@ -500,6 +507,14 @@ class RoomService {
       return "Error";
     }
     return roomId;
+  }
+
+  bool isCustomHomeserver() {
+    final homeserver = getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return true;
+    }
+    return false;
   }
 
   void getAndUpdateDisplayName() async {
@@ -524,7 +539,9 @@ class RoomService {
 
       if (latitude != null && longitude != null) {
         // Create a unique hash for the location message
-        final messageHash = '$latitude:$longitude';
+        var timestamp = DateTime.now().millisecondsSinceEpoch;
+
+        final messageHash = '$latitude:$longitude:$timestamp';
 
         // Check if the message is already sent
         if (_recentlySentMessages[roomId]?.contains(messageHash) == true) {
@@ -822,7 +839,6 @@ class RoomService {
 
   Future<Map<String, dynamic>> getDirectRooms() async {
     try {
-      await client.sync();
       List<User> directUsers = [];
       Map<User, String> userRoomMap = {};
 
