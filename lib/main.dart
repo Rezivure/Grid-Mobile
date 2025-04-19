@@ -74,7 +74,6 @@ void main() async {
   if (token != null && token.isNotEmpty) {
     try {
       client.accessToken = token;
-      await client.sync();
     } catch (e) {
       print('Error restoring session with token: $e');
     }

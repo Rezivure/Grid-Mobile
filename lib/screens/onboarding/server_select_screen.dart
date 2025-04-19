@@ -150,7 +150,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
             ),
           ),
           Text(
-            'This is how others can discover you.',
+            'This is how others can add you.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onBackground.withOpacity(0.7),
             ),

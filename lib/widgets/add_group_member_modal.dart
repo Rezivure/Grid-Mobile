@@ -9,6 +9,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 
+
 import '../models/grid_user.dart' as GridUser;
 
 import '../repositories/user_repository.dart';
@@ -56,21 +57,26 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     });
   }
 
+  bool isCustomHomeserver() {
+    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return false;
+    }
+    return true;
+  }
+
   void _addMember() async {
     const int MAX_GROUP_MEMBERS = 15;
 
-    final inputText = _controller.text.trim();
-    String username;
-    if (_matrixUserId != null && _matrixUserId!.isNotEmpty) {
-      username = _matrixUserId!;
+    var username = _controller.text.toLowerCase();
+    bool isCustomServer = isCustomHomeserver();
+    if (!isCustomServer)  {
+      // is grid server
+      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+      username = '@$username:$homeserver';
     } else {
-      username = inputText;
+      username = '@$username';
     }
-
-
-    var usernameLowercase = username.toLowerCase();
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    final fullMatrixId = '@$usernameLowercase:$homeserver';
 
     if (username.isEmpty) {
       if (mounted) {
@@ -90,10 +96,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
 
     try {
 
-
       // check if inviting self
-      final usernameLowercase = username.toLowerCase();
-      final isSelf = (await widget.roomService.getMyUserId() == fullMatrixId);
+      final isSelf = (await widget.roomService.getMyUserId() == username);
       if (isSelf) {
         if (mounted) {
           setState(() {
@@ -140,7 +144,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Verify user exists
-      if (!await widget.userService.userExists(fullMatrixId!)) {
+      if (!await widget.userService.userExists(username)) {
         if (mounted) {
           setState(() {
             _contactError = 'The user $username does not exist.';
@@ -151,7 +155,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Check if already in group
-      if (await widget.roomService.isUserInRoom(widget.roomId, fullMatrixId)) {
+      if (await widget.roomService.isUserInRoom(widget.roomId, username)) {
         if (mounted) {
           setState(() {
             _contactError = 'The user $username is already in the group.';
@@ -162,10 +166,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       }
 
       // Send the matrix invite
-      await widget.roomService.client.inviteUser(widget.roomId, fullMatrixId);
+      await widget.roomService.client.inviteUser(widget.roomId, username);
 
       // Let GroupsBloc handle the state updates
-      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, fullMatrixId);
+      context.read<GroupsBloc>().handleNewMemberInvited(widget.roomId, username);
 
       if (widget.onInviteSent != null) {
         widget.onInviteSent!();
@@ -174,7 +178,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invite sent successfully to ${localpart(fullMatrixId)}.')),
+          SnackBar(content: Text('Invite sent successfully to ${localpart(username)}.')),
         );
       }
 
@@ -204,8 +208,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     });
   }
 
+
   void _onQRViewCreated(QRViewController controller) {
     _qrController = controller;
+    bool isCustomServ = isCustomHomeserver();
     controller.scannedDataStream.listen((scanData) async {
       if (!hasScanned) {
         String scannedUserId = scanData.code ?? '';
@@ -216,12 +222,9 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
           controller.pauseCamera(); // Pause the camera to avoid rescanning
           setState(() {
             _isScanning = false;
-            _matrixUserId = scannedUserId;
-            _controller.text = scannedUserId
-                .split(":")
-                .first
-                .replaceFirst('@', '');
+            _controller.text = scannedUserId.replaceAll('@', "");
           });
+
           _addMember();
         } else {
           print('QR Code data is empty');
@@ -246,6 +249,14 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    bool isCustomHomeserver() {
+      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+      if (homeserver == dotenv.env['HOMESERVER']) {
+        return false;
+      }
+      return true;
+    }
 
     return Material(
       color: Colors.transparent,
@@ -331,7 +342,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
                     child: TextField(
                       controller: _controller,
                       decoration: InputDecoration(
-                        hintText: 'Enter username',
+                        hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
                         prefixText: '@',
                         errorText: _contactError,
                         filled: true,

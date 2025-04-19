@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
@@ -27,13 +28,24 @@ class FriendRequestModal extends StatefulWidget {
   _FriendRequestModalState createState() => _FriendRequestModalState();
 }
 
+
 class _FriendRequestModalState extends State<FriendRequestModal> {
   bool _isProcessing = false;
+
+
+  bool isCustomHomeserver() {
+    final homeserver = widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    if (homeserver == dotenv.env['HOMESERVER']) {
+      return false;
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final bool isCustomServer = isCustomHomeserver();
 
     return AlertDialog(
       content: Column(
@@ -46,9 +58,10 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           ),
           SizedBox(height: 20),
           Text(
-            widget.displayName,
+            '@${widget.displayName}',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
+          isCustomServer ? Text(widget.userId) : Text(""),
           SizedBox(height: 10),
           Text(
             'Wants to connect with you. You will begin sharing locations once you accept.',
