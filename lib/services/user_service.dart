@@ -39,7 +39,6 @@ class UserService {
   }
 
   Future<RelationshipStatus> getRelationshipStatus(String effectiveUserId, String targetUserId) async {
-    await client.sync();
 
     for (var room in client.rooms) {
       final roomName1 = "Grid:Direct:$effectiveUserId:$targetUserId";

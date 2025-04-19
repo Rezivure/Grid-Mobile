@@ -98,10 +98,18 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     final inputText = _controller.text.trim();
     bool isCustomServer = isCustomHomeserver();
 
-    var normalizedUserId = _friendQrCodeScan!.toLowerCase();
+    String? rawInput = _friendQrCodeScan ?? _controller.text.trim();
+    if (rawInput.isEmpty) {
+      setState(() {
+        _contactError = 'Please enter a username.';
+      });
+      return;
+    }
+    var normalizedUserId = rawInput.toLowerCase();
+    print(normalizedUserId);
     if (!isCustomServer) {
       final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-      normalizedUserId = '$normalizedUserId:$homeserver';
+      normalizedUserId = '@$normalizedUserId:$homeserver';
     }
     if (normalizedUserId.isNotEmpty) {
       if (mounted) {
@@ -111,16 +119,16 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
       try {
-        bool userExists = await widget.userService.userExists(normalizedUserId!);
-        if (!userExists) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'Invalid username: @$inputText';
-              _isProcessing = false;
-            });
-          }
-          return;
-        }
+        // bool userExists = await widget.userService.userExists(normalizedUserId!);
+        // if (!userExists) {
+        //   if (mounted) {
+        //     setState(() {
+        //       _contactError = 'Invalid username: @$inputText';
+        //       _isProcessing = false;
+        //     });
+        //   }
+        //   return;
+        // }
 
         // User exists, proceed with invitation
         bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
@@ -220,14 +228,16 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
-    var usernameLowercase = '@${username.toLowerCase()}';
+    var usernameLowercase = '${username.toLowerCase()}';
     var fullMatrixId = usernameLowercase;
     final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
     bool isCustomServer = isCustomHomeserver();
-    if (!isCustomServer) {
+    if (isCustomServer) {
       fullMatrixId = '$usernameLowercase:$homeserver';
     }
-    final doesExist = await this.widget.userService.userExists(fullMatrixId);
+
+    print(fullMatrixId);
+    final doesExist = true; // await this.widget.userService.userExists(fullMatrixId);
     final isSelf = await widget.roomService.getMyUserId() == (fullMatrixId);
 
     if (!doesExist || isSelf) {
@@ -563,7 +573,6 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                   style: TextStyle(
                                     color: theme.textTheme.bodyMedium?.color,
                                     fontSize: 18,
-                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),

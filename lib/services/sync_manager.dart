@@ -115,9 +115,12 @@ class SyncManager with ChangeNotifier {
 
   Future<void> startSync() async {
     if (_isSyncing) return;
-
     _isSyncing = true;
-    client.sync(fullState: true);
+    client.sync(
+      fullState: false,
+      timeout: 10000,
+    );
+
 
 
     client.onSync.stream.listen((SyncUpdate syncUpdate) {

@@ -50,8 +50,7 @@ class AuthProvider with ChangeNotifier {
         token: jwt,
       );
 
-      await client.sync();
-
+      await client.sync(fullState: true, timeout: 5000); // prime the state, fast
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
     } catch (e) {
