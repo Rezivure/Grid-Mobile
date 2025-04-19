@@ -198,7 +198,6 @@ class RoomService {
 
   Future<List<Map<String, dynamic>>> getGroupRooms() async {
     try {
-      await client.sync();
       List<Map<String, dynamic>> groupRooms = [];
 
       for (var room in client.rooms) {
@@ -221,7 +220,6 @@ class RoomService {
 
   Future<int> getNumInvites() async {
     try {
-      await client.sync();
       List<Room> invitedRooms = client.rooms.where((room) =>
       room.membership == Membership.invite).toList();
       return invitedRooms.length;
@@ -488,12 +486,15 @@ class RoomService {
       // Invite users to the room
       for (String id in userIds) {
         if (id != effectiveUserId) {
-          id = '@${id.toLowerCase()}';
-          var fullUsername = '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
           bool isCustomServer = isCustomHomeserver();
+          print("IS CUSTOM SERVER:");
+          print(isCustomServer);
+
           if (isCustomServer) {
-            fullUsername = id;
+            id =  '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
           }
+          var fullUsername = id;
+          print(fullUsername);
           await client.inviteUser(roomId, fullUsername);
         }
       }
@@ -511,9 +512,9 @@ class RoomService {
   bool isCustomHomeserver() {
     final homeserver = getMyHomeserver().replaceFirst('https://', '');
     if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
+      return true;
     }
-    return true;
+    return false;
   }
 
   void getAndUpdateDisplayName() async {
@@ -838,7 +839,6 @@ class RoomService {
 
   Future<Map<String, dynamic>> getDirectRooms() async {
     try {
-      await client.sync();
       List<User> directUsers = [];
       Map<User, String> userRoomMap = {};
 

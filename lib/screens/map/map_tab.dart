@@ -123,7 +123,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     setState(() {
       _isPingOnCooldown = true;
-      _pingCooldownSeconds = 5;
+      _pingCooldownSeconds = 10; // sets ping rate max
     });
 
     _pingCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
