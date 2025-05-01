@@ -644,9 +644,9 @@ class _SettingsPageState extends State<SettingsPage> {
         leading: BackButton(color: colorScheme.onBackground),
       ),
       body: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         color: colorScheme.background,
-        child: Column(
+        child: ListView(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           children: [
             _buildAvatar(_localpart ?? 'Unknown User'),
             SizedBox(height: 10),
@@ -706,13 +706,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 );
               },
             ),
-            Text(
-              '@$_username',
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.normal,
-              ),
+            Center(
+              child: Text(
+                '@$_username',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.normal,
+                ),
+              )
             ),
             Divider(height: 16),
             Container(
@@ -819,90 +821,82 @@ class _SettingsPageState extends State<SettingsPage> {
 
             _buildInfoBubble('Device ID ', deviceID ?? 'Loading...'),
             _buildInfoBubble('Identity Key ', identityKey ?? 'Loading...'),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.only(top: 30),
-                children: <Widget>[
-                  _buildSettingsOption(
-                    icon: Icons.info,
-                    title: 'About',
-                    color: colorScheme.onBackground,
-                    onTap: () => _launchURL('https://mygrid.app/about'),
-                  ),
-                  _buildSettingsOption(
-                    icon: Icons.lock,
-                    title: 'Privacy',
-                    color: colorScheme.onBackground,
-                    onTap: () => _launchURL('https://mygrid.app/privacy'),
-                  ),
-                  _buildSettingsOption(
-                    icon: Icons.mail,
-                    title: 'Feedback',
-                    color: colorScheme.onBackground,
-                    onTap: () => _launchURL('https://mygrid.app/feedback'),
-                  ),
-                  _buildSettingsOption(
-                    icon: Icons.report,
-                    title: 'Report Abuse',
-                    color: colorScheme.onBackground,
-                    onTap: () => _launchURL('https://mygrid.app/report'),
-                  ),
-                  /*
-                  TODO: reimplement clear cache
-                  Divider(color: colorScheme.onBackground), // Divider uses theme
-                  _buildSettingsOption(
-                    icon: Icons.delete,
-                    title: 'Clear Cache',
-                    color: colorScheme.onBackground,
-                    onTap: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text('Clear Cache'),
-                          content: Text('Are you sure you want to clear cache? User locations saved on the device will be cleared.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: Text('Clear Data', style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed ?? false) {
-                        await Provider.of<DatabaseService>(context, listen: false).deleteAndReinitialize();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('All data has been cleared.')),
-                        );
-                      }
-                    },
-                  ),
-                  */
-                  _buildSettingsOption(
-                    icon: Icons.logout,
-                    title: 'Sign Out',
-                    color: Colors.red,
-                    onTap: _logout,
-                  ),
-                  Center(
-                    child: TextButton(
-                      onPressed: _deleteAccount,
-                      child: Text(
-                        'Delete Account',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
+            _buildSettingsOption(
+              icon: Icons.info,
+              title: 'About',
+              color: colorScheme.onBackground,
+              onTap: () => _launchURL('https://mygrid.app/about'),
+            ),
+            _buildSettingsOption(
+              icon: Icons.lock,
+              title: 'Privacy',
+              color: colorScheme.onBackground,
+              onTap: () => _launchURL('https://mygrid.app/privacy'),
+            ),
+            _buildSettingsOption(
+              icon: Icons.mail,
+              title: 'Feedback',
+              color: colorScheme.onBackground,
+              onTap: () => _launchURL('https://mygrid.app/feedback'),
+            ),
+            _buildSettingsOption(
+              icon: Icons.report,
+              title: 'Report Abuse',
+              color: colorScheme.onBackground,
+              onTap: () => _launchURL('https://mygrid.app/report'),
+            ),
+            /*
+            TODO: reimplement clear cache
+            Divider(color: colorScheme.onBackground), // Divider uses theme
+            _buildSettingsOption(
+              icon: Icons.delete,
+              title: 'Clear Cache',
+              color: colorScheme.onBackground,
+              onTap: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('Clear Cache'),
+                    content: Text('Are you sure you want to clear cache? User locations saved on the device will be cleared.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text('Cancel'),
                       ),
-                    ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text('Clear Data', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
                   ),
+                );
 
-                ],
+                if (confirmed ?? false) {
+                  await Provider.of<DatabaseService>(context, listen: false).deleteAndReinitialize();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('All data has been cleared.')),
+                  );
+                }
+              },
+            ),
+            */
+            _buildSettingsOption(
+              icon: Icons.logout,
+              title: 'Sign Out',
+              color: Colors.red,
+              onTap: _logout,
+            ),
+            Center(
+              child: TextButton(
+                onPressed: _deleteAccount,
+                child: Text(
+                  'Delete Account',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
