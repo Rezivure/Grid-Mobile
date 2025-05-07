@@ -72,7 +72,6 @@ class RoomService {
 
     // Check if the user exists
     try {
-      print(matrixUserId);
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
         return false;
@@ -418,55 +417,43 @@ class RoomService {
     }
   }
 
-
   Future<String> createGroup(String groupName, List<String> userIds, int durationInHours) async {
-    String? effectiveUserId = client.userID ?? client.userID?.localpart;
+    final effectiveUserId = client.userID ?? client.userID?.localpart;
     if (effectiveUserId == null) {
-      return "Error";
+      throw Exception('Unable to determine current user ID');
     }
 
-    // Calculate expiration timestamp
-    int expirationTimestamp;
-    if (durationInHours == 0) {
-      // Infinite duration, set expiration to 0
-      expirationTimestamp = 0;
-    } else {
-      // Calculate expiration time based on current time and duration
-      final expirationTime = DateTime.now().add(Duration(hours: durationInHours));
-      expirationTimestamp = expirationTime.millisecondsSinceEpoch ~/ 1000; // Convert to Unix timestamp
-    }
+    final int expirationTimestamp = durationInHours == 0
+        ? 0
+        : DateTime.now().add(Duration(hours: durationInHours)).millisecondsSinceEpoch ~/ 1000;
 
-    final roomName = "Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId";
-    var roomId = "";
+    final roomName = 'Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId';
+
+    // power-levels config: only admins (creator) can invite/kick/etc.
+    final powerLevelsContent = {
+      'ban': 50,
+      'events': {
+        'm.room.name': 50,
+        'm.room.power_levels': 100,
+        'm.room.history_visibility': 100,
+        'm.room.canonical_alias': 50,
+        'm.room.avatar': 50,
+        'm.room.tombstone': 100,
+        'm.room.server_acl': 100,
+        'm.room.encryption': 100,
+      },
+      'events_default': 0,
+      'invite': 100,
+      'kick': 100,
+      'notifications': {'room': 50},
+      'redact': 50,
+      'state_default': 50,
+      'users': {effectiveUserId: 100},
+      'users_default': 0,
+    };
+
+    String roomId;
     try {
-      // Create power levels content that restricts invites to admin only
-      final powerLevelsContent = {
-        "ban": 50,
-        "events": {
-          "m.room.name": 50,
-          "m.room.power_levels": 100,
-          "m.room.history_visibility": 100,
-          "m.room.canonical_alias": 50,
-          "m.room.avatar": 50,
-          "m.room.tombstone": 100,
-          "m.room.server_acl": 100,
-          "m.room.encryption": 100,
-        },
-        "events_default": 0,
-        "invite": 100,
-        "kick": 100,
-        "notifications": {
-          "room": 50
-        },
-        "redact": 50,
-        "state_default": 50,
-        "users": {
-          effectiveUserId: 100,
-        },
-        "users_default": 0
-      };
-
-      // Create the room with power levels and encryption
       roomId = await client.createRoom(
         name: roomName,
         isDirect: false,
@@ -474,7 +461,7 @@ class RoomService {
         initialState: [
           StateEvent(
             type: EventTypes.Encryption,
-            content: {"algorithm": "m.megolm.v1.aes-sha2"},
+            content: {'algorithm': 'm.megolm.v1.aes-sha2'},
           ),
           StateEvent(
             type: EventTypes.RoomPowerLevels,
@@ -483,35 +470,30 @@ class RoomService {
         ],
       );
 
-      // Invite users to the room
-      for (String id in userIds) {
-        if (id != effectiveUserId) {
-          bool isCustomServer = isCustomHomeserver();
-          print("IS CUSTOM SERVER:");
-          print(isCustomServer);
-
-          if (isCustomServer) {
-            id =  '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
-          }
-          var fullUsername = id;
-          print(fullUsername);
-          await client.inviteUser(roomId, fullUsername);
+      for (final user in userIds) {
+        var fullMatrixId = user;
+        final isCustomServ = isCustomHomeserver();
+        if (isCustomServ) {
+          fullMatrixId = '@$fullMatrixId';
+        } else {
+          final homeserver = getMyHomeserver().replaceFirst('https://', '');
+          fullMatrixId = '@$user:$homeserver';
         }
+        await client.inviteUser(roomId, fullMatrixId);
       }
 
-      // Add the "Grid Group" tag to the room
-      await client.setRoomTag(client.userID!, roomId, "Grid Group");
+      await client.setRoomTag(effectiveUserId, roomId, 'Grid Group');
     } catch (e) {
-      // Handle errors
-      print('Error creating room: $e');
-      return "Error";
+      throw Exception('Failed to create group: $e');
     }
+
     return roomId;
   }
 
+
   bool isCustomHomeserver() {
     final homeserver = getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
+    if (homeserver != dotenv.env['HOMESERVER']) {
       return true;
     }
     return false;
