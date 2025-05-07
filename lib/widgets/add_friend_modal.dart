@@ -106,7 +106,6 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
     var normalizedUserId = rawInput.toLowerCase();
-    print(normalizedUserId);
     if (!isCustomServer) {
       final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
       normalizedUserId = '@$normalizedUserId:$homeserver';
@@ -119,18 +118,17 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
       try {
-        // bool userExists = await widget.userService.userExists(normalizedUserId!);
-        // if (!userExists) {
-        //   if (mounted) {
-        //     setState(() {
-        //       _contactError = 'Invalid username: @$inputText';
-        //       _isProcessing = false;
-        //     });
-        //   }
-        //   return;
-        // }
+        bool userExists = await widget.userService.userExists(normalizedUserId!);
+        if (!userExists) {
+          if (mounted) {
+            setState(() {
+              _contactError = 'Invalid username: @$inputText';
+              _isProcessing = false;
+            });
+          }
+          return;
+        }
 
-        // User exists, proceed with invitation
         bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
 
         if (success) {
@@ -219,6 +217,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
       return;
     }
 
+
     String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
 
     if (_members.contains(username)) {
@@ -233,11 +232,12 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
     bool isCustomServer = isCustomHomeserver();
     if (isCustomServer) {
-      fullMatrixId = '$usernameLowercase:$homeserver';
+      fullMatrixId = '@$usernameLowercase';
+    } else {
+      fullMatrixId = '@$usernameLowercase:$homeserver';
     }
 
-    print(fullMatrixId);
-    final doesExist = true; // await this.widget.userService.userExists(fullMatrixId);
+    final doesExist = await widget.userService.userExists(fullMatrixId);
     final isSelf = await widget.roomService.getMyUserId() == (fullMatrixId);
 
     if (!doesExist || isSelf) {
@@ -247,7 +247,6 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } else {
       setState(() {
         _members.add(username);
-        print(_members);
         _usernameError = null; // Clear error on successful add
         _memberLimitError = null; // Clear limit error if member added successfully
         _memberInputController.clear();
@@ -283,7 +282,6 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
 
       // Create the group and get the room ID
       final roomId = await widget.roomService.createGroup(groupName, _members, durationInHours);
-
 
       if (mounted) {
         // Wait briefly for room creation to complete
@@ -324,7 +322,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating group: $e')),
+          SnackBar(content: Text('Error creating group. Does that user exist?')),
         );
       }
     } finally {
