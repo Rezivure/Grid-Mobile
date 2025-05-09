@@ -1,12 +1,11 @@
 import 'dart:async'; // Import for Timer
 import 'dart:math'; // For generating random numbers
 import 'package:flutter/material.dart';
+import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:lottie/lottie.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
@@ -14,7 +13,8 @@ class ServerSelectScreen extends StatefulWidget {
 }
 
 class _ServerSelectScreenState extends State<ServerSelectScreen> {
-  int _currentStep = 0; // 0: Enter Username, 1: Enter Phone Number, 2: Verify SMS Code
+  int _currentStep =
+      0; // 0: Enter Username, 1: Enter Phone Number, 2: Verify SMS Code
   bool _isLoginFlow = false;
   bool _isLoading = false; // For showing spinner and disabling button
 
@@ -40,7 +40,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
     _usernameController.addListener(_onUsernameChanged);
   }
 
-
   void _onUsernameChanged() {
     // Debounce input to prevent rapid validation calls
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -57,7 +56,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
     if (username.length < 5) {
       setState(() {
         _usernameStatusMessage =
-        'Username must be at least 5 characters and no special characters or spaces.';
+            'Username must be at least 5 characters and no special characters or spaces.';
         _usernameStatusColor = Colors.red;
       });
       return;
@@ -185,19 +184,22 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: (_usernameStatusMessage == 'Username is available') && !_isLoading
+            onPressed: (_usernameStatusMessage == 'Username is available') &&
+                    !_isLoading
                 ? () {
-              setState(() {
-                _currentStep = 1; // Proceed to next step
-              });
-            }
+                    setState(() {
+                      _currentStep = 1; // Proceed to next step
+                    });
+                  }
                 : null, // Disable button if username is not available or loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              'Next',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
+            child: _isLoading
+                ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                : Text(
+                    'Next',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,
               minimumSize: const Size(double.infinity, 50),
@@ -287,49 +289,53 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
           ElevatedButton(
             onPressed: !_isLoading
                 ? () async {
-              setState(() {
-                _isLoading = true;
-              });
-              try {
-                if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
-                  setState(() {
-                    _isLoading = false;
-                  });
-                  return;
-                }
-                if (_isLoginFlow) {
-                  // For login, only phone number is required
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(_fullPhoneNumber, isLogin: true);
-                } else {
-                  // For registration, both username and phone number are required
-                  String username = _usernameController.text;
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(
-                    _fullPhoneNumber,
-                    isLogin: false,
-                    username: username,
-                  );
-                }
-                setState(() {
-                  _currentStep = 2; // Proceed to verify code step
-                });
-              } catch (e) {
-                _showErrorDialog(context, 'Phone number invalid or already registered');
-              } finally {
-                setState(() {
-                  _isLoading = false;
-                });
-              }
-            }
+                    setState(() {
+                      _isLoading = true;
+                    });
+                    try {
+                      if (_fullPhoneNumber.isEmpty) {
+                        _showErrorDialog(
+                            context, 'Please enter a valid phone number.');
+                        setState(() {
+                          _isLoading = false;
+                        });
+                        return;
+                      }
+                      if (_isLoginFlow) {
+                        // For login, only phone number is required
+                        await Provider.of<AuthProvider>(context, listen: false)
+                            .sendSmsCode(_fullPhoneNumber, isLogin: true);
+                      } else {
+                        // For registration, both username and phone number are required
+                        String username = _usernameController.text;
+                        await Provider.of<AuthProvider>(context, listen: false)
+                            .sendSmsCode(
+                          _fullPhoneNumber,
+                          isLogin: false,
+                          username: username,
+                        );
+                      }
+                      setState(() {
+                        _currentStep = 2; // Proceed to verify code step
+                      });
+                    } catch (e) {
+                      _showErrorDialog(context,
+                          'Phone number invalid or already registered');
+                    } finally {
+                      setState(() {
+                        _isLoading = false;
+                      });
+                    }
+                  }
                 : null, // Disable button if loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              'Send Code',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
+            child: _isLoading
+                ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                : Text(
+                    'Send Code',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,
               minimumSize: const Size(double.infinity, 50),
@@ -372,7 +378,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
             onTap: () async {
               try {
                 if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
+                  _showErrorDialog(
+                      context, 'Please enter a valid phone number.');
                   return;
                 }
                 if (_isLoginFlow) {
@@ -423,62 +430,68 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
           ElevatedButton(
             onPressed: !_isLoading
                 ? () async {
-              setState(() {
-                _isLoading = true;
-              });
-              if (_codeController.text.length == 6) {
-                if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
-                  setState(() {
-                    _isLoading = false;
-                  });
-                  return;
-                }
-                if (_isLoginFlow) {
-                  // Login flow
-                  try {
-                    await Provider.of<AuthProvider>(context, listen: false)
-                        .verifyLoginCode(
-                      _fullPhoneNumber,
-                      _codeController.text,
-                    );
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/main',      // The target route (main screen)
-                          (Route<dynamic> route) => false,  // Remove all previous routes
-                    );
-                  } catch (e) {
-                    _showErrorDialog(context, 'Login failed');
+                    setState(() {
+                      _isLoading = true;
+                    });
+                    if (_codeController.text.length == 6) {
+                      if (_fullPhoneNumber.isEmpty) {
+                        _showErrorDialog(
+                            context, 'Please enter a valid phone number.');
+                        setState(() {
+                          _isLoading = false;
+                        });
+                        return;
+                      }
+                      if (_isLoginFlow) {
+                        // Login flow
+                        try {
+                          await Provider.of<AuthProvider>(context,
+                                  listen: false)
+                              .verifyLoginCode(
+                            _fullPhoneNumber,
+                            _codeController.text,
+                          );
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/main', // The target route (main screen)
+                            (Route<dynamic> route) =>
+                                false, // Remove all previous routes
+                          );
+                        } catch (e) {
+                          _showErrorDialog(context, 'Login failed');
+                        }
+                      } else {
+                        // Register flow
+                        String username = _usernameController.text;
+                        try {
+                          await Provider.of<AuthProvider>(context,
+                                  listen: false)
+                              .verifyRegistrationCode(
+                            username,
+                            _fullPhoneNumber,
+                            _codeController.text,
+                          );
+                          Navigator.pushNamed(context, '/main');
+                        } catch (e) {
+                          _showErrorDialog(context, 'Registration failed');
+                        }
+                      }
+                    } else {
+                      _showInvalidCodeDialog(context);
+                    }
+                    setState(() {
+                      _isLoading = false;
+                    });
                   }
-                } else {
-                  // Register flow
-                  String username = _usernameController.text;
-                  try {
-                    await Provider.of<AuthProvider>(context, listen: false)
-                        .verifyRegistrationCode(
-                      username,
-                      _fullPhoneNumber,
-                      _codeController.text,
-                    );
-                    Navigator.pushNamed(context, '/main');
-                  } catch (e) {
-                    _showErrorDialog(context, 'Registration failed');
-                  }
-                }
-              } else {
-                _showInvalidCodeDialog(context);
-              }
-              setState(() {
-                _isLoading = false;
-              });
-            }
                 : null, // Disable button if loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              _isLoginFlow ? 'Sign In' : 'Register',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
+            child: _isLoading
+                ? CircularProgressIndicator(color: colorScheme.onPrimary)
+                : Text(
+                    _isLoginFlow ? 'Sign In' : 'Register',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onPrimary,
+                    ),
+                  ),
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,
               minimumSize: const Size(double.infinity, 50),
