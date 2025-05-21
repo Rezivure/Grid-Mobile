@@ -291,7 +291,7 @@ class RoomService {
       print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
-        print("trying to get rooms");
+        print("Trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
         String leaveReason = '';
@@ -301,7 +301,6 @@ class RoomService {
           print("Checking Grid room: ${room.name}");
 
           if (room.name.contains("Grid:Group:")) {
-            // Handle group rooms
             final roomNameParts = room.name.split(":");
             if (roomNameParts.length >= 4) {
               final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
@@ -313,7 +312,6 @@ class RoomService {
               }
             }
           } else if (room.name.contains("Grid:Direct:")) {
-            // Handle direct rooms
             print("Checking direct room: ${room.id} with ${participants.length} participants");
 
             if (participants.length <= 1) {
@@ -326,7 +324,6 @@ class RoomService {
             }
           }
         } else {
-          // Non-Grid rooms should be left
           print("Found non-Grid room: ${room.name}");
           shouldLeave = true;
           leaveReason = 'non-Grid room';
@@ -344,13 +341,22 @@ class RoomService {
           try {
             print("Leaving room ${room.id} (${room.name}) - Reason: $leaveReason");
 
-            // Perform local cleanup before leaving the room
-            await _cleanupLocalData(room.id, participants);
-
-            // Leave and forget the room on the server
+            // Leave and forget the room on the server first
             await room.leave();
             await client.forgetRoom(room.id);
-            print('Successfully left and forgot room: ${room.id}');
+            print('Attempted to leave room: ${room.id}, verifying...');
+
+            // Confirm the room is left by re-fetching the joined rooms
+            final joinedRooms = await client.getJoinedRooms();
+            if (!joinedRooms.contains(room.id)) {
+              print('Confirmed room ${room.id} left successfully.');
+
+              // Only clean up locally if the leave was successful
+              await _cleanupLocalData(room.id, participants);
+              print('Successfully cleaned up local data for room: ${room.id}');
+            } else {
+              print('Room ${room.id} still appears in joined rooms after leave attempt.');
+            }
           } catch (e) {
             print('Error leaving room ${room.id}: $e');
           }
@@ -363,6 +369,7 @@ class RoomService {
       print("Error during room cleanup: $e");
     }
   }
+
 
   /// Handles cleanup of local data when leaving a room
   Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
