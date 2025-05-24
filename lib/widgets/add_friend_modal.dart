@@ -334,6 +334,598 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     }
   }
 
+  // Helper Methods for New UI
+  Widget _buildSectionCard({
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.15),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.primary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 14,
+              color: colorScheme.onBackground.withOpacity(0.6),
+            ),
+          ),
+          SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickDurationButton(String label, int hours, ColorScheme colorScheme) {
+    bool isSelected = _sliderValue == hours || (hours == 72 && _sliderValue >= 71);
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _sliderValue = hours.toDouble();
+          _isForever = hours >= 71;
+        });
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? colorScheme.primary 
+              : colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected 
+                ? colorScheme.primary 
+                : colorScheme.outline.withOpacity(0.3),
+            width: 1,
+          ),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: colorScheme.primary.withOpacity(0.3),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ] : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected 
+                ? Colors.white 
+                : colorScheme.onSurface,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberCard(String username, ColorScheme colorScheme) {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.primary.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: colorScheme.primary.withOpacity(0.1),
+            child: RandomAvatar(
+              username.toLowerCase(),
+              height: 32,
+              width: 32,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '@${username.toLowerCase()}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _removeMember(username),
+            child: Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.close,
+                color: Colors.red,
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQRScannerView(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Section
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Scan QR Code',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Point your camera at a friend\'s QR code to add them instantly',
+              style: TextStyle(
+                fontSize: 16,
+                color: colorScheme.onBackground.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 32),
+
+        // QR Scanner Section
+        Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: colorScheme.background,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.15),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                height: 300,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: colorScheme.primary.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: QRView(
+                    key: qrKey,
+                    onQRViewCreated: _onQRViewCreated,
+                    overlay: QrScannerOverlayShape(
+                      borderColor: colorScheme.primary,
+                      borderRadius: 16,
+                      borderLength: 30,
+                      borderWidth: 4,
+                      cutOutSize: 250,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Position the QR code within the frame',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colorScheme.onBackground.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 32),
+
+        // Cancel Button
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                colorScheme.outline.withOpacity(0.3),
+                colorScheme.outline.withOpacity(0.2),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: ElevatedButton(
+            onPressed: () {
+              _qrController?.pauseCamera();
+              setState(() {
+                _isScanning = false;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: EdgeInsets.symmetric(vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                  size: 20,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Back to Manual Entry',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddContactForm(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Section
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add New Contact',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Send a friend request to start sharing your location',
+              style: TextStyle(
+                fontSize: 16,
+                color: colorScheme.onBackground.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 32),
+
+        // Username Input Section
+        _buildSectionCard(
+          theme: theme,
+          colorScheme: colorScheme,
+          title: 'Username',
+          subtitle: 'Enter your friend\'s username',
+          child: Column(
+            children: [
+              TextField(
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: isCustomHomeserver() 
+                      ? 'john:homeserver.io' 
+                      : 'Enter username...',
+                  prefixIcon: Icon(
+                    Icons.person,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                  prefixText: '@',
+                  errorText: _contactError,
+                  filled: true,
+                  fillColor: colorScheme.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.outline.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.outline.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.primary,
+                      width: 2,
+                    ),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: Colors.red,
+                      width: 1,
+                    ),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: Colors.red,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                ),
+              ),
+              if (_contactError == null) ...[
+                SizedBox(height: 12),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: colorScheme.primary.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: colorScheme.primary,
+                        size: 16,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Secure location sharing will begin once accepted',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        SizedBox(height: 24),
+
+        // Action Buttons Section
+        Column(
+          children: [
+            // Send Request Button
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _isProcessing
+                      ? [
+                          colorScheme.outline.withOpacity(0.3),
+                          colorScheme.outline.withOpacity(0.2),
+                        ]
+                      : [
+                          colorScheme.primary,
+                          colorScheme.primary.withOpacity(0.8),
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: _isProcessing
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: colorScheme.primary.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+              ),
+              child: ElevatedButton(
+                onPressed: _isProcessing ? null : _addContact,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: _isProcessing
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Sending Request...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person_add,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Send Friend Request',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            SizedBox(height: 16),
+
+            // OR Divider
+            Row(
+              children: [
+                Expanded(
+                  child: Divider(
+                    color: colorScheme.outline.withOpacity(0.3),
+                    thickness: 1,
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'OR',
+                    style: TextStyle(
+                      color: colorScheme.onSurface.withOpacity(0.6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Divider(
+                    color: colorScheme.outline.withOpacity(0.3),
+                    thickness: 1,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+
+            // QR Scanner Button
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.3),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: _scanQRCode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.qr_code_scanner,
+                      color: colorScheme.primary,
+                      size: 22,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Scan QR Code Instead',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -378,378 +970,473 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // Add Contact Tab
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _isScanning
-                            ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Scan a Profile QR',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: theme.textTheme.bodyMedium?.color,
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Container(
-                              height: 300,
-                              child: QRView(
-                                key: qrKey,
-                                onQRViewCreated: _onQRViewCreated,
-                                overlay: QrScannerOverlayShape(
-                                  borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
-                                  borderRadius: 36,
-                                  borderLength: 30,
-                                  borderWidth: 10,
-                                  cutOutSize: 250,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            ElevatedButton(
-                              onPressed: () {
-                                _qrController?.pauseCamera();
-                                setState(() {
-                                  _isScanning = false;
-                                });
-                              },
-                              child: Text('Cancel'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.onSurface,
-                                foregroundColor: colorScheme.surface,
-                              )
-                            ),
-                          ],
-                        )
-                            : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Styled Text Field for Add Contact
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(36),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: TextField(
-                                  controller: _controller,
-                                  decoration: InputDecoration(
-                                    hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-                                    prefixText: '@',
-                                    errorText: _contactError,
-                                    filled: true,
-                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24), // increased radius for rounded corners
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                  ),
-                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                                ),
-                              ),
-                              SizedBox(height: 8), // Space between the TextField and subtext
-                              Text(
-                                'Secure location sharing will begin once accepted.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              ElevatedButton(
-                                onPressed: _isProcessing ? null : _addContact,
-                                child: _isProcessing
-                                    ? CircularProgressIndicator(color: Colors.white)
-                                    : Text('Send Request'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(35),
-                                  ),
-                                  backgroundColor: colorScheme.onSurface,
-                                  foregroundColor: colorScheme.surface,
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              // Scan QR Code Icon
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
-                                  borderRadius: BorderRadius.circular(35),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton.icon(
-                                  onPressed: _scanQRCode,
-                                  icon: Icon(
-                                    Icons.qr_code_scanner,
-                                    color: Theme.of(context).brightness == Brightness.light
-                                        ? colorScheme.primary
-                                        : colorScheme.surface,
-                                  ),
-                                  label: Text(
-                                    'Scan QR Code',
-                                    style: TextStyle(
-                                      color: Theme.of(context).brightness == Brightness.light
-                                          ? colorScheme.onSurface
-                                          : colorScheme.surface,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(35),
-                                    ),
-                                    backgroundColor: Theme.of(context).brightness == Brightness.light
-                                        ? colorScheme.surface
-                                        : colorScheme.primary,
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Create Group Tab
+                      // Add Contact Tab - Redesigned
                       SingleChildScrollView(
                         child: Padding(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.all(20.0),
+                          child: _isScanning
+                              ? _buildQRScannerView(theme, colorScheme)
+                              : _buildAddContactForm(theme, colorScheme),
+                        ),
+                      ),
+                      // Create Group Tab - Redesigned
+                      SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Styled Group Name Input
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(36),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: TextField(
-                                  controller: _groupNameController,
-                                  maxLength: 14,
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter Group Name',
-                                    filled: true,
-                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                    counterText: '',
-                                  ),
-                                  style: TextStyle(
-                                    color: theme.textTheme.bodyMedium?.color,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              // Circular Slider
-                              SleekCircularSlider(
-                                min: 1,
-                                max: 72,
-                                initialValue: _sliderValue,
-                                appearance: CircularSliderAppearance(
-                                  customWidths: CustomSliderWidths(
-                                    trackWidth: 4,
-                                    progressBarWidth: 8,
-                                    handlerSize: 8,
-                                  ),
-                                  customColors: CustomSliderColors(
-                                    trackColor: theme.dividerColor,
-                                    progressBarColor: colorScheme.primary,
-                                    dotColor: colorScheme.primary,
-                                    hideShadow: true,
-                                  ),
-                                  infoProperties: InfoProperties(
-                                    modifier: (double value) {
-                                      if (value >= 71) {
-                                        _isForever = true;
-                                        return 'Forever';
-                                      } else {
-                                        _isForever = false;
-                                        return '${value.toInt()}h';
-                                      }
-                                    },
-                                    mainLabelStyle: TextStyle(
-                                      color: colorScheme.primary,
-                                      fontSize: 24,
-
-                                    ),
-                                  ),
-                                  startAngle: 270,
-                                  angleRange: 360,
-                                  size: 200,
-                                ),
-                                onChange: (value) {
-                                  setState(() {
-                                    _sliderValue = value >= 71 ? 72 : value;
-                                  });
-                                },
-                              ),
-                              SizedBox(height: 20),
-                              // Styled Add Member Input
-                              Row(
+                              // Header Section
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: theme.cardColor,
-                                        borderRadius: BorderRadius.circular(36),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: TextField(
-                                        controller: _memberInputController,
-                                        decoration: InputDecoration(
-                                          hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-                                          prefixText: '@',
-                                          errorText: _usernameError ?? _memberLimitError,
-                                          filled: true,
-                                          fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedErrorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                        ),
-                                        style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                                      ),
+                                  Text(
+                                    'Create New Group',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onBackground,
                                     ),
                                   ),
-                                  SizedBox(width: 10),
-                                  ElevatedButton(
-                                    onPressed: _addMember,
-                                    child: Text('Add'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: colorScheme.onSurface,
-                                      foregroundColor: colorScheme.surface,
-                                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(36),
-                                      ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Set up a group to share your location with multiple friends',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: colorScheme.onBackground.withOpacity(0.7),
                                     ),
                                   ),
                                 ],
                               ),
-                              SizedBox(height: 20),
-                              // Display Added Members
-                              if (_members.isNotEmpty)
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: _members.map((username) {
-                                    return Stack(
-                                      children: [
-                                        Column(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 20,
-                                              child: RandomAvatar(
-                                                username.toLowerCase(),
-                                                height: 40,
-                                                width: 40,
-                                              ),
-                                            ),
-                                            SizedBox(height: 5),
-                                            Text(
-                                              username.toLowerCase(),
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: theme.textTheme.bodyMedium?.color,
-                                              ),
-                                            ),
-                                          ],
+                              SizedBox(height: 32),
+                              
+                              // Group Name Section
+                              _buildSectionCard(
+                                theme: theme,
+                                colorScheme: colorScheme,
+                                title: 'Group Name',
+                                subtitle: 'Choose a memorable name',
+                                child: TextField(
+                                  controller: _groupNameController,
+                                  maxLength: 14,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter group name...',
+                                    filled: true,
+                                    fillColor: colorScheme.surface,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: colorScheme.outline.withOpacity(0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: colorScheme.outline.withOpacity(0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      borderSide: BorderSide(
+                                        color: colorScheme.primary,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                    counterText: '',
+                                  ),
+                                  style: TextStyle(
+                                    color: colorScheme.onSurface,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 24),
+
+                              // Duration Section
+                              _buildSectionCard(
+                                theme: theme,
+                                colorScheme: colorScheme,
+                                title: 'Duration',
+                                subtitle: 'How long should the group last?',
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary.withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: colorScheme.primary.withOpacity(0.2),
+                                          width: 1,
                                         ),
-                                        Positioned(
-                                          top: 0,
-                                          right: 0,
-                                          child: GestureDetector(
-                                            onTap: () => _removeMember(username),
-                                            child: CircleAvatar(
-                                              radius: 8,
-                                              backgroundColor: Colors.red,
-                                              child: Icon(
-                                                Icons.close,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          SleekCircularSlider(
+                                            min: 1,
+                                            max: 72,
+                                            initialValue: _sliderValue,
+                                            appearance: CircularSliderAppearance(
+                                              customWidths: CustomSliderWidths(
+                                                trackWidth: 6,
+                                                progressBarWidth: 12,
+                                                handlerSize: 16,
+                                              ),
+                                              customColors: CustomSliderColors(
+                                                trackColor: colorScheme.outline.withOpacity(0.2),
+                                                progressBarColor: colorScheme.primary,
+                                                dotColor: colorScheme.primary,
+                                                hideShadow: false,
+                                                shadowColor: colorScheme.primary.withOpacity(0.3),
+                                                shadowMaxOpacity: 0.2,
+                                              ),
+                                              infoProperties: InfoProperties(
+                                                modifier: (double value) {
+                                                  if (value >= 71) {
+                                                    _isForever = true;
+                                                    return 'Forever';
+                                                  } else {
+                                                    _isForever = false;
+                                                    return '${value.toInt()}h';
+                                                  }
+                                                },
+                                                mainLabelStyle: TextStyle(
+                                                  color: colorScheme.primary,
+                                                  fontSize: 28,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                bottomLabelStyle: TextStyle(
+                                                  color: colorScheme.onBackground.withOpacity(0.6),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                bottomLabelText: _isForever ? 'Permanent group' : 'Hours until expiration',
+                                              ),
+                                              startAngle: 270,
+                                              angleRange: 360,
+                                              size: 180,
+                                            ),
+                                            onChange: (value) {
+                                              setState(() {
+                                                _sliderValue = value >= 71 ? 72 : value;
+                                              });
+                                            },
+                                          ),
+                                          SizedBox(height: 16),
+                                          SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              children: [
+                                                _buildQuickDurationButton('1h', 1, colorScheme),
+                                                SizedBox(width: 8),
+                                                _buildQuickDurationButton('4h', 4, colorScheme),
+                                                SizedBox(width: 8),
+                                                _buildQuickDurationButton('12h', 12, colorScheme),
+                                                SizedBox(width: 8),
+                                                _buildQuickDurationButton('24h', 24, colorScheme),
+                                                SizedBox(width: 8),
+                                                _buildQuickDurationButton('∞', 72, colorScheme),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 24),
+
+                              // Members Section
+                              _buildSectionCard(
+                                theme: theme,
+                                colorScheme: colorScheme,
+                                title: 'Add Members',
+                                subtitle: 'Invite up to 5 friends to your group',
+                                child: Column(
+                                  children: [
+                                    // Add Member Input
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            controller: _memberInputController,
+                                            decoration: InputDecoration(
+                                              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
+                                              prefixIcon: Icon(
+                                                Icons.person_add,
+                                                color: colorScheme.primary,
+                                                size: 20,
+                                              ),
+                                              prefixText: '@',
+                                              errorText: _usernameError ?? _memberLimitError,
+                                              filled: true,
+                                              fillColor: colorScheme.surface,
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                                borderSide: BorderSide(
+                                                  color: colorScheme.outline.withOpacity(0.3),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                                borderSide: BorderSide(
+                                                  color: colorScheme.outline.withOpacity(0.3),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                                borderSide: BorderSide(
+                                                  color: colorScheme.primary,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              errorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                                borderSide: BorderSide(
+                                                  color: Colors.red,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              focusedErrorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                                borderSide: BorderSide(
+                                                  color: Colors.red,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                            ),
+                                            style: TextStyle(
+                                              color: colorScheme.onSurface,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                colorScheme.primary,
+                                                colorScheme.primary.withOpacity(0.8),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius: BorderRadius.circular(16),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: colorScheme.primary.withOpacity(0.3),
+                                                blurRadius: 8,
+                                                offset: Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: ElevatedButton(
+                                            onPressed: _addMember,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.transparent,
+                                              shadowColor: Colors.transparent,
+                                              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Add',
+                                              style: TextStyle(
                                                 color: Colors.white,
-                                                size: 10,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 16,
                                               ),
                                             ),
                                           ),
                                         ),
                                       ],
-                                    );
-                                  }).toList(),
+                                    ),
+                                    SizedBox(height: 20),
+                                    
+                                    // Members List
+                                    if (_members.isNotEmpty) ...[
+                                      Container(
+                                        padding: EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: colorScheme.outline.withOpacity(0.2),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.people,
+                                                  color: colorScheme.primary,
+                                                  size: 20,
+                                                ),
+                                                SizedBox(width: 8),
+                                                Text(
+                                                  'Group Members (${_members.length}/5)',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: colorScheme.onSurface,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            SizedBox(height: 16),
+                                            Wrap(
+                                              spacing: 16,
+                                              runSpacing: 16,
+                                              children: _members.map((username) => _buildMemberCard(username, colorScheme)).toList(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      Container(
+                                        padding: EdgeInsets.all(24),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.surface.withOpacity(0.5),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: colorScheme.outline.withOpacity(0.2),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              Icons.people_outline,
+                                              color: colorScheme.onSurface.withOpacity(0.4),
+                                              size: 48,
+                                            ),
+                                            SizedBox(height: 12),
+                                            Text(
+                                              'No members added yet',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                color: colorScheme.onSurface.withOpacity(0.6),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              'Add friends to get started',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: colorScheme.onSurface.withOpacity(0.4),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              SizedBox(height: 20),
-                              ElevatedButton(
-                                onPressed: (_isProcessing ||
-                                    _members.isEmpty ||
-                                    _groupNameController.text.trim().isEmpty)
-                                    ? null
-                                    : _createGroup,
-                                child: _isProcessing
-                                    ? CircularProgressIndicator(color: Colors.white)
-                                    : Text('Create Group'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: colorScheme.onSurface,
-                                  foregroundColor: colorScheme.surface,
-                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(36),
+                              ),
+                              SizedBox(height: 32),
+
+                              // Create Button
+                              Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: (_isProcessing ||
+                                        _members.isEmpty ||
+                                        _groupNameController.text.trim().isEmpty)
+                                        ? [
+                                            colorScheme.outline.withOpacity(0.3),
+                                            colorScheme.outline.withOpacity(0.2),
+                                          ]
+                                        : [
+                                            colorScheme.primary,
+                                            colorScheme.primary.withOpacity(0.8),
+                                          ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: (_isProcessing ||
+                                      _members.isEmpty ||
+                                      _groupNameController.text.trim().isEmpty)
+                                      ? []
+                                      : [
+                                          BoxShadow(
+                                            color: colorScheme.primary.withOpacity(0.4),
+                                            blurRadius: 12,
+                                            offset: Offset(0, 6),
+                                          ),
+                                        ],
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: (_isProcessing ||
+                                      _members.isEmpty ||
+                                      _groupNameController.text.trim().isEmpty)
+                                      ? null
+                                      : _createGroup,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    padding: EdgeInsets.symmetric(vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                  child: _isProcessing
+                                      ? Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                            SizedBox(width: 12),
+                                            Text(
+                                              'Creating Group...',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.group_add,
+                                              color: Colors.white,
+                                              size: 22,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Create Group',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                 ),
                               ),
                             ],
