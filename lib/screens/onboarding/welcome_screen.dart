@@ -10,9 +10,18 @@ class WelcomeScreen extends StatefulWidget {
   _WelcomeScreenState createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProviderStateMixin {
+class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateMixin {
   late AnimationController _fadeController;
+  late AnimationController _scaleController;
+  late AnimationController _slideController;
+  late AnimationController _networkController;
+  late AnimationController _floatController;
+  
   late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _networkAnimation;
+  late Animation<double> _floatAnimation;
 
   Timer? _avatarTimer;
   int _avatarUpdateIndex = 0;
@@ -20,16 +29,68 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    
+    // Multiple animation controllers for staggered animations
     _fadeController = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _networkController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    );
+    _floatController = AnimationController(
+      duration: const Duration(milliseconds: 4000),
+      vsync: this,
+    );
+    
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
-      curve: Curves.easeIn,
+      curve: Curves.easeInOut,
     );
+    _scaleAnimation = CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.elasticOut,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+    _networkAnimation = CurvedAnimation(
+      parent: _networkController,
+      curve: Curves.easeInOut,
+    );
+    _floatAnimation = CurvedAnimation(
+      parent: _floatController,
+      curve: Curves.easeInOut,
+    );
+
+    // Start animations with staggered delays
     _fadeController.forward();
-    _avatarTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      _scaleController.forward();
+    });
+    Future.delayed(const Duration(milliseconds: 600), () {
+      _slideController.forward();
+    });
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      _networkController.repeat();
+      _floatController.repeat(reverse: true);
+    });
+    
+    // Avatar animation timer
+    _avatarTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
       setState(() {
         _avatarUpdateIndex = DateTime.now().millisecondsSinceEpoch;
       });
@@ -39,6 +100,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
   @override
   void dispose() {
     _fadeController.dispose();
+    _scaleController.dispose();
+    _slideController.dispose();
+    _networkController.dispose();
+    _floatController.dispose();
     _avatarTimer?.cancel();
     super.dispose();
   }
@@ -51,6 +116,176 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
     }
   }
 
+  Widget _buildModernLogo() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            Theme.of(context).colorScheme.primary.withOpacity(0.05),
+            Colors.transparent,
+          ],
+          stops: const [0.3, 0.7, 1.0],
+        ),
+      ),
+      child: Image.asset(
+        'assets/logos/png-file-2.png',
+        height: 120,
+        width: 120,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildModernAvatarNetwork() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Container(
+      width: 280,
+      height: 180,
+      child: AnimatedBuilder(
+        animation: _networkAnimation,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: NetworkLinesPainter(
+              colorScheme: colorScheme,
+              animationValue: _networkAnimation.value,
+            ),
+            child: Stack(
+              children: _buildNetworkAvatars(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<Widget> _buildNetworkAvatars() {
+    final double avatarSize = 40;
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    // Define specific positions for a network layout
+    final List<Offset> basePositions = [
+      const Offset(40, 40),   // Top left
+      const Offset(140, 20),  // Top center
+      const Offset(240, 50),  // Top right
+      const Offset(60, 120),  // Bottom left
+      const Offset(160, 140), // Bottom center
+      const Offset(220, 120), // Bottom right
+    ];
+
+    return List.generate(basePositions.length, (i) {
+      final basePosition = basePositions[i];
+      
+      return AnimatedBuilder(
+        animation: _floatAnimation,
+        builder: (context, child) {
+          // Create different floating patterns for each avatar
+          final floatOffset = Offset(
+            sin(_floatAnimation.value * 2 * pi + i * 0.5) * 3,
+            cos(_floatAnimation.value * 2 * pi + i * 0.7) * 2,
+          );
+          
+          final animatedPosition = basePosition + floatOffset;
+          
+          return Positioned(
+            left: animatedPosition.dx - avatarSize / 2,
+            top: animatedPosition.dy - avatarSize / 2,
+            child: AnimatedOpacity(
+              opacity: 0.9,
+              duration: const Duration(milliseconds: 500),
+              child: Transform.scale(
+                scale: 1.0 + sin(_floatAnimation.value * 2 * pi + i) * 0.05,
+                child: Container(
+                  width: avatarSize,
+                  height: avatarSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: colorScheme.surface,
+                      width: 3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.primary.withOpacity(0.2 + sin(_floatAnimation.value * 2 * pi + i) * 0.1),
+                        blurRadius: 8 + sin(_floatAnimation.value * 2 * pi + i) * 2,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: RandomAvatar(
+                      _avatarUpdateIndex.toString() + i.toString(),
+                      height: avatarSize,
+                      width: avatarSize,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  Widget _buildModernButton({
+    required String text,
+    required VoidCallback onPressed,
+    required bool isPrimary,
+    required ColorScheme colorScheme,
+    IconData? icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: isPrimary ? [
+          BoxShadow(
+            color: colorScheme.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ] : null,
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isPrimary ? colorScheme.primary : Colors.transparent,
+          foregroundColor: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: isPrimary ? BorderSide.none : BorderSide(
+              color: colorScheme.outline.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -58,162 +293,279 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: colorScheme.background,
-      body: SingleChildScrollView(
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const SizedBox(height: 60), // Replace Spacer
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Image.asset(
-                  'assets/logos/png-file-2.png',
-                  height: 250,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: 250,
-                height: 250,
-                padding: const EdgeInsets.all(0),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: _buildAvatarCircle(),
-                ),
-              ),
-              const SizedBox(height: 30), // Replace Spacer
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Text(
-                  'Welcome to Grid',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: <Widget>[
+                const SizedBox(height: 20),
+                
+                // Modern Logo Section
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: _buildModernLogo(),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 10),
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Text(
-                  '',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onBackground.withOpacity(0.7),
+                
+                const SizedBox(height: 15),
+                
+                // Avatar Network
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: _buildModernAvatarNetwork(),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 20),
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: Text.rich(
-                  TextSpan(
-                    text: 'By using this app, you agree to our\n ',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onBackground.withOpacity(0.6),
-                    ),
-                    children: <TextSpan>[
-                      TextSpan(
-                        text: 'Privacy Policy',
-                        style: TextStyle(
-                          color: colorScheme.primary,
+                
+                const SizedBox(height: 30),
+                
+                // Welcome Text Section
+                SlideTransition(
+                  position: _slideAnimation,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            'WELCOME TO',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.primary,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
                         ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            _launchUrl('https://mygrid.app/privacy');
-                          },
-                      ),
-                      TextSpan(text: ' and '),
-                      TextSpan(
-                        text: 'Terms of Service.',
-                        style: TextStyle(
-                          color: colorScheme.primary,
+                        const SizedBox(height: 12),
+                        Text(
+                          'Grid',
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurface,
+                            height: 1.0,
+                          ),
                         ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            _launchUrl('https://mygrid.app/terms');
+                        const SizedBox(height: 8),
+                        Text(
+                          'Connect with friends and share your location\nsecurely in real-time',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+                
+                // Action Buttons
+                SlideTransition(
+                  position: _slideAnimation,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Column(
+                      children: [
+                        _buildModernButton(
+                          text: 'Get Started',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/server_select');
                           },
+                          isPrimary: true,
+                          colorScheme: colorScheme,
+                          icon: Icons.arrow_forward,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildModernButton(
+                          text: 'Custom Provider',
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/login');
+                          },
+                          isPrimary: false,
+                          colorScheme: colorScheme,
+                          icon: Icons.settings,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 30),
+                
+                // Terms and Privacy
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceVariant.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colorScheme.outline.withOpacity(0.1),
+                        width: 1,
                       ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 30), // Replace Spacer
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/server_select');
-                  },
-                  child: Text(
-                    'Continue',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colorScheme.onPrimary,
+                    ),
+                    child: Text.rich(
+                      TextSpan(
+                        text: 'By continuing, you agree to our ',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                          height: 1.3,
+                        ),
+                        children: <TextSpan>[
+                          TextSpan(
+                            text: 'Privacy Policy',
+                            style: TextStyle(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                _launchUrl('https://mygrid.app/privacy');
+                              },
+                          ),
+                          const TextSpan(text: ' and '),
+                          TextSpan(
+                            text: 'Terms of Service',
+                            style: TextStyle(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                _launchUrl('https://mygrid.app/terms');
+                              },
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/login');
-                  },
-                  child: Text(
-                    'Custom Provider',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.secondary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+                
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
 
-  List<Widget> _buildAvatarCircle() {
-    final double radius = 100;
-    final int avatarCount = 10;
-    final double avatarSize = 40;
-    final double angleIncrement = (2 * pi) / avatarCount;
-    final double offsetX = 20;
-    final double offsetY = 20;
-
-    List<Widget> avatars = [];
-    for (int i = 0; i < avatarCount; i++) {
-      final double angle = i * angleIncrement;
-      final double x = radius * cos(angle) + offsetX;
-      final double y = radius * sin(angle) + offsetY;
-
-      avatars.add(
-        Positioned(
-          left: x + radius - avatarSize / 2,
-          top: y + radius - avatarSize / 2,
-          child: RandomAvatar(
-            _avatarUpdateIndex.toString() + i.toString(),
-            height: avatarSize,
-            width: avatarSize,
-          ),
-        ),
+class NetworkLinesPainter extends CustomPainter {
+  final ColorScheme colorScheme;
+  final double animationValue;
+  
+  NetworkLinesPainter({required this.colorScheme, required this.animationValue});
+  
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Animated opacity and thickness
+    final baseOpacity = 0.3 + sin(animationValue * 2 * pi) * 0.1;
+    final baseThickness = 1.5 + sin(animationValue * 2 * pi) * 0.3;
+    
+    final paint = Paint()
+      ..color = colorScheme.primary.withOpacity(baseOpacity)
+      ..strokeWidth = baseThickness
+      ..style = PaintingStyle.stroke;
+    
+    final glowPaint = Paint()
+      ..color = colorScheme.primary.withOpacity(0.1 + sin(animationValue * 2 * pi) * 0.05)
+      ..strokeWidth = baseThickness + 2
+      ..style = PaintingStyle.stroke;
+    
+    // Define the same base positions as in the avatar layout
+    final List<Offset> basePositions = [
+      const Offset(40, 40),   // Top left
+      const Offset(140, 20),  // Top center
+      const Offset(240, 50),  // Top right
+      const Offset(60, 120),  // Bottom left
+      const Offset(160, 140), // Bottom center
+      const Offset(220, 120), // Bottom right
+    ];
+    
+    // Apply the same floating animation to line endpoints
+    final List<Offset> animatedPositions = basePositions.asMap().entries.map((entry) {
+      final i = entry.key;
+      final basePosition = entry.value;
+      
+      final floatOffset = Offset(
+        sin(animationValue * 2 * pi + i * 0.5) * 3,
+        cos(animationValue * 2 * pi + i * 0.7) * 2,
       );
+      
+      return basePosition + floatOffset;
+    }).toList();
+    
+    // Draw connections between avatars to create a network effect
+    final connections = [
+      [0, 1], // Top left to top center
+      [1, 2], // Top center to top right
+      [0, 3], // Top left to bottom left
+      [1, 4], // Top center to bottom center
+      [2, 5], // Top right to bottom right
+      [3, 4], // Bottom left to bottom center
+      [4, 5], // Bottom center to bottom right
+      [1, 3], // Cross connection
+      [1, 5], // Cross connection
+    ];
+    
+    for (int i = 0; i < connections.length; i++) {
+      final connection = connections[i];
+      final start = animatedPositions[connection[0]];
+      final end = animatedPositions[connection[1]];
+      
+      // Add staggered animation delay for each connection
+      final connectionDelay = i * 0.1;
+      final connectionAnimation = (animationValue + connectionDelay) % 1.0;
+      
+      // Draw glow effect
+      canvas.drawLine(start, end, glowPaint);
+      
+      // Draw main connection line
+      canvas.drawLine(start, end, paint);
+      
+      // Add animated pulse effect
+      _drawAnimatedPulse(canvas, start, end, connectionAnimation);
     }
-
-    return avatars;
   }
+  
+  void _drawAnimatedPulse(Canvas canvas, Offset start, Offset end, double animation) {
+    // Draw moving pulse dot along the line
+    final pulsePosition = Offset.lerp(start, end, animation)!;
+    
+    final pulsePaint = Paint()
+      ..color = colorScheme.primary.withOpacity(0.8)
+      ..style = PaintingStyle.fill;
+    
+    final pulseGlowPaint = Paint()
+      ..color = colorScheme.primary.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+    
+    // Draw glow
+    canvas.drawCircle(pulsePosition, 4, pulseGlowPaint);
+    
+    // Draw pulse dot
+    canvas.drawCircle(pulsePosition, 2, pulsePaint);
+  }
+  
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
