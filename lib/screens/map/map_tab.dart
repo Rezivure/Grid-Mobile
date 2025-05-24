@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -62,6 +63,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   String? _selectedUserName;
 
   AnimationController? _animationController;
+  
+  // Map rotation tracking
+  double _currentMapRotation = 0.0;
 
   @override
   void initState() {
@@ -217,6 +221,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       _followUser = false;
                     });
                   }
+                  // Track map rotation changes
+                  if (position.rotation != _currentMapRotation) {
+                    setState(() {
+                      _currentMapRotation = position.rotation ?? 0.0;
+                    });
+                  }
                 },
                 initialCenter: LatLng(51.5, -0.09),
                 initialZoom: _zoom,
@@ -319,20 +329,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FloatingActionButton(
-                    heroTag: "orientNorthBtn",
-                    backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                    onPressed: () => _mapController.moveAndRotate(
-                      _mapController.camera.center,
-                      _mapController.camera.zoom,
-                      0,  // Set rotation to 0 (north)
-                    ),
-                    child: Icon(
-                        Icons.explore,
-                        color: isDarkMode ? colorScheme.primary : Colors.black
-                    ),
-                    mini: true,
-                  ),
+                  _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
                   FloatingActionButton(
                     heroTag: "centerUserBtn",
@@ -412,4 +409,119 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       ),
     );
   }
+
+  Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
+    return GestureDetector(
+      onTap: () {
+        // Orient north when tapped
+        _mapController.moveAndRotate(
+          _mapController.camera.center,
+          _mapController.camera.zoom,
+          0, // Set rotation to 0 (north)
+        );
+        setState(() {
+          _currentMapRotation = 0.0;
+        });
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Compass circle background
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDarkMode ? colorScheme.outline.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+            // Rotating compass needle
+            Transform.rotate(
+              angle: -_currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
+              child: CustomPaint(
+                size: Size(28, 28),
+                painter: CompassPainter(
+                  northColor: Colors.red,
+                  southColor: isDarkMode ? colorScheme.onSurface.withOpacity(0.6) : Colors.black.withOpacity(0.6),
+                ),
+              ),
+            ),
+            // North indicator (N)
+            Positioned(
+              top: 4,
+              child: Text(
+                'N',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? colorScheme.primary : Colors.black,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CompassPainter extends CustomPainter {
+  final Color northColor;
+  final Color southColor;
+
+  CompassPainter({
+    required this.northColor,
+    required this.southColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint northPaint = Paint()
+      ..color = northColor
+      ..style = PaintingStyle.fill;
+
+    final Paint southPaint = Paint()
+      ..color = southColor
+      ..style = PaintingStyle.fill;
+
+    final double centerX = size.width / 2;
+    final double centerY = size.height / 2;
+
+    // North arrow (red) - using ui.Path to avoid conflict with latlong2.Path
+    final ui.Path northPath = ui.Path();
+    northPath.moveTo(centerX, centerY - 10); // Top point
+    northPath.lineTo(centerX - 3, centerY); // Left point
+    northPath.lineTo(centerX + 3, centerY); // Right point
+    northPath.close();
+
+    // South arrow (gray)
+    final ui.Path southPath = ui.Path();
+    southPath.moveTo(centerX, centerY + 10); // Bottom point
+    southPath.lineTo(centerX - 3, centerY); // Left point
+    southPath.lineTo(centerX + 3, centerY); // Right point
+    southPath.close();
+
+    canvas.drawPath(northPath, northPaint);
+    canvas.drawPath(southPath, southPaint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
