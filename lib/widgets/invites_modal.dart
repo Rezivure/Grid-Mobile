@@ -32,7 +32,6 @@ class InvitesModal extends StatelessWidget {
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
             // Handle indicator
             Container(
@@ -91,13 +90,14 @@ class InvitesModal extends StatelessWidget {
             ),
 
             // Content Section
-            Flexible(
+            Expanded(
               child: syncManager.invites.isEmpty
-                  ? Container(
-                      padding: EdgeInsets.all(40),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                  ? Center(
+                      child: Container(
+                        padding: EdgeInsets.all(40),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                           Container(
                             padding: EdgeInsets.all(20),
                             decoration: BoxDecoration(
@@ -130,7 +130,8 @@ class InvitesModal extends StatelessWidget {
                           ),
                         ],
                       ),
-                    )
+                    ),
+                  )
                   : ListView.builder(
                       shrinkWrap: true,
                       padding: EdgeInsets.symmetric(horizontal: 16),
