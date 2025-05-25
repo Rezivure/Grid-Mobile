@@ -381,7 +381,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                   Positioned(
                     bottom: 0,
                     right: 0,
-                    child: _buildStatusDot(contact.lastSeen, colorScheme),
+                    child: _buildStatusDot(contact.lastSeen, colorScheme, membershipStatus: contact.membershipStatus),
                   ),
                 ],
               ),
@@ -427,7 +427,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _buildEnhancedStatusIndicator(contact.lastSeen, colorScheme, theme),
+                  // Use StatusIndicator if we have membership status, otherwise use enhanced status
+                  contact.membershipStatus != null
+                      ? StatusIndicator(
+                          timeAgo: contact.lastSeen,
+                          membershipStatus: contact.membershipStatus,
+                        )
+                      : _buildEnhancedStatusIndicator(contact.lastSeen, colorScheme, theme),
                   // Future: Add geocoding info here
                   // const SizedBox(height: 4),
                   // Text('2.3 km away', style: TextStyle(fontSize: 10)),
@@ -440,9 +446,18 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     );
   }
 
-  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme) {
-    Color statusColor = _getStatusColor(timeAgo, colorScheme);
-    bool isOnline = _isRecentlyActive(timeAgo);
+  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
+    Color statusColor;
+    bool isOnline;
+    
+    // Check for invitation status first
+    if (membershipStatus == 'invite') {
+      statusColor = Colors.orange;
+      isOnline = false;
+    } else {
+      statusColor = _getStatusColor(timeAgo, colorScheme);
+      isOnline = _isRecentlyActive(timeAgo);
+    }
     
     return Container(
       width: 16,
@@ -595,6 +610,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           userService: Provider.of<UserService>(context, listen: false),
           groupsBloc: context.read<GroupsBloc>(),
           onGroupCreated: () {
+            // Refresh contacts when a new group is created
+            context.read<ContactsBloc>().add(LoadContacts());
+          },
+          onContactAdded: () {
             // Refresh contacts when a new contact is added
             context.read<ContactsBloc>().add(LoadContacts());
           },

@@ -22,8 +22,9 @@ class AddFriendModal extends StatefulWidget {
   final RoomService roomService;
   final GroupsBloc groupsBloc;
   final VoidCallback? onGroupCreated;
+  final VoidCallback? onContactAdded;
 
-  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated}) : super(key: key);
+  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated, this.onContactAdded}) : super(key: key);
 
   @override
   _AddFriendModalState createState() => _AddFriendModalState();
@@ -39,8 +40,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _memberInputController = TextEditingController();
   List<String> _members = [];
-  double _sliderValue = 1;
+  double _sliderValue = 12;
   bool _isForever = false;
+  bool _isCustomDuration = false;
+  DateTime? _customEndDate;
   String? _usernameError;
   String? _contactError;
   String? _matrixUserId = "";
@@ -138,6 +141,8 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Request sent.')),
             );
+            // Trigger contact refresh callback
+            widget.onContactAdded?.call();
             Navigator.of(context).pop();
           }
         } else {
@@ -278,7 +283,18 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
 
     try {
       final groupName = _groupNameController.text.trim();
-      final durationInHours = _isForever ? 0 : _sliderValue.toInt();
+      int durationInHours;
+      
+      if (_isForever) {
+        durationInHours = 0;
+      } else if (_isCustomDuration && _customEndDate != null) {
+        final now = DateTime.now();
+        final difference = _customEndDate!.difference(now);
+        durationInHours = difference.inHours;
+        if (durationInHours <= 0) durationInHours = 1; // Minimum 1 hour
+      } else {
+        durationInHours = _sliderValue.toInt();
+      }
 
       // Create the group and get the room ID
       final roomId = await widget.roomService.createGroup(groupName, _members, durationInHours);
@@ -343,7 +359,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     required Widget child,
   }) {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: colorScheme.background,
         borderRadius: BorderRadius.circular(20),
@@ -385,15 +401,72 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     );
   }
 
+  Future<void> _showCustomDatePicker() async {
+    final now = DateTime.now();
+    final initialDate = _customEndDate ?? now.add(Duration(hours: 24));
+    
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: now,
+      lastDate: now.add(Duration(days: 365)),
+    );
+    
+    if (selectedDate != null) {
+      final selectedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(initialDate),
+      );
+      
+      if (selectedTime != null) {
+        final customDateTime = DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          selectedTime.hour,
+          selectedTime.minute,
+        );
+        
+        setState(() {
+          _customEndDate = customDateTime;
+          _isCustomDuration = true;
+          _isForever = false;
+        });
+      }
+    }
+  }
+
+  String _formatCustomDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = dateTime.difference(now);
+    
+    if (difference.inDays > 0) {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} (${difference.inDays}d ${difference.inHours % 24}h)';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} (${difference.inHours}h ${difference.inMinutes % 60}m)';
+    }
+  }
+
   Widget _buildQuickDurationButton(String label, int hours, ColorScheme colorScheme) {
-    bool isSelected = _sliderValue == hours || (hours == 72 && _sliderValue >= 71);
+    bool isSelected;
+    if (label == 'Custom') {
+      isSelected = _isCustomDuration;
+    } else {
+      isSelected = !_isCustomDuration && (_sliderValue == hours || (hours == 0 && _isForever));
+    }
     
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _sliderValue = hours.toDouble();
-          _isForever = hours >= 71;
-        });
+        if (label == 'Custom') {
+          _showCustomDatePicker();
+        } else {
+          setState(() {
+            _sliderValue = hours.toDouble();
+            _isForever = hours == 0;
+            _isCustomDuration = false;
+            _customEndDate = null;
+          });
+        }
       },
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -626,35 +699,11 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header Section
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add New Contact',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onBackground,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Send a friend request to start sharing your location',
-              style: TextStyle(
-                fontSize: 16,
-                color: colorScheme.onBackground.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 32),
-
-        // Username Input Section
+        // Add Contact Input Section
         _buildSectionCard(
           theme: theme,
           colorScheme: colorScheme,
-          title: 'Username',
+          title: 'Add Contact',
           subtitle: 'Enter your friend\'s username',
           child: Column(
             children: [
@@ -973,7 +1022,7 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                       // Add Contact Tab - Redesigned
                       SingleChildScrollView(
                         child: Padding(
-                          padding: const EdgeInsets.all(20.0),
+                          padding: const EdgeInsets.all(24.0),
                           child: _isScanning
                               ? _buildQRScannerView(theme, colorScheme)
                               : _buildAddContactForm(theme, colorScheme),
@@ -982,34 +1031,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                       // Create Group Tab - Redesigned
                       SingleChildScrollView(
                         child: Padding(
-                          padding: const EdgeInsets.all(20.0),
+                          padding: const EdgeInsets.all(24.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Header Section
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Create New Group',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.onBackground,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Set up a group to share your location with multiple friends',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: colorScheme.onBackground.withOpacity(0.7),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 32),
-                              
                               // Group Name Section
                               _buildSectionCard(
                                 theme: theme,
@@ -1064,88 +1089,76 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 subtitle: 'How long should the group last?',
                                 child: Column(
                                   children: [
-                                    Container(
-                                      padding: EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary.withOpacity(0.05),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: colorScheme.primary.withOpacity(0.2),
-                                          width: 1,
+                                    // Duration options in a clean grid
+                                    Wrap(
+                                      spacing: 12,
+                                      runSpacing: 12,
+                                      children: [
+                                        _buildQuickDurationButton('12h', 12, colorScheme),
+                                        _buildQuickDurationButton('24h', 24, colorScheme),
+                                        _buildQuickDurationButton('72h', 72, colorScheme),
+                                        _buildQuickDurationButton('∞', 0, colorScheme),
+                                        _buildQuickDurationButton('Custom', -1, colorScheme),
+                                      ],
+                                    ),
+                                    
+                                    // Show selected custom duration info
+                                    if (_isCustomDuration && _customEndDate != null) ...[
+                                      SizedBox(height: 16),
+                                      Container(
+                                        padding: EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.primary.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: colorScheme.primary.withOpacity(0.2),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.schedule_rounded,
+                                              color: colorScheme.primary,
+                                              size: 20,
+                                            ),
+                                            SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Custom End Time',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w600,
+                                                      color: colorScheme.onSurface,
+                                                      fontSize: 14,
+                                                    ),
+                                                  ),
+                                                  SizedBox(height: 2),
+                                                  Text(
+                                                    _formatCustomDateTime(_customEndDate!),
+                                                    style: TextStyle(
+                                                      color: colorScheme.onSurface.withOpacity(0.7),
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            TextButton(
+                                              onPressed: _showCustomDatePicker,
+                                              child: Text(
+                                                'Change',
+                                                style: TextStyle(
+                                                  color: colorScheme.primary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      child: Column(
-                                        children: [
-                                          SleekCircularSlider(
-                                            min: 1,
-                                            max: 72,
-                                            initialValue: _sliderValue,
-                                            appearance: CircularSliderAppearance(
-                                              customWidths: CustomSliderWidths(
-                                                trackWidth: 6,
-                                                progressBarWidth: 12,
-                                                handlerSize: 16,
-                                              ),
-                                              customColors: CustomSliderColors(
-                                                trackColor: colorScheme.outline.withOpacity(0.2),
-                                                progressBarColor: colorScheme.primary,
-                                                dotColor: colorScheme.primary,
-                                                hideShadow: false,
-                                                shadowColor: colorScheme.primary.withOpacity(0.3),
-                                                shadowMaxOpacity: 0.2,
-                                              ),
-                                              infoProperties: InfoProperties(
-                                                modifier: (double value) {
-                                                  if (value >= 71) {
-                                                    _isForever = true;
-                                                    return 'Forever';
-                                                  } else {
-                                                    _isForever = false;
-                                                    return '${value.toInt()}h';
-                                                  }
-                                                },
-                                                mainLabelStyle: TextStyle(
-                                                  color: colorScheme.primary,
-                                                  fontSize: 28,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                                bottomLabelStyle: TextStyle(
-                                                  color: colorScheme.onBackground.withOpacity(0.6),
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                                bottomLabelText: _isForever ? 'Permanent group' : 'Hours until expiration',
-                                              ),
-                                              startAngle: 270,
-                                              angleRange: 360,
-                                              size: 180,
-                                            ),
-                                            onChange: (value) {
-                                              setState(() {
-                                                _sliderValue = value >= 71 ? 72 : value;
-                                              });
-                                            },
-                                          ),
-                                          SizedBox(height: 16),
-                                          SingleChildScrollView(
-                                            scrollDirection: Axis.horizontal,
-                                            child: Row(
-                                              children: [
-                                                _buildQuickDurationButton('1h', 1, colorScheme),
-                                                SizedBox(width: 8),
-                                                _buildQuickDurationButton('4h', 4, colorScheme),
-                                                SizedBox(width: 8),
-                                                _buildQuickDurationButton('12h', 12, colorScheme),
-                                                SizedBox(width: 8),
-                                                _buildQuickDurationButton('24h', 24, colorScheme),
-                                                SizedBox(width: 8),
-                                                _buildQuickDurationButton('∞', 72, colorScheme),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -1159,107 +1172,116 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                                 subtitle: 'Invite up to 5 friends to your group',
                                 child: Column(
                                   children: [
-                                    // Add Member Input
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _memberInputController,
-                                            decoration: InputDecoration(
-                                              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
-                                              prefixIcon: Icon(
-                                                Icons.person_add,
-                                                color: colorScheme.primary,
-                                                size: 20,
-                                              ),
-                                              prefixText: '@',
-                                              errorText: _usernameError ?? _memberLimitError,
-                                              filled: true,
-                                              fillColor: colorScheme.surface,
-                                              border: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colorScheme.outline.withOpacity(0.3),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colorScheme.outline.withOpacity(0.3),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: colorScheme.primary,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              errorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: Colors.red,
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              focusedErrorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                                borderSide: BorderSide(
-                                                  color: Colors.red,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                            ),
-                                            style: TextStyle(
-                                              color: colorScheme.onSurface,
-                                              fontSize: 16,
-                                            ),
+                                    // Add Member Input - Full width for better usability
+                                    TextField(
+                                      controller: _memberInputController,
+                                      decoration: InputDecoration(
+                                        hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
+                                        prefixIcon: Icon(
+                                          Icons.person_add,
+                                          color: colorScheme.primary,
+                                          size: 20,
+                                        ),
+                                        prefixText: '@',
+                                        errorText: _usernameError ?? _memberLimitError,
+                                        filled: true,
+                                        fillColor: colorScheme.surface,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide(
+                                            color: colorScheme.outline.withOpacity(0.3),
+                                            width: 1,
                                           ),
                                         ),
-                                        SizedBox(width: 12),
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                colorScheme.primary,
-                                                colorScheme.primary.withOpacity(0.8),
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide(
+                                            color: colorScheme.outline.withOpacity(0.3),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide(
+                                            color: colorScheme.primary,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        errorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide(
+                                            color: Colors.red,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        focusedErrorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide(
+                                            color: Colors.red,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                                      ),
+                                      style: TextStyle(
+                                        color: colorScheme.onSurface,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    SizedBox(height: 16),
+                                    // Add Member Button - Full width with icon
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              colorScheme.primary,
+                                              colorScheme.primary.withOpacity(0.8),
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: colorScheme.primary.withOpacity(0.3),
+                                              blurRadius: 8,
+                                              offset: Offset(0, 4),
                                             ),
-                                            borderRadius: BorderRadius.circular(16),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: colorScheme.primary.withOpacity(0.3),
-                                                blurRadius: 8,
-                                                offset: Offset(0, 4),
+                                          ],
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed: _addMember,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.person_add_rounded,
+                                                color: Colors.white,
+                                                size: 20,
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text(
+                                                'Add Member',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16,
+                                                ),
                                               ),
                                             ],
                                           ),
-                                          child: ElevatedButton(
-                                            onPressed: _addMember,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.transparent,
-                                              shadowColor: Colors.transparent,
-                                              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              'Add',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                          ),
                                         ),
-                                      ],
+                                      ),
                                     ),
                                     SizedBox(height: 20),
                                     
