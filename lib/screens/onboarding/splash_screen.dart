@@ -87,8 +87,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   Future<void> _navigateToNext() async {
-    // Wait for animations to complete
-    await Future.delayed(const Duration(milliseconds: 2500));
+    // Wait for animations to complete (shorter delay)
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     // Load the token from SharedPreferences
     String? token = await _loadFromPrefs();
@@ -96,12 +96,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final client = Provider.of<Client>(context, listen: false);
 
     if (token != null && token.isNotEmpty) {
-      // If token exists, set it to the client and sync
+      // If token exists, set it to the client and go directly to main app
       try {
         client.accessToken = token;
         var stat = client.isLogged();
         print("print stat of client log:{$stat} ");
         if (client.isLogged()) {
+          // Go directly to main app - let it handle loading states during sync
           Navigator.pushReplacementNamed(context, '/main');
           return;
         }
@@ -303,15 +304,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 child: _buildAppName(),
               ),
               
-              const Spacer(flex: 2),
-              
-              // Loading Indicator
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: _buildLoadingIndicator(),
-              ),
-              
-              const Spacer(flex: 3),
+              const Spacer(flex: 5),
               
               // Version/Footer
               FadeTransition(

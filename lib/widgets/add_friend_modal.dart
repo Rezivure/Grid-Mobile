@@ -14,6 +14,7 @@ import 'package:grid_frontend/services/room_service.dart';
 
 import '../blocs/groups/groups_bloc.dart';
 import '../blocs/groups/groups_event.dart';
+import '../blocs/contacts/contacts_bloc.dart';
 import '../services/sync_manager.dart';
 
 
@@ -31,7 +32,7 @@ class AddFriendModal extends StatefulWidget {
 }
 
 
-class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProviderStateMixin {
+class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStateMixin {
   // Add Contact variables
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
@@ -52,7 +53,14 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   // New variable for member limit error
   String? _memberLimitError;
 
+  // Step-based group creation variables
+  int _currentGroupStep = 0; // 0: Name, 1: Duration, 2: Members, 3: Summary
+
   late TabController _tabController;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
 
   // QR code scanning variables
   bool _isScanning = false;
@@ -66,6 +74,27 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
 
     _controller.addListener(() {
       if (_contactError != null) {
@@ -87,6 +116,21 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
     });
+
+    _fadeController.forward();
+    _slideController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    _controller.dispose();
+    _tabController.dispose();
+    _qrController?.dispose();
+    _groupNameController.dispose();
+    _memberInputController.dispose();
+    super.dispose();
   }
 
   bool isCustomHomeserver() {
@@ -132,14 +176,44 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
           return;
         }
 
-        bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
+        final result = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
 
-        if (success) {
+        if (result) {
+          // Get the room ID for the newly created direct room
+          final myUserId = await widget.roomService.getMyUserId();
+          if (myUserId != null) {
+            // Find the direct room we just created
+            final rooms = widget.roomService.client.rooms;
+            final directRoom = rooms.where((room) {
+              final name = room.name ?? '';
+              return name == "Grid:Direct:$myUserId:$normalizedUserId" || 
+                     name == "Grid:Direct:$normalizedUserId:$myUserId";
+            }).firstOrNull;
+            
+            if (directRoom != null) {
+              // Handle the new contact invite immediately using ContactsBloc
+              try {
+                final contactsBloc = context.read<ContactsBloc>();
+                await contactsBloc.handleNewContactInvited(directRoom.id, normalizedUserId);
+                print('AddFriendModal: Handled new contact invite via ContactsBloc');
+              } catch (e) {
+                print('AddFriendModal: Error calling ContactsBloc: $e');
+              }
+            }
+          }
+          
           // Clear _matrixUserId after successful use
           _matrixUserId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Request sent.')),
+              SnackBar(
+                content: Text('Friend request sent to ${localpart(normalizedUserId)}.'),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             );
             // Trigger contact refresh callback
             widget.onContactAdded?.call();
@@ -350,7 +424,70 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     }
   }
 
+  // Step navigation methods for group creation
+  void _nextGroupStep() {
+    if (_currentGroupStep < 3) {
+      setState(() {
+        _currentGroupStep++;
+      });
+      _animateStepTransition();
+    }
+  }
+
+  void _previousGroupStep() {
+    if (_currentGroupStep > 0) {
+      setState(() {
+        _currentGroupStep--;
+      });
+      _animateStepTransition();
+    }
+  }
+
+  void _animateStepTransition() {
+    _slideController.reset();
+    _slideController.forward();
+  }
+
+  bool _canProceedFromStep(int step) {
+    switch (step) {
+      case 0: // Group name
+        return _groupNameController.text.trim().isNotEmpty;
+      case 1: // Duration
+        return true; // Always can proceed from duration
+      case 2: // Members
+        return _members.isNotEmpty;
+      case 3: // Summary
+        return true;
+      default:
+        return false;
+    }
+  }
+
   // Helper Methods for New UI
+  Widget _buildModernCard({required Widget child, EdgeInsets? padding}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: padding ?? const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildSectionCard({
     required ThemeData theme,
     required ColorScheme colorScheme,
@@ -556,433 +693,1203 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     );
   }
 
-  Widget _buildQRScannerView(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header Section
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Scan QR Code',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onBackground,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Point your camera at a friend\'s QR code to add them instantly',
-              style: TextStyle(
-                fontSize: 16,
-                color: colorScheme.onBackground.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 32),
+  // New Modern Add Contact UI Components
+  Widget _buildContactHeader() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-        // QR Scanner Section
-        Container(
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: colorScheme.background,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.15),
-              width: 1,
+    return _buildModernCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.05),
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                height: 300,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: colorScheme.primary.withOpacity(0.3),
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: QRView(
-                    key: qrKey,
-                    onQRViewCreated: _onQRViewCreated,
-                    overlay: QrScannerOverlayShape(
-                      borderColor: colorScheme.primary,
-                      borderRadius: 16,
-                      borderLength: 30,
-                      borderWidth: 4,
-                      cutOutSize: 250,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-              Text(
-                'Position the QR code within the frame',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onBackground.withOpacity(0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: 32),
-
-        // Cancel Button
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                colorScheme.outline.withOpacity(0.3),
-                colorScheme.outline.withOpacity(0.2),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            child: Icon(
+              Icons.person_add,
+              color: colorScheme.primary,
+              size: 24,
             ),
-            borderRadius: BorderRadius.circular(20),
           ),
-          child: ElevatedButton(
-            onPressed: () {
-              _qrController?.pauseCamera();
-              setState(() {
-                _isScanning = false;
-              });
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              padding: EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.arrow_back,
-                  color: colorScheme.onSurface,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
                 Text(
-                  'Back to Manual Entry',
-                  style: TextStyle(
+                  'Add Contact',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
                     color: colorScheme.onSurface,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Send a friend request to start sharing',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildAddContactForm(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Add Contact Input Section
-        _buildSectionCard(
-          theme: theme,
-          colorScheme: colorScheme,
-          title: 'Add Contact',
-          subtitle: 'Enter your friend\'s username',
-          child: Column(
-            children: [
-              TextField(
-                controller: _controller,
-                decoration: InputDecoration(
-                  hintText: isCustomHomeserver() 
-                      ? 'john:homeserver.io' 
-                      : 'Enter username...',
-                  prefixIcon: Icon(
-                    Icons.person,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                  prefixText: '@',
-                  errorText: _contactError,
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.outline.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.outline.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.primary,
-                      width: 2,
-                    ),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: Colors.red,
-                      width: 1,
-                    ),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: Colors.red,
-                      width: 2,
-                    ),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                ),
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 16,
-                ),
-              ),
-              if (_contactError == null) ...[
-                SizedBox(height: 12),
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: colorScheme.primary.withOpacity(0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: colorScheme.primary,
-                        size: 16,
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Secure location sharing will begin once accepted',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+  Widget _buildContactUsernameInput() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Username',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
           ),
-        ),
-        SizedBox(height: 24),
-
-        // Action Buttons Section
-        Column(
-          children: [
-            // Send Request Button
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: _isProcessing
-                      ? [
-                          colorScheme.outline.withOpacity(0.3),
-                          colorScheme.outline.withOpacity(0.2),
-                        ]
-                      : [
-                          colorScheme.primary,
-                          colorScheme.primary.withOpacity(0.8),
-                        ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: _isProcessing
-                    ? []
-                    : [
-                        BoxShadow(
-                          color: colorScheme.primary.withOpacity(0.4),
-                          blurRadius: 12,
-                          offset: Offset(0, 6),
-                        ),
-                      ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            decoration: InputDecoration(
+              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
+              prefixText: '@',
+              errorText: _contactError,
+              filled: true,
+              fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _addContact,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.outline.withOpacity(0.2),
                 ),
-                child: _isProcessing
-                    ? Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Text(
-                            'Sending Request...',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.person_add,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Send Friend Request',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
               ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.primary,
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.error,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
-            SizedBox(height: 16),
-
-            // OR Divider
-            Row(
-              children: [
-                Expanded(
-                  child: Divider(
-                    color: colorScheme.outline.withOpacity(0.3),
-                    thickness: 1,
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'OR',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Divider(
-                    color: colorScheme.outline.withOpacity(0.3),
-                    thickness: 1,
-                  ),
-                ),
-              ],
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
             ),
-            SizedBox(height: 16),
-
-            // QR Scanner Button
+          ),
+          if (_contactError == null) ...[
+            const SizedBox(height: 8),
             Container(
-              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.3),
-                  width: 1,
+                  color: colorScheme.primary.withOpacity(0.2),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.shadow.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Secure location sharing begins once accepted',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              child: ElevatedButton(
-                onPressed: _scanQRCode,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactQRScannerCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Icon(
+                  Icons.qr_code_scanner,
+                  color: colorScheme.secondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.qr_code_scanner,
-                      color: colorScheme.primary,
-                      size: 22,
-                    ),
-                    SizedBox(width: 8),
                     Text(
-                      'Scan QR Code Instead',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontSize: 16,
+                      'Quick Add',
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      'Scan a user\'s QR code',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                   ],
                 ),
               ),
+              TextButton.icon(
+                onPressed: _scanQRCode,
+                icon: Icon(
+                  Icons.qr_code_scanner,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+                label: Text(
+                  'Scan',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: colorScheme.primary.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactQRScanner() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  _qrController?.pauseCamera();
+                  setState(() {
+                    _isScanning = false;
+                  });
+                },
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Scan QR Code',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 300,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.outline.withOpacity(0.2),
+              ),
             ),
-          ],
+            clipBehavior: Clip.antiAlias,
+            child: QRView(
+              key: qrKey,
+              onQRViewCreated: _onQRViewCreated,
+              overlay: QrScannerOverlayShape(
+                borderColor: colorScheme.primary,
+                borderRadius: 12,
+                borderLength: 30,
+                borderWidth: 4,
+                cutOutSize: 250,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Point your camera at a user\'s QR code to add them instantly',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactActionButtons() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outline.withOpacity(0.1),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colorScheme.onSurface,
+                side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _isProcessing ? null : _addContact,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: _isProcessing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Send Request',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step-based Group Creation UI Components
+  Widget _buildStepHeader({
+    required String title,
+    required String subtitle,
+    Widget? illustration,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Column(
+      children: [
+        if (illustration != null) ...[
+          illustration,
+          const SizedBox(height: 24),
+        ],
+        Text(
+          title,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurface.withOpacity(0.7),
+          ),
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _tabController.dispose();
-    _qrController?.dispose();
-    _groupNameController.dispose();
-    _memberInputController.dispose();
-    super.dispose();
+  Widget _buildStepIndicator() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(4, (index) {
+        final isActive = index <= _currentGroupStep;
+        final isCurrent = index == _currentGroupStep;
+        
+        return Container(
+          margin: EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: isCurrent ? 24 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isActive 
+                      ? colorScheme.primary 
+                      : colorScheme.outline.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              if (index < 3) SizedBox(width: 8),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildStepNavigationButtons({
+    required String? nextText,
+    required VoidCallback? onNext,
+    String? backText,
+    VoidCallback? onBack,
+    bool isLoading = false,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        children: [
+          if (onBack != null) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: isLoading ? null : onBack,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: colorScheme.onSurface,
+                  side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(backText ?? 'Back'),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            flex: onBack != null ? 1 : 2,
+            child: ElevatedButton(
+              onPressed: isLoading ? null : onNext,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          nextText ?? 'Next',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (nextText == null || nextText.toLowerCase().contains('next')) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward, size: 18),
+                        ],
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step 0: Group Name
+  Widget _buildGroupNameStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Create Group',
+              subtitle: 'Choose a memorable name for your group',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.1),
+                      colorScheme.primary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.group_add,
+                  size: 40,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            TextField(
+              controller: _groupNameController,
+              maxLength: 14,
+              onChanged: (value) => setState(() {}), // Trigger rebuild for button state
+              decoration: InputDecoration(
+                labelText: 'Group Name',
+                hintText: 'Enter group name...',
+                filled: true,
+                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                counterText: '',
+              ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Group names are visible to all members',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 1: Duration
+  Widget _buildGroupDurationStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Set Duration',
+              subtitle: 'How long should the group last?',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.secondary.withOpacity(0.1),
+                      colorScheme.secondary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.schedule,
+                  size: 40,
+                  color: colorScheme.secondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Duration options in a clean grid
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildQuickDurationButton('12h', 12, colorScheme),
+                _buildQuickDurationButton('24h', 24, colorScheme),
+                _buildQuickDurationButton('72h', 72, colorScheme),
+                _buildQuickDurationButton('∞', 0, colorScheme),
+                _buildQuickDurationButton('Custom', -1, colorScheme),
+              ],
+            ),
+            
+            // Show selected custom duration info
+            if (_isCustomDuration && _customEndDate != null) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.primary.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Custom End Time',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatCustomDateTime(_customEndDate!),
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _showCustomDatePicker,
+                      child: Text(
+                        'Change',
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 2: Add Members
+  Widget _buildGroupMembersStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Add Members',
+              subtitle: 'Invite up to 5 friends to your group',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.tertiary.withOpacity(0.1),
+                      colorScheme.tertiary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.people,
+                  size: 40,
+                  color: colorScheme.tertiary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Add Member Input
+            TextField(
+              controller: _memberInputController,
+              decoration: InputDecoration(
+                labelText: 'Username',
+                hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
+                prefixText: '@',
+                errorText: _usernameError ?? _memberLimitError,
+                filled: true,
+                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.error,
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Add Member Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _addMember,
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('Add Member'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.secondary,
+                  foregroundColor: colorScheme.onSecondary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Members List
+            if (_members.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Group Members (${_members.length}/5)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: _members.map((username) => _buildMemberCard(username, colorScheme)).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.people_outline,
+                      color: colorScheme.onSurface.withOpacity(0.4),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No members added yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add friends to get started',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colorScheme.onSurface.withOpacity(0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 3: Summary
+  Widget _buildGroupSummaryStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    String durationText;
+    if (_isForever) {
+      durationText = 'Permanent';
+    } else if (_isCustomDuration && _customEndDate != null) {
+      durationText = 'Until ${_formatCustomDateTime(_customEndDate!)}';
+    } else {
+      durationText = '${_sliderValue.toInt()} hours';
+    }
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Review & Create',
+              subtitle: 'Check your group details before creating',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.green.withOpacity(0.1),
+                      Colors.green.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  size: 40,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            
+            // Summary Cards
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: colorScheme.outline.withOpacity(0.1),
+                ),
+              ),
+              child: Column(
+                children: [
+                  _buildSummaryRow(
+                    icon: Icons.group,
+                    label: 'Group Name',
+                    value: _groupNameController.text.trim(),
+                    colorScheme: colorScheme,
+                  ),
+                  const Divider(height: 24),
+                  _buildSummaryRow(
+                    icon: Icons.schedule,
+                    label: 'Duration',
+                    value: durationText,
+                    colorScheme: colorScheme,
+                  ),
+                  const Divider(height: 24),
+                  _buildSummaryRow(
+                    icon: Icons.people,
+                    label: 'Members',
+                    value: '${_members.length} invited',
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+            ),
+            
+            if (_members.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.1),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Members to invite:',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _members.map((username) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: colorScheme.primary.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '@$username',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required ColorScheme colorScheme,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: colorScheme.primary,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepBasedGroupTab() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.background,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Modern handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outline.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Step indicator
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: _buildStepIndicator(),
+            ),
+            
+            // Step content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _getCurrentStepWidget(),
+              ),
+            ),
+            
+            // Navigation buttons
+            _buildStepNavigationButtons(
+              nextText: _currentGroupStep == 3 ? 'Create Group' : null,
+              onNext: _currentGroupStep == 3 
+                  ? (_canProceedFromStep(_currentGroupStep) ? _createGroup : null)
+                  : (_canProceedFromStep(_currentGroupStep) ? _nextGroupStep : null),
+              backText: _currentGroupStep == 0 ? 'Cancel' : null,
+              onBack: _currentGroupStep == 0 
+                  ? () => Navigator.of(context).pop()
+                  : _previousGroupStep,
+              isLoading: _isProcessing,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _getCurrentStepWidget() {
+    switch (_currentGroupStep) {
+      case 0:
+        return _buildGroupNameStep();
+      case 1:
+        return _buildGroupDurationStep();
+      case 2:
+        return _buildGroupMembersStep();
+      case 3:
+        return _buildGroupSummaryStep();
+      default:
+        return _buildGroupNameStep();
+    }
+  }
+
+  Widget _buildModernAddContactTab() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.background,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Modern handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outline.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    _buildContactHeader(),
+                    if (_isScanning) _buildContactQRScanner() else ...[
+                      _buildContactUsernameInput(),
+                      _buildContactQRScannerCard(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            if (!_isScanning) _buildContactActionButtons(),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1014,471 +1921,16 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
                 // Tab views
                 Container(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.6,
+                    maxHeight: MediaQuery.of(context).size.height * 0.7,
                   ),
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      // Add Contact Tab - Redesigned
-                      SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: _isScanning
-                              ? _buildQRScannerView(theme, colorScheme)
-                              : _buildAddContactForm(theme, colorScheme),
-                        ),
-                      ),
-                      // Create Group Tab - Redesigned
-                      SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Group Name Section
-                              _buildSectionCard(
-                                theme: theme,
-                                colorScheme: colorScheme,
-                                title: 'Group Name',
-                                subtitle: 'Choose a memorable name',
-                                child: TextField(
-                                  controller: _groupNameController,
-                                  maxLength: 14,
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter group name...',
-                                    filled: true,
-                                    fillColor: colorScheme.surface,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: colorScheme.outline.withOpacity(0.3),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: colorScheme.outline.withOpacity(0.3),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      borderSide: BorderSide(
-                                        color: colorScheme.primary,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                                    counterText: '',
-                                  ),
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 24),
-
-                              // Duration Section
-                              _buildSectionCard(
-                                theme: theme,
-                                colorScheme: colorScheme,
-                                title: 'Duration',
-                                subtitle: 'How long should the group last?',
-                                child: Column(
-                                  children: [
-                                    // Duration options in a clean grid
-                                    Wrap(
-                                      spacing: 12,
-                                      runSpacing: 12,
-                                      children: [
-                                        _buildQuickDurationButton('12h', 12, colorScheme),
-                                        _buildQuickDurationButton('24h', 24, colorScheme),
-                                        _buildQuickDurationButton('72h', 72, colorScheme),
-                                        _buildQuickDurationButton('∞', 0, colorScheme),
-                                        _buildQuickDurationButton('Custom', -1, colorScheme),
-                                      ],
-                                    ),
-                                    
-                                    // Show selected custom duration info
-                                    if (_isCustomDuration && _customEndDate != null) ...[
-                                      SizedBox(height: 16),
-                                      Container(
-                                        padding: EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.primary.withOpacity(0.05),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: colorScheme.primary.withOpacity(0.2),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.schedule_rounded,
-                                              color: colorScheme.primary,
-                                              size: 20,
-                                            ),
-                                            SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    'Custom End Time',
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.w600,
-                                                      color: colorScheme.onSurface,
-                                                      fontSize: 14,
-                                                    ),
-                                                  ),
-                                                  SizedBox(height: 2),
-                                                  Text(
-                                                    _formatCustomDateTime(_customEndDate!),
-                                                    style: TextStyle(
-                                                      color: colorScheme.onSurface.withOpacity(0.7),
-                                                      fontSize: 13,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            TextButton(
-                                              onPressed: _showCustomDatePicker,
-                                              child: Text(
-                                                'Change',
-                                                style: TextStyle(
-                                                  color: colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              SizedBox(height: 24),
-
-                              // Members Section
-                              _buildSectionCard(
-                                theme: theme,
-                                colorScheme: colorScheme,
-                                title: 'Add Members',
-                                subtitle: 'Invite up to 5 friends to your group',
-                                child: Column(
-                                  children: [
-                                    // Add Member Input - Full width for better usability
-                                    TextField(
-                                      controller: _memberInputController,
-                                      decoration: InputDecoration(
-                                        hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
-                                        prefixIcon: Icon(
-                                          Icons.person_add,
-                                          color: colorScheme.primary,
-                                          size: 20,
-                                        ),
-                                        prefixText: '@',
-                                        errorText: _usernameError ?? _memberLimitError,
-                                        filled: true,
-                                        fillColor: colorScheme.surface,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                          borderSide: BorderSide(
-                                            color: colorScheme.outline.withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                          borderSide: BorderSide(
-                                            color: colorScheme.outline.withOpacity(0.3),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                          borderSide: BorderSide(
-                                            color: colorScheme.primary,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        errorBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                          borderSide: BorderSide(
-                                            color: Colors.red,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        focusedErrorBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                          borderSide: BorderSide(
-                                            color: Colors.red,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                                      ),
-                                      style: TextStyle(
-                                        color: colorScheme.onSurface,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    SizedBox(height: 16),
-                                    // Add Member Button - Full width with icon
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              colorScheme.primary,
-                                              colorScheme.primary.withOpacity(0.8),
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          borderRadius: BorderRadius.circular(16),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: colorScheme.primary.withOpacity(0.3),
-                                              blurRadius: 8,
-                                              offset: Offset(0, 4),
-                                            ),
-                                          ],
-                                        ),
-                                        child: ElevatedButton(
-                                          onPressed: _addMember,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.transparent,
-                                            shadowColor: Colors.transparent,
-                                            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                Icons.person_add_rounded,
-                                                color: Colors.white,
-                                                size: 20,
-                                              ),
-                                              SizedBox(width: 8),
-                                              Text(
-                                                'Add Member',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 16,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(height: 20),
-                                    
-                                    // Members List
-                                    if (_members.isNotEmpty) ...[
-                                      Container(
-                                        padding: EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.surface,
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: colorScheme.outline.withOpacity(0.2),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.people,
-                                                  color: colorScheme.primary,
-                                                  size: 20,
-                                                ),
-                                                SizedBox(width: 8),
-                                                Text(
-                                                  'Group Members (${_members.length}/5)',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: colorScheme.onSurface,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            SizedBox(height: 16),
-                                            Wrap(
-                                              spacing: 16,
-                                              runSpacing: 16,
-                                              children: _members.map((username) => _buildMemberCard(username, colorScheme)).toList(),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      Container(
-                                        padding: EdgeInsets.all(24),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.surface.withOpacity(0.5),
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: colorScheme.outline.withOpacity(0.2),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Icon(
-                                              Icons.people_outline,
-                                              color: colorScheme.onSurface.withOpacity(0.4),
-                                              size: 48,
-                                            ),
-                                            SizedBox(height: 12),
-                                            Text(
-                                              'No members added yet',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                color: colorScheme.onSurface.withOpacity(0.6),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Add friends to get started',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: colorScheme.onSurface.withOpacity(0.4),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              SizedBox(height: 32),
-
-                              // Create Button
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: (_isProcessing ||
-                                        _members.isEmpty ||
-                                        _groupNameController.text.trim().isEmpty)
-                                        ? [
-                                            colorScheme.outline.withOpacity(0.3),
-                                            colorScheme.outline.withOpacity(0.2),
-                                          ]
-                                        : [
-                                            colorScheme.primary,
-                                            colorScheme.primary.withOpacity(0.8),
-                                          ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: (_isProcessing ||
-                                      _members.isEmpty ||
-                                      _groupNameController.text.trim().isEmpty)
-                                      ? []
-                                      : [
-                                          BoxShadow(
-                                            color: colorScheme.primary.withOpacity(0.4),
-                                            blurRadius: 12,
-                                            offset: Offset(0, 6),
-                                          ),
-                                        ],
-                                ),
-                                child: ElevatedButton(
-                                  onPressed: (_isProcessing ||
-                                      _members.isEmpty ||
-                                      _groupNameController.text.trim().isEmpty)
-                                      ? null
-                                      : _createGroup,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    padding: EdgeInsets.symmetric(vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                  child: _isProcessing
-                                      ? Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                color: Colors.white,
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                            SizedBox(width: 12),
-                                            Text(
-                                              'Creating Group...',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.group_add,
-                                              color: Colors.white,
-                                              size: 22,
-                                            ),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Create Group',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      // Add Contact Tab - Modern Design
+                      _buildModernAddContactTab(),
+                      // Create Group Tab - Step-based Design
+                      _buildStepBasedGroupTab(),
                     ],
-                  ),
-                ),
-                // Close button at the bottom
-                Center(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.onSurface,
-                      foregroundColor: colorScheme.surface,
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: Text('Close'),
                   ),
                 ),
               ],

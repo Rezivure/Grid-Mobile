@@ -510,7 +510,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             ),
             const SizedBox(height: 16),
             Text(
-              'Loading map...',
+              'Loading...',
               style: TextStyle(
                 fontSize: 13,
                 color: colorScheme.onSurface.withOpacity(0.6),

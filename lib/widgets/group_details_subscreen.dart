@@ -193,18 +193,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
-  Widget _getSubtitleText(BuildContext context, GroupsLoaded state,
-      GridUser user, UserLocation? userLocation) {
-    final memberStatus = state.getMemberStatus(user.userId);
-    final timeAgoText = userLocation != null
-        ? TimeAgoFormatter.format(userLocation.timestamp)
-        : 'Off Grid';
-
-    return StatusIndicator(
-      timeAgo: timeAgoText,
-      membershipStatus: memberStatus,
-    );
-  }
 
   Future<void> _showLeaveConfirmationDialog() async {
     final colorScheme = Theme.of(context).colorScheme;
@@ -326,7 +314,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   Widget _buildMemberTile(GridUser user, GroupsLoaded state, 
       List<UserLocation> userLocations) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final userLocation = userLocations
         .cast<UserLocation?>()
         .firstWhere(
@@ -334,19 +323,26 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           orElse: () => null,
         );
 
+    final memberStatus = state.getMemberStatus(user.userId);
+    final timeAgoText = userLocation != null
+        ? TimeAgoFormatter.format(userLocation.timestamp)
+        : 'Off Grid';
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: colorScheme.outline.withOpacity(0.1),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: colorScheme.shadow.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -369,50 +365,179 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             ),
           ],
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: colorScheme.primary.withOpacity(0.2),
-                width: 2,
-              ),
-            ),
-            child: CircleAvatar(
-              radius: 26,
-              backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-              child: RandomAvatar(
-                user.userId.split(':')[0].replaceFirst('@', ''),
-                height: 48,
-                width: 48,
-              ),
-            ),
-          ),
-          title: Text(
-            user.displayName ?? localpart(user.userId),
-            style: TextStyle(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-            ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _getSubtitleText(context, state, user, userLocation),
-          ),
-          trailing: Icon(
-            Icons.chevron_right,
-            color: colorScheme.onSurface.withOpacity(0.4),
-            size: 20,
-          ),
+        child: InkWell(
           onTap: () {
             Provider.of<SelectedUserProvider>(context, listen: false)
                 .setSelectedUserId(user.userId, context);
           },
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                // Avatar with status indicator
+                Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.15),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: colorScheme.primary.withOpacity(0.1),
+                        child: RandomAvatar(
+                          user.userId.split(':')[0].replaceFirst('@', ''),
+                          height: 44,
+                          width: 44,
+                        ),
+                      ),
+                    ),
+                    // Status dot
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: _buildStatusDot(timeAgoText, colorScheme, membershipStatus: memberStatus),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // User information
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Display name
+                      Text(
+                        user.displayName ?? localpart(user.userId),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      
+                      const SizedBox(height: 2),
+                      
+                      // User ID subtitle
+                      Text(
+                        '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Status indicator on the right
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    StatusIndicator(
+                      timeAgo: timeAgoText,
+                      membershipStatus: memberStatus,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
+    Color statusColor;
+    bool isOnline;
+    
+    // Check for invitation status first
+    if (membershipStatus == 'invite') {
+      statusColor = Colors.orange;
+      isOnline = false;
+    } else {
+      statusColor = _getStatusColor(timeAgo, colorScheme);
+      isOnline = _isRecentlyActive(timeAgo);
+    }
+    
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: colorScheme.surface,
+          width: 2,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: statusColor,
+          shape: BoxShape.circle,
+        ),
+        child: isOnline
+            ? Container(
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.circle,
+                  color: Colors.transparent,
+                  size: 8,
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
+    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
+      return Colors.green;
+    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
+      // Extract minutes to check if over 10 minutes
+      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
+      if (minutesMatch != null) {
+        final minutes = int.parse(minutesMatch.group(1)!);
+        return minutes <= 10 ? Colors.green : Colors.orange;
+      }
+      return Colors.green;
+    } else if (timeAgo.contains('h ago')) {
+      return Colors.orange;
+    } else if (timeAgo.contains('d ago')) {
+      return Colors.red;
+    } else {
+      return colorScheme.onSurface.withOpacity(0.4);
+    }
+  }
+
+  bool _isRecentlyActive(String timeAgo) {
+    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
+      return true;
+    }
+    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
+      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
+      if (minutesMatch != null) {
+        final minutes = int.parse(minutesMatch.group(1)!);
+        return minutes <= 10; // Only consider active if 10 minutes or less
+      }
+    }
+    return false;
   }
 
   Widget _buildEmptyState() {
@@ -614,7 +739,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     ? _buildEmptyState()
                     : ListView.builder(
                         controller: widget.scrollController,
-                        padding: const EdgeInsets.only(top: 8, bottom: 8),
+                        padding: const EdgeInsets.all(16.0),
                         itemCount: _filteredMembers.length + 1,
                         itemBuilder: (context, index) {
                           if (index < _filteredMembers.length) {

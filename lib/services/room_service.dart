@@ -101,6 +101,10 @@ class RoomService {
           ),
         ],
       );
+      
+      // Room created with invite - now we need to handle it immediately
+      // Note: invite is already sent via createRoom parameters
+      
       return true; // success
     }
     return false; // failed
@@ -119,14 +123,41 @@ class RoomService {
   Future<String?> getUserRoomMembership(String roomId, String userId) async {
     Room? room = client.getRoomById(roomId);
     if (room != null) {
+      // Check all members, not just joined participants
+      try {
+        // First try to get from the room state directly
+        final memberEvent = room.getState('m.room.member', userId);
+        if (memberEvent != null) {
+          final membership = memberEvent.content['membership'] as String?;
+          print("RoomService: User $userId membership from state in room $roomId: $membership");
+          return membership;
+        }
+      } catch (e) {
+        print("RoomService: Failed to get membership from state: $e");
+      }
+      
+      // Fallback to participants list
       var participants = room.getParticipants();
       try {
         final participant = participants.firstWhere(
               (user) => user.id == userId,
         );
-        return participant.membership.name;
+        final membershipName = participant.membership.name;
+        print("RoomService: User $userId membership from participants in room $roomId: $membershipName");
+        return membershipName;
       } catch (e) {
-        return 'invited';  // Default to invited if user not found
+        print("RoomService: User $userId not found in participants, checking if room was just created");
+        
+        // If this is a direct room that was just created, the invited user might not appear
+        // in participants yet, so we assume they're invited
+        final roomName = room.name ?? '';
+        if (roomName.startsWith('Grid:Direct:')) {
+          print("RoomService: Direct room detected, assuming user $userId is invited");
+          return 'invite';
+        }
+        
+        print("RoomService: User $userId not found, returning null");
+        return null;
       }
     }
     return null;

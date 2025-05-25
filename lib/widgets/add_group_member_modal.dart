@@ -9,11 +9,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 
-
 import '../models/grid_user.dart' as GridUser;
-
 import '../repositories/user_repository.dart';
-
 
 class AddGroupMemberModal extends StatefulWidget {
   final String roomId;
@@ -22,13 +19,20 @@ class AddGroupMemberModal extends StatefulWidget {
   final UserRepository userRepository;
   final VoidCallback? onInviteSent;
 
-  AddGroupMemberModal({required this.roomId, required this.userService, required this.roomService, required this.userRepository, required this.onInviteSent});
+  AddGroupMemberModal({
+    required this.roomId,
+    required this.userService,
+    required this.roomService,
+    required this.userRepository,
+    required this.onInviteSent,
+  });
 
   @override
   _AddGroupMemberModalState createState() => _AddGroupMemberModalState();
 }
 
-class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
+class _AddGroupMemberModalState extends State<AddGroupMemberModal>
+    with TickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
 
@@ -40,9 +44,21 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
   String? _matrixUserId = "";
   String? _contactError;
 
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
 
     _controller.addListener(() {
       if (_contactError != null) {
@@ -55,10 +71,21 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
         _matrixUserId = null;
       }
     });
+
+    _fadeController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _controller.dispose();
+    _qrController?.dispose();
+    super.dispose();
   }
 
   bool isCustomHomeserver() {
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    final homeserver =
+        this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
     if (homeserver == dotenv.env['HOMESERVER']) {
       return false;
     }
@@ -70,9 +97,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
 
     var username = _controller.text.toLowerCase();
     bool isCustomServer = isCustomHomeserver();
-    if (!isCustomServer)  {
+    if (!isCustomServer) {
       // is grid server
-      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+      final homeserver =
+          this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
       username = '@$username:$homeserver';
     } else {
       username = '@$username';
@@ -95,7 +123,6 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     }
 
     try {
-
       // check if inviting self
       final isSelf = (await widget.roomService.getMyUserId() == username);
       if (isSelf) {
@@ -118,7 +145,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       if (!room.canInvite) {
         if (mounted) {
           setState(() {
-            _contactError = 'You do not have permission to invite members to this group.';
+            _contactError =
+                'You do not have permission to invite members to this group.';
             _isProcessing = false;
           });
         }
@@ -129,8 +157,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       final memberCount = room
           .getParticipants()
           .where((member) =>
-      member.membership == Membership.join ||
-          member.membership == Membership.invite)
+              member.membership == Membership.join ||
+              member.membership == Membership.invite)
           .length;
 
       if (memberCount >= MAX_GROUP_MEMBERS) {
@@ -178,12 +206,18 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invite sent successfully to ${localpart(username)}.')),
+          SnackBar(
+            content: Text('Invite sent successfully to ${localpart(username)}.'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
 
       _matrixUserId = null;
-
     } catch (e) {
       print('Error adding member: $e');
       if (mounted) {
@@ -207,7 +241,6 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
       _isScanning = true;
     });
   }
-
 
   void _onQRViewCreated(QRViewController controller) {
     _qrController = controller;
@@ -238,201 +271,436 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal> {
     _qrController?.resumeCamera();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _qrController?.dispose();
-    super.dispose();
+  Widget _buildModernCard({required Widget child, EdgeInsets? padding}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: padding ?? const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHeader() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    bool isCustomHomeserver() {
-      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-      if (homeserver == dotenv.env['HOMESERVER']) {
-        return false;
-      }
-      return true;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        // Dismiss keyboard on tap outside
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery
-                .of(context)
-                .viewInsets
-                .bottom, // Adjust for keyboard
+    return _buildModernCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.person_add,
+              color: colorScheme.primary,
+              size: 24,
+            ),
           ),
-          child: Container(
-            color: Colors.transparent,
-            padding: EdgeInsets.all(16.0),
-            child: _isScanning
-                ? Column(
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Scan QR Code',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.textTheme.bodyMedium?.color,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Container(
-                  height: 300,
-                  child: QRView(
-                    key: qrKey,
-                    onQRViewCreated: _onQRViewCreated,
-                    overlay: QrScannerOverlayShape(
-                      borderColor: theme.textTheme.bodyMedium?.color ??
-                          Colors.black,
-                      borderRadius: 36,
-                      borderLength: 30,
-                      borderWidth: 10,
-                      cutOutSize: 250,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    _qrController?.pauseCamera();
-                    setState(() {
-                      _isScanning = false;
-                    });
-                  },
-                  child: Text('Cancel'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.onSurface,
-                    foregroundColor: colorScheme.surface,
-                  ),
-                ),
-              ],
-            )
-                : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 300, // Set a fixed width for the text field
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.light
-                          ? theme.cardColor
-                          : theme.colorScheme.surface.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(36),
-                      border: Theme.of(context).brightness == Brightness.dark
-                          ? Border.all(color: theme.colorScheme.surface.withOpacity(0.15), width: 1)
-                          : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-                        prefixText: '@',
-                        errorText: _contactError,
-                        filled: true,
-                        fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                      style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8), // Space between the TextField and subtext
-                Text(
-                  'Secure location sharing begins once accepted.',
-                  style: TextStyle(
-                    fontSize: 12,
+                  'Add Member',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
                     color: colorScheme.onSurface,
                   ),
                 ),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _isProcessing ? null : _addMember,
-                  child: _isProcessing
-                      ? CircularProgressIndicator(color: Colors.white)
-                      : Text('Send Request'),
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: 40, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(35),
-                    ),
-                    backgroundColor: colorScheme.onSurface,
-                    foregroundColor: colorScheme.surface,
+                const SizedBox(height: 4),
+                Text(
+                  'Invite someone to join this group',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
-                SizedBox(height: 20),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
-                    borderRadius: BorderRadius.circular(35),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUsernameInput() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Username',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            decoration: InputDecoration(
+              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
+              prefixText: '@',
+              errorText: _contactError,
+              filled: true,
+              fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.outline.withOpacity(0.2),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.primary,
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.error,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          if (_contactError == null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 16,
                   ),
-                  child: ElevatedButton.icon(
-                    onPressed: _scanQRCode,
-                    icon: Icon(
-                      Icons.qr_code_scanner,
-                      color: Theme.of(context).brightness == Brightness.light
-                          ? colorScheme.primary
-                          : colorScheme.surface,
-                    ),
-                    label: Text(
-                      'Scan QR Code',
-                      style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? colorScheme.onSurface
-                            : colorScheme.surface,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Secure location sharing begins once accepted',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(35),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQRScannerCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.qr_code_scanner,
+                  color: colorScheme.secondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Quick Add',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
                       ),
-                      backgroundColor: Theme.of(context).brightness == Brightness.light
-                          ? colorScheme.surface
-                          : colorScheme.primary,
-                      elevation: 0,
+                    ),
+                    Text(
+                      'Scan a user\'s QR code',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _scanQRCode,
+                icon: Icon(
+                  Icons.qr_code_scanner,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+                label: Text(
+                  'Scan',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: colorScheme.primary.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQRScanner() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  _qrController?.pauseCamera();
+                  setState(() {
+                    _isScanning = false;
+                  });
+                },
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Scan QR Code',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 300,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.outline.withOpacity(0.2),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: QRView(
+              key: qrKey,
+              onQRViewCreated: _onQRViewCreated,
+              overlay: QrScannerOverlayShape(
+                borderColor: colorScheme.primary,
+                borderRadius: 12,
+                borderLength: 30,
+                borderWidth: 4,
+                cutOutSize: 250,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Point your camera at a user\'s QR code to add them instantly',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurface.withOpacity(0.6),
                     ),
                   ),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outline.withOpacity(0.1),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colorScheme.onSurface,
+                side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _isProcessing ? null : _addMember,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: _isProcessing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Send Invite',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.background,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Modern handle
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outline.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  top: 24,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  children: [
+                    _buildHeader(),
+                    if (_isScanning) _buildQRScanner() else ...[
+                      _buildUsernameInput(),
+                      _buildQRScannerCard(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            if (!_isScanning) _buildActionButtons(),
+          ],
         ),
       ),
     );
