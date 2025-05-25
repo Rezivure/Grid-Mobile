@@ -33,6 +33,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
   Timer? _debounce;
   String _fullPhoneNumber = '';
+  bool _hasAttemptedAutoSubmit = false;
 
   @override
   void initState() {
@@ -65,9 +66,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _slideController.forward();
 
     _usernameController.addListener(_onUsernameChanged);
-    _codeController.addListener(() {
-      setState(() {}); // Trigger rebuild when code changes
-    });
+    _codeController.addListener(_onCodeChanged);
   }
 
   @override
@@ -85,6 +84,16 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _validateUsernameInput();
     });
+  }
+
+  void _onCodeChanged() {
+    setState(() {}); // Trigger rebuild when code changes
+    
+    // Auto-submit when 6 digits are entered (only if not already attempted)
+    if (_codeController.text.trim().length == 6 && !_hasAttemptedAutoSubmit && !_isLoading) {
+      _hasAttemptedAutoSubmit = true;
+      _submitVerificationCode();
+    }
   }
 
   void _validateUsernameInput() {
@@ -782,40 +791,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         _buildModernButton(
           text: _isLoginFlow ? 'Sign In' : 'Complete Registration',
           onPressed: !_isLoading && _codeController.text.trim().length == 6
-              ? () async {
-                  setState(() {
-                    _isLoading = true;
-                  });
-                  try {
-                    if (_isLoginFlow) {
-                      await Provider.of<AuthProvider>(context, listen: false)
-                          .verifyLoginCode(
-                        _fullPhoneNumber,
-                        _codeController.text,
-                      );
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        '/main',
-                        (Route<dynamic> route) => false,
-                      );
-                    } else {
-                      String username = _usernameController.text;
-                      await Provider.of<AuthProvider>(context, listen: false)
-                          .verifyRegistrationCode(
-                        username,
-                        _fullPhoneNumber,
-                        _codeController.text,
-                      );
-                      Navigator.pushNamed(context, '/main');
-                    }
-                  } catch (e) {
-                    _showErrorDialog(_isLoginFlow ? 'Login failed' : 'Registration failed');
-                  } finally {
-                    setState(() {
-                      _isLoading = false;
-                    });
-                  }
-                }
+              ? _submitVerificationCode
               : null,
           isPrimary: true,
           isLoading: _isLoading,
@@ -825,6 +801,44 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         const SizedBox(height: 40),
       ],
     );
+  }
+
+  Future<void> _submitVerificationCode() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      if (_isLoginFlow) {
+        await Provider.of<AuthProvider>(context, listen: false)
+            .verifyLoginCode(
+          _fullPhoneNumber,
+          _codeController.text,
+        );
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/main',
+          (Route<dynamic> route) => false,
+        );
+      } else {
+        String username = _usernameController.text;
+        await Provider.of<AuthProvider>(context, listen: false)
+            .verifyRegistrationCode(
+          username,
+          _fullPhoneNumber,
+          _codeController.text,
+        );
+        Navigator.pushNamed(context, '/main');
+      }
+    } catch (e) {
+      // Reset auto-submit flag on error so user can try again
+      _hasAttemptedAutoSubmit = false;
+      _showErrorDialog(_isLoginFlow ? 'Login failed' : 'Registration failed');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _showErrorDialog(String message) {
