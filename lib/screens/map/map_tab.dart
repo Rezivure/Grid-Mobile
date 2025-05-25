@@ -188,7 +188,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   Widget build(BuildContext context) {
     if (_tileProvider == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildMapLoadingState(context);
     }
 
     final theme = Theme.of(context);
@@ -473,6 +473,42 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   fontWeight: FontWeight.bold,
                   color: isDarkMode ? colorScheme.primary : Colors.black,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapLoadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Subtle loading indicator
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  colorScheme.primary.withOpacity(0.7),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading map...',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurface.withOpacity(0.6),
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],

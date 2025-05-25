@@ -14,13 +14,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late AnimationController _slideController;
-  late AnimationController _networkController;
   late AnimationController _floatController;
   
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
-  late Animation<double> _networkAnimation;
   late Animation<double> _floatAnimation;
 
   Timer? _avatarTimer;
@@ -43,10 +41,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    _networkController = AnimationController(
-      duration: const Duration(milliseconds: 3000),
-      vsync: this,
-    );
     _floatController = AnimationController(
       duration: const Duration(milliseconds: 4000),
       vsync: this,
@@ -67,10 +61,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       parent: _slideController,
       curve: Curves.easeOutCubic,
     ));
-    _networkAnimation = CurvedAnimation(
-      parent: _networkController,
-      curve: Curves.easeInOut,
-    );
     _floatAnimation = CurvedAnimation(
       parent: _floatController,
       curve: Curves.easeInOut,
@@ -85,7 +75,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       _slideController.forward();
     });
     Future.delayed(const Duration(milliseconds: 1000), () {
-      _networkController.repeat();
       _floatController.repeat(reverse: true);
     });
     
@@ -102,7 +91,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     _fadeController.dispose();
     _scaleController.dispose();
     _slideController.dispose();
-    _networkController.dispose();
     _floatController.dispose();
     _avatarTimer?.cancel();
     super.dispose();
@@ -146,15 +134,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       width: 280,
       height: 180,
       child: AnimatedBuilder(
-        animation: _networkAnimation,
+        animation: _floatAnimation,
         builder: (context, child) {
           return CustomPaint(
-            painter: NetworkLinesPainter(
+            painter: CircularLinesPainter(
               colorScheme: colorScheme,
-              animationValue: _networkAnimation.value,
+              animationValue: _floatAnimation.value,
             ),
             child: Stack(
-              children: _buildNetworkAvatars(),
+              children: _buildCircularAvatars(),
             ),
           );
         },
@@ -162,30 +150,29 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     );
   }
 
-  List<Widget> _buildNetworkAvatars() {
-    final double avatarSize = 40;
+  List<Widget> _buildCircularAvatars() {
+    final double avatarSize = 35;
     final colorScheme = Theme.of(context).colorScheme;
+    final double radius = 70;
+    final center = Offset(140, 90); // Adjusted to fit all avatars within bounds
     
-    // Define specific positions for a network layout
-    final List<Offset> basePositions = [
-      const Offset(40, 40),   // Top left
-      const Offset(140, 20),  // Top center
-      const Offset(240, 50),  // Top right
-      const Offset(60, 120),  // Bottom left
-      const Offset(160, 140), // Bottom center
-      const Offset(220, 120), // Bottom right
-    ];
-
-    return List.generate(basePositions.length, (i) {
-      final basePosition = basePositions[i];
+    // Create avatars in a circle (8 avatars for better visual balance)
+    return List.generate(8, (i) {
+      final angle = (i * 2 * pi / 8) - pi / 2; // Start from top, distribute evenly
       
       return AnimatedBuilder(
         animation: _floatAnimation,
         builder: (context, child) {
-          // Create different floating patterns for each avatar
+          // Add subtle floating animation
           final floatOffset = Offset(
-            sin(_floatAnimation.value * 2 * pi + i * 0.5) * 3,
-            cos(_floatAnimation.value * 2 * pi + i * 0.7) * 2,
+            sin(_floatAnimation.value * 2 * pi + i * 0.5) * 2,
+            cos(_floatAnimation.value * 2 * pi + i * 0.7) * 1.5,
+          );
+          
+          // Calculate circular position
+          final basePosition = Offset(
+            center.dx + cos(angle) * radius,
+            center.dy + sin(angle) * radius,
           );
           
           final animatedPosition = basePosition + floatOffset;
@@ -197,7 +184,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
               opacity: 0.9,
               duration: const Duration(milliseconds: 500),
               child: Transform.scale(
-                scale: 1.0 + sin(_floatAnimation.value * 2 * pi + i) * 0.05,
+                scale: 1.0 + sin(_floatAnimation.value * 2 * pi + i) * 0.03,
                 child: Container(
                   width: avatarSize,
                   height: avatarSize,
@@ -351,7 +338,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         Text(
                           'Grid',
                           style: theme.textTheme.displaySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Goli',
+                            fontWeight: FontWeight.bold,
                             color: colorScheme.onSurface,
                             height: 1.0,
                           ),
@@ -469,101 +457,73 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   }
 }
 
-class NetworkLinesPainter extends CustomPainter {
+class CircularLinesPainter extends CustomPainter {
   final ColorScheme colorScheme;
   final double animationValue;
   
-  NetworkLinesPainter({required this.colorScheme, required this.animationValue});
+  CircularLinesPainter({required this.colorScheme, required this.animationValue});
   
   @override
   void paint(Canvas canvas, Size size) {
-    // Animated opacity and thickness
-    final baseOpacity = 0.3 + sin(animationValue * 2 * pi) * 0.1;
-    final baseThickness = 1.5 + sin(animationValue * 2 * pi) * 0.3;
+    final double radius = 70;
+    final center = Offset(140, 90);
+    final int avatarCount = 8;
     
+    // Subtle line settings
+    final baseOpacity = 0.15 + sin(animationValue * 2 * pi) * 0.05;
     final paint = Paint()
       ..color = colorScheme.primary.withOpacity(baseOpacity)
-      ..strokeWidth = baseThickness
+      ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
     
-    final glowPaint = Paint()
-      ..color = colorScheme.primary.withOpacity(0.1 + sin(animationValue * 2 * pi) * 0.05)
-      ..strokeWidth = baseThickness + 2
-      ..style = PaintingStyle.stroke;
-    
-    // Define the same base positions as in the avatar layout
-    final List<Offset> basePositions = [
-      const Offset(40, 40),   // Top left
-      const Offset(140, 20),  // Top center
-      const Offset(240, 50),  // Top right
-      const Offset(60, 120),  // Bottom left
-      const Offset(160, 140), // Bottom center
-      const Offset(220, 120), // Bottom right
-    ];
-    
-    // Apply the same floating animation to line endpoints
-    final List<Offset> animatedPositions = basePositions.asMap().entries.map((entry) {
-      final i = entry.key;
-      final basePosition = entry.value;
+    // Calculate avatar positions with floating animation
+    List<Offset> avatarPositions = [];
+    for (int i = 0; i < avatarCount; i++) {
+      final angle = (i * 2 * pi / avatarCount) - pi / 2;
       
       final floatOffset = Offset(
-        sin(animationValue * 2 * pi + i * 0.5) * 3,
-        cos(animationValue * 2 * pi + i * 0.7) * 2,
+        sin(animationValue * 2 * pi + i * 0.5) * 2,
+        cos(animationValue * 2 * pi + i * 0.7) * 1.5,
       );
       
-      return basePosition + floatOffset;
-    }).toList();
-    
-    // Draw connections between avatars to create a network effect
-    final connections = [
-      [0, 1], // Top left to top center
-      [1, 2], // Top center to top right
-      [0, 3], // Top left to bottom left
-      [1, 4], // Top center to bottom center
-      [2, 5], // Top right to bottom right
-      [3, 4], // Bottom left to bottom center
-      [4, 5], // Bottom center to bottom right
-      [1, 3], // Cross connection
-      [1, 5], // Cross connection
-    ];
-    
-    for (int i = 0; i < connections.length; i++) {
-      final connection = connections[i];
-      final start = animatedPositions[connection[0]];
-      final end = animatedPositions[connection[1]];
+      final basePosition = Offset(
+        center.dx + cos(angle) * radius,
+        center.dy + sin(angle) * radius,
+      );
       
-      // Add staggered animation delay for each connection
-      final connectionDelay = i * 0.1;
-      final connectionAnimation = (animationValue + connectionDelay) % 1.0;
-      
-      // Draw glow effect
-      canvas.drawLine(start, end, glowPaint);
-      
-      // Draw main connection line
-      canvas.drawLine(start, end, paint);
-      
-      // Add animated pulse effect
-      _drawAnimatedPulse(canvas, start, end, connectionAnimation);
+      avatarPositions.add(basePosition + floatOffset);
     }
-  }
-  
-  void _drawAnimatedPulse(Canvas canvas, Offset start, Offset end, double animation) {
-    // Draw moving pulse dot along the line
-    final pulsePosition = Offset.lerp(start, end, animation)!;
     
-    final pulsePaint = Paint()
-      ..color = colorScheme.primary.withOpacity(0.8)
-      ..style = PaintingStyle.fill;
+    // Draw lines connecting adjacent avatars
+    for (int i = 0; i < avatarCount; i++) {
+      final nextIndex = (i + 1) % avatarCount;
+      final start = avatarPositions[i];
+      final end = avatarPositions[nextIndex];
+      
+      // Add subtle animation delay for each connection
+      final connectionAnimation = (animationValue + i * 0.1) % 1.0;
+      final connectionOpacity = baseOpacity * (0.5 + sin(connectionAnimation * 2 * pi) * 0.3);
+      
+      final animatedPaint = Paint()
+        ..color = colorScheme.primary.withOpacity(connectionOpacity)
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke;
+      
+      canvas.drawLine(start, end, animatedPaint);
+    }
     
-    final pulseGlowPaint = Paint()
-      ..color = colorScheme.primary.withOpacity(0.3)
-      ..style = PaintingStyle.fill;
-    
-    // Draw glow
-    canvas.drawCircle(pulsePosition, 4, pulseGlowPaint);
-    
-    // Draw pulse dot
-    canvas.drawCircle(pulsePosition, 2, pulsePaint);
+    // Optional: Draw lines to center for a more connected look
+    for (int i = 0; i < avatarCount; i += 2) { // Only every other avatar to avoid clutter
+      final start = avatarPositions[i];
+      final connectionOpacity = baseOpacity * 0.3;
+      
+      final centerPaint = Paint()
+        ..color = colorScheme.primary.withOpacity(connectionOpacity)
+        ..strokeWidth = 0.8
+        ..style = PaintingStyle.stroke;
+      
+      canvas.drawLine(start, center, centerPaint);
+    }
   }
   
   @override

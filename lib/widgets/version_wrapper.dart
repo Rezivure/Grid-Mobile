@@ -85,17 +85,8 @@ class _VersionWrapperState extends State<VersionWrapper> {
   @override
   Widget build(BuildContext context) {
     if (!_checkComplete) {
-      return MaterialApp(
-        home: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          body: Center(
-            child: Image.asset(
-              'assets/logos/png-file-2.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      );
+      // Show the beautiful splash while checking version
+      return widget.child;
     }
 
     if (_needsCriticalUpdate) {
