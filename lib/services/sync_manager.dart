@@ -722,7 +722,10 @@ class SyncManager with ChangeNotifier {
 
     // Finally, process the full client.rooms if you like
     for (var room in client.rooms) {
-      initialProcessRoom(room);
+      // Only process rooms that the user has joined
+      if (room.membership == Membership.join) {
+        initialProcessRoom(room);
+      }
     }
 
     // Refresh contacts
@@ -732,6 +735,16 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> initialProcessRoom(Room room) async {
+    // Check if the user has actually joined this room
+    if (room.membership != Membership.join) {
+      print('Skipping room ${room.id} - membership status: ${room.membership}');
+      return;
+    }
+
+    await processJoinedRoom(room);
+  }
+
+  Future<void> processJoinedRoom(Room room) async {
     // Check if the room already exists
     final existingRoom = await roomRepository.getRoomById(room.id);
 
@@ -844,21 +857,34 @@ class SyncManager with ChangeNotifier {
       if (didJoin) {
         print('Successfully joined room $roomId');
 
-        // Process the room to ensure database updates
-        await roomService.updateSingleRoom(roomId);
-        final room = client.getRoomById(roomId);
-        if (room != null) {
-          await initialProcessRoom(room);
-        }
-
-        // Trigger a full client sync to fetch all updates
+        // Trigger a sync first to update room membership status
         await client.sync(timeout: 10000);
         print('Sync completed for room $roomId');
+
+        // Now process the room after sync has updated membership
+        final room = client.getRoomById(roomId);
+        if (room != null) {
+          // Force process the room even if membership hasn't updated yet
+          await processJoinedRoom(room);
+        }
+        
+        // Refresh groups to show the new room
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+        
+        // Additional delayed refreshes to ensure UI updates
+        Future.delayed(const Duration(milliseconds: 200), () {
+          groupsBloc.add(RefreshGroups());
+          groupsBloc.add(LoadGroups());
+        });
+        
+        Future.delayed(const Duration(milliseconds: 500), () {
+          groupsBloc.add(RefreshGroups());
+          groupsBloc.add(LoadGroups());
+        });
       } else {
         throw Exception('Failed to join room');
       }
-      // Remove invite since excepted
-      removeInvite(roomId);
     } catch (e) {
       print('Error during room join and sync: $e');
       throw e; // Re-throw for error handling in calling code
