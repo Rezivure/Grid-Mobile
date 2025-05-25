@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -122,6 +121,16 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
+  Future<bool> _canCurrentUserKick() async {
+    try {
+      final room = widget.roomService.client.getRoomById(widget.room.roomId);
+      return room?.canKick ?? false;
+    } catch (e) {
+      print('Error checking kick permissions: $e');
+      return false;
+    }
+  }
+
   Future<void> _kickMember(String userId) async {
     try {
       final success = await widget.roomService.kickMemberFromRoom(
@@ -131,7 +140,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('User kicked from group'),
+              content: const Text('User removed from group'),
               backgroundColor: Theme.of(context).colorScheme.primary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -139,12 +148,24 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               ),
             ),
           );
+          
+          // Refresh the member list immediately
+          context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+          
+          // Handle the kick in the bloc
           await context.read<GroupsBloc>().handleMemberKicked(
               widget.room.roomId, userId);
+              
+          // Add a delayed refresh to ensure sync
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+            }
+          });
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Failed to kick. Only group creator can kick.'),
+              content: const Text('Failed to remove user. You may not have permission.'),
               backgroundColor: Theme.of(context).colorScheme.error,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -158,7 +179,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error kicking user: $e'),
+            content: Text('Error removing user: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -168,6 +189,185 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         );
       }
     }
+  }
+
+  void _showMemberMenu(GridUser user, String? memberStatus) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final canKick = await _canCurrentUserKick();
+    
+    if (!mounted) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.4,
+          ),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Member info header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: RandomAvatar(
+                        user.userId.split(':')[0].replaceFirst('@', ''),
+                        height: 40,
+                        width: 40,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName ?? localpart(user.userId),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Menu options
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    // Remove from group option
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: canKick 
+                              ? Colors.red.withOpacity(0.1)
+                              : colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.person_remove_outlined,
+                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Remove from Group',
+                        style: TextStyle(
+                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      enabled: canKick,
+                      onTap: canKick ? () {
+                        Navigator.pop(context);
+                        _showKickConfirmation(user);
+                      } : null,
+                    ),
+                    
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showKickConfirmation(GridUser user) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_remove_outlined,
+                color: Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Remove Member',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _kickMember(user.userId);
+              },
+              child: const Text(
+                'Remove',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _onSubscreenSelected(String subscreen) {
@@ -349,30 +549,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
         ],
       ),
-      child: Slidable(
-        key: ValueKey(user.userId),
-        endActionPane: ActionPane(
-          motion: const BehindMotion(),
-          extentRatio: 0.25,
-          children: [
-            SlidableAction(
-              onPressed: (_) => _kickMember(user.userId),
-              backgroundColor: colorScheme.error,
-              foregroundColor: colorScheme.onError,
-              icon: Icons.person_remove_outlined,
-              label: 'Kick',
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-          ],
-        ),
-        child: InkWell(
+      child: InkWell(
           onTap: () {
             Provider.of<SelectedUserProvider>(context, listen: false)
                 .setSelectedUserId(user.userId, context);
           },
+          onLongPress: () => _showMemberMenu(user, memberStatus),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -459,7 +641,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -546,45 +727,48 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   Widget _buildEmptyState() {
     final colorScheme = Theme.of(context).colorScheme;
     
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.3),
-                shape: BoxShape.circle,
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 80),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.group_outlined,
+                  size: 48,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
               ),
-              child: Icon(
-                Icons.group_outlined,
-                size: 48,
-                color: colorScheme.onSurface.withOpacity(0.6),
+              const SizedBox(height: 16),
+              Text(
+                "It's lonely here!",
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "It's lonely here!",
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+              const SizedBox(height: 8),
+              Text(
+                'Invite friends to join this group',
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Invite friends to join this group',
-              style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        _buildActionButtons(),
+      ],
     );
   }
 
@@ -744,7 +928,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               
               Expanded(
                 child: _filteredMembers.isEmpty
-                    ? _buildEmptyState()
+                    ? SingleChildScrollView(
+                        controller: widget.scrollController,
+                        padding: const EdgeInsets.all(16.0),
+                        child: _buildEmptyState(),
+                      )
                     : ListView.builder(
                         controller: widget.scrollController,
                         padding: const EdgeInsets.all(16.0),

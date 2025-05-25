@@ -70,14 +70,19 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
   Future<void> _loadSharingPreferences() async {
     try {
-      final prefs = await widget.sharingPreferencesRepo.getSharingPreferences(widget.contact.userId, 'contact');
+      // Try 'user' type first (new format), then fall back to 'contact' for backwards compatibility
+      var prefs = await widget.sharingPreferencesRepo.getSharingPreferences(widget.contact.userId, 'user');
+      prefs ??= await widget.sharingPreferencesRepo.getSharingPreferences(widget.contact.userId, 'contact');
+      
       setState(() {
-        _alwaysShare = prefs?.activeSharing ?? false;
+        // Default to true for new contacts if no preferences exist
+        _alwaysShare = prefs?.activeSharing ?? true;
         _sharingWindows = prefs?.shareWindows ?? [];
       });
     } catch (e) {
+      print('Error loading sharing preferences: $e');
       setState(() {
-        _alwaysShare = false;
+        _alwaysShare = true; // Default to sharing for new contacts
         _sharingWindows = [];
       });
     }
@@ -86,7 +91,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   Future<void> _saveToDatabase() async {
     final preferences = SharingPreferences(
       targetId: widget.contact.userId,
-      targetType: 'contact',
+      targetType: 'user', // Use 'user' to match what sync_manager creates
       activeSharing: _alwaysShare,
       shareWindows: _sharingWindows,
     );

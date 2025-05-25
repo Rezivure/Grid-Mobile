@@ -751,8 +751,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+          padding: const EdgeInsets.only(
             left: 16,
             right: 16,
             top: 16,

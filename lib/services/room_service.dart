@@ -731,9 +731,10 @@ class RoomService {
     final room = client.getRoomById(roomId);
     if (room != null && room.canKick) {
       try {
-        room.kick(userId);
+        await room.kick(userId);
+        print("Successfully kicked user $userId from room $roomId");
       } catch (e) {
-        print("Failed to remove member");
+        print("Failed to remove member: $e");
         return false;
       }
       return true;
