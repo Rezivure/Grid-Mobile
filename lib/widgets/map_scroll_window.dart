@@ -516,7 +516,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         });
       },
       child: Container(
-        width: 70,
+        width: 80,
         height: 84,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
@@ -555,7 +555,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             ),
             const SizedBox(height: 4),
             SizedBox(
-              width: 58, // Fixed width to force ellipsis
+              width: 68, // Increased width to fit "Contacts" text
               child: Text(
                 'Contacts',
                 style: TextStyle(
@@ -602,7 +602,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           });
         },
         child: Container(
-          width: 70,
+          width: 80,
           height: 84,
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
@@ -664,7 +664,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               ),
               const SizedBox(height: 4),
               SizedBox(
-                width: 58, // Fixed width to force ellipsis
+                width: 68, // Increased width to match contacts
                 child: Text(
                   groupName,
                   style: TextStyle(

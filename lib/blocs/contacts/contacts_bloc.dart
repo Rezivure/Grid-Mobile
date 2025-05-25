@@ -101,14 +101,28 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
     final currentUserId = roomService.getMyUserId();
     final directContacts = await userRepository.getDirectContacts();
 
-    return directContacts
-        .where((contact) => contact.userId != currentUserId)
-        .map((contact) => ContactDisplay(
-      userId: contact.userId,
-      displayName: contact.displayName ?? 'Deleted User',
-      avatarUrl: contact.avatarUrl,
-      lastSeen: 'Offline',
-    ))
-        .toList();
+    List<ContactDisplay> contactDisplays = [];
+    
+    for (final contact in directContacts) {
+      if (contact.userId == currentUserId) continue;
+      
+      // Get the direct room for this contact to check membership status
+      final directRoomId = await userRepository.getDirectRoomForContact(contact.userId);
+      String? membershipStatus;
+      
+      if (directRoomId != null) {
+        membershipStatus = await roomService.getUserRoomMembership(directRoomId, contact.userId);
+      }
+      
+      contactDisplays.add(ContactDisplay(
+        userId: contact.userId,
+        displayName: contact.displayName ?? 'Deleted User',
+        avatarUrl: contact.avatarUrl,
+        lastSeen: 'Offline',
+        membershipStatus: membershipStatus,
+      ));
+    }
+    
+    return contactDisplays;
   }
 }
