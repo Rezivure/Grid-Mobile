@@ -743,7 +743,7 @@ class RoomService {
 
   Future<void> updateSingleRoom(String roomId) async {
     final room = client.getRoomById(roomId);
-    if (room != null) {
+    if (room != null && currentLocation != null) {
       // Verify it's a valid room to send to (direct room or group)
       var joinedMembers = room
           .getParticipants()

@@ -422,7 +422,19 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       // Accept the invitation through SyncManager to ensure proper syncing
       await syncManager.acceptInviteAndSync(widget.roomId);
 
-      // Wait briefly for room creation to complete
+      // Close the modal immediately after successful join
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Group invitation accepted.")),
+        );
+      }
+
+      // Now do the cleanup and updates
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Remove invite and update UI
@@ -432,11 +444,6 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       groupsBloc.add(RefreshGroups());
       groupsBloc.add(LoadGroups());
       mapBloc.add(MapLoadUserLocations());
-
-      // Close the modal
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
 
       // Staggered updates to ensure everything syncs properly
       Future.delayed(const Duration(milliseconds: 750), () {
@@ -455,33 +462,40 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         }
       });
 
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Group invitation accepted.")),
-        );
+      // Call the refresh callback if it exists
+      try {
+        await widget.refreshCallback();
+      } catch (callbackError) {
+        print('Error in refresh callback: $callbackError');
+        // Don't throw, as the join was successful
       }
-
-      // Call the refresh callback
-      await widget.refreshCallback();
     } catch (e) {
+      print('Error in _acceptGroupInvitation: $e');
+      print('Error type: ${e.runtimeType}');
+      
       if (mounted) {
-        // Show error message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error accepting invitation: $e")),
-        );
-
-        // Close modal and show invalid invite notice if appropriate
-        Navigator.of(context).pop();
-        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-
-        await showDialog(
-          context: context,
-          builder: (context) => NoticeContinueModal(
-            message: "The invite is no longer valid. It may have been removed.",
-            onContinue: () {},
-          ),
-        );
+        setState(() {
+          _isProcessing = false;
+        });
+        
+        // Only show the invalid invite modal for specific errors
+        if (e.toString().contains('403') || e.toString().contains('not_in_room') || e.toString().contains('Invalid')) {
+          Navigator.of(context).pop();
+          Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+          
+          await showDialog(
+            context: context,
+            builder: (context) => NoticeContinueModal(
+              message: "The invite is no longer valid. It may have been removed.",
+              onContinue: () {},
+            ),
+          );
+        } else {
+          // For other errors, just show a snackbar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error accepting invitation: ${e.toString()}")),
+          );
+        }
       }
     } finally {
       if (mounted) {
