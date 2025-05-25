@@ -551,15 +551,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
   Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
     if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return Colors.green;
+      return colorScheme.primary; // Use primary green
     } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
       // Extract minutes to check if over 10 minutes
       final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
       if (minutesMatch != null) {
         final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10 ? Colors.green : Colors.orange;
+        return minutes <= 10 ? colorScheme.primary : Colors.orange;
       }
-      return Colors.green;
+      return colorScheme.primary;
     } else if (timeAgo.contains('h ago')) {
       return Colors.orange;
     } else if (timeAgo.contains('d ago')) {
