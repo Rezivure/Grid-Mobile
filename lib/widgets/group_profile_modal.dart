@@ -118,7 +118,11 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalContext) {
-        return AddSharingPreferenceModal(
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: AddSharingPreferenceModal(
           onSave: (label, selectedDays, isAllDay, startTime, endTime) async {
             final newWindow = SharingWindow(
               label: label,
@@ -138,6 +142,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             });
             await _saveToDatabase();
           },
+        ),
         );
       },
     );

@@ -358,7 +358,11 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalContext) {
-        return AddSharingPreferenceModal(
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: AddSharingPreferenceModal(
           onSave: (label, selectedDays, isAllDay, startTime, endTime) async {
             final newWindow = SharingWindow(
               label: label,
@@ -378,6 +382,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             });
             await _saveToDatabase();
           },
+        ),
         );
       },
     );

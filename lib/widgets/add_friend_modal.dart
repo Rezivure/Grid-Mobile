@@ -1771,60 +1771,39 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   Widget _buildStepBasedGroupTab() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+    return Column(
+      children: [
+        // Step indicator
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: _buildStepIndicator(),
+        ),
+        
+        // Step content with generous padding
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            ),
+            child: _getCurrentStepWidget(),
           ),
         ),
-        child: Column(
-          children: [
-            // Modern handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colorScheme.outline.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            
-            // Step indicator
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: _buildStepIndicator(),
-            ),
-            
-            // Step content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _getCurrentStepWidget(),
-              ),
-            ),
-            
-            // Navigation buttons
-            _buildStepNavigationButtons(
-              nextText: _currentGroupStep == 3 ? 'Create Group' : null,
-              onNext: _currentGroupStep == 3 
-                  ? (_canProceedFromStep(_currentGroupStep) ? _createGroup : null)
-                  : (_canProceedFromStep(_currentGroupStep) ? _nextGroupStep : null),
-              backText: _currentGroupStep == 0 ? 'Cancel' : null,
-              onBack: _currentGroupStep == 0 
-                  ? () => Navigator.of(context).pop()
-                  : _previousGroupStep,
-              isLoading: _isProcessing,
-            ),
-          ],
+        
+        // Navigation buttons
+        _buildStepNavigationButtons(
+          nextText: _currentGroupStep == 3 ? 'Create Group' : null,
+          onNext: _currentGroupStep == 3 
+              ? (_canProceedFromStep(_currentGroupStep) ? _createGroup : null)
+              : (_canProceedFromStep(_currentGroupStep) ? _nextGroupStep : null),
+          backText: _currentGroupStep == 0 ? 'Cancel' : null,
+          onBack: _currentGroupStep == 0 
+              ? () => Navigator.of(context).pop()
+              : _previousGroupStep,
+          isLoading: _isProcessing,
         ),
-      ),
+      ],
     );
   }
 
@@ -1844,50 +1823,22 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   Widget _buildModernAddContactTab() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Modern handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colorScheme.outline.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    _buildContactHeader(),
-                    if (_isScanning) _buildContactQRScanner() else ...[
-                      _buildContactUsernameInput(),
-                      _buildContactQRScannerCard(),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-
-            if (!_isScanning) _buildContactActionButtons(),
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        children: [
+          _buildContactHeader(),
+          if (_isScanning) _buildContactQRScanner() else ...[
+            _buildContactUsernameInput(),
+            _buildContactQRScannerCard(),
           ],
-        ),
+          if (!_isScanning) _buildContactActionButtons(),
+        ],
       ),
     );
   }
@@ -1897,48 +1848,63 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Material(
-      color: Colors.transparent, // Ensure modal background is transparent
-      child: SingleChildScrollView(
-        child: Container(
-          color: Colors.transparent,
-          padding: EdgeInsets.all(16.0),
-          child: DefaultTabController(
-            length: 2,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Tabs
-                TabBar(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.background,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Modern handle
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.outline.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              
+              // Tabs with better spacing
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: TabBar(
                   controller: _tabController,
-                  labelColor: theme.textTheme.bodyMedium?.color,
-                  unselectedLabelColor: theme.textTheme.bodySmall?.color,
-                  indicatorColor: theme.textTheme.bodyMedium?.color,
+                  labelColor: colorScheme.primary,
+                  unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+                  indicatorColor: colorScheme.primary,
+                  indicatorWeight: 3,
+                  indicatorSize: TabBarIndicatorSize.label,
                   tabs: [
                     Tab(text: 'Add Contact'),
                     Tab(text: 'Create Group'),
                   ],
                 ),
-                // Tab views
-                Container(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.7,
-                  ),
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Add Contact Tab - Modern Design
-                      _buildModernAddContactTab(),
-                      // Create Group Tab - Step-based Design
-                      _buildStepBasedGroupTab(),
-                    ],
-                  ),
+              ),
+              
+              // Tab views with flexible height
+              Flexible(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Add Contact Tab - Modern Design
+                    _buildModernAddContactTab(),
+                    // Create Group Tab - Step-based Design
+                    _buildStepBasedGroupTab(),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
         ),
-
       ),
     );
   }

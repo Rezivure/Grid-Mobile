@@ -295,6 +295,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -602,14 +605,19 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   context: context,
                   isScrollControlled: true,
                   backgroundColor: Colors.transparent,
-                  builder: (context) => GroupProfileModal(
-                    room: widget.room,
-                    roomService: widget.roomService,
-                    sharingPreferencesRepo: widget.sharingPreferencesRepository,
-                    onMemberAdded: () {
-                      Navigator.pop(context);
-                      _showAddGroupMemberModal();
-                    },
+                  builder: (context) => Container(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
+                    ),
+                    child: GroupProfileModal(
+                      room: widget.room,
+                      roomService: widget.roomService,
+                      sharingPreferencesRepo: widget.sharingPreferencesRepository,
+                      onMemberAdded: () {
+                        Navigator.pop(context);
+                        _showAddGroupMemberModal();
+                      },
+                    ),
                   ),
                 );
               },
