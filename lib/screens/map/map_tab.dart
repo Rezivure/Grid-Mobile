@@ -25,6 +25,7 @@ import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/widgets/onboarding_modal.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -74,6 +75,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _mapController = MapController();
     _initializeServices();
     _loadMapProvider();
+    
+    // Show onboarding modal if user hasn't seen it yet
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      OnboardingModal.showOnboardingIfNeeded(context);
+    });
   }
 
   Future<void> _initializeServices() async {

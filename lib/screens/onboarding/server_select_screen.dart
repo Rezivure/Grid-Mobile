@@ -815,6 +815,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        // Navigate to main app
         Navigator.pushNamedAndRemoveUntil(
           context,
           '/main',
@@ -828,6 +829,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        // Navigate to main app
         Navigator.pushNamed(context, '/main');
       }
     } catch (e) {
