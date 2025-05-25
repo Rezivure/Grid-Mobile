@@ -294,9 +294,18 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         if (matrixStatus != null) {
           // Use Matrix status if available
           membershipStatuses[userId] = matrixStatus;
+          // Update the stored status to match Matrix status
+          await userRepository.updateMembershipStatus(userId, event.roomId, matrixStatus);
         } else {
-          // Fall back to stored status
-          membershipStatuses[userId] = relationship['membershipStatus'] as String? ?? 'join';
+          // Check if user is in the room's member list (means they joined)
+          if (room.members.contains(userId)) {
+            membershipStatuses[userId] = 'join';
+            // Update stored status to reflect reality
+            await userRepository.updateMembershipStatus(userId, event.roomId, 'join');
+          } else {
+            // Fall back to stored status for truly invited users
+            membershipStatuses[userId] = relationship['membershipStatus'] as String? ?? 'invite';
+          }
         }
       }
 

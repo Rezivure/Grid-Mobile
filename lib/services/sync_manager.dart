@@ -401,6 +401,7 @@ class SyncManager with ChangeNotifier {
     }
   }
 
+
   Future<void> handleNewGroupCreation(String roomId) async {
     print("SyncManager: Handling new group creation for room $roomId");
 
@@ -553,6 +554,39 @@ class SyncManager with ChangeNotifier {
           } catch (e) {
             print('Error fetching profile for invited user ${event.stateKey}: $e');
           }
+        }
+      }
+    } else {
+      // Handle direct room membership changes
+      final membershipStatus = event.content['membership'] as String?;
+      
+      if (event.stateKey != null && membershipStatus == 'invite') {
+        print("SyncManager: Processing invite in direct room for ${event.stateKey}");
+        
+        try {
+          // Fetch user profile and insert/update user
+          final profileInfo = await client.getUserProfile(event.stateKey!);
+          final gridUser = GridUser.GridUser(
+            userId: event.stateKey!,
+            displayName: profileInfo.displayname,
+            avatarUrl: profileInfo.avatarUrl?.toString(),
+            lastSeen: DateTime.now().toIso8601String(),
+            profileStatus: "",
+          );
+          await userRepository.insertUser(gridUser);
+          
+          // Insert direct relationship
+          await userRepository.insertUserRelationship(
+            event.stateKey!,
+            roomId,
+            true, // isDirect
+          );
+          
+          print("SyncManager: Direct contact invite processed, refreshing contacts");
+          contactsBloc.add(RefreshContacts());
+          
+        } catch (e) {
+          print('Error processing direct room invite for ${event.stateKey}: $e');
         }
       }
     }

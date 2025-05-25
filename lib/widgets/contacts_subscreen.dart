@@ -128,7 +128,22 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           hintText: 'Search Contacts',
         ),
         Expanded(
-          child: BlocBuilder<ContactsBloc, ContactsState>(
+          child: BlocConsumer<ContactsBloc, ContactsState>(
+            listener: (context, state) {
+              // Show snackbar for error states
+              if (state is ContactsError) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: ${state.message}'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              }
+            },
             builder: (context, state) {
               if (state is ContactsLoading) {
                 return _buildLoadingState();
@@ -614,8 +629,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
             context.read<ContactsBloc>().add(LoadContacts());
           },
           onContactAdded: () {
-            // Refresh contacts when a new contact is added
-            context.read<ContactsBloc>().add(LoadContacts());
+            // Trigger immediate refresh - sync manager will handle the rest
+            context.read<ContactsBloc>().add(RefreshContacts());
           },
         ),
       ),
@@ -796,7 +811,22 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
+                final contactName = contact.displayName;
+                
+                // Send delete event
                 context.read<ContactsBloc>().add(DeleteContact(contact.userId));
+                
+                // Show immediate feedback - assume success unless error occurs
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Removing $contactName from contacts...'),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
