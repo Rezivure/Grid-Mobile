@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
 
@@ -405,34 +405,37 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         _buildStepHeader(
           title: 'Choose Your Username',
           subtitle: 'This is how others can find and add you on Grid',
-          illustration: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
+          illustration: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.1),
+                      colorScheme.primary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: RandomAvatar(
+                  username.toLowerCase(),
+                  height: 80,
+                  width: 80,
+                ),
               ),
-            ),
-            child: RandomAvatar(
-              username.toLowerCase(),
-              height: 80,
-              width: 80,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 8),
-        Text(
-          'Your unique avatar!',
-          style: TextStyle(
-            fontSize: 14,
-            color: colorScheme.onSurface.withOpacity(0.6),
-            fontWeight: FontWeight.w500,
+              const SizedBox(height: 8),
+              Text(
+                'Your unique avatar!',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
         
