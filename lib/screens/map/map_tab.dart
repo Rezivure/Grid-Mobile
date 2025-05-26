@@ -176,7 +176,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Error'),
-        content: const Text('Invalid map URL. You will be logged out and redirected to login.'),
+        content: const Text('Failed to load map! Try checking connection and restarting the app.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
