@@ -274,8 +274,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 VectorTileLayer(
                   theme: _mapTheme,
                   tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                  fileCacheTtl: const Duration(hours: 24),
-                  concurrency: 10,
+                  fileCacheTtl: const Duration(days: 14),
+                  memoryTileDataCacheMaxSize: 80,
+                  memoryTileCacheMaxSize: 100,
+                  concurrency: 5,
                 ),
                 CurrentLocationLayer(
                   alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
