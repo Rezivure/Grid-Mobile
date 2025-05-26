@@ -758,6 +758,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _addContact(),
             decoration: InputDecoration(
               hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
               prefixText: '@',
@@ -1444,6 +1446,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
             // Add Member Input
             TextField(
               controller: _memberInputController,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _addMember(),
               decoration: InputDecoration(
                 labelText: 'Username',
                 hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
@@ -1476,6 +1480,11 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
                   ),
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.add_circle, color: colorScheme.primary),
+                  onPressed: _addMember,
+                  tooltip: 'Add Member',
+                ),
               ),
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: colorScheme.onSurface,
@@ -1487,15 +1496,16 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _addMember,
-                icon: const Icon(Icons.person_add, size: 18),
-                label: const Text('Add Member'),
+                icon: Icon(Icons.person_add, size: 18, color: colorScheme.onPrimary),
+                label: Text('Add Member', style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.secondary,
-                  foregroundColor: colorScheme.onSecondary,
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 0,
                 ),
               ),
             ),
@@ -1782,10 +1792,10 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         // Step content with generous padding
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.only(
+            padding: const EdgeInsets.only(
               left: 24,
               right: 24,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              bottom: 24,
             ),
             child: _getCurrentStepWidget(),
           ),
@@ -1823,23 +1833,30 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   Widget _buildModernAddContactTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        children: [
-          _buildContactHeader(),
-          if (_isScanning) _buildContactQRScanner() else ...[
-            _buildContactUsernameInput(),
-            _buildContactQRScannerCard(),
-          ],
-          if (!_isScanning) _buildContactActionButtons(),
-        ],
-      ),
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: 24,
+            ),
+            child: Column(
+              children: [
+                _buildContactHeader(),
+                if (_isScanning) _buildContactQRScanner() else ...[
+                  _buildContactUsernameInput(),
+                  _buildContactQRScannerCard(),
+                ],
+                const SizedBox(height: 24), // Extra space for keyboard
+              ],
+            ),
+          ),
+        ),
+        if (!_isScanning) _buildContactActionButtons(),
+      ],
     );
   }
 
@@ -1847,62 +1864,69 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    
     return Material(
       color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+      child: AnimatedPadding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colorScheme.background,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
           ),
-        ),
-        child: DefaultTabController(
-          length: 2,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Modern handle
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colorScheme.outline.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Modern handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outline.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              
-              // Tabs with better spacing
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: TabBar(
-                  controller: _tabController,
-                  labelColor: colorScheme.primary,
-                  unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                  indicatorColor: colorScheme.primary,
-                  indicatorWeight: 3,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  tabs: [
-                    Tab(text: 'Add Contact'),
-                    Tab(text: 'Create Group'),
-                  ],
+                
+                // Tabs with better spacing
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: colorScheme.primary,
+                    unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+                    indicatorColor: colorScheme.primary,
+                    indicatorWeight: 3,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    tabs: [
+                      Tab(text: 'Add Contact'),
+                      Tab(text: 'Create Group'),
+                    ],
+                  ),
                 ),
-              ),
-              
-              // Tab views with flexible height
-              Flexible(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    // Add Contact Tab - Modern Design
-                    _buildModernAddContactTab(),
-                    // Create Group Tab - Step-based Design
-                    _buildStepBasedGroupTab(),
-                  ],
+                
+                // Tab views with flexible height
+                Flexible(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // Add Contact Tab - Modern Design
+                      _buildModernAddContactTab(),
+                      // Create Group Tab - Step-based Design
+                      _buildStepBasedGroupTab(),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

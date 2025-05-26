@@ -750,36 +750,29 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-          ),
-          child: AddFriendModal(
-            roomService: _roomService,
-            userService: _userService,
-            groupsBloc: _groupsBloc,
-            onGroupCreated: () {
-              // Force refresh right away
-              _groupsBloc.add(RefreshGroups());
+        child: AddFriendModal(
+          roomService: _roomService,
+          userService: _userService,
+          groupsBloc: _groupsBloc,
+          onGroupCreated: () {
+            // Force refresh right away
+            _groupsBloc.add(RefreshGroups());
 
-              // Force dropdown to open to show new group
-              setState(() {
-                _isDropdownExpanded = true;
-                _expandController.forward();
-                _fadeController.forward();
-              });
+            // Force dropdown to open to show new group
+            setState(() {
+              _isDropdownExpanded = true;
+              _expandController.forward();
+              _fadeController.forward();
+            });
 
-              // Add a delayed refresh for sync completion
-              Future.delayed(const Duration(milliseconds: 1500), () {
-                if (mounted) {
-                  _groupsBloc.add(RefreshGroups());
-                  _groupsBloc.add(LoadGroups());
-                }
-              });
-            },
-          ),
+            // Add a delayed refresh for sync completion
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) {
+                _groupsBloc.add(RefreshGroups());
+                _groupsBloc.add(LoadGroups());
+              }
+            });
+          },
         ),
       ),
     );
