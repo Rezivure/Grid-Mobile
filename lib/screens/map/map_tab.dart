@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -24,6 +25,7 @@ import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/widgets/onboarding_modal.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -62,6 +64,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   String? _selectedUserName;
 
   AnimationController? _animationController;
+  
+  // Map rotation tracking
+  double _currentMapRotation = 0.0;
+  
+  // Track map movement completion
+  Timer? _mapMoveTimer;
+  String? _targetUserId;
 
   @override
   void initState() {
@@ -70,6 +79,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _mapController = MapController();
     _initializeServices();
     _loadMapProvider();
+    
+    // Show onboarding modal if user hasn't seen it yet
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      OnboardingModal.showOnboardingIfNeeded(context);
+    });
   }
 
   Future<void> _initializeServices() async {
@@ -93,6 +107,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   void dispose() {
     _animationController?.dispose();
+    _mapMoveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     _syncManager.stopSync();
@@ -174,6 +189,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
 
   void _onMarkerTap(String userId, LatLng position) {
+    // Update map state with selected user
+    context.read<MapBloc>().add(MapMoveToUser(userId));
+    
     setState(() {
       _selectedUserId = userId;
       _bubblePosition = position;
@@ -184,7 +202,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   Widget build(BuildContext context) {
     if (_tileProvider == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildMapLoadingState(context);
     }
 
     final theme = Theme.of(context);
@@ -198,8 +216,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         if (state.center != null && _isMapReady) {
           setState(() {
             _followUser = false;  // Turn off following when moving to new location
+            _targetUserId = state.selectedUserId;
           });
           _mapController.move(state.center!, _zoom);
+          
+          // Set timer to trigger bounce animation after map move completes
+          _mapMoveTimer?.cancel();
+          _mapMoveTimer = Timer(const Duration(milliseconds: 500), () {
+            if (_targetUserId != null && mounted) {
+              // Trigger a state update to force bounce animation
+              setState(() {});
+            }
+          });
         }
       },
       child: Scaffold(
@@ -211,10 +239,26 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
+                onTap: (tapPosition, latLng) {
+                  // Clear selection when tapping on map
+                  context.read<MapBloc>().add(MapClearSelection());
+                  // Also clear bubble if shown
+                  setState(() {
+                    _bubblePosition = null;
+                    _selectedUserId = null;
+                    _selectedUserName = null;
+                  });
+                },
                 onPositionChanged: (position, hasGesture) {
                   if (hasGesture && _followUser) {
                     setState(() {
                       _followUser = false;
+                    });
+                  }
+                  // Track map rotation changes
+                  if (position.rotation != _currentMapRotation) {
+                    setState(() {
+                      _currentMapRotation = position.rotation ?? 0.0;
                     });
                   }
                 },
@@ -230,25 +274,33 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 VectorTileLayer(
                   theme: _mapTheme,
                   tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                  fileCacheTtl: const Duration(hours: 24),
-                  concurrency: 10,
+                  fileCacheTtl: const Duration(days: 14),
+                  memoryTileDataCacheMaxSize: 80,
+                  memoryTileCacheMaxSize: 100,
+                  concurrency: 5,
                 ),
                 CurrentLocationLayer(
                   alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
                   style: const LocationMarkerStyle(),
                 ),
                 BlocBuilder<MapBloc, MapState>(
-                  buildWhen: (previous, current) => previous.userLocations != current.userLocations,
+                  buildWhen: (previous, current) => 
+                      previous.userLocations != current.userLocations ||
+                      previous.selectedUserId != current.selectedUserId,
                   builder: (context, state) {
                     return MarkerLayer(
                       markers: state.userLocations.map((userLocation) =>
                           Marker(
-                            width: 60.0,
-                            height: 70.0,
+                            width: 100.0,
+                            height: 100.0,
                             point: userLocation.position,
                             child: GestureDetector(
                               onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
-                              child: UserMapMarker(userId: userLocation.userId),
+                              child: UserMapMarker(
+                                userId: userLocation.userId,
+                                isSelected: state.selectedUserId == userLocation.userId,
+                                timestamp: userLocation.timestamp,
+                              ),
                             ),
                           )
                       ).toList(),
@@ -319,20 +371,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FloatingActionButton(
-                    heroTag: "orientNorthBtn",
-                    backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                    onPressed: () => _mapController.moveAndRotate(
-                      _mapController.camera.center,
-                      _mapController.camera.zoom,
-                      0,  // Set rotation to 0 (north)
-                    ),
-                    child: Icon(
-                        Icons.explore,
-                        color: isDarkMode ? colorScheme.primary : Colors.black
-                    ),
-                    mini: true,
-                  ),
+                  _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
                   FloatingActionButton(
                     heroTag: "centerUserBtn",
@@ -412,4 +451,155 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       ),
     );
   }
+
+  Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
+    return GestureDetector(
+      onTap: () {
+        // Orient north when tapped
+        _mapController.moveAndRotate(
+          _mapController.camera.center,
+          _mapController.camera.zoom,
+          0, // Set rotation to 0 (north)
+        );
+        setState(() {
+          _currentMapRotation = 0.0;
+        });
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Compass circle background
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDarkMode ? colorScheme.outline.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+            ),
+            // Rotating compass needle
+            Transform.rotate(
+              angle: -_currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
+              child: CustomPaint(
+                size: Size(28, 28),
+                painter: CompassPainter(
+                  northColor: Colors.red,
+                  southColor: isDarkMode ? colorScheme.onSurface.withOpacity(0.6) : Colors.black.withOpacity(0.6),
+                ),
+              ),
+            ),
+            // North indicator (N)
+            Positioned(
+              top: 4,
+              child: Text(
+                'N',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? colorScheme.primary : Colors.black,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapLoadingState(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Subtle loading indicator
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  colorScheme.primary.withOpacity(0.7),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading...',
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurface.withOpacity(0.6),
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CompassPainter extends CustomPainter {
+  final Color northColor;
+  final Color southColor;
+
+  CompassPainter({
+    required this.northColor,
+    required this.southColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint northPaint = Paint()
+      ..color = northColor
+      ..style = PaintingStyle.fill;
+
+    final Paint southPaint = Paint()
+      ..color = southColor
+      ..style = PaintingStyle.fill;
+
+    final double centerX = size.width / 2;
+    final double centerY = size.height / 2;
+
+    // North arrow (red) - using ui.Path to avoid conflict with latlong2.Path
+    final ui.Path northPath = ui.Path();
+    northPath.moveTo(centerX, centerY - 10); // Top point
+    northPath.lineTo(centerX - 3, centerY); // Left point
+    northPath.lineTo(centerX + 3, centerY); // Right point
+    northPath.close();
+
+    // South arrow (gray)
+    final ui.Path southPath = ui.Path();
+    southPath.moveTo(centerX, centerY + 10); // Bottom point
+    southPath.lineTo(centerX - 3, centerY); // Left point
+    southPath.lineTo(centerX + 3, centerY); // Right point
+    southPath.close();
+
+    canvas.drawPath(northPath, northPaint);
+    canvas.drawPath(southPath, southPaint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }

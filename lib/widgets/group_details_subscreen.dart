@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -34,7 +33,6 @@ class GroupDetailsSubscreen extends StatefulWidget {
   final GridRoom.Room room;
   final VoidCallback onGroupLeft;
 
-
   const GroupDetailsSubscreen({
     Key? key,
     required this.scrollController,
@@ -50,45 +48,57 @@ class GroupDetailsSubscreen extends StatefulWidget {
   _GroupDetailsSubscreenState createState() => _GroupDetailsSubscreenState();
 }
 
-class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
+class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
+    with TickerProviderStateMixin {
   bool _isLeaving = false;
   bool _isProcessing = false;
   bool _isRefreshing = false;
   bool _isInitialLoad = true;
-
 
   final TextEditingController _searchController = TextEditingController();
   List<GridUser> _filteredMembers = [];
   String? _currentUserId;
   Timer? _refreshTimer;
 
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+    
     _searchController.addListener(_filterMembers);
     _loadCurrentUser();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('group:${widget.room.roomId}');
       context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+      _fadeController.forward();
     });
-
   }
 
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _searchController.dispose();
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _loadCurrentUser() async {
     _currentUserId = await widget.userService.getMyUserId();
     if (mounted) {
       setState(() {});
     }
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _refreshTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -111,6 +121,16 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     }
   }
 
+  Future<bool> _canCurrentUserKick() async {
+    try {
+      final room = widget.roomService.client.getRoomById(widget.room.roomId);
+      return room?.canKick ?? false;
+    } catch (e) {
+      print('Error checking kick permissions: $e');
+      return false;
+    }
+  }
+
   Future<void> _kickMember(String userId) async {
     try {
       final success = await widget.roomService.kickMemberFromRoom(
@@ -119,24 +139,235 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User kicked from group')),
+            SnackBar(
+              content: const Text('User removed from group'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
           );
-          // Handle state updates through GroupsBloc
+          
+          // Refresh the member list immediately
+          context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+          
+          // Handle the kick in the bloc
           await context.read<GroupsBloc>().handleMemberKicked(
               widget.room.roomId, userId);
+              
+          // Add a delayed refresh to ensure sync
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+            }
+          });
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to kick. Only group creator can kick.')),
+            SnackBar(
+              content: const Text('Failed to remove user. You may not have permission.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error kicking user: $e')),
+          SnackBar(
+            content: Text('Error removing user: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     }
+  }
+
+  void _showMemberMenu(GridUser user, String? memberStatus) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final canKick = await _canCurrentUserKick();
+    
+    if (!mounted) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.4,
+          ),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Member info header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: RandomAvatar(
+                        user.userId.split(':')[0].replaceFirst('@', ''),
+                        height: 40,
+                        width: 40,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName ?? localpart(user.userId),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Menu options
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    // Remove from group option
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: canKick 
+                              ? Colors.red.withOpacity(0.1)
+                              : colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.person_remove_outlined,
+                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Remove from Group',
+                        style: TextStyle(
+                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      enabled: canKick,
+                      onTap: canKick ? () {
+                        Navigator.pop(context);
+                        _showKickConfirmation(user);
+                      } : null,
+                    ),
+                    
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showKickConfirmation(GridUser user) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_remove_outlined,
+                color: Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Remove Member',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _kickMember(user.userId);
+              },
+              child: const Text(
+                'Remove',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _onSubscreenSelected(String subscreen) {
@@ -146,52 +377,74 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
 
   void _filterMembers() {
     if (mounted) {
-      final state = context
-          .read<GroupsBloc>()
-          .state;
+      final state = context.read<GroupsBloc>().state;
       if (state is GroupsLoaded && state.selectedRoomMembers != null) {
         final searchText = _searchController.text.toLowerCase();
         setState(() {
           _filteredMembers = state.selectedRoomMembers!
               .where((user) => user.userId != _currentUserId)
               .where((user) =>
-          (user.displayName?.toLowerCase().contains(searchText) ?? false) ||
-              user.userId.toLowerCase().contains(searchText))
+                  (user.displayName?.toLowerCase().contains(searchText) ??
+                      false) ||
+                  user.userId.toLowerCase().contains(searchText))
               .toList();
         });
       }
     }
   }
 
-  Widget _getSubtitleText(BuildContext context, GroupsLoaded state,
-      GridUser user, UserLocation? userLocation) {
-    final memberStatus = state.getMemberStatus(user.userId);
-    final timeAgoText = userLocation != null
-        ? TimeAgoFormatter.format(userLocation.timestamp)
-        : 'Off Grid';
-
-    return StatusIndicator(
-      timeAgo: timeAgoText,
-      membershipStatus: memberStatus,
-    );
-  }
-
 
   Future<void> _showLeaveConfirmationDialog() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Leave Group'),
-          content: const Text('Are you sure you want to leave this group?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.exit_to_app,
+                color: colorScheme.error,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Leave Group',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to leave this group? This action cannot be undone.',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+            ),
+          ),
           actions: [
             TextButton(
-              child: const Text('Cancel'),
               onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.onSurface.withOpacity(0.7),
+              ),
+              child: const Text('Cancel'),
             ),
-            TextButton(
-              child: const Text('Leave'),
+            ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Leave'),
             ),
           ],
         );
@@ -217,7 +470,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error leaving group: $e')),
+          SnackBar(
+            content: Text('Error leaving group: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     } finally {
@@ -232,23 +492,382 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
   void _showAddGroupMemberModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme
-          .of(context)
-          .colorScheme
-          .surface,
-      builder: (context) {
-        return AddGroupMemberModal(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: AddGroupMemberModal(
           roomId: widget.room.roomId,
           userService: widget.userService,
           roomService: widget.roomService,
           userRepository: widget.userRepository,
           onInviteSent: () {
-            // Reload members when invite is sent
-            context.read<GroupsBloc>().add(
-                LoadGroupMembers(widget.room.roomId));
+            context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberTile(GridUser user, GroupsLoaded state, 
+      List<UserLocation> userLocations) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final userLocation = userLocations
+        .cast<UserLocation?>()
+        .firstWhere(
+          (loc) => loc?.userId == user.userId,
+          orElse: () => null,
         );
-      },
+
+    final memberStatus = state.getMemberStatus(user.userId);
+    final timeAgoText = userLocation != null
+        ? TimeAgoFormatter.format(userLocation.timestamp)
+        : 'Off Grid';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: InkWell(
+          onTap: () {
+            Provider.of<SelectedUserProvider>(context, listen: false)
+                .setSelectedUserId(user.userId, context);
+          },
+          onLongPress: () => _showMemberMenu(user, memberStatus),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                // Avatar with status indicator
+                Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.15),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: colorScheme.primary.withOpacity(0.1),
+                        child: RandomAvatar(
+                          user.userId.split(':')[0].replaceFirst('@', ''),
+                          height: 44,
+                          width: 44,
+                        ),
+                      ),
+                    ),
+                    // Status dot
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: _buildStatusDot(timeAgoText, colorScheme, membershipStatus: memberStatus),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // User information
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Display name
+                      Text(
+                        user.displayName ?? localpart(user.userId),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      
+                      const SizedBox(height: 2),
+                      
+                      // User ID subtitle
+                      Text(
+                        '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Status indicator on the right
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    StatusIndicator(
+                      timeAgo: timeAgoText,
+                      membershipStatus: memberStatus,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+    );
+  }
+
+  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
+    Color statusColor;
+    bool isOnline;
+    
+    // Check for invitation status first
+    if (membershipStatus == 'invite') {
+      statusColor = Colors.orange;
+      isOnline = false;
+    } else {
+      statusColor = _getStatusColor(timeAgo, colorScheme);
+      isOnline = _isRecentlyActive(timeAgo);
+    }
+    
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: colorScheme.surface,
+          width: 2,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: statusColor,
+          shape: BoxShape.circle,
+        ),
+        child: isOnline
+            ? Container(
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.circle,
+                  color: Colors.transparent,
+                  size: 8,
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
+    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
+      return colorScheme.primary; // Use primary green
+    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
+      // Extract minutes to check if over 10 minutes
+      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
+      if (minutesMatch != null) {
+        final minutes = int.parse(minutesMatch.group(1)!);
+        return minutes <= 10 ? colorScheme.primary : Colors.orange;
+      }
+      return colorScheme.primary;
+    } else if (timeAgo.contains('h ago')) {
+      return Colors.orange;
+    } else if (timeAgo.contains('d ago')) {
+      return Colors.red;
+    } else {
+      return colorScheme.onSurface.withOpacity(0.4);
+    }
+  }
+
+  bool _isRecentlyActive(String timeAgo) {
+    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
+      return true;
+    }
+    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
+      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
+      if (minutesMatch != null) {
+        final minutes = int.parse(minutesMatch.group(1)!);
+        return minutes <= 10; // Only consider active if 10 minutes or less
+      }
+    }
+    return false;
+  }
+
+  Widget _buildEmptyState() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 80),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.group_outlined,
+                  size: 48,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "It's lonely here!",
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Invite friends to join this group',
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        _buildActionButtons(),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          // Group Settings Button
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _isProcessing ? null : () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => Container(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.8,
+                    ),
+                    child: GroupProfileModal(
+                      room: widget.room,
+                      roomService: widget.roomService,
+                      sharingPreferencesRepo: widget.sharingPreferencesRepository,
+                      onMemberAdded: () {
+                        Navigator.pop(context);
+                        _showAddGroupMemberModal();
+                      },
+                    ),
+                  ),
+                );
+              },
+              icon: Icon(
+                Icons.settings_outlined,
+                size: 20,
+                color: colorScheme.onPrimary,
+              ),
+              label: Text(
+                'Group Settings',
+                style: TextStyle(
+                  color: colorScheme.onPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Leave Group Button
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
+              icon: _isLeaving
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.error,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Icon(
+                      Icons.exit_to_app_outlined,
+                      size: 20,
+                      color: colorScheme.error,
+                    ),
+              label: Text(
+                _isLeaving ? 'Leaving...' : 'Leave Group',
+                style: TextStyle(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colorScheme.error,
+                side: BorderSide(color: colorScheme.error),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -276,9 +895,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
                 controller: _searchController,
                 hintText: 'Search Members',
               ),
-              const Expanded(
+              Expanded(
                 child: Center(
-                  child: CircularProgressIndicator(),
+                  child: CircularProgressIndicator(
+                    color: colorScheme.primary,
+                  ),
                 ),
               ),
             ],
@@ -290,156 +911,48 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen> {
           _filteredMembers = state.selectedRoomMembers!
               .where((user) => user.userId != _currentUserId)
               .where((user) =>
-          (user.displayName?.toLowerCase().contains(searchText) ?? false) ||
-              user.userId.toLowerCase().contains(searchText))
+                  (user.displayName?.toLowerCase().contains(searchText) ??
+                      false) ||
+                  user.userId.toLowerCase().contains(searchText))
               .toList();
         }
 
-        return Column(
-          children: [
-            CustomSearchBar(
-              controller: _searchController,
-              hintText: 'Search Members',
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: widget.scrollController,
-                padding: EdgeInsets.zero,
-                itemCount: _filteredMembers.isEmpty ? 2 : _filteredMembers.length + 1,
-                itemBuilder: (context, index) {
-                  if (_filteredMembers.isEmpty && index == 0) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 40),
-                        child: Text(
-                          "It's lonely here. Invite someone!",
-                          style: TextStyle(
-                            color: colorScheme.onBackground,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (index < _filteredMembers.length) {
-                    final user = _filteredMembers[index];
-                    final userLocation = userLocations
-                        .cast<UserLocation?>()
-                        .firstWhere(
-                          (loc) => loc?.userId == user.userId,
-                      orElse: () => null,
-                    );
-
-                    return Slidable(
-                      key: ValueKey(user.userId),
-                      endActionPane: ActionPane(
-                        motion: const ScrollMotion(),
-                        children: [
-                          SlidableAction(
-                            onPressed: (_) => _kickMember(user.userId),
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            icon: Icons.person_remove,
-                            label: 'Kick',
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 30,
-                          child: RandomAvatar(
-                            user.userId.split(':')[0].replaceFirst('@', ''),
-                            height: 60,
-                            width: 60,
-                          ),
-                          backgroundColor: colorScheme.primary.withOpacity(0.2),
-                        ),
-                        title: Text(
-                          user.displayName ?? user.userId,
-                          style: TextStyle(color: colorScheme.onBackground),
-                        ),
-                        subtitle: _getSubtitleText(context, state, user, userLocation),
-                        onTap: () {
-                          Provider.of<SelectedUserProvider>(context, listen: false)
-                              .setSelectedUserId(user.userId, context);
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            children: [
+              CustomSearchBar(
+                controller: _searchController,
+                hintText: 'Search Members',
+              ),
+              
+              Expanded(
+                child: _filteredMembers.isEmpty
+                    ? SingleChildScrollView(
+                        controller: widget.scrollController,
+                        padding: const EdgeInsets.all(16.0),
+                        child: _buildEmptyState(),
+                      )
+                    : ListView.builder(
+                        controller: widget.scrollController,
+                        padding: const EdgeInsets.all(16.0),
+                        itemCount: _filteredMembers.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index < _filteredMembers.length) {
+                            final user = _filteredMembers[index];
+                            return _buildMemberTile(
+                              user,
+                              state,
+                              userLocations,
+                            );
+                          } else {
+                            return _buildActionButtons();
+                          }
                         },
                       ),
-                    );
-                  } else {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0)
-                          .copyWith(top: 20.0),
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            child: ElevatedButton(
-                              onPressed: _isProcessing ? null : () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.transparent,
-                                  builder: (context) => GroupProfileModal(
-                                    room: widget.room,
-                                    roomService: widget.roomService,
-                                    sharingPreferencesRepo: widget.sharingPreferencesRepository,
-                                    onMemberAdded: () {
-                                      // Close the modal first
-                                      Navigator.pop(context);
-                                      // Then show the add member modal
-                                      _showAddGroupMemberModal();
-                                    },
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).brightness == Brightness.light
-                                    ? colorScheme.onSurface
-                                    : colorScheme.primary,  // Green in dark mode
-                                foregroundColor: colorScheme.surface,
-                                side: BorderSide(
-                                  color: Theme.of(context).brightness == Brightness.light
-                                      ? colorScheme.onSurface
-                                      : colorScheme.primary,
-                                ),
-                                minimumSize: const Size(150, 40),
-                              ),
-                              child: const Text('Group Settings'),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: 180,
-                            child: ElevatedButton(
-                              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).brightness == Brightness.light
-                                    ? Colors.white
-                                    : Colors.red,
-                                foregroundColor: Theme.of(context).brightness == Brightness.light
-                                    ? Colors.red
-                                    : Colors.white,
-                                side: const BorderSide(color: Colors.red),
-                                minimumSize: const Size(150, 40),
-                              ),
-                              child: _isLeaving
-                                  ? CircularProgressIndicator(
-                                  color: Theme.of(context).brightness == Brightness.light
-                                      ? Colors.red
-                                      : Colors.white
-                              )
-                                  : const Text('Leave Group'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                },
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

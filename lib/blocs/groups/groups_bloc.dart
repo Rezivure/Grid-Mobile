@@ -93,22 +93,34 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   Future<void> _onRefreshGroups(RefreshGroups event, Emitter<GroupsState> emit) async {
     print("GroupsBloc: Handling RefreshGroups event");
     try {
-      // First emit loading state to trigger UI update
-      emit(GroupsLoading());
-
       final updatedGroups = await _loadGroups();
       _allGroups = updatedGroups;
 
-      // Preserve member data if we have it
+      // Preserve member data and statuses if we have them
       if (state is GroupsLoaded) {
         final currentState = state as GroupsLoaded;
-        emit(GroupsLoaded(
-          List.from(_allGroups),
-          selectedRoomId: currentState.selectedRoomId,
-          selectedRoomMembers: currentState.selectedRoomMembers,
-          membershipStatuses: currentState.membershipStatuses,
-        ));
+        
+        // If we have a selected room with members, preserve the invitation statuses
+        if (currentState.selectedRoomId != null && 
+            currentState.selectedRoomMembers != null && 
+            currentState.membershipStatuses != null) {
+          
+          // Don't emit loading state when preserving detailed member data
+          // to avoid flickering and status resets
+          emit(GroupsLoaded(
+            List.from(_allGroups),
+            selectedRoomId: currentState.selectedRoomId,
+            selectedRoomMembers: currentState.selectedRoomMembers,
+            membershipStatuses: currentState.membershipStatuses,
+          ));
+        } else {
+          // Only emit loading state if we don't have detailed member data to preserve
+          emit(GroupsLoading());
+          emit(GroupsLoaded(List.from(_allGroups)));
+        }
       } else {
+        // First time loading - show loading state
+        emit(GroupsLoading());
         emit(GroupsLoaded(List.from(_allGroups)));
       }
 
@@ -282,9 +294,18 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         if (matrixStatus != null) {
           // Use Matrix status if available
           membershipStatuses[userId] = matrixStatus;
+          // Update the stored status to match Matrix status
+          await userRepository.updateMembershipStatus(userId, event.roomId, matrixStatus);
         } else {
-          // Fall back to stored status
-          membershipStatuses[userId] = relationship['membershipStatus'] as String? ?? 'join';
+          // Check if user is in the room's member list (means they joined)
+          if (room.members.contains(userId)) {
+            membershipStatuses[userId] = 'join';
+            // Update stored status to reflect reality
+            await userRepository.updateMembershipStatus(userId, event.roomId, 'join');
+          } else {
+            // Fall back to stored status for truly invited users
+            membershipStatuses[userId] = relationship['membershipStatus'] as String? ?? 'invite';
+          }
         }
       }
 

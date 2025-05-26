@@ -9,13 +9,30 @@ class SignUpScreen extends StatefulWidget {
   _SignUpScreenState createState() => _SignUpScreenState();
 }
 
-class _SignUpScreenState extends State<SignUpScreen> {
+class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMixin {
   late String _homeserver;
   late String _mapsUrl;
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+    );
+    
+    _fadeController.forward();
+  }
 
   @override
   void didChangeDependencies() {
@@ -38,130 +55,415 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background, // Use theme background color
-      appBar: AppBar(
-        leading: BackButton(color: colorScheme.onBackground), // Use theme color for back button
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView( // Make the content scrollable
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20), // Add some vertical padding
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const SizedBox(height: 50), // Add some space at the top
-              RandomAvatar(
-                _usernameController.text.isNotEmpty ? _usernameController.text.toLowerCase() : 'default',
-                height: 100,
-                width: 100,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Sign Up',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  color: colorScheme.primary, // Use primary color for text
-                  fontWeight: FontWeight.bold,
+      backgroundColor: colorScheme.surface,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                // Header with back button
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: Icon(
+                        Icons.arrow_back,
+                        color: colorScheme.onSurface,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        'Step 2 of 2',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Homeserver: $_homeserver',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.primary,
+                
+                const SizedBox(height: 40),
+                
+                // Avatar Section
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colorScheme.outline.withOpacity(0.1),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorScheme.shadow.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: RandomAvatar(
+                          _usernameController.text.isNotEmpty 
+                              ? _usernameController.text.toLowerCase() 
+                              : 'default',
+                          height: 100,
+                          width: 100,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Your Avatar Preview',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'This unique avatar is generated from your username',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Maps URL: $_mapsUrl',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.primary,
+                
+                const SizedBox(height: 32),
+                
+                // Main Form Card
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.shadow.withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Create Account',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Set up your Grid account with a unique username',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Server Info Card
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: _homeserver.isEmpty 
+                              ? colorScheme.errorContainer.withOpacity(0.3)
+                              : colorScheme.surfaceVariant.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _homeserver.isEmpty 
+                                ? colorScheme.error.withOpacity(0.3)
+                                : colorScheme.outline.withOpacity(0.1),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  _homeserver.isEmpty ? Icons.error_outline : Icons.dns_outlined,
+                                  size: 20,
+                                  color: _homeserver.isEmpty ? colorScheme.error : colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Server Configuration',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: _homeserver.isEmpty ? colorScheme.error : colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _buildServerInfoRow(
+                              'Homeserver', 
+                              _homeserver.isEmpty ? 'No homeserver set' : _homeserver, 
+                              Icons.home_outlined,
+                              isError: _homeserver.isEmpty,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildServerInfoRow(
+                              'Maps Provider', 
+                              _mapsUrl.contains('mygrid.app') ? 'Grid Maps' : _mapsUrl, 
+                              Icons.map_outlined
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Error Message
+                      if (_errorMessage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: colorScheme.errorContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                color: colorScheme.onErrorContainer,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onErrorContainer,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      
+                      // Username Field
+                      TextFormField(
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          labelText: 'Username',
+                          hintText: 'Enter your unique username',
+                          prefixIcon: Container(
+                            width: 40,
+                            alignment: Alignment.center,
+                            child: Text(
+                              '@',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Password Field
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          hintText: 'Create a secure password',
+                          prefixIcon: Icon(
+                            Icons.lock_outline,
+                            color: colorScheme.primary,
+                          ),
+                          filled: true,
+                          fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Password Helper Text
+                      Text(
+                        'Make sure to remember your password - it can\'t be recovered!',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Sign Up Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _signUp,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colorScheme.primary,
+                            foregroundColor: colorScheme.onPrimary,
+                            disabledBackgroundColor: colorScheme.surfaceVariant,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      colorScheme.onPrimary,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  'Create Account',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: colorScheme.onPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Sign In Link
+                      Center(
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/login',
+                              arguments: {
+                                'homeserver': _homeserver,
+                                'mapsUrl': _mapsUrl,
+                              },
+                            );
+                          },
+                          child: RichText(
+                            text: TextSpan(
+                              text: 'Already have an account? ',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'Sign In',
+                                  style: TextStyle(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'This will be your avatar!',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onBackground.withOpacity(0.7),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              if (_errorMessage != null) ...[
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(color: colorScheme.error),
-                ),
-                const SizedBox(height: 10),
+                
+                const SizedBox(height: 40),
               ],
-              TextField(
-                controller: _usernameController,
-                decoration: InputDecoration(
-                  labelText: 'Username',
-                  prefixText: '@', // Add the @ symbol
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Password (remember me!)',
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: const UnderlineInputBorder(), // Line underneath
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 20),
-              _isLoading
-                  ? CircularProgressIndicator(color: colorScheme.primary)
-                  : ElevatedButton(
-                onPressed: _signUp,
-                child: Text(
-                  'Sign Up',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onPrimary, // Text color in the button
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary, // Button color
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/login',
-                    arguments: {
-                      'homeserver': _homeserver,
-                      'mapsUrl': _mapsUrl,
-                    },
-                  );
-                },
-                child: Text(
-                  'Already have an account? Sign In',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onBackground.withOpacity(0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildServerInfoRow(String label, String value, IconData icon, {bool isError = false}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: isError 
+              ? colorScheme.error 
+              : colorScheme.onSurface.withOpacity(0.6),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: isError 
+                ? colorScheme.error 
+                : colorScheme.onSurface.withOpacity(0.6),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: isError 
+                  ? colorScheme.error 
+                  : colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 
@@ -275,6 +577,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   void dispose() {
+    _fadeController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();

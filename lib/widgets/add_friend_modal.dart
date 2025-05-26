@@ -14,6 +14,7 @@ import 'package:grid_frontend/services/room_service.dart';
 
 import '../blocs/groups/groups_bloc.dart';
 import '../blocs/groups/groups_event.dart';
+import '../blocs/contacts/contacts_bloc.dart';
 import '../services/sync_manager.dart';
 
 
@@ -22,15 +23,16 @@ class AddFriendModal extends StatefulWidget {
   final RoomService roomService;
   final GroupsBloc groupsBloc;
   final VoidCallback? onGroupCreated;
+  final VoidCallback? onContactAdded;
 
-  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated}) : super(key: key);
+  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated, this.onContactAdded}) : super(key: key);
 
   @override
   _AddFriendModalState createState() => _AddFriendModalState();
 }
 
 
-class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProviderStateMixin {
+class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStateMixin {
   // Add Contact variables
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
@@ -39,8 +41,10 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _memberInputController = TextEditingController();
   List<String> _members = [];
-  double _sliderValue = 1;
+  double _sliderValue = 12;
   bool _isForever = false;
+  bool _isCustomDuration = false;
+  DateTime? _customEndDate;
   String? _usernameError;
   String? _contactError;
   String? _matrixUserId = "";
@@ -49,7 +53,14 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   // New variable for member limit error
   String? _memberLimitError;
 
+  // Step-based group creation variables
+  int _currentGroupStep = 0; // 0: Name, 1: Duration, 2: Members, 3: Summary
+
   late TabController _tabController;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
 
   // QR code scanning variables
   bool _isScanning = false;
@@ -63,6 +74,27 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
 
     _controller.addListener(() {
       if (_contactError != null) {
@@ -84,6 +116,21 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
         });
       }
     });
+
+    _fadeController.forward();
+    _slideController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    _controller.dispose();
+    _tabController.dispose();
+    _qrController?.dispose();
+    _groupNameController.dispose();
+    _memberInputController.dispose();
+    super.dispose();
   }
 
   bool isCustomHomeserver() {
@@ -129,15 +176,47 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
           return;
         }
 
-        bool success = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
+        final result = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
 
-        if (success) {
+        if (result) {
+          // Get the room ID for the newly created direct room
+          final myUserId = await widget.roomService.getMyUserId();
+          if (myUserId != null) {
+            // Find the direct room we just created
+            final rooms = widget.roomService.client.rooms;
+            final directRoom = rooms.where((room) {
+              final name = room.name ?? '';
+              return name == "Grid:Direct:$myUserId:$normalizedUserId" || 
+                     name == "Grid:Direct:$normalizedUserId:$myUserId";
+            }).firstOrNull;
+            
+            if (directRoom != null) {
+              // Handle the new contact invite immediately using ContactsBloc
+              try {
+                final contactsBloc = context.read<ContactsBloc>();
+                await contactsBloc.handleNewContactInvited(directRoom.id, normalizedUserId);
+                print('AddFriendModal: Handled new contact invite via ContactsBloc');
+              } catch (e) {
+                print('AddFriendModal: Error calling ContactsBloc: $e');
+              }
+            }
+          }
+          
           // Clear _matrixUserId after successful use
           _matrixUserId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Request sent.')),
+              SnackBar(
+                content: Text('Friend request sent to ${localpart(normalizedUserId)}.'),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
             );
+            // Trigger contact refresh callback
+            widget.onContactAdded?.call();
             Navigator.of(context).pop();
           }
         } else {
@@ -278,7 +357,18 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
 
     try {
       final groupName = _groupNameController.text.trim();
-      final durationInHours = _isForever ? 0 : _sliderValue.toInt();
+      int durationInHours;
+      
+      if (_isForever) {
+        durationInHours = 0;
+      } else if (_isCustomDuration && _customEndDate != null) {
+        final now = DateTime.now();
+        final difference = _customEndDate!.difference(now);
+        durationInHours = difference.inHours;
+        if (durationInHours <= 0) durationInHours = 1; // Minimum 1 hour
+      } else {
+        durationInHours = _sliderValue.toInt();
+      }
 
       // Create the group and get the room ID
       final roomId = await widget.roomService.createGroup(groupName, _members, durationInHours);
@@ -334,450 +424,1511 @@ class _AddFriendModalState extends State<AddFriendModal> with SingleTickerProvid
     }
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _tabController.dispose();
-    _qrController?.dispose();
-    _groupNameController.dispose();
-    _memberInputController.dispose();
-    super.dispose();
+  // Step navigation methods for group creation
+  void _nextGroupStep() {
+    if (_currentGroupStep < 3) {
+      setState(() {
+        _currentGroupStep++;
+      });
+      _animateStepTransition();
+    }
+  }
+
+  void _previousGroupStep() {
+    if (_currentGroupStep > 0) {
+      setState(() {
+        _currentGroupStep--;
+      });
+      _animateStepTransition();
+    }
+  }
+
+  void _animateStepTransition() {
+    _slideController.reset();
+    _slideController.forward();
+  }
+
+  bool _canProceedFromStep(int step) {
+    switch (step) {
+      case 0: // Group name
+        return _groupNameController.text.trim().isNotEmpty;
+      case 1: // Duration
+        return true; // Always can proceed from duration
+      case 2: // Members
+        return _members.isNotEmpty;
+      case 3: // Summary
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // Helper Methods for New UI
+  Widget _buildModernCard({required Widget child, EdgeInsets? padding}) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: padding ?? const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSectionCard({
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.15),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.primary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 14,
+              color: colorScheme.onBackground.withOpacity(0.6),
+            ),
+          ),
+          SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCustomDatePicker() async {
+    final now = DateTime.now();
+    final initialDate = _customEndDate ?? now.add(Duration(hours: 24));
+    
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: now,
+      lastDate: now.add(Duration(days: 365)),
+    );
+    
+    if (selectedDate != null) {
+      final selectedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(initialDate),
+      );
+      
+      if (selectedTime != null) {
+        final customDateTime = DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          selectedTime.hour,
+          selectedTime.minute,
+        );
+        
+        setState(() {
+          _customEndDate = customDateTime;
+          _isCustomDuration = true;
+          _isForever = false;
+        });
+      }
+    }
+  }
+
+  String _formatCustomDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = dateTime.difference(now);
+    
+    if (difference.inDays > 0) {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} (${difference.inDays}d ${difference.inHours % 24}h)';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} (${difference.inHours}h ${difference.inMinutes % 60}m)';
+    }
+  }
+
+  Widget _buildQuickDurationButton(String label, int hours, ColorScheme colorScheme) {
+    bool isSelected;
+    if (label == 'Custom') {
+      isSelected = _isCustomDuration;
+    } else {
+      isSelected = !_isCustomDuration && (_sliderValue == hours || (hours == 0 && _isForever));
+    }
+    
+    return GestureDetector(
+      onTap: () {
+        if (label == 'Custom') {
+          _showCustomDatePicker();
+        } else {
+          setState(() {
+            _sliderValue = hours.toDouble();
+            _isForever = hours == 0;
+            _isCustomDuration = false;
+            _customEndDate = null;
+          });
+        }
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? colorScheme.primary 
+              : colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected 
+                ? colorScheme.primary 
+                : colorScheme.outline.withOpacity(0.3),
+            width: 1,
+          ),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: colorScheme.primary.withOpacity(0.3),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ] : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected 
+                ? Colors.white 
+                : colorScheme.onSurface,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberCard(String username, ColorScheme colorScheme) {
+    return Container(
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.primary.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: colorScheme.primary.withOpacity(0.1),
+            child: RandomAvatar(
+              username.toLowerCase(),
+              height: 32,
+              width: 32,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '@${username.toLowerCase()}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _removeMember(username),
+            child: Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.close,
+                color: Colors.red,
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // New Modern Add Contact UI Components
+  Widget _buildContactHeader() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.person_add,
+              color: colorScheme.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add Contact',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Send a friend request to start sharing',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactUsernameInput() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Username',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _addContact(),
+            decoration: InputDecoration(
+              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
+              prefixText: '@',
+              errorText: _contactError,
+              filled: true,
+              fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.outline.withOpacity(0.2),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.primary,
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: colorScheme.error,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+          if (_contactError == null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Secure location sharing begins once accepted',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactQRScannerCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.qr_code_scanner,
+                  color: colorScheme.secondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Quick Add',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      'Scan a user\'s QR code',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _scanQRCode,
+                icon: Icon(
+                  Icons.qr_code_scanner,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+                label: Text(
+                  'Scan',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: colorScheme.primary.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactQRScanner() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  _qrController?.pauseCamera();
+                  setState(() {
+                    _isScanning = false;
+                  });
+                },
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Scan QR Code',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 300,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.outline.withOpacity(0.2),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: QRView(
+              key: qrKey,
+              onQRViewCreated: _onQRViewCreated,
+              overlay: QrScannerOverlayShape(
+                borderColor: colorScheme.primary,
+                borderRadius: 12,
+                borderLength: 30,
+                borderWidth: 4,
+                cutOutSize: 250,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Point your camera at a user\'s QR code to add them instantly',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactActionButtons() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outline.withOpacity(0.1),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colorScheme.onSurface,
+                side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _isProcessing ? null : _addContact,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: _isProcessing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Send Request',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step-based Group Creation UI Components
+  Widget _buildStepHeader({
+    required String title,
+    required String subtitle,
+    Widget? illustration,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Column(
+      children: [
+        if (illustration != null) ...[
+          illustration,
+          const SizedBox(height: 24),
+        ],
+        Text(
+          title,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurface.withOpacity(0.7),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepIndicator() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(4, (index) {
+        final isActive = index <= _currentGroupStep;
+        final isCurrent = index == _currentGroupStep;
+        
+        return Container(
+          margin: EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: isCurrent ? 24 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isActive 
+                      ? colorScheme.primary 
+                      : colorScheme.outline.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              if (index < 3) SizedBox(width: 8),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildStepNavigationButtons({
+    required String? nextText,
+    required VoidCallback? onNext,
+    String? backText,
+    VoidCallback? onBack,
+    bool isLoading = false,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        children: [
+          if (onBack != null) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: isLoading ? null : onBack,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: colorScheme.onSurface,
+                  side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(backText ?? 'Back'),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            flex: onBack != null ? 1 : 2,
+            child: ElevatedButton(
+              onPressed: isLoading ? null : onNext,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: colorScheme.onPrimary,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          nextText ?? 'Next',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (nextText == null || nextText.toLowerCase().contains('next')) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward, size: 18),
+                        ],
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step 0: Group Name
+  Widget _buildGroupNameStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Create Group',
+              subtitle: 'Choose a memorable name for your group',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.1),
+                      colorScheme.primary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.group_add,
+                  size: 40,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            TextField(
+              controller: _groupNameController,
+              maxLength: 14,
+              onChanged: (value) => setState(() {}), // Trigger rebuild for button state
+              decoration: InputDecoration(
+                labelText: 'Group Name',
+                hintText: 'Enter group name...',
+                filled: true,
+                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                counterText: '',
+              ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Group names are visible to all members',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 1: Duration
+  Widget _buildGroupDurationStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Set Duration',
+              subtitle: 'How long should the group last?',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.secondary.withOpacity(0.1),
+                      colorScheme.secondary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.schedule,
+                  size: 40,
+                  color: colorScheme.secondary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Duration options in a clean grid
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildQuickDurationButton('12h', 12, colorScheme),
+                _buildQuickDurationButton('24h', 24, colorScheme),
+                _buildQuickDurationButton('72h', 72, colorScheme),
+                _buildQuickDurationButton('∞', 0, colorScheme),
+                _buildQuickDurationButton('Custom', -1, colorScheme),
+              ],
+            ),
+            
+            // Show selected custom duration info
+            if (_isCustomDuration && _customEndDate != null) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.primary.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Custom End Time',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatCustomDateTime(_customEndDate!),
+                            style: TextStyle(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _showCustomDatePicker,
+                      child: Text(
+                        'Change',
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 2: Add Members
+  Widget _buildGroupMembersStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Add Members',
+              subtitle: 'Invite up to 5 friends to your group',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.tertiary.withOpacity(0.1),
+                      colorScheme.tertiary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Icon(
+                  Icons.people,
+                  size: 40,
+                  color: colorScheme.tertiary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Add Member Input
+            TextField(
+              controller: _memberInputController,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _addMember(),
+              decoration: InputDecoration(
+                labelText: 'Username',
+                hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
+                prefixText: '@',
+                errorText: _usernameError ?? _memberLimitError,
+                filled: true,
+                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: colorScheme.error,
+                    width: 2,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.add_circle, color: colorScheme.primary),
+                  onPressed: _addMember,
+                  tooltip: 'Add Member',
+                ),
+              ),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Add Member Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _addMember,
+                icon: Icon(Icons.person_add, size: 18, color: colorScheme.onPrimary),
+                label: Text('Add Member', style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorScheme.primary,
+                  foregroundColor: colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Members List
+            if (_members.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Group Members (${_members.length}/5)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: _members.map((username) => _buildMemberCard(username, colorScheme)).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.people_outline,
+                      color: colorScheme.onSurface.withOpacity(0.4),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No members added yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add friends to get started',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colorScheme.onSurface.withOpacity(0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 3: Summary
+  Widget _buildGroupSummaryStep() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    String durationText;
+    if (_isForever) {
+      durationText = 'Permanent';
+    } else if (_isCustomDuration && _customEndDate != null) {
+      durationText = 'Until ${_formatCustomDateTime(_customEndDate!)}';
+    } else {
+      durationText = '${_sliderValue.toInt()} hours';
+    }
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: _buildModernCard(
+        child: Column(
+          children: [
+            _buildStepHeader(
+              title: 'Review & Create',
+              subtitle: 'Check your group details before creating',
+              illustration: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.green.withOpacity(0.1),
+                      Colors.green.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  size: 40,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            
+            // Summary Cards
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: colorScheme.outline.withOpacity(0.1),
+                ),
+              ),
+              child: Column(
+                children: [
+                  _buildSummaryRow(
+                    icon: Icons.group,
+                    label: 'Group Name',
+                    value: _groupNameController.text.trim(),
+                    colorScheme: colorScheme,
+                  ),
+                  const Divider(height: 24),
+                  _buildSummaryRow(
+                    icon: Icons.schedule,
+                    label: 'Duration',
+                    value: durationText,
+                    colorScheme: colorScheme,
+                  ),
+                  const Divider(height: 24),
+                  _buildSummaryRow(
+                    icon: Icons.people,
+                    label: 'Members',
+                    value: '${_members.length} invited',
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+            ),
+            
+            if (_members.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.1),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Members to invite:',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _members.map((username) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: colorScheme.primary.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '@$username',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required ColorScheme colorScheme,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: colorScheme.primary,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepBasedGroupTab() {
+    return Column(
+      children: [
+        // Step indicator
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: _buildStepIndicator(),
+        ),
+        
+        // Step content with generous padding
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 24,
+              right: 24,
+              bottom: 24,
+            ),
+            child: _getCurrentStepWidget(),
+          ),
+        ),
+        
+        // Navigation buttons
+        _buildStepNavigationButtons(
+          nextText: _currentGroupStep == 3 ? 'Create Group' : null,
+          onNext: _currentGroupStep == 3 
+              ? (_canProceedFromStep(_currentGroupStep) ? _createGroup : null)
+              : (_canProceedFromStep(_currentGroupStep) ? _nextGroupStep : null),
+          backText: _currentGroupStep == 0 ? 'Cancel' : null,
+          onBack: _currentGroupStep == 0 
+              ? () => Navigator.of(context).pop()
+              : _previousGroupStep,
+          isLoading: _isProcessing,
+        ),
+      ],
+    );
+  }
+
+  Widget _getCurrentStepWidget() {
+    switch (_currentGroupStep) {
+      case 0:
+        return _buildGroupNameStep();
+      case 1:
+        return _buildGroupDurationStep();
+      case 2:
+        return _buildGroupMembersStep();
+      case 3:
+        return _buildGroupSummaryStep();
+      default:
+        return _buildGroupNameStep();
+    }
+  }
+
+  Widget _buildModernAddContactTab() {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: 24,
+            ),
+            child: Column(
+              children: [
+                _buildContactHeader(),
+                if (_isScanning) _buildContactQRScanner() else ...[
+                  _buildContactUsernameInput(),
+                  _buildContactQRScannerCard(),
+                ],
+                const SizedBox(height: 24), // Extra space for keyboard
+              ],
+            ),
+          ),
+        ),
+        if (!_isScanning) _buildContactActionButtons(),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    
     return Material(
-      color: Colors.transparent, // Ensure modal background is transparent
-      child: SingleChildScrollView(
+      color: Colors.transparent,
+      child: AnimatedPadding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
         child: Container(
-          color: Colors.transparent,
-          padding: EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: colorScheme.background,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
           child: DefaultTabController(
             length: 2,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Tabs
-                TabBar(
-                  controller: _tabController,
-                  labelColor: theme.textTheme.bodyMedium?.color,
-                  unselectedLabelColor: theme.textTheme.bodySmall?.color,
-                  indicatorColor: theme.textTheme.bodyMedium?.color,
-                  tabs: [
-                    Tab(text: 'Add Contact'),
-                    Tab(text: 'Create Group'),
-                  ],
-                ),
-                // Tab views
+                // Modern handle
                 Container(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.6,
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outline.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  child: TabBarView(
+                ),
+                
+                // Tabs with better spacing
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: TabBar(
                     controller: _tabController,
-                    children: [
-                      // Add Contact Tab
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _isScanning
-                            ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Scan a Profile QR',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: theme.textTheme.bodyMedium?.color,
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Container(
-                              height: 300,
-                              child: QRView(
-                                key: qrKey,
-                                onQRViewCreated: _onQRViewCreated,
-                                overlay: QrScannerOverlayShape(
-                                  borderColor: theme.textTheme.bodyMedium?.color ?? Colors.black,
-                                  borderRadius: 36,
-                                  borderLength: 30,
-                                  borderWidth: 10,
-                                  cutOutSize: 250,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            ElevatedButton(
-                              onPressed: () {
-                                _qrController?.pauseCamera();
-                                setState(() {
-                                  _isScanning = false;
-                                });
-                              },
-                              child: Text('Cancel'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.onSurface,
-                                foregroundColor: colorScheme.surface,
-                              )
-                            ),
-                          ],
-                        )
-                            : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Styled Text Field for Add Contact
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(36),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: TextField(
-                                  controller: _controller,
-                                  decoration: InputDecoration(
-                                    hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-                                    prefixText: '@',
-                                    errorText: _contactError,
-                                    filled: true,
-                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24), // increased radius for rounded corners
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                  ),
-                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                                ),
-                              ),
-                              SizedBox(height: 8), // Space between the TextField and subtext
-                              Text(
-                                'Secure location sharing will begin once accepted.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              ElevatedButton(
-                                onPressed: _isProcessing ? null : _addContact,
-                                child: _isProcessing
-                                    ? CircularProgressIndicator(color: Colors.white)
-                                    : Text('Send Request'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(35),
-                                  ),
-                                  backgroundColor: colorScheme.onSurface,
-                                  foregroundColor: colorScheme.surface,
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              // Scan QR Code Icon
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).brightness == Brightness.light ? theme.cardColor : null,
-                                  borderRadius: BorderRadius.circular(35),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton.icon(
-                                  onPressed: _scanQRCode,
-                                  icon: Icon(
-                                    Icons.qr_code_scanner,
-                                    color: Theme.of(context).brightness == Brightness.light
-                                        ? colorScheme.primary
-                                        : colorScheme.surface,
-                                  ),
-                                  label: Text(
-                                    'Scan QR Code',
-                                    style: TextStyle(
-                                      color: Theme.of(context).brightness == Brightness.light
-                                          ? colorScheme.onSurface
-                                          : colorScheme.surface,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(35),
-                                    ),
-                                    backgroundColor: Theme.of(context).brightness == Brightness.light
-                                        ? colorScheme.surface
-                                        : colorScheme.primary,
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Create Group Tab
-                      SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            children: [
-                              // Styled Group Name Input
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: theme.cardColor,
-                                  borderRadius: BorderRadius.circular(36),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: TextField(
-                                  controller: _groupNameController,
-                                  maxLength: 14,
-                                  decoration: InputDecoration(
-                                    hintText: 'Enter Group Name',
-                                    filled: true,
-                                    fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                    counterText: '',
-                                  ),
-                                  style: TextStyle(
-                                    color: theme.textTheme.bodyMedium?.color,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              // Circular Slider
-                              SleekCircularSlider(
-                                min: 1,
-                                max: 72,
-                                initialValue: _sliderValue,
-                                appearance: CircularSliderAppearance(
-                                  customWidths: CustomSliderWidths(
-                                    trackWidth: 4,
-                                    progressBarWidth: 8,
-                                    handlerSize: 8,
-                                  ),
-                                  customColors: CustomSliderColors(
-                                    trackColor: theme.dividerColor,
-                                    progressBarColor: colorScheme.primary,
-                                    dotColor: colorScheme.primary,
-                                    hideShadow: true,
-                                  ),
-                                  infoProperties: InfoProperties(
-                                    modifier: (double value) {
-                                      if (value >= 71) {
-                                        _isForever = true;
-                                        return 'Forever';
-                                      } else {
-                                        _isForever = false;
-                                        return '${value.toInt()}h';
-                                      }
-                                    },
-                                    mainLabelStyle: TextStyle(
-                                      color: colorScheme.primary,
-                                      fontSize: 24,
-
-                                    ),
-                                  ),
-                                  startAngle: 270,
-                                  angleRange: 360,
-                                  size: 200,
-                                ),
-                                onChange: (value) {
-                                  setState(() {
-                                    _sliderValue = value >= 71 ? 72 : value;
-                                  });
-                                },
-                              ),
-                              SizedBox(height: 20),
-                              // Styled Add Member Input
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: theme.cardColor,
-                                        borderRadius: BorderRadius.circular(36),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: TextField(
-                                        controller: _memberInputController,
-                                        decoration: InputDecoration(
-                                          hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-                                          prefixText: '@',
-                                          errorText: _usernameError ?? _memberLimitError,
-                                          filled: true,
-                                          fillColor: theme.colorScheme.onBackground.withOpacity(0.15),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedErrorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(24),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                        ),
-                                        style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  ElevatedButton(
-                                    onPressed: _addMember,
-                                    child: Text('Add'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: colorScheme.onSurface,
-                                      foregroundColor: colorScheme.surface,
-                                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(36),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 20),
-                              // Display Added Members
-                              if (_members.isNotEmpty)
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: _members.map((username) {
-                                    return Stack(
-                                      children: [
-                                        Column(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 20,
-                                              child: RandomAvatar(
-                                                username.toLowerCase(),
-                                                height: 40,
-                                                width: 40,
-                                              ),
-                                            ),
-                                            SizedBox(height: 5),
-                                            Text(
-                                              username.toLowerCase(),
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: theme.textTheme.bodyMedium?.color,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Positioned(
-                                          top: 0,
-                                          right: 0,
-                                          child: GestureDetector(
-                                            onTap: () => _removeMember(username),
-                                            child: CircleAvatar(
-                                              radius: 8,
-                                              backgroundColor: Colors.red,
-                                              child: Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                size: 10,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }).toList(),
-                                ),
-                              SizedBox(height: 20),
-                              ElevatedButton(
-                                onPressed: (_isProcessing ||
-                                    _members.isEmpty ||
-                                    _groupNameController.text.trim().isEmpty)
-                                    ? null
-                                    : _createGroup,
-                                child: _isProcessing
-                                    ? CircularProgressIndicator(color: Colors.white)
-                                    : Text('Create Group'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: colorScheme.onSurface,
-                                  foregroundColor: colorScheme.surface,
-                                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(36),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    labelColor: colorScheme.primary,
+                    unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+                    indicatorColor: colorScheme.primary,
+                    indicatorWeight: 3,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    tabs: [
+                      Tab(text: 'Add Contact'),
+                      Tab(text: 'Create Group'),
                     ],
                   ),
                 ),
-                // Close button at the bottom
-                Center(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.onSurface,
-                      foregroundColor: colorScheme.surface,
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: Text('Close'),
+                
+                // Tab views with flexible height
+                Flexible(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // Add Contact Tab - Modern Design
+                      _buildModernAddContactTab(),
+                      // Create Group Tab - Step-based Design
+                      _buildStepBasedGroupTab(),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-
         ),
-
       ),
     );
   }
