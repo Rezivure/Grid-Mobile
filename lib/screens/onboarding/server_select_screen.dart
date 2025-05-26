@@ -343,6 +343,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
     return Scaffold(
       backgroundColor: colorScheme.background,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
@@ -360,24 +361,25 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         ),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            _buildProgressIndicator(),
-            const SizedBox(height: 40),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: FadeTransition(
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                _buildProgressIndicator(),
+                const SizedBox(height: 40),
+                FadeTransition(
                   opacity: _fadeAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
                     child: _buildCurrentStep(),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
