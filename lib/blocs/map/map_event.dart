@@ -25,3 +25,5 @@ class RemoveUserLocation extends MapEvent {
   final String userId;
   const RemoveUserLocation(this.userId);
 }
+
+class MapClearSelection extends MapEvent {}
