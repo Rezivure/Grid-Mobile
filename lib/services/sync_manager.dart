@@ -89,6 +89,9 @@ class SyncManager with ChangeNotifier {
       await _loadSinceToken();
       await roomService.cleanRooms();
 
+      // Perform reconciliation check on app load
+      await _reconcileLocalStateWithServer();
+
       final response = await client.sync(
         since: _sinceToken,
         fullState: _sinceToken == null,
@@ -946,5 +949,220 @@ class SyncManager with ChangeNotifier {
   bool _messageExists(String roomId, String? eventId) {
     final roomMessages = _roomMessages[roomId] ?? [];
     return roomMessages.any((message) => message['eventId'] == eventId);
+  }
+
+  Future<bool> _isServerReachable() async {
+    try {
+      // Try to check homeserver connectivity
+      final homeserverUrl = client.homeserver;
+      if (homeserverUrl == null) {
+        print("[SyncManager] No homeserver URL configured");
+        return false;
+      }
+      
+      // Use the Matrix client's built-in connectivity check
+      await client.checkHomeserver(homeserverUrl);
+      
+      // Also verify we're logged in and can make authenticated requests
+      if (!client.isLogged()) {
+        print("[SyncManager] Client is not logged in");
+        return false;
+      }
+      
+      // Try a simple authenticated request to verify token is valid
+      try {
+        await client.getAccountData(client.userID!, 'm.push_rules');
+        return true;
+      } catch (e) {
+        // If we can't get account data, try to get our own profile as a fallback
+        await client.getUserProfile(client.userID!);
+        return true;
+      }
+    } catch (e) {
+      print("[SyncManager] Server connectivity check failed: $e");
+      return false;
+    }
+  }
+
+  Future<void> _reconcileLocalStateWithServer() async {
+    print("[SyncManager] Starting reconciliation check...");
+    
+    try {
+      // CRITICAL: First verify server is reachable
+      final isReachable = await _isServerReachable();
+      if (!isReachable) {
+        print("[SyncManager] Server is not reachable, skipping reconciliation");
+        return;
+      }
+      
+      print("[SyncManager] Server is reachable, proceeding with reconciliation");
+      
+      // 1. Get all joined rooms from server
+      final serverRooms = client.rooms.where((room) => room.membership == Membership.join).toList();
+      
+      // Sanity check: If server returns 0 rooms but we have rooms locally,
+      // this might indicate an issue rather than the user having no rooms
+      final localRooms = await roomRepository.getAllRooms();
+      if (serverRooms.isEmpty && localRooms.isNotEmpty) {
+        print("[SyncManager] WARNING: Server returned 0 rooms but local has ${localRooms.length} rooms");
+        print("[SyncManager] This might indicate a sync issue, skipping reconciliation");
+        return;
+      }
+      
+      final serverRoomIds = serverRooms.map((r) => r.id).toSet();
+      final localRoomIds = localRooms.map((r) => r.roomId).toSet();
+      
+      // 2. Find discrepancies
+      final roomsOnServerButNotLocal = serverRoomIds.difference(localRoomIds);
+      final roomsInLocalButNotServer = localRoomIds.difference(serverRoomIds);
+      
+      print("[SyncManager] Reconciliation summary:");
+      print("  - Server rooms: ${serverRoomIds.length}");
+      print("  - Local rooms: ${localRoomIds.length}");
+      print("  - Missing locally: ${roomsOnServerButNotLocal.length}");
+      print("  - Extra locally: ${roomsInLocalButNotServer.length}");
+      
+      // 3. Add missing rooms from server
+      for (final roomId in roomsOnServerButNotLocal) {
+        print("[SyncManager] Adding missing room: $roomId");
+        final serverRoom = serverRooms.firstWhere((r) => r.id == roomId);
+        await processJoinedRoom(serverRoom);
+      }
+      
+      // 4. Remove rooms that don't exist on server (with additional safety check)
+      for (final roomId in roomsInLocalButNotServer) {
+        // Double-check this room really doesn't exist on server
+        try {
+          final room = client.getRoomById(roomId);
+          if (room != null && room.membership == Membership.join) {
+            print("[SyncManager] Room $roomId actually exists on server, skipping removal");
+            continue;
+          }
+        } catch (e) {
+          // Room lookup failed, proceed with removal
+        }
+        
+        print("[SyncManager] Removing orphaned room: $roomId");
+        await roomRepository.deleteRoom(roomId);
+        await roomRepository.removeAllParticipants(roomId);
+      }
+      
+      // 5. Verify room members for existing rooms
+      for (final serverRoom in serverRooms) {
+        if (localRoomIds.contains(serverRoom.id)) {
+          await _reconcileRoomMembers(serverRoom);
+        }
+      }
+      
+      // 6. Clean up orphaned users
+      await _cleanupOrphanedUsers();
+      
+      // 7. Refresh UI
+      contactsBloc.add(RefreshContacts());
+      groupsBloc.add(RefreshGroups());
+      mapBloc.add(MapLoadUserLocations());
+      
+      print("[SyncManager] Reconciliation complete");
+      
+    } catch (e) {
+      print("[SyncManager] Error during reconciliation: $e");
+      // Continue with normal sync even if reconciliation fails
+    }
+  }
+  
+  Future<void> _reconcileRoomMembers(Room serverRoom) async {
+    try {
+      final localRoom = await roomRepository.getRoomById(serverRoom.id);
+      if (localRoom == null) return;
+      
+      final serverMembers = serverRoom.getParticipants()
+          .where((p) => p.membership == Membership.join)
+          .map((p) => p.id)
+          .toSet();
+      final localMembers = localRoom.members.toSet();
+      
+      final missingLocally = serverMembers.difference(localMembers);
+      final extraLocally = localMembers.difference(serverMembers);
+      
+      if (missingLocally.isNotEmpty || extraLocally.isNotEmpty) {
+        print("[SyncManager] Room ${serverRoom.id} member mismatch:");
+        print("  - Missing locally: $missingLocally");
+        print("  - Extra locally: $extraLocally");
+        
+        // Update room with correct member list
+        final updatedRoom = GridRoom.Room(
+          roomId: localRoom.roomId,
+          name: localRoom.name,
+          isGroup: localRoom.isGroup,
+          lastActivity: localRoom.lastActivity,
+          avatarUrl: localRoom.avatarUrl,
+          members: serverMembers.toList(),
+          expirationTimestamp: localRoom.expirationTimestamp,
+        );
+        await roomRepository.updateRoom(updatedRoom);
+        
+        // Add missing members
+        for (final memberId in missingLocally) {
+          try {
+            final profileInfo = await client.getUserProfile(memberId);
+            final gridUser = GridUser.GridUser(
+              userId: memberId,
+              displayName: profileInfo.displayname,
+              avatarUrl: profileInfo.avatarUrl?.toString(),
+              lastSeen: DateTime.now().toIso8601String(),
+              profileStatus: "",
+            );
+            await userRepository.insertUser(gridUser);
+            
+            String? membershipStatus;
+            if (localRoom.isGroup) {
+              membershipStatus = await roomService.getUserRoomMembership(serverRoom.id, memberId) ?? 'joined';
+            }
+            
+            await userRepository.insertUserRelationship(
+              memberId,
+              serverRoom.id,
+              !localRoom.isGroup,
+              membershipStatus: membershipStatus,
+            );
+          } catch (e) {
+            print("[SyncManager] Error adding member $memberId: $e");
+          }
+        }
+        
+        // Remove extra members
+        for (final memberId in extraLocally) {
+          await userRepository.removeUserRelationship(memberId, serverRoom.id);
+          await roomRepository.removeRoomParticipant(serverRoom.id, memberId);
+        }
+      }
+    } catch (e) {
+      print("[SyncManager] Error reconciling room members: $e");
+    }
+  }
+  
+  Future<void> _cleanupOrphanedUsers() async {
+    try {
+      // Get all users from database
+      final allUsers = await userRepository.getAllUsers();
+      
+      for (final user in allUsers) {
+        // Skip own user
+        if (user.userId == client.userID) continue;
+        
+        // Check if user exists in any rooms or as a contact
+        final userRooms = await roomRepository.getUserRooms(user.userId);
+        final directRoom = await userRepository.getDirectRoomForContact(user.userId);
+        
+        if (userRooms.isEmpty && directRoom == null) {
+          print("[SyncManager] Removing orphaned user: ${user.userId}");
+          await locationRepository.deleteUserLocations(user.userId);
+          await userRepository.deleteUser(user.userId);
+          mapBloc.add(RemoveUserLocation(user.userId));
+        }
+      }
+    } catch (e) {
+      print("[SyncManager] Error cleaning up orphaned users: $e");
+    }
   }
 }
