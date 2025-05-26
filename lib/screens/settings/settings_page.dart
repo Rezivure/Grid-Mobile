@@ -587,52 +587,333 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _editDisplayName() async {
     final TextEditingController controller = TextEditingController(text: _displayName ?? _username);
-    final RegExp validCharacters = RegExp(r'^[a-zA-Z0-9_\-\.\s]+$');
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    String? errorText;
+    bool hasError = false;
 
     bool isValidName(String name) {
       final trimmedName = name.trim();
-      return trimmedName.length >= 3 &&
-          trimmedName.length <= 14 &&
-          validCharacters.hasMatch(name);
+      if (trimmedName.isEmpty) return false;
+      if (trimmedName.length < 3 || trimmedName.length > 14) return false;
+      
+      // Allow letters, numbers, spaces, emojis, and basic punctuation
+      // This regex allows Unicode characters (including emojis)
+      final invalidChars = RegExp(r'[<>"/\\|?*]'); // Only block truly problematic characters
+      return !invalidChars.hasMatch(trimmedName);
     }
 
     final String? newDisplayName = await showDialog<String>(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: theme.cardColor,
-          title: Text('Edit Display Name'),
-          content: TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              hintText: 'Enter your display name',
-              helperText: '- 3-14 characters\n- no special characters',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (isValidName(controller.text)) {
-                  Navigator.pop(context, controller.text);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Please enter a valid display name (3-14 characters, using only letters, numbers, and _-.).',
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.background,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.shadow.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header Section
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: colorScheme.outline.withOpacity(0.1),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.edit,
+                              color: colorScheme.primary,
+                              size: 20,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Edit Display Name',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.onBackground,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Choose how others see you',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colorScheme.onBackground.withOpacity(0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                }
-              },
-              child: Text('Save'),
-            ),
-          ],
+                    
+                    // Content Section - Scrollable
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Display Name',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.onBackground.withOpacity(0.7),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: hasError 
+                                      ? Colors.red.withOpacity(0.5)
+                                      : colorScheme.outline.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: TextField(
+                                controller: controller,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: colorScheme.onSurface,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Enter your display name',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  hintStyle: TextStyle(
+                                    color: colorScheme.onSurface.withOpacity(0.4),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.person_outline,
+                                    color: colorScheme.onSurface.withOpacity(0.4),
+                                    size: 20,
+                                  ),
+                                  counterText: '${controller.text.trim().length}/14',
+                                  counterStyle: TextStyle(
+                                    fontSize: 11,
+                                    color: hasError 
+                                        ? Colors.red 
+                                        : colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                maxLength: 14,
+                                onChanged: (value) {
+                                  setState(() {
+                                    hasError = !isValidName(value);
+                                    if (hasError) {
+                                      final trimmed = value.trim();
+                                      if (trimmed.isEmpty) {
+                                        errorText = 'Display name cannot be empty';
+                                      } else if (trimmed.length < 3) {
+                                        errorText = 'Must be at least 3 characters';
+                                      } else if (trimmed.length > 14) {
+                                        errorText = 'Must be 14 characters or less';
+                                      } else {
+                                        errorText = 'Contains invalid characters';
+                                      }
+                                    } else {
+                                      errorText = null;
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                            if (errorText != null) ...[
+                              SizedBox(height: 6),
+                              Text(
+                                errorText!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                            SizedBox(height: 12),
+                            
+                            // Guidelines - More compact
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: colorScheme.primary.withOpacity(0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.visibility,
+                                    color: colorScheme.primary,
+                                    size: 14,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Display names are only visible to your contacts and group members',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colorScheme.primary.withOpacity(0.8),
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Actions Section
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: colorScheme.outline.withOpacity(0.1),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: colorScheme.surface,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: colorScheme.outline.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    hasError 
+                                        ? Colors.grey 
+                                        : colorScheme.primary,
+                                    hasError 
+                                        ? Colors.grey.withOpacity(0.8)
+                                        : colorScheme.primary.withOpacity(0.8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: hasError ? [] : [
+                                  BoxShadow(
+                                    color: colorScheme.primary.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: TextButton(
+                                onPressed: hasError ? null : () {
+                                  if (isValidName(controller.text)) {
+                                    Navigator.pop(context, controller.text.trim());
+                                  }
+                                },
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  padding: EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Save',
+                                  style: TextStyle(
+                                    color: hasError 
+                                        ? Colors.white.withOpacity(0.5)
+                                        : Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -656,11 +937,19 @@ class _SettingsPageState extends State<SettingsPage> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Display name updated successfully')),
+          SnackBar(
+            content: Text('Display name updated successfully'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: colorScheme.primary,
+          ),
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update display name: $e')),
+          SnackBar(
+            content: Text('Failed to update display name: $e'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
         );
       } finally {
         setState(() {

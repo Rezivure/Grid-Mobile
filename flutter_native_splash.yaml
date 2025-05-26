@@ -1,0 +1,28 @@
+flutter_native_splash:
+  # Native splash with just background colors to seamlessly transition
+  # to the Flutter splash screen
+  
+  # Light mode configuration
+  color: "#FFFFFF"  # White background for light mode
+  # No image - just blank background
+  
+  # Dark mode configuration
+  color_dark: "#191919"  # Dark background (matching RGB: 25/25/25)
+  # No image - just blank background
+  
+  # Android specific settings
+  android: true
+  android_12:
+    # Android 12+ uses a new splash screen API
+    color: "#FFFFFF"
+    color_dark: "#191919"
+    # No image for Android 12+ either
+  
+  # iOS specific settings
+  ios: true
+  
+  # Ensure the splash screen fills the entire screen
+  fullscreen: true
+  
+  # Web configuration (if needed in future)
+  web: false

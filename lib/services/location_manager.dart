@@ -187,11 +187,14 @@ class LocationManager with ChangeNotifier {
       maxRecordsToPersist: 20, // Reduce storage
     ));
 
-    // Location updates with smart throttling
+    // Location updates - always keep position fresh
     bg.BackgroundGeolocation.onLocation((bg.Location location) {
       final now = DateTime.now();
       
-      // Smart throttling: Skip updates if stationary and recent update exists
+      // Always update our internal position to keep it fresh
+      _lastPosition = location;
+      
+      // Smart throttling: Only skip SENDING updates if stationary and recent
       if (!_isMoving && _lastLocationUpdate != null) {
         final timeSinceLastUpdate = now.difference(_lastLocationUpdate!);
         
@@ -201,12 +204,12 @@ class LocationManager with ChangeNotifier {
             : const Duration(minutes: 1);
             
         if (timeSinceLastUpdate < throttleInterval) {
-          print("Skipping location update - stationary and recent update exists");
-          return;
+          print("Throttling location broadcast - stationary and recent update exists");
+          return; // Skip broadcasting, but we've already updated _lastPosition
         }
       }
       
-      _lastPosition = location;
+      // Broadcast the update
       _lastLocationUpdate = now;
       _locationStreamController.add(location);
       notifyListeners();
@@ -217,17 +220,14 @@ class LocationManager with ChangeNotifier {
       print(">>> onMotionChange: isMoving = ${location.isMoving}");
       _isMoving = location.isMoving ?? false;
       
-      // If started moving, immediately get a location update
+      // Always update position from motion change event
+      _lastPosition = location;
+      
+      // If started moving, immediately broadcast the update
       if (_isMoving) {
-        bg.BackgroundGeolocation.getCurrentPosition(
-          samples: 1,
-          persist: false,
-        ).then((pos) {
-          _lastPosition = pos;
-          _lastLocationUpdate = DateTime.now();
-          _locationStreamController.add(pos);
-          notifyListeners();
-        });
+        _lastLocationUpdate = DateTime.now();
+        _locationStreamController.add(location);
+        notifyListeners();
       }
     });
 
@@ -241,18 +241,25 @@ class LocationManager with ChangeNotifier {
   }
 
   // Manually request the current location (e.g., for a "Ping" button)
+  // This ALWAYS gets a fresh location, bypassing any throttling
   Future<void> grabLocationAndPing() async {
     try {
       print("Manually requesting current location...");
       final currentPos = await bg.BackgroundGeolocation.getCurrentPosition(
-        samples: 1,
+        samples: 3, // Take multiple samples for better accuracy on manual ping
         timeout: 30,
-        maximumAge: 0,
+        maximumAge: 0, // Force fresh location
         persist: false,
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // Force high accuracy for manual ping
       );
+      
+      // Always update position and timestamp for manual requests
       _lastPosition = currentPos;
+      _lastLocationUpdate = DateTime.now();
       _locationStreamController.add(currentPos);
       notifyListeners();
+      
+      print("Manual location ping completed: ${currentPos.coords.latitude}, ${currentPos.coords.longitude}");
     } catch (e) {
       print("Error getting current position: $e");
     }
