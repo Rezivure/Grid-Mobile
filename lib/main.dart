@@ -28,6 +28,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
 import 'screens/onboarding/server_select_screen.dart';
+import 'widgets/app_initializer.dart';
 import 'screens/onboarding/login_screen.dart';
 import 'screens/onboarding/signup_screen.dart';
 import 'screens/map/map_tab.dart';
@@ -233,7 +234,7 @@ void main() async {
           themeMode: ThemeMode.system,
           home: VersionWrapper(
             client: client,
-            child: client.isLogged() ? const MapTab() : SplashScreen(),
+            child: AppInitializer(client: client),
           ),
           routes: {
             '/welcome': (context) => WelcomeScreen(),

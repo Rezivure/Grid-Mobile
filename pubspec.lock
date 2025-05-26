@@ -294,6 +294,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.5.1"
+  flutter_intl_phone_field:
+    dependency: "direct main"
+    description:
+      name: flutter_intl_phone_field
+      sha256: ec38faf32e62f1e0d3efe2c2630202728c024d17eef0c6ababc877c9b3c9d113
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.7"
   flutter_launcher_icons:
     dependency: "direct main"
     description:
@@ -544,14 +552,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.19.0"
-  intl_phone_field:
-    dependency: "direct main"
-    description:
-      name: intl_phone_field
-      sha256: "73819d3dfcb68d2c85663606f6842597c3ddf6688ac777f051b17814fe767bbf"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.2.0"
   js:
     dependency: transitive
     description:
