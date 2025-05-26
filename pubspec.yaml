@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 1.0.3+103
+version: 1.0.4+104
 
 environment:
   sdk: '>=3.3.3 <4.0.0'
@@ -62,6 +62,7 @@ flutter_launcher_icons:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_native_splash: ^2.3.10
   flutter_lints: ^5.0.0
 
 flutter:
