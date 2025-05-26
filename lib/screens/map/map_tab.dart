@@ -67,6 +67,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // Map rotation tracking
   double _currentMapRotation = 0.0;
+  
+  // Track map movement completion
+  Timer? _mapMoveTimer;
+  String? _targetUserId;
 
   @override
   void initState() {
@@ -103,6 +107,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   void dispose() {
     _animationController?.dispose();
+    _mapMoveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     _syncManager.stopSync();
@@ -184,6 +189,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
 
   void _onMarkerTap(String userId, LatLng position) {
+    // Update map state with selected user
+    context.read<MapBloc>().add(MapMoveToUser(userId));
+    
     setState(() {
       _selectedUserId = userId;
       _bubblePosition = position;
@@ -208,8 +216,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         if (state.center != null && _isMapReady) {
           setState(() {
             _followUser = false;  // Turn off following when moving to new location
+            _targetUserId = state.selectedUserId;
           });
           _mapController.move(state.center!, _zoom);
+          
+          // Set timer to trigger bounce animation after map move completes
+          _mapMoveTimer?.cancel();
+          _mapMoveTimer = Timer(const Duration(milliseconds: 500), () {
+            if (_targetUserId != null && mounted) {
+              // Trigger a state update to force bounce animation
+              setState(() {});
+            }
+          });
         }
       },
       child: Scaffold(
@@ -221,6 +239,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             FlutterMap(
               mapController: _mapController,
               options: MapOptions(
+                onTap: (tapPosition, latLng) {
+                  // Clear selection when tapping on map
+                  context.read<MapBloc>().add(MapClearSelection());
+                  // Also clear bubble if shown
+                  setState(() {
+                    _bubblePosition = null;
+                    _selectedUserId = null;
+                    _selectedUserName = null;
+                  });
+                },
                 onPositionChanged: (position, hasGesture) {
                   if (hasGesture && _followUser) {
                     setState(() {
@@ -254,17 +282,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   style: const LocationMarkerStyle(),
                 ),
                 BlocBuilder<MapBloc, MapState>(
-                  buildWhen: (previous, current) => previous.userLocations != current.userLocations,
+                  buildWhen: (previous, current) => 
+                      previous.userLocations != current.userLocations ||
+                      previous.selectedUserId != current.selectedUserId,
                   builder: (context, state) {
                     return MarkerLayer(
                       markers: state.userLocations.map((userLocation) =>
                           Marker(
-                            width: 60.0,
-                            height: 70.0,
+                            width: 100.0,
+                            height: 100.0,
                             point: userLocation.position,
                             child: GestureDetector(
                               onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
-                              child: UserMapMarker(userId: userLocation.userId),
+                              child: UserMapMarker(
+                                userId: userLocation.userId,
+                                isSelected: state.selectedUserId == userLocation.userId,
+                                timestamp: userLocation.timestamp,
+                              ),
                             ),
                           )
                       ).toList(),

@@ -9,6 +9,7 @@ class MapState extends Equatable {
   final List<UserLocation> userLocations;
   final String? error;
   final int moveCount;
+  final String? selectedUserId;
 
 
   const MapState({
@@ -18,6 +19,7 @@ class MapState extends Equatable {
     this.userLocations = const [],
     this.error,
     this.moveCount = 0,
+    this.selectedUserId,
   });
 
   MapState copyWith({
@@ -27,6 +29,8 @@ class MapState extends Equatable {
     List<UserLocation>? userLocations,
     String? error,
     int? moveCount,
+    String? selectedUserId,
+    bool clearSelectedUserId = false,
   }) {
     return MapState(
       isLoading: isLoading ?? this.isLoading,
@@ -35,9 +39,10 @@ class MapState extends Equatable {
       userLocations: userLocations ?? this.userLocations,
       error: error,
       moveCount: moveCount ?? this.moveCount,
+      selectedUserId: clearSelectedUserId ? null : (selectedUserId ?? this.selectedUserId),
     );
   }
 
   @override
-  List<Object?> get props => [isLoading, center, zoom, userLocations, error, moveCount];
+  List<Object?> get props => [isLoading, center, zoom, userLocations, error, moveCount, selectedUserId];
 }
