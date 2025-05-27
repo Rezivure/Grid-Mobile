@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:matrix/matrix_api_lite/generated/model.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -84,12 +84,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   }
 
   bool isCustomHomeserver() {
-    final homeserver =
-        this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
-    }
-    return true;
+    final homeserver = this.widget.roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   void _addMember() async {
@@ -214,7 +210,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Invite sent successfully to ${localpart(username)}.'),
+            content: Text('Invite sent successfully to ${utils.localpart(username)}.'),
             backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(

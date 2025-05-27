@@ -8,6 +8,7 @@ import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 
 class FriendRequestModal extends StatefulWidget {
   final RoomService roomService;
@@ -32,11 +33,8 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   bool _isProcessing = false;
 
   bool isCustomHomeserver() {
-    final homeserver = widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
-    }
-    return true;
+    final homeserver = widget.roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   @override

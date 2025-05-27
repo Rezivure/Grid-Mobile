@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -530,11 +530,8 @@ class RoomService {
 
 
   bool isCustomHomeserver() {
-    final homeserver = getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver != dotenv.env['HOMESERVER']) {
-      return true;
-    }
-    return false;
+    final homeserver = getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   void getAndUpdateDisplayName() async {

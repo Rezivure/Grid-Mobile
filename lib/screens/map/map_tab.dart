@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -157,6 +158,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   Future<void> _loadMapProvider() async {
     try {
+      // Ensure dotenv is loaded before proceeding
+      if (dotenv.env.isEmpty) {
+        print('Dotenv not loaded, attempting to reload...');
+        try {
+          await dotenv.load(fileName: ".env");
+        } catch (e) {
+          print('Failed to reload dotenv: $e');
+        }
+      }
+      
       final prefs = await SharedPreferences.getInstance();
       final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
 
@@ -172,17 +183,105 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _showMapErrorDialog() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: const Text('Failed to load map! Try checking connection and restarting the app.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Error icon with animation
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.wifi_off_rounded,
+                  size: 48,
+                  color: Colors.orange,
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Title
+              Text(
+                'Connection Error',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Content
+              Text(
+                'Failed to connect and load Grid. Please check your internet connection.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                  height: 1.4,
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Single retry button that restarts the app
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Navigate to splash screen to restart the app flow
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/', 
+                      (Route<dynamic> route) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

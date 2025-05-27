@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 
 
 
@@ -47,11 +48,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool isCustomHomeserver() {
     final roomService = Provider.of<RoomService>(context, listen: false);
-    final homeserver = roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
-    }
-    return true;
+    final homeserver = roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   Future<void> _loadUser() async {
