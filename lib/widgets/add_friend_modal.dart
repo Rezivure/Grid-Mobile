@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
@@ -134,11 +134,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   bool isCustomHomeserver() {
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
-    }
-    return true;
+    final homeserver = this.widget.roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   void _addContact() async {
@@ -152,11 +149,39 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       });
       return;
     }
+    
     var normalizedUserId = rawInput.toLowerCase();
-    if (!isCustomServer) {
-      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-      normalizedUserId = '@$normalizedUserId:$homeserver';
+    
+    // Check if this is from QR scan (already has @ prefix)
+    if (_friendQrCodeScan != null && normalizedUserId.startsWith('@')) {
+      // QR code contains full matrix ID
+      if (!isCustomServer) {
+        // For default homeserver, extract just the localpart and rebuild
+        final localpart = normalizedUserId.split(':')[0].replaceFirst('@', '');
+        final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+        normalizedUserId = '@$localpart:$homeserver';
+      }
+      // For custom homeserver, use as-is
+    } else {
+      // Manual input from text field
+      if (isCustomServer) {
+        // For custom homeservers, expect full matrix ID without @ prefix
+        // (since @ is already shown as prefix in the input field)
+        if (!normalizedUserId.contains(':')) {
+          setState(() {
+            _contactError = 'Please enter full Matrix ID (e.g., user:domain.com)';
+            _isProcessing = false;
+          });
+          return;
+        }
+        normalizedUserId = '@$normalizedUserId';
+      } else {
+        // For default homeserver, just add local part
+        final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+        normalizedUserId = '@$normalizedUserId:$homeserver';
+      }
     }
+    
     if (normalizedUserId.isNotEmpty) {
       if (mounted) {
         setState(() {
@@ -165,7 +190,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         });
       }
       try {
-        bool userExists = await widget.userService.userExists(normalizedUserId!);
+        print('AddFriendModal: Checking if user exists: $normalizedUserId');
+        bool userExists = await widget.userService.userExists(normalizedUserId);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -207,7 +233,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Friend request sent to ${localpart(normalizedUserId)}.'),
+                content: Text('Friend request sent to ${utils.localpart(normalizedUserId)}.'),
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
@@ -263,7 +289,13 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           setState(() {
             _isScanning = false;
             _matrixUserId = scannedUserId;
-            _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+            // For custom homeservers, preserve the full matrix ID (without @)
+            // For default homeserver, extract just the localpart
+            if (isCustomHomeserver() && scannedUserId.contains(':')) {
+              _controller.text = scannedUserId.replaceFirst('@', '');
+            } else {
+              _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+            }
             _friendQrCodeScan = scannedUserId;
             _addContact();
           });
@@ -296,7 +328,6 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       return;
     }
 
-
     String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
 
     if (_members.contains(username)) {
@@ -306,13 +337,22 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       return;
     }
 
-    var usernameLowercase = '${username.toLowerCase()}';
+    var usernameLowercase = username.toLowerCase();
     var fullMatrixId = usernameLowercase;
     final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
     bool isCustomServer = isCustomHomeserver();
+    
     if (isCustomServer) {
+      // For custom homeservers, expect full matrix ID without @ prefix
+      if (!usernameLowercase.contains(':')) {
+        setState(() {
+          _usernameError = 'Please enter full Matrix ID (e.g., user:domain.com)';
+        });
+        return;
+      }
       fullMatrixId = '@$usernameLowercase';
     } else {
+      // For default homeserver, just add local part
       fullMatrixId = '@$usernameLowercase:$homeserver';
     }
 
@@ -370,8 +410,18 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         durationInHours = _sliderValue.toInt();
       }
 
+      // Pass member IDs without @ prefix - the room service will add it
+      final normalizedMembers = _members.map((username) {
+        // username in _members is already lowercase and without @ prefix
+        // Just pass them as-is, the room service will handle the @ prefix
+        print('Passing member to room service: $username');
+        return username;
+      }).toList();
+      
+      print('Creating group with members: $normalizedMembers');
+      
       // Create the group and get the room ID
-      final roomId = await widget.roomService.createGroup(groupName, _members, durationInHours);
+      final roomId = await widget.roomService.createGroup(groupName, normalizedMembers, durationInHours);
 
       if (mounted) {
         // Wait briefly for room creation to complete
@@ -411,8 +461,28 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       }
     } catch (e) {
       if (mounted) {
+        String errorMsg = 'Error creating group';
+        if (e.toString().contains('does not exist') || e.toString().contains('not found')) {
+          errorMsg = 'One or more users could not be found';
+        } else if (e.toString().contains('permission')) {
+          errorMsg = 'Permission denied to create group';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating group. Does that user exist?')),
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(child: Text(errorMsg)),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     } finally {
@@ -641,6 +711,12 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   Widget _buildMemberCard(String username, ColorScheme colorScheme) {
+    // Extract localpart for avatar generation
+    String avatarSeed = username;
+    if (username.contains(':')) {
+      avatarSeed = username.split(':')[0];
+    }
+    
     return Container(
       padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -658,7 +734,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
             radius: 16,
             backgroundColor: colorScheme.primary.withOpacity(0.1),
             child: RandomAvatar(
-              username.toLowerCase(),
+              avatarSeed.toLowerCase(),
               height: 32,
               width: 32,
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -89,15 +90,48 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _navigateToNext() async {
     // Wait for animations to complete (shorter delay)
     await Future.delayed(const Duration(milliseconds: 1500));
+    
+    // Ensure environment variables are loaded
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (e) {
+      print('Error loading .env file: $e');
+    }
 
     // Load the token from SharedPreferences
     String? token = await _loadFromPrefs();
 
     final client = Provider.of<Client>(context, listen: false);
+    final prefs = await SharedPreferences.getInstance();
 
     if (token != null && token.isNotEmpty) {
       // If token exists, set it to the client and go directly to main app
       try {
+        // Restore custom homeserver if it was saved
+        final customHomeserver = prefs.getString('custom_homeserver');
+        if (customHomeserver != null && customHomeserver.isNotEmpty) {
+          // For custom servers, we need to set the homeserver before checking if logged in
+          try {
+            await client.checkHomeserver(Uri.https(customHomeserver, ''));
+          } catch (e) {
+            // If we can't reach the custom server (offline), still set it as the homeserver
+            // so isCustomHomeserver() will work correctly
+            print('Could not reach custom homeserver (may be offline): $e');
+            // Manually set the homeserver URL even if offline
+            client.homeserver = Uri.https(customHomeserver, '');
+          }
+        } else {
+          // For default server, ensure the homeserver is set even if offline
+          try {
+            await client.checkHomeserver(Uri.parse(dotenv.env['MATRIX_SERVER_URL']!));
+          } catch (e) {
+            // If offline, manually set the default homeserver
+            print('Could not reach default homeserver (may be offline): $e');
+            final defaultUrl = dotenv.env['MATRIX_SERVER_URL'] ?? 'https://matrix.mygrid.app';
+            client.homeserver = Uri.parse(defaultUrl);
+          }
+        }
+        
         client.accessToken = token;
         var stat = client.isLogged();
         print("print stat of client log:{$stat} ");
