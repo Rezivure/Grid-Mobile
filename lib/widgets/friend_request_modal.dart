@@ -335,13 +335,43 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         await widget.onResponse(); // Execute callback to refresh any parent components
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Friend request accepted.")),
+          SnackBar(
+            content: Text("Friend request accepted."),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
+        // Remove the invite from the list if it's expired or invalid
+        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+        Navigator.of(context).pop(); // Close the modal
+        await widget.onResponse(); // Refresh the list
+        
+        String errorMessage = "This invitation has expired or is no longer valid.";
+        if (e.toString().toLowerCase().contains('forbidden')) {
+          errorMessage = "This invitation has already been accepted or declined.";
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error accepting the request: $e")),
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Expanded(child: Text(errorMessage)),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     } finally {

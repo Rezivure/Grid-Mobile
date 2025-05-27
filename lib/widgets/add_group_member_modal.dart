@@ -95,17 +95,9 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   void _addMember() async {
     const int MAX_GROUP_MEMBERS = 15;
 
-    var username = _controller.text.toLowerCase();
+    var username = _controller.text.trim().toLowerCase();
     bool isCustomServer = isCustomHomeserver();
-    if (!isCustomServer) {
-      // is grid server
-      final homeserver =
-          this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-      username = '@$username:$homeserver';
-    } else {
-      username = '@$username';
-    }
-
+    
     if (username.isEmpty) {
       if (mounted) {
         setState(() {
@@ -113,6 +105,21 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         });
       }
       return;
+    }
+    
+    if (isCustomServer) {
+      // For custom homeservers, expect full matrix ID without @ prefix
+      if (!username.contains(':')) {
+        setState(() {
+          _contactError = 'Please enter full Matrix ID (e.g., user:domain.com)';
+        });
+        return;
+      }
+      username = '@$username';
+    } else {
+      // For default homeserver, just add local part
+      final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+      username = '@$username:$homeserver';
     }
 
     if (mounted) {
@@ -255,7 +262,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           controller.pauseCamera(); // Pause the camera to avoid rescanning
           setState(() {
             _isScanning = false;
-            _controller.text = scannedUserId.replaceAll('@', "");
+            // For custom homeservers, preserve the full matrix ID (without @)
+            // For default homeserver, extract just the localpart
+            if (isCustomServ && scannedUserId.contains(':')) {
+              _controller.text = scannedUserId.replaceFirst('@', '');
+            } else {
+              _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+            }
           });
 
           _addMember();
