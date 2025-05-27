@@ -12,6 +12,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/contacts/contacts_state.dart';
@@ -347,6 +348,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   }
 
   Widget _buildModernContactCard(ContactDisplay contact, ColorScheme colorScheme, ThemeData theme) {
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -428,9 +433,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     
                     const SizedBox(height: 2),
                     
-                    // User ID subtitle
+                    // User ID subtitle - show full matrix ID for custom homeservers
                     Text(
-                      '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
+                      showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 12,
@@ -643,6 +648,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -693,7 +702,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                             ),
                           ),
                           Text(
-                            '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
+                            showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),

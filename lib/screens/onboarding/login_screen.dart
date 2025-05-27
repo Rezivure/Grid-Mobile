@@ -100,6 +100,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         _isLoading = false;
       });
 
+      // Store the custom homeserver URL for restoration
+      await prefs.setString('custom_homeserver', homeserver);
       await prefs.setString('maps_url_type', _useDefaultMapsUrl ? 'default' : 'custom');
       Navigator.pushReplacementNamed(context, '/main');
     } catch (e) {

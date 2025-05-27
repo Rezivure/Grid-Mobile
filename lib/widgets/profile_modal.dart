@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -34,25 +34,21 @@ class _ProfileModalState extends State<ProfileModal> {
 
   Future<bool> isCustomServer() async {
     final roomService = Provider.of<RoomService>(context, listen: false);
-    final homeserver = roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      // is grid server
-      return false;
-    }
-    return true;
+    final homeserver = roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   Future<void> _loadUserId() async {
     final client = Provider.of<Client>(context, listen: false);
     var userId = client.userID;
-    _userLocalpart = localpart(userId!);
+    _userLocalpart = utils.localpart(userId!);
 
     bool isCustomServ = await isCustomServer();
     String relativeUserId;
 
     if (!isCustomServ) {
       // is grid server
-      relativeUserId = '@${localpart(userId)}';
+      relativeUserId = '@${utils.localpart(userId)}';
     } else {
       relativeUserId = userId;
     }
