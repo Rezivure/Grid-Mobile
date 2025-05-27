@@ -12,7 +12,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/contacts/contacts_state.dart';
@@ -350,7 +350,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   Widget _buildModernContactCard(ContactDisplay contact, ColorScheme colorScheme, ThemeData theme) {
     // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -650,7 +650,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     
     // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
     
     showModalBottomSheet(
       context: context,

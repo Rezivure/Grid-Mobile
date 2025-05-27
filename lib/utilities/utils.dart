@@ -100,7 +100,10 @@ int extractExpirationTimestamp(String roomName) {
 }
 
 String formatUserId(String userId) {
-  final homeserver = dotenv.env['HOMESERVER'] ?? '';
+  // Default homeserver fallback in case dotenv fails
+  const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';
+  
+  final homeserver = dotenv.env['HOMESERVER'] ?? FALLBACK_DEFAULT_HOMESERVER;
 
   // Split the userId into localpart and domain
   final parts = userId.split(':');
@@ -108,14 +111,37 @@ String formatUserId(String userId) {
 
   final domain = parts[1];
 
-  // If domain matches homeserver from .env, return only localpart
+  // If domain matches homeserver from .env or fallback, return only localpart
   // Otherwise return full userId
-  return domain == homeserver ? parts[0] : userId;
+  return (domain == homeserver || domain == FALLBACK_DEFAULT_HOMESERVER) ? parts[0] : userId;
 }
 
 bool isCustomHomeserver(String currentHomeserver) {
-  final defaultHomeserver = dotenv.env['HOMESERVER'] ?? '';
-  final cleanedHomeserver = currentHomeserver.replaceFirst('https://', '').replaceFirst('http://', '');
-  return cleanedHomeserver != defaultHomeserver;
+  // Default homeserver fallback in case dotenv fails
+  const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';
+  
+  final defaultHomeserver = dotenv.env['HOMESERVER'] ?? FALLBACK_DEFAULT_HOMESERVER;
+  
+  // Handle empty or null-like strings
+  if (currentHomeserver.isEmpty || currentHomeserver == 'null') {
+    print('Warning: Empty or null homeserver provided, assuming default');
+    return false;
+  }
+  
+  // Clean up the current homeserver URL
+  final cleanedHomeserver = currentHomeserver
+      .replaceFirst('https://', '')
+      .replaceFirst('http://', '')
+      .replaceFirst(':443', '')  // Remove default HTTPS port
+      .replaceFirst(':80', '');   // Remove default HTTP port
+  
+  // If dotenv didn't load properly, also check against the fallback
+  if (dotenv.env['HOMESERVER'] == null) {
+    print('Warning: HOMESERVER env var not found, using fallback');
+  }
+  
+  print('isCustomHomeserver check: cleaned=$cleanedHomeserver, default=$defaultHomeserver');
+  
+  return cleanedHomeserver != defaultHomeserver && cleanedHomeserver != FALLBACK_DEFAULT_HOMESERVER;
 }
 

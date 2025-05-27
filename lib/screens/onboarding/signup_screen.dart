@@ -572,6 +572,9 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', token);
     await prefs.setString('user_id', userId);
+    
+    // Store the custom homeserver URL for restoration
+    await prefs.setString('custom_homeserver', _homeserver);
     await prefs.setString('maps_url', _mapsUrl); // Save the map tile URL
   }
 

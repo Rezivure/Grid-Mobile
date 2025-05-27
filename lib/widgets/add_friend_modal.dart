@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
@@ -134,11 +134,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   }
 
   bool isCustomHomeserver() {
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return false;
-    }
-    return true;
+    final homeserver = this.widget.roomService.getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   void _addContact() async {
@@ -236,7 +233,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Friend request sent to ${localpart(normalizedUserId)}.'),
+                content: Text('Friend request sent to ${utils.localpart(normalizedUserId)}.'),
                 backgroundColor: Theme.of(context).colorScheme.primary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
