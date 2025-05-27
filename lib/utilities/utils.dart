@@ -113,3 +113,9 @@ String formatUserId(String userId) {
   return domain == homeserver ? parts[0] : userId;
 }
 
+bool isCustomHomeserver(String currentHomeserver) {
+  final defaultHomeserver = dotenv.env['HOMESERVER'] ?? '';
+  final cleanedHomeserver = currentHomeserver.replaceFirst('https://', '').replaceFirst('http://', '');
+  return cleanedHomeserver != defaultHomeserver;
+}
+

@@ -859,6 +859,9 @@ class SyncManager with ChangeNotifier {
 
       if (didJoin) {
         print('Successfully joined room $roomId');
+        
+        // Remove the invite immediately after accepting
+        removeInvite(roomId);
 
         // Trigger a sync first to update room membership status
         await client.sync(timeout: 10000);
