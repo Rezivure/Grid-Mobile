@@ -32,7 +32,8 @@ class MapScrollWindow extends StatefulWidget {
 
 enum SubscreenOption { contacts, groups, invites, groupDetails }
 
-class _MapScrollWindowState extends State<MapScrollWindow> {
+class _MapScrollWindowState extends State<MapScrollWindow> 
+    with TickerProviderStateMixin {
   late final RoomService _roomService;
   late final UserService _userService;
   late final LocationRepository _locationRepository;
@@ -47,8 +48,13 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   GridRoom.Room? _selectedRoom;
   bool _isScrollingContent = false;
 
+  late AnimationController _expandController;
+  late Animation<double> _expandAnimation;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
   final DraggableScrollableController _scrollableController =
-  DraggableScrollableController();
+      DraggableScrollableController();
 
   @override
   void initState() {
@@ -61,12 +67,38 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     _groupsBloc = context.read<GroupsBloc>();
     sharingPreferencesRepository = context.read<SharingPreferencesRepository>();
 
+    // Initialize animations
+    _expandController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _expandController,
+      curve: Curves.easeInOut,
+    );
+
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
+
     _groupsBloc.add(LoadGroups());
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
     });
+  }
+
+  @override
+  void dispose() {
+    _expandController.dispose();
+    _fadeController.dispose();
+    super.dispose();
   }
 
   Future<List<GridRoom.Room>> _fetchGroupRooms() async {
@@ -77,20 +109,26 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        child: InvitesModal(
-          roomService: _roomService,
-          onInviteHandled: _navigateToContacts,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: InvitesModal(
+            roomService: _roomService,
+            onInviteHandled: _navigateToContacts,
+          ),
         ),
       ),
     );
@@ -118,21 +156,23 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: colorScheme.background,
+              color: colorScheme.surface,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.onBackground.withOpacity(0.1),
-                  blurRadius: 10.0,
-                  spreadRadius: 5.0,
+                  color: colorScheme.shadow.withOpacity(0.15),
+                  blurRadius: 20.0,
+                  spreadRadius: 0,
+                  offset: const Offset(0, -5),
                 ),
               ],
             ),
             child: Column(
               children: [
+                // Drag Handle Area - Make this draggable
                 GestureDetector(
                   onVerticalDragUpdate: (details) {
                     final delta = details.delta.dy / MediaQuery.of(context).size.height;
@@ -141,26 +181,35 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     _scrollableController.jumpTo(newSize);
                   },
                   behavior: HitTestBehavior.translucent,
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Center(
-                          child: Container(
-                            width: 50,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: colorScheme.onBackground.withOpacity(0.4),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      _buildDropdownHeader(colorScheme),
-                      if (_isDropdownExpanded) _buildHorizontalScroller(colorScheme),
-                    ],
+                    ),
                   ),
                 ),
+                
+                // Header Section
+                _buildModernHeader(colorScheme),
+                
+                // Expandable Group Selector
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: _isDropdownExpanded 
+                      ? _buildModernHorizontalScroller(colorScheme)
+                      : const SizedBox.shrink(),
+                ),
+                
+                // Content
                 Expanded(
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
@@ -168,7 +217,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                           notification is ScrollUpdateNotification &&
                           notification.dragDetails != null &&
                           !_isScrollingContent) {
-                        final delta = notification.dragDetails!.delta.dy / MediaQuery.of(context).size.height;
+                        final delta = notification.dragDetails!.delta.dy / 
+                            MediaQuery.of(context).size.height;
                         final newSize = (_scrollableController.size - delta)
                             .clamp(0.3, 0.7);
                         _scrollableController.jumpTo(newSize);
@@ -187,91 +237,86 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-  Widget _buildDropdownHeader(ColorScheme colorScheme) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
+  Widget _buildModernHeader(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isDropdownExpanded = !_isDropdownExpanded;
-                if (_isDropdownExpanded) {
-                  _groupsBloc.add(RefreshGroups());
-                }
-              });
-            },
-            child: Row(
-              children: [
-                Text(
-                  _selectedLabel,
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: colorScheme.onBackground,
-                    fontWeight: FontWeight.bold,
+          // Title Section with Dropdown
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isDropdownExpanded = !_isDropdownExpanded;
+                  if (_isDropdownExpanded) {
+                    _expandController.forward();
+                    _fadeController.forward();
+                    _groupsBloc.add(RefreshGroups());
+                  } else {
+                    _expandController.reverse();
+                    _fadeController.reverse();
+                  }
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: colorScheme.outline.withOpacity(0.1),
                   ),
                 ),
-                Icon(
-                  _isDropdownExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  color: colorScheme.onBackground,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedLabel,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      turns: _isDropdownExpanded ? 0.5 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: colorScheme.onSurface.withOpacity(0.7),
+                        size: 20,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
+          
+          const SizedBox(width: 12),
+          
+          // Action Buttons
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: Icon(Icons.add, color: colorScheme.onBackground),
+              _buildActionButton(
+                icon: Icons.person_add_outlined,
                 onPressed: () => _showAddFriendModal(context),
+                colorScheme: colorScheme,
               ),
-              IconButton(
-                icon: Icon(Icons.qr_code, color: colorScheme.onBackground),
+              const SizedBox(width: 8),
+              _buildActionButton(
+                icon: Icons.qr_code_scanner_outlined,
                 onPressed: () => _showProfileModal(context),
+                colorScheme: colorScheme,
               ),
-              Stack(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.notifications_outlined,
-                        color: colorScheme.onBackground),
-                    onPressed: () => _showInvitesModal(context),
-                  ),
-                  Positioned(
-                    right: 4,
-                    top: 4,
-                    child: Consumer<SyncManager>(
-                      builder: (context, syncManager, child) {
-                        int inviteCount = syncManager.totalInvites;
-                        if (inviteCount > 0) {
-                          return Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$inviteCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          );
-                        }
-                        return const SizedBox();
-                      },
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox(width: 8),
+              _buildNotificationButton(colorScheme),
             ],
           ),
         ],
@@ -279,24 +324,129 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-  Widget _buildHorizontalScroller(ColorScheme colorScheme) {
+  Widget _buildActionButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required ColorScheme colorScheme,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+        ),
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: colorScheme.onSurface,
+          size: 20,
+        ),
+        onPressed: onPressed,
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 40,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationButton(ColorScheme colorScheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+        ),
+      ),
+      child: Stack(
+        children: [
+          IconButton(
+            icon: Icon(
+              Icons.notifications_outlined,
+              color: colorScheme.onSurface,
+              size: 20,
+            ),
+            onPressed: () => _showInvitesModal(context),
+            padding: const EdgeInsets.all(8),
+            constraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 40,
+            ),
+          ),
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Consumer<SyncManager>(
+              builder: (context, syncManager, child) {
+                int inviteCount = syncManager.totalInvites;
+                if (inviteCount > 0) {
+                  return Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.error,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '$inviteCount',
+                      style: TextStyle(
+                        color: colorScheme.onError,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                return const SizedBox();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernHorizontalScroller(ColorScheme colorScheme) {
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
         return FutureBuilder<String?>(
           future: _userService.getMyUserId(),
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
+              return Container(
                 height: 100,
-                child: Center(child: CircularProgressIndicator()),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: colorScheme.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
               );
             }
 
             final userId = userSnapshot.data;
             if (userId == null) {
-              return const SizedBox(
+              return Container(
                 height: 100,
-                child: Center(child: Text('User ID not found')),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Center(
+                  child: Text(
+                    'User ID not found',
+                    style: TextStyle(
+                      color: colorScheme.onSurface.withOpacity(0.7),
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               );
             }
 
@@ -304,30 +454,47 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                 ? groupsState.groups
                 : <GridRoom.Room>[];
 
+            // Debug info for testing scrolling
+            final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
+            print('DEBUG: Total items in horizontal scroller: $totalItems (${groups.length} groups + 1 contact + ${groupsState is GroupsLoading ? 1 : 0} loading)');
+
             return SizedBox(
               height: 100,
-              child: ListView(
+              child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                physics: const AlwaysScrollableScrollPhysics(),
-                primary: false,
-                children: [
-                  _buildContactOption(colorScheme, userId),
-                  ...groups.map((room) => _buildGroupOption(colorScheme, room)),
-                  if (groupsState is GroupsLoading)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colorScheme.primary,
-                          ),
-                        ),
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+                itemCount: totalItems,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: _buildModernContactOption(colorScheme, userId),
+                    );
+                  }
+                  
+                  final groupIndex = index - 1;
+                  if (groupIndex < groups.length) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: _buildModernGroupOption(colorScheme, groups[groupIndex]),
+                    );
+                  }
+                  
+                  // Loading indicator
+                  if (groupsState is GroupsLoading) {
+                    return Container(
+                      width: 70,
+                      alignment: Alignment.center,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.primary,
                       ),
-                    ),
-                ],
+                    );
+                  }
+                  
+                  return const SizedBox.shrink();
+                },
               ),
             );
           },
@@ -336,7 +503,7 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-  Widget _buildContactOption(ColorScheme colorScheme, String userId) {
+  Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
 
     return GestureDetector(
@@ -345,32 +512,65 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
           _selectedOption = SubscreenOption.contacts;
           _selectedLabel = 'My Contacts';
           _isDropdownExpanded = false;
+          _expandController.reverse();
+          _fadeController.reverse();
           Provider.of<SelectedSubscreenProvider>(context, listen: false)
               .setSelectedSubscreen('contacts');
         });
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0),
+      child: Container(
+        width: 80,
+        height: 84,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? colorScheme.primaryContainer 
+              : colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected 
+                ? colorScheme.primary.withOpacity(0.3)
+                : colorScheme.outline.withOpacity(0.1),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: colorScheme.primary.withOpacity(0.15),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ] : null,
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: isSelected
-                  ? colorScheme.primary
-                  : colorScheme.primary.withOpacity(0.2),
-              child: RandomAvatar(
-                localpart(userId),
-                height: 60,
-                width: 60,
+            ClipOval(
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: RandomAvatar(
+                  localpart(userId),
+                  height: 36,
+                  width: 36,
+                ),
               ),
             ),
-            const SizedBox(height: 5),
-            Text(
-              'My Contacts',
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onBackground,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 68, // Increased width to fit "Contacts" text
+              child: Text(
+                'Contacts',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected 
+                      ? colorScheme.onPrimaryContainer
+                      : colorScheme.onSurface,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -379,15 +579,15 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     );
   }
 
-  Widget _buildGroupOption(ColorScheme colorScheme, GridRoom.Room room) {
+  Widget _buildModernGroupOption(ColorScheme colorScheme, GridRoom.Room room) {
     final parts = room.name.split(':');
     if (parts.length >= 5) {
       final groupName = parts[3];
       final remainingTimeStr = room.expirationTimestamp == 0
           ? '∞'
           : _formatDuration(Duration(
-          seconds: room.expirationTimestamp -
-              DateTime.now().millisecondsSinceEpoch ~/ 1000));
+              seconds: room.expirationTimestamp -
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000));
 
       final isSelected = _selectedLabel == groupName;
 
@@ -398,32 +598,66 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             _selectedLabel = groupName;
             _selectedRoom = room;
             _isDropdownExpanded = false;
+            _expandController.reverse();
+            _fadeController.reverse();
             Provider.of<SelectedSubscreenProvider>(context, listen: false)
                 .setSelectedSubscreen('group:${room.roomId}');
           });
         },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10.0),
+        child: Container(
+          width: 80,
+          height: 84,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? colorScheme.primaryContainer 
+                : colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected 
+                  ? colorScheme.primary.withOpacity(0.3)
+                  : colorScheme.outline.withOpacity(0.1),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected ? [
+              BoxShadow(
+                color: colorScheme.primary.withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ] : null,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  TriangleAvatars(userIds: room.members),
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: TriangleAvatars(userIds: room.members),
+                  ),
                   if (room.expirationTimestamp > 0)
                     Positioned(
-                      bottom: 0,
-                      right: 0,
+                      bottom: -2,
+                      right: -2,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         decoration: BoxDecoration(
                           color: colorScheme.primary,
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: colorScheme.surface,
+                            width: 1,
+                          ),
                         ),
                         child: Text(
                           remainingTimeStr,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
+                          style: TextStyle(
+                            color: colorScheme.onPrimary,
+                            fontSize: 7,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -431,13 +665,21 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
                     ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                groupName,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onBackground,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              const SizedBox(height: 4),
+              SizedBox(
+                width: 68, // Increased width to match contacts
+                child: Text(
+                  groupName,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isSelected 
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurface,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -464,7 +706,14 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             onGroupLeft: _navigateToContacts,
           );
         }
-        return const Center(child: Text('No group selected'));
+        return Center(
+          child: Text(
+            'No group selected',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+        );
       case SubscreenOption.contacts:
       default:
         return ContactsSubscreen(
@@ -481,6 +730,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
       _selectedOption = SubscreenOption.contacts;
       _selectedLabel = 'My Contacts';
       _isDropdownExpanded = false;
+      _expandController.reverse();
+      _fadeController.reverse();
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
     });
@@ -490,16 +741,14 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: AddFriendModal(
           roomService: _roomService,
@@ -512,6 +761,8 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
             // Force dropdown to open to show new group
             setState(() {
               _isDropdownExpanded = true;
+              _expandController.forward();
+              _fadeController.forward();
             });
 
             // Add a delayed refresh for sync completion
@@ -528,23 +779,28 @@ class _MapScrollWindowState extends State<MapScrollWindow> {
   }
 
   void _showProfileModal(BuildContext context) {
-    var theme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: theme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        child: ProfileModal(
-          userService: _userService,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: ProfileModal(
+            userService: _userService,
+          ),
         ),
       ),
     );

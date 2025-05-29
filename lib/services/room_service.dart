@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -72,7 +72,6 @@ class RoomService {
 
     // Check if the user exists
     try {
-      print(matrixUserId);
       final exists = await userService.userExists(matrixUserId);
       if (!exists) {
         return false;
@@ -102,6 +101,10 @@ class RoomService {
           ),
         ],
       );
+      
+      // Room created with invite - now we need to handle it immediately
+      // Note: invite is already sent via createRoom parameters
+      
       return true; // success
     }
     return false; // failed
@@ -120,14 +123,41 @@ class RoomService {
   Future<String?> getUserRoomMembership(String roomId, String userId) async {
     Room? room = client.getRoomById(roomId);
     if (room != null) {
+      // Check all members, not just joined participants
+      try {
+        // First try to get from the room state directly
+        final memberEvent = room.getState('m.room.member', userId);
+        if (memberEvent != null) {
+          final membership = memberEvent.content['membership'] as String?;
+          print("RoomService: User $userId membership from state in room $roomId: $membership");
+          return membership;
+        }
+      } catch (e) {
+        print("RoomService: Failed to get membership from state: $e");
+      }
+      
+      // Fallback to participants list
       var participants = room.getParticipants();
       try {
         final participant = participants.firstWhere(
               (user) => user.id == userId,
         );
-        return participant.membership.name;
+        final membershipName = participant.membership.name;
+        print("RoomService: User $userId membership from participants in room $roomId: $membershipName");
+        return membershipName;
       } catch (e) {
-        return 'invited';  // Default to invited if user not found
+        print("RoomService: User $userId not found in participants, checking if room was just created");
+        
+        // If this is a direct room that was just created, the invited user might not appear
+        // in participants yet, so we assume they're invited
+        final roomName = room.name ?? '';
+        if (roomName.startsWith('Grid:Direct:')) {
+          print("RoomService: Direct room detected, assuming user $userId is invited");
+          return 'invite';
+        }
+        
+        print("RoomService: User $userId not found, returning null");
+        return null;
       }
     }
     return null;
@@ -292,7 +322,7 @@ class RoomService {
       print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
-        print("trying to get rooms");
+        print("Trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
         String leaveReason = '';
@@ -302,7 +332,6 @@ class RoomService {
           print("Checking Grid room: ${room.name}");
 
           if (room.name.contains("Grid:Group:")) {
-            // Handle group rooms
             final roomNameParts = room.name.split(":");
             if (roomNameParts.length >= 4) {
               final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
@@ -314,7 +343,6 @@ class RoomService {
               }
             }
           } else if (room.name.contains("Grid:Direct:")) {
-            // Handle direct rooms
             print("Checking direct room: ${room.id} with ${participants.length} participants");
 
             if (participants.length <= 1) {
@@ -327,7 +355,6 @@ class RoomService {
             }
           }
         } else {
-          // Non-Grid rooms should be left
           print("Found non-Grid room: ${room.name}");
           shouldLeave = true;
           leaveReason = 'non-Grid room';
@@ -345,13 +372,22 @@ class RoomService {
           try {
             print("Leaving room ${room.id} (${room.name}) - Reason: $leaveReason");
 
-            // Perform local cleanup before leaving the room
-            await _cleanupLocalData(room.id, participants);
-
-            // Leave and forget the room on the server
+            // Leave and forget the room on the server first
             await room.leave();
             await client.forgetRoom(room.id);
-            print('Successfully left and forgot room: ${room.id}');
+            print('Attempted to leave room: ${room.id}, verifying...');
+
+            // Confirm the room is left by re-fetching the joined rooms
+            final joinedRooms = await client.getJoinedRooms();
+            if (!joinedRooms.contains(room.id)) {
+              print('Confirmed room ${room.id} left successfully.');
+
+              // Only clean up locally if the leave was successful
+              await _cleanupLocalData(room.id, participants);
+              print('Successfully cleaned up local data for room: ${room.id}');
+            } else {
+              print('Room ${room.id} still appears in joined rooms after leave attempt.');
+            }
           } catch (e) {
             print('Error leaving room ${room.id}: $e');
           }
@@ -364,6 +400,7 @@ class RoomService {
       print("Error during room cleanup: $e");
     }
   }
+
 
   /// Handles cleanup of local data when leaving a room
   Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
@@ -418,55 +455,43 @@ class RoomService {
     }
   }
 
-
   Future<String> createGroup(String groupName, List<String> userIds, int durationInHours) async {
-    String? effectiveUserId = client.userID ?? client.userID?.localpart;
+    final effectiveUserId = client.userID ?? client.userID?.localpart;
     if (effectiveUserId == null) {
-      return "Error";
+      throw Exception('Unable to determine current user ID');
     }
 
-    // Calculate expiration timestamp
-    int expirationTimestamp;
-    if (durationInHours == 0) {
-      // Infinite duration, set expiration to 0
-      expirationTimestamp = 0;
-    } else {
-      // Calculate expiration time based on current time and duration
-      final expirationTime = DateTime.now().add(Duration(hours: durationInHours));
-      expirationTimestamp = expirationTime.millisecondsSinceEpoch ~/ 1000; // Convert to Unix timestamp
-    }
+    final int expirationTimestamp = durationInHours == 0
+        ? 0
+        : DateTime.now().add(Duration(hours: durationInHours)).millisecondsSinceEpoch ~/ 1000;
 
-    final roomName = "Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId";
-    var roomId = "";
+    final roomName = 'Grid:Group:$expirationTimestamp:$groupName:$effectiveUserId';
+
+    // power-levels config: only admins (creator) can invite/kick/etc.
+    final powerLevelsContent = {
+      'ban': 50,
+      'events': {
+        'm.room.name': 50,
+        'm.room.power_levels': 100,
+        'm.room.history_visibility': 100,
+        'm.room.canonical_alias': 50,
+        'm.room.avatar': 50,
+        'm.room.tombstone': 100,
+        'm.room.server_acl': 100,
+        'm.room.encryption': 100,
+      },
+      'events_default': 0,
+      'invite': 100,
+      'kick': 100,
+      'notifications': {'room': 50},
+      'redact': 50,
+      'state_default': 50,
+      'users': {effectiveUserId: 100},
+      'users_default': 0,
+    };
+
+    String roomId;
     try {
-      // Create power levels content that restricts invites to admin only
-      final powerLevelsContent = {
-        "ban": 50,
-        "events": {
-          "m.room.name": 50,
-          "m.room.power_levels": 100,
-          "m.room.history_visibility": 100,
-          "m.room.canonical_alias": 50,
-          "m.room.avatar": 50,
-          "m.room.tombstone": 100,
-          "m.room.server_acl": 100,
-          "m.room.encryption": 100,
-        },
-        "events_default": 0,
-        "invite": 100,
-        "kick": 100,
-        "notifications": {
-          "room": 50
-        },
-        "redact": 50,
-        "state_default": 50,
-        "users": {
-          effectiveUserId: 100,
-        },
-        "users_default": 0
-      };
-
-      // Create the room with power levels and encryption
       roomId = await client.createRoom(
         name: roomName,
         isDirect: false,
@@ -474,7 +499,7 @@ class RoomService {
         initialState: [
           StateEvent(
             type: EventTypes.Encryption,
-            content: {"algorithm": "m.megolm.v1.aes-sha2"},
+            content: {'algorithm': 'm.megolm.v1.aes-sha2'},
           ),
           StateEvent(
             type: EventTypes.RoomPowerLevels,
@@ -483,38 +508,30 @@ class RoomService {
         ],
       );
 
-      // Invite users to the room
-      for (String id in userIds) {
-        if (id != effectiveUserId) {
-          bool isCustomServer = isCustomHomeserver();
-          print("IS CUSTOM SERVER:");
-          print(isCustomServer);
-
-          if (isCustomServer) {
-            id =  '@' + id + ':' + client.homeserver.toString().replaceFirst('https://', '');
-          }
-          var fullUsername = id;
-          print(fullUsername);
-          await client.inviteUser(roomId, fullUsername);
+      for (final user in userIds) {
+        var fullMatrixId = user;
+        final isCustomServ = isCustomHomeserver();
+        if (isCustomServ) {
+          fullMatrixId = '@$fullMatrixId';
+        } else {
+          final homeserver = getMyHomeserver().replaceFirst('https://', '');
+          fullMatrixId = '@$user:$homeserver';
         }
+        await client.inviteUser(roomId, fullMatrixId);
       }
 
-      // Add the "Grid Group" tag to the room
-      await client.setRoomTag(client.userID!, roomId, "Grid Group");
+      await client.setRoomTag(effectiveUserId, roomId, 'Grid Group');
     } catch (e) {
-      // Handle errors
-      print('Error creating room: $e');
-      return "Error";
+      throw Exception('Failed to create group: $e');
     }
+
     return roomId;
   }
 
+
   bool isCustomHomeserver() {
-    final homeserver = getMyHomeserver().replaceFirst('https://', '');
-    if (homeserver == dotenv.env['HOMESERVER']) {
-      return true;
-    }
-    return false;
+    final homeserver = getMyHomeserver();
+    return utils.isCustomHomeserver(homeserver);
   }
 
   void getAndUpdateDisplayName() async {
@@ -711,9 +728,10 @@ class RoomService {
     final room = client.getRoomById(roomId);
     if (room != null && room.canKick) {
       try {
-        room.kick(userId);
+        await room.kick(userId);
+        print("Successfully kicked user $userId from room $roomId");
       } catch (e) {
-        print("Failed to remove member");
+        print("Failed to remove member: $e");
         return false;
       }
       return true;
@@ -723,7 +741,7 @@ class RoomService {
 
   Future<void> updateSingleRoom(String roomId) async {
     final room = client.getRoomById(roomId);
-    if (room != null) {
+    if (room != null && currentLocation != null) {
       // Verify it's a valid room to send to (direct room or group)
       var joinedMembers = room
           .getParticipants()

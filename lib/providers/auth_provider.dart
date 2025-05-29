@@ -39,6 +39,9 @@ class AuthProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     //await prefs.setBool('isLoggedIn', _isLoggedIn);
     await prefs.setString('loginToken', jwt);
+    
+    // Clear any stored custom homeserver since this is default server login
+    await prefs.remove('custom_homeserver');
 
     try {
       // Check if we can communicate with the Matrix server
@@ -69,6 +72,7 @@ class AuthProvider with ChangeNotifier {
     await prefs.setBool('isLoggedIn', _isLoggedIn);
     await prefs.remove('token');
     await prefs.remove('userId');
+    await prefs.remove('custom_homeserver');
 
     notifyListeners();
   }

@@ -1,22 +1,27 @@
-import 'dart:async'; // Import for Timer
-import 'dart:math'; // For generating random numbers
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:random_avatar/random_avatar.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
-import 'package:intl_phone_field/intl_phone_field.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
   _ServerSelectScreenState createState() => _ServerSelectScreenState();
 }
 
-class _ServerSelectScreenState extends State<ServerSelectScreen> {
+class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProviderStateMixin {
   int _currentStep = 0; // 0: Enter Username, 1: Enter Phone Number, 2: Verify SMS Code
   bool _isLoginFlow = false;
-  bool _isLoading = false; // For showing spinner and disabling button
+  bool _isLoading = false;
+
+  // Animation controllers
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
   // Controllers
   final TextEditingController _usernameController = TextEditingController();
@@ -26,53 +31,89 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
   String _usernameStatusMessage = '';
   Color _usernameStatusColor = Colors.transparent;
 
-  Timer? _debounce; // Timer for debouncing input
-  Timer? _typingTimer; // Timer for auto-typing username
-
-  // Variable to store the full phone number
+  Timer? _debounce;
   String _fullPhoneNumber = '';
+  bool _hasAttemptedAutoSubmit = false;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animations
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
 
-    // Add listeners to username controller to check username availability
+    // Start animations
+    _fadeController.forward();
+    _slideController.forward();
+
     _usernameController.addListener(_onUsernameChanged);
+    _codeController.addListener(_onCodeChanged);
   }
 
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    _usernameController.dispose();
+    _codeController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
 
   void _onUsernameChanged() {
-    // Debounce input to prevent rapid validation calls
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-
     _debounce = Timer(const Duration(milliseconds: 300), () {
       _validateUsernameInput();
     });
   }
 
+  void _onCodeChanged() {
+    setState(() {}); // Trigger rebuild when code changes
+    
+    // Auto-submit when 6 digits are entered (only if not already attempted)
+    if (_codeController.text.trim().length == 6 && !_hasAttemptedAutoSubmit && !_isLoading) {
+      _hasAttemptedAutoSubmit = true;
+      _submitVerificationCode();
+    }
+  }
+
   void _validateUsernameInput() {
     String username = _usernameController.text;
 
-    // Ensure that the text part of the username is at least 5 characters
     if (username.length < 5) {
       setState(() {
-        _usernameStatusMessage =
-        'Username must be at least 5 characters and no special characters or spaces.';
+        _usernameStatusMessage = 'Username must be at least 5 characters and no special characters or spaces.';
         _usernameStatusColor = Colors.red;
       });
       return;
     }
 
-    // If input is valid, proceed with async username availability check
     _checkUsernameAvailability();
   }
 
   Future<void> _checkUsernameAvailability() async {
     String username = _usernameController.text;
 
-    // Check availability only if username is valid
     if (username.isNotEmpty && username.length >= 5) {
-      // Call the AuthProvider to check availability
       bool isAvailable = await Provider.of<AuthProvider>(context, listen: false)
           .checkUsernameAvailability(username);
 
@@ -88,444 +129,769 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _codeController.dispose();
-    _debounce?.cancel(); // Cancel debounce timer if any
-    _typingTimer?.cancel(); // Cancel typing timer
-    super.dispose();
+  void _animateToNextStep() {
+    _slideController.reset();
+    _fadeController.reset();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _fadeController.forward();
+      _slideController.forward();
+    });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      backgroundColor: colorScheme.background,
-      appBar: AppBar(
-        leading: BackButton(color: colorScheme.onBackground),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        child: _buildCurrentStep(context),
+  Widget _buildProgressIndicator() {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: List.generate(3, (index) {
+          final isActive = index <= _currentStep;
+          final isCompleted = index < _currentStep;
+          
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  if (index > 0)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: isCompleted 
+                              ? colorScheme.primary 
+                              : colorScheme.outline.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: isActive ? colorScheme.primary : colorScheme.outline.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: isCompleted
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: colorScheme.onPrimary,
+                          )
+                        : Center(
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                color: isActive ? colorScheme.onPrimary : colorScheme.onSurface.withOpacity(0.6),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                  ),
+                  if (index < 2)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: isCompleted 
+                              ? colorScheme.primary 
+                              : colorScheme.outline.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
 
-  Widget _buildCurrentStep(BuildContext context) {
+  Widget _buildModernButton({
+    required String text,
+    required VoidCallback? onPressed,
+    required bool isPrimary,
+    bool isLoading = false,
+    IconData? icon,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isEnabled = onPressed != null && !isLoading;
+    
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: isPrimary && isEnabled ? [
+          BoxShadow(
+            color: colorScheme.primary.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ] : null,
+      ),
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isPrimary 
+              ? (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5))
+              : Colors.transparent,
+          foregroundColor: isPrimary 
+              ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
+              : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: isPrimary ? BorderSide.none : BorderSide(
+              color: isEnabled 
+                  ? colorScheme.outline.withOpacity(0.2)
+                  : colorScheme.outline.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+        ),
+        child: isLoading
+            ? SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
+                  strokeWidth: 2,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 20),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isPrimary 
+                          ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
+                          : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildStepHeader({
+    required String title,
+    required String subtitle,
+    Widget? illustration,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Column(
+      children: [
+        if (illustration != null) ...[
+          illustration,
+          const SizedBox(height: 24),
+        ],
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            'STEP ${_currentStep + 1} OF 3',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.primary,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          title,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurface.withOpacity(0.7),
+            height: 1.4,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: colorScheme.background,
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          _isLoginFlow ? 'Sign In' : 'Get Started',
+          style: TextStyle(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                _buildProgressIndicator(),
+                const SizedBox(height: 40),
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildCurrentStep(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep() {
     switch (_currentStep) {
       case 0:
-        return _buildUsernameStep(context);
+        return _buildUsernameStep();
       case 1:
-        return _buildPhoneNumberStep(context);
+        return _buildPhoneNumberStep();
       case 2:
-        return _buildVerifySmsStep(context);
+        return _buildVerifySmsStep();
       default:
         return Container();
     }
   }
 
-  Widget _buildUsernameStep(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildUsernameStep() {
+    final colorScheme = Theme.of(context).colorScheme;
+    String username = _usernameController.text.isNotEmpty ? _usernameController.text : 'default';
 
-    String username = _usernameController.text.isNotEmpty
-        ? _usernameController.text
-        : 'default';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 50),
-          Text(
-            'Set a Username',
-            style: theme.textTheme.headlineMedium?.copyWith(
-              color: colorScheme.primary,
+    return Column(
+      children: [
+        _buildStepHeader(
+          title: 'Choose Your Username',
+          subtitle: 'This is how others can find and add you on Grid',
+          illustration: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withOpacity(0.1),
+                      colorScheme.primary.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: RandomAvatar(
+                  username.toLowerCase(),
+                  height: 80,
+                  width: 80,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your unique avatar!',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.1),
+              width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          Text(
-            'This is how others can add you.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onBackground.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 20),
-          RandomAvatar(
-            username.toLowerCase(),
-            height: 100,
-            width: 100,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'This will be your avatar!',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onBackground.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextField(
+          child: TextField(
             controller: _usernameController,
             decoration: InputDecoration(
               labelText: 'Username',
-              border: OutlineInputBorder(),
+              hintText: 'Enter your unique username',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
               filled: true,
-              fillColor: colorScheme.surface.withOpacity(0.1),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _usernameStatusMessage,
-            style: TextStyle(color: _usernameStatusColor),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: (_usernameStatusMessage == 'Username is available') && !_isLoading
-                ? () {
-              setState(() {
-                _currentStep = 1; // Proceed to next step
-              });
-            }
-                : null, // Disable button if username is not available or loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              'Next',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.all(20),
+              prefixIcon: Icon(
+                Icons.person_outline,
+                color: colorScheme.primary,
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _isLoginFlow = true;
-                _currentStep = 1; // Go to phone number step for login
-              });
-            },
-            child: Text(
-              'Already have an account? Sign in',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: Colors.white,
-              ),
+        ),
+        
+        if (_usernameStatusMessage.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: (_usernameStatusColor == Colors.green 
+                  ? Colors.green 
+                  : Colors.red).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.secondary, // Secondary color
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
+            child: Row(
+              children: [
+                Icon(
+                  _usernameStatusColor == Colors.green 
+                      ? Icons.check_circle_outline 
+                      : Icons.error_outline,
+                  size: 16,
+                  color: _usernameStatusColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _usernameStatusMessage,
+                    style: TextStyle(
+                      color: _usernameStatusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
+        
+        const SizedBox(height: 40),
+        
+        _buildModernButton(
+          text: 'Continue',
+          onPressed: (_usernameStatusMessage == 'Username is available') && !_isLoading
+              ? () {
+                  setState(() {
+                    _currentStep = 1;
+                  });
+                  _animateToNextStep();
+                }
+              : null,
+          isPrimary: true,
+          isLoading: _isLoading,
+          icon: Icons.arrow_forward,
+        ),
+        
+        const SizedBox(height: 16),
+        
+        _buildModernButton(
+          text: 'Already have an account? Sign In',
+          onPressed: () {
+            setState(() {
+              _isLoginFlow = true;
+              _currentStep = 1;
+            });
+            _animateToNextStep();
+          },
+          isPrimary: false,
+          icon: Icons.login,
+        ),
+        
+        const SizedBox(height: 40),
+      ],
     );
   }
 
-  Widget _buildPhoneNumberStep(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildPhoneNumberStep() {
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: 20),
-          Lottie.network(
-            'https://lottie.host/e8ebf51a-dd5f-4b40-8320-ca08f5041d13/LNsJZ0BVrk.json',
-            height: 150,
-            width: 150,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            _isLoginFlow ? 'Sign In' : 'Register',
-            style: theme.textTheme.headlineMedium?.copyWith(
+    return Column(
+      children: [
+        _buildStepHeader(
+          title: _isLoginFlow ? 'Welcome Back!' : 'Verify Your Identity',
+          subtitle: 'Enter your phone number to ${_isLoginFlow ? 'sign in' : 'continue registration'}',
+          illustration: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.1),
+                  colorScheme.primary.withOpacity(0.05),
+                  Colors.transparent,
+                ],
+                stops: const [0.3, 0.7, 1.0],
+              ),
+            ),
+            child: Icon(
+              Icons.phone_android,
+              size: 48,
               color: colorScheme.primary,
             ),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 10),
-          Text(
-            'Please enter your phone number to confirm your identity.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onBackground.withOpacity(0.7),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.1),
+              width: 1,
             ),
-            textAlign: TextAlign.center,
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          IntlPhoneField(
+          child: IntlPhoneField(
             decoration: InputDecoration(
               labelText: 'Phone Number',
+              hintText: 'Enter your phone number',
               border: OutlineInputBorder(
-                borderSide: BorderSide(),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
               filled: true,
-              fillColor: colorScheme.surface.withOpacity(0.1),
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.all(20),
             ),
             initialCountryCode: 'US',
             onChanged: (phone) {
               setState(() {
                 _fullPhoneNumber = phone.completeNumber;
               });
-              print('Full phone number: $_fullPhoneNumber');
             },
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: !_isLoading
-                ? () async {
-              setState(() {
-                _isLoading = true;
-              });
-              try {
-                if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
+        ),
+        
+        const SizedBox(height: 40),
+        
+        _buildModernButton(
+          text: 'Send Verification Code',
+          onPressed: !_isLoading && _fullPhoneNumber.isNotEmpty
+              ? () async {
                   setState(() {
-                    _isLoading = false;
+                    _isLoading = true;
                   });
-                  return;
+                  try {
+                    if (_isLoginFlow) {
+                      await Provider.of<AuthProvider>(context, listen: false)
+                          .sendSmsCode(_fullPhoneNumber, isLogin: true);
+                    } else {
+                      String username = _usernameController.text;
+                      await Provider.of<AuthProvider>(context, listen: false)
+                          .sendSmsCode(
+                        _fullPhoneNumber,
+                        isLogin: false,
+                        username: username,
+                      );
+                    }
+                    setState(() {
+                      _currentStep = 2;
+                    });
+                    _animateToNextStep();
+                  } catch (e) {
+                    _showErrorDialog('Phone number invalid or does not have an active account.');
+                  } finally {
+                    setState(() {
+                      _isLoading = false;
+                    });
+                  }
                 }
-                if (_isLoginFlow) {
-                  // For login, only phone number is required
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(_fullPhoneNumber, isLogin: true);
-                } else {
-                  // For registration, both username and phone number are required
-                  String username = _usernameController.text;
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(
-                    _fullPhoneNumber,
-                    isLogin: false,
-                    username: username,
-                  );
-                }
-                setState(() {
-                  _currentStep = 2; // Proceed to verify code step
-                });
-              } catch (e) {
-                _showErrorDialog(context, 'Phone number invalid or already registered');
-              } finally {
-                setState(() {
-                  _isLoading = false;
-                });
-              }
-            }
-                : null, // Disable button if loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              'Send Code',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
-            ),
-          ),
-        ],
-      ),
+              : null,
+          isPrimary: true,
+          isLoading: _isLoading,
+          icon: Icons.send,
+        ),
+        
+        const SizedBox(height: 40),
+      ],
     );
   }
 
-  Widget _buildVerifySmsStep(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildVerifySmsStep() {
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          const SizedBox(height: 20),
-          Lottie.network(
-            'https://lottie.host/e8ebf51a-dd5f-4b40-8320-ca08f5041d13/LNsJZ0BVrk.json',
-            height: 150,
-            width: 150,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Enter Verification Code',
-            style: theme.textTheme.headlineMedium?.copyWith(
+    return Column(
+      children: [
+        _buildStepHeader(
+          title: 'Enter Verification Code',
+          subtitle: 'We sent a 6-digit code to $_fullPhoneNumber',
+          illustration: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.1),
+                  colorScheme.primary.withOpacity(0.05),
+                  Colors.transparent,
+                ],
+                stops: const [0.3, 0.7, 1.0],
+              ),
+            ),
+            child: Icon(
+              Icons.verified_user,
+              size: 48,
               color: colorScheme.primary,
             ),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () async {
-              try {
-                if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
-                  return;
-                }
-                if (_isLoginFlow) {
-                  // For login, only phone number is required
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(_fullPhoneNumber, isLogin: true);
-                } else {
-                  // For registration, both username and phone number are required
-                  String username = _usernameController.text;
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .sendSmsCode(
-                    _fullPhoneNumber,
-                    isLogin: false,
-                    username: username,
-                  );
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Verification code resent')),
-                );
-              } catch (e) {
-                _showErrorDialog(context, 'Failed to resend SMS code');
-              }
-            },
-            child: Text(
-              'Resend code?',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.primary.withOpacity(0.8),
-                decoration: TextDecoration.underline,
-              ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.1),
+              width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          TextField(
+          child: TextField(
             controller: _codeController,
             autofocus: true,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
             decoration: InputDecoration(
               labelText: 'Verification Code',
+              hintText: '000000',
               border: OutlineInputBorder(
-                borderSide: BorderSide(),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
               filled: true,
-              fillColor: colorScheme.surface.withOpacity(0.1),
-              hintText: 'Enter your 6-digit code',
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.all(20),
+              prefixIcon: Icon(
+                Icons.lock_outline,
+                color: colorScheme.primary,
+              ),
             ),
-            keyboardType: TextInputType.number,
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: !_isLoading
-                ? () async {
-              setState(() {
-                _isLoading = true;
-              });
-              if (_codeController.text.length == 6) {
-                if (_fullPhoneNumber.isEmpty) {
-                  _showErrorDialog(context, 'Please enter a valid phone number.');
-                  setState(() {
-                    _isLoading = false;
-                  });
-                  return;
-                }
-                if (_isLoginFlow) {
-                  // Login flow
-                  try {
-                    await Provider.of<AuthProvider>(context, listen: false)
-                        .verifyLoginCode(
-                      _fullPhoneNumber,
-                      _codeController.text,
-                    );
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/main',      // The target route (main screen)
-                          (Route<dynamic> route) => false,  // Remove all previous routes
-                    );
-                  } catch (e) {
-                    _showErrorDialog(context, 'Login failed');
-                  }
-                } else {
-                  // Register flow
-                  String username = _usernameController.text;
-                  try {
-                    await Provider.of<AuthProvider>(context, listen: false)
-                        .verifyRegistrationCode(
-                      username,
-                      _fullPhoneNumber,
-                      _codeController.text,
-                    );
-                    Navigator.pushNamed(context, '/main');
-                  } catch (e) {
-                    _showErrorDialog(context, 'Registration failed');
-                  }
-                }
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Debug info - can be removed later
+        if (_codeController.text.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceVariant.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Code length: ${_codeController.text.trim().length}/6',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+          ),
+        
+        const SizedBox(height: 12),
+        
+        TextButton(
+          onPressed: () async {
+            try {
+              if (_isLoginFlow) {
+                await Provider.of<AuthProvider>(context, listen: false)
+                    .sendSmsCode(_fullPhoneNumber, isLogin: true);
               } else {
-                _showInvalidCodeDialog(context);
+                String username = _usernameController.text;
+                await Provider.of<AuthProvider>(context, listen: false)
+                    .sendSmsCode(
+                  _fullPhoneNumber,
+                  isLogin: false,
+                  username: username,
+                );
               }
-              setState(() {
-                _isLoading = false;
-              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Verification code resent'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } catch (e) {
+              _showErrorDialog('Failed to resend SMS code');
             }
-                : null, // Disable button if loading
-            child: _isLoading ? CircularProgressIndicator(color: colorScheme.onPrimary) : Text(
-              _isLoginFlow ? 'Sign In' : 'Register',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-              ),
+          },
+          child: Text(
+            'Didn\'t receive a code? Resend',
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 20),
-        ],
-      ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        _buildModernButton(
+          text: _isLoginFlow ? 'Sign In' : 'Complete Registration',
+          onPressed: !_isLoading && _codeController.text.trim().length == 6
+              ? _submitVerificationCode
+              : null,
+          isPrimary: true,
+          isLoading: _isLoading,
+          icon: _isLoginFlow ? Icons.login : Icons.check_circle,
+        ),
+        
+        const SizedBox(height: 40),
+      ],
     );
   }
 
-  void _showInvalidCodeDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Invalid Code'),
-          content: Text('Please enter a valid 6-digit verification code.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('OK'),
-            ),
-          ],
+  Future<void> _submitVerificationCode() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      if (_isLoginFlow) {
+        await Provider.of<AuthProvider>(context, listen: false)
+            .verifyLoginCode(
+          _fullPhoneNumber,
+          _codeController.text,
         );
-      },
-    );
+        // Navigate to main app
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/main',
+          (Route<dynamic> route) => false,
+        );
+      } else {
+        String username = _usernameController.text;
+        await Provider.of<AuthProvider>(context, listen: false)
+            .verifyRegistrationCode(
+          username,
+          _fullPhoneNumber,
+          _codeController.text,
+        );
+        // Navigate to main app
+        Navigator.pushNamed(context, '/main');
+      }
+    } catch (e) {
+      // Reset auto-submit flag on error so user can try again
+      _hasAttemptedAutoSubmit = false;
+      _showErrorDialog(_isLoginFlow ? 'Login failed' : 'Registration failed');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  void _showErrorDialog(BuildContext context, String message) {
+  void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
         return AlertDialog(
-          title: Text('Error'),
-          content: Text(message),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Error',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            message,
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+            ),
+          ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.primary,
+              ),
+              child: Text(
+                'OK',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         );

@@ -116,8 +116,8 @@ class UserService {
     final sharingPreferences = await sharingPreferencesRepository.getSharingPreferences(roomId, 'group');
 
     if (sharingPreferences == null) {
-      // If no preferences are set, assume user is not sharing
-      return false;
+      // If no preferences are set, default to sharing (true)
+      return true;
     }
 
     // If "Always Share" is active, no need to check windows
@@ -147,11 +147,13 @@ class UserService {
   }
 
   Future<bool> isInSharingWindow(String userId) async {
-    final sharingPreferences = await sharingPreferencesRepository.getSharingPreferences(userId, 'user');
+    // Try 'user' type first (new format), then fall back to 'contact' for backwards compatibility
+    var sharingPreferences = await sharingPreferencesRepository.getSharingPreferences(userId, 'user');
+    sharingPreferences ??= await sharingPreferencesRepository.getSharingPreferences(userId, 'contact');
 
     if (sharingPreferences == null) {
-      // If no preferences are set, assume user is not sharing
-      return false;
+      // If no preferences are set, default to sharing (true)
+      return true;
     }
 
     // If "Always Share" is active, no need to check windows

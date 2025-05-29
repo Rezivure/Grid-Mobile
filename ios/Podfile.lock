@@ -10,6 +10,8 @@ PODS:
     - Flutter
   - flutter_compass (0.0.1):
     - Flutter
+  - flutter_native_splash (2.4.3):
+    - Flutter
   - flutter_olm (3.2.15):
     - Flutter
   - flutter_openssl_crypto (0.0.1):
@@ -45,6 +47,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_background_geolocation (from `.symlinks/plugins/flutter_background_geolocation/ios`)
   - flutter_compass (from `.symlinks/plugins/flutter_compass/ios`)
+  - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_olm (from `.symlinks/plugins/flutter_olm/ios`)
   - flutter_openssl_crypto (from `.symlinks/plugins/flutter_openssl_crypto/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
@@ -72,6 +75,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_background_geolocation/ios"
   flutter_compass:
     :path: ".symlinks/plugins/flutter_compass/ios"
+  flutter_native_splash:
+    :path: ".symlinks/plugins/flutter_native_splash/ios"
   flutter_olm:
     :path: ".symlinks/plugins/flutter_olm/ios"
   flutter_openssl_crypto:
@@ -101,6 +106,7 @@ SPEC CHECKSUMS:
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_background_geolocation: 0c6320679295ce63872295d85de144bfffbfc4b6
   flutter_compass: cbbd285cea1584c7ac9c4e0c3e1f17cbea55e855
+  flutter_native_splash: f71420956eb811e6d310720fee915f1d42852e7a
   flutter_olm: 41bad3c821821a227ce3b793d338e9801fb8d0ae
   flutter_openssl_crypto: 636ad25f56fbe0f45b9e13b8589540b341a486a1
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
