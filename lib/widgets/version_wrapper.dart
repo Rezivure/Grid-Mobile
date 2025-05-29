@@ -85,27 +85,62 @@ class _VersionWrapperState extends State<VersionWrapper> {
   @override
   Widget build(BuildContext context) {
     if (!_checkComplete) {
-      return MaterialApp(
-        home: Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.background,
-          body: Center(
-            child: Image.asset(
-              'assets/logos/png-file-2.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      );
+      // Show the beautiful splash while checking version
+      return widget.child;
     }
 
     if (_needsCriticalUpdate) {
       return MaterialApp(
+        theme: Theme.of(context),
         home: Scaffold(
           backgroundColor: Theme.of(context).colorScheme.background,
-          body: Center(
-            child: Image.asset(
-              'assets/logos/png-file-2.png',
-              fit: BoxFit.contain,
+          body: SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                          Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.3, 0.7, 1.0],
+                      ),
+                    ),
+                    child: Image.asset(
+                      'assets/logos/png-file-2.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Update Required',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please update Grid to continue',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  CircularProgressIndicator(
+                    color: Theme.of(context).colorScheme.primary,
+                    strokeWidth: 2,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -16,6 +16,8 @@ class LocationManager with ChangeNotifier {
   bool _isTracking = false;
   bool _isInForeground = true;
   bool _batterySaverEnabled = false;
+  bool _isMoving = false;
+  DateTime? _lastLocationUpdate;
 
   late final AppLifecycleListener _lifecycleListener;
 
@@ -66,15 +68,19 @@ class LocationManager with ChangeNotifier {
     if (!_isTracking) return;
 
     if (_batterySaverEnabled) {
-      // Battery saver config
+      // Battery saver config - more aggressive battery saving
       bg.BackgroundGeolocation.setConfig(bg.Config(
-        desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
-        distanceFilter: 200,
-        stopTimeout: 2,
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_LOW, // Lower accuracy saves more battery
+        distanceFilter: 500, // Only update after 500m movement
+        stopTimeout: 5, // Wait longer before entering stationary mode
         disableStopDetection: false,
         pausesLocationUpdatesAutomatically: true,
-        stationaryRadius: 50,
-        heartbeatInterval: 900, // 15 min
+        stationaryRadius: 100, // Larger radius to prevent false movement detection
+        heartbeatInterval: 1800, // 30 min heartbeat
+        activityRecognitionInterval: 20000, // Check activity less frequently (20s)
+        minimumActivityRecognitionConfidence: 80, // Higher confidence required
+        disableMotionActivityUpdates: false,
+        stopDetectionDelay: 5, // Wait 5 min before stopping
       ));
     } else {
       // Normal config
@@ -86,16 +92,23 @@ class LocationManager with ChangeNotifier {
           pausesLocationUpdatesAutomatically: true,
           stopTimeout: 2,
           heartbeatInterval: 60, // 1 min
+          activityRecognitionInterval: 10000, // 10s in foreground
+          minimumActivityRecognitionConfidence: 70,
+          stopDetectionDelay: 1, // Quick stop detection in foreground
         ));
       } else {
         bg.BackgroundGeolocation.setConfig(bg.Config(
-          desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+          desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM, // Medium accuracy in background
           distanceFilter: 100,
-          stopTimeout: 2,
+          stopTimeout: 3,
           disableStopDetection: false,
           pausesLocationUpdatesAutomatically: true,
-          stationaryRadius: 50,
+          stationaryRadius: 75,
           heartbeatInterval: 600, // 10 min
+          activityRecognitionInterval: 15000, // 15s in background
+          minimumActivityRecognitionConfidence: 75,
+          stopDetectionDelay: 3, // 3 min delay in background
+          disableMotionActivityUpdates: false,
         ));
       }
     }
@@ -111,6 +124,22 @@ class LocationManager with ChangeNotifier {
   }
 
   bool get isTracking => _isTracking;
+  bool get batterySaverEnabled => _batterySaverEnabled;
+  bool get isMoving => _isMoving;
+  DateTime? get lastLocationUpdate => _lastLocationUpdate;
+  
+  // Check if location data is stale
+  bool get isLocationStale {
+    if (_lastLocationUpdate == null) return true;
+    final age = DateTime.now().difference(_lastLocationUpdate!);
+    return age > const Duration(minutes: 10);
+  }
+  
+  // Get age of last location update
+  Duration? get locationAge {
+    if (_lastLocationUpdate == null) return null;
+    return DateTime.now().difference(_lastLocationUpdate!);
+  }
 
   // Start tracking. Let the plugin handle moving vs stationary automatically.
   Future<void> startTracking() async {
@@ -121,7 +150,7 @@ class LocationManager with ChangeNotifier {
       await bg.BackgroundGeolocation.requestPermission();
     }
 
-    // Configure plugin one time
+    // Configure plugin one time with optimized defaults
     await bg.BackgroundGeolocation.ready(bg.Config(
       desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
       stopOnTerminate: false,
@@ -130,8 +159,16 @@ class LocationManager with ChangeNotifier {
       disableStopDetection: false,
       activityType: bg.Config.ACTIVITY_TYPE_OTHER,
       stopTimeout: 2,
-      // If you want it to transition to stationary quickly, keep this low
-      stopDetectionDelay: 0,
+      stopDetectionDelay: 1,
+      // Motion detection optimizations
+      isMoving: false, // Start in stationary mode
+      motionTriggerDelay: 0, // No delay for motion trigger
+      disableMotionActivityUpdates: false,
+      useSignificantChangesOnly: false,
+      // Power optimizations
+      preventSuspend: false, // Allow OS to suspend when possible
+      disableLocationAuthorizationAlert: false,
+      locationAuthorizationRequest: 'Always',
       backgroundPermissionRationale: bg.PermissionRationale(
         title: "Allow background location?",
         message: "Needed to keep sharing location with your contacts, even if app is closed.",
@@ -142,16 +179,38 @@ class LocationManager with ChangeNotifier {
         title: "Location Sharing",
         text: "Active",
         sticky: true,
+        priority: bg.Config.NOTIFICATION_PRIORITY_LOW, // Lower priority notification
       ),
       debug: false,
-      logLevel: bg.Config.LOG_LEVEL_VERBOSE,
-      maxDaysToPersist: 3,
-      maxRecordsToPersist: 50,
+      logLevel: bg.Config.LOG_LEVEL_ERROR, // Reduce logging overhead
+      maxDaysToPersist: 1, // Reduce storage
+      maxRecordsToPersist: 20, // Reduce storage
     ));
 
-    // Location updates
+    // Location updates - always keep position fresh
     bg.BackgroundGeolocation.onLocation((bg.Location location) {
+      final now = DateTime.now();
+      
+      // Always update our internal position to keep it fresh
       _lastPosition = location;
+      
+      // Smart throttling: Only skip SENDING updates if stationary and recent
+      if (!_isMoving && _lastLocationUpdate != null) {
+        final timeSinceLastUpdate = now.difference(_lastLocationUpdate!);
+        
+        // In battery saver mode, throttle stationary updates more aggressively
+        final throttleInterval = _batterySaverEnabled 
+            ? const Duration(minutes: 5) 
+            : const Duration(minutes: 1);
+            
+        if (timeSinceLastUpdate < throttleInterval) {
+          print("Throttling location broadcast - stationary and recent update exists");
+          return; // Skip broadcasting, but we've already updated _lastPosition
+        }
+      }
+      
+      // Broadcast the update
+      _lastLocationUpdate = now;
       _locationStreamController.add(location);
       notifyListeners();
     });
@@ -159,7 +218,17 @@ class LocationManager with ChangeNotifier {
     // Motion-detection updates
     bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
       print(">>> onMotionChange: isMoving = ${location.isMoving}");
-      // Plugin decides if device is moving or stationary automatically.
+      _isMoving = location.isMoving ?? false;
+      
+      // Always update position from motion change event
+      _lastPosition = location;
+      
+      // If started moving, immediately broadcast the update
+      if (_isMoving) {
+        _lastLocationUpdate = DateTime.now();
+        _locationStreamController.add(location);
+        notifyListeners();
+      }
     });
 
     // Start tracking
@@ -172,18 +241,25 @@ class LocationManager with ChangeNotifier {
   }
 
   // Manually request the current location (e.g., for a "Ping" button)
+  // This ALWAYS gets a fresh location, bypassing any throttling
   Future<void> grabLocationAndPing() async {
     try {
       print("Manually requesting current location...");
       final currentPos = await bg.BackgroundGeolocation.getCurrentPosition(
-        samples: 1,
+        samples: 3, // Take multiple samples for better accuracy on manual ping
         timeout: 30,
-        maximumAge: 0,
+        maximumAge: 0, // Force fresh location
         persist: false,
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // Force high accuracy for manual ping
       );
+      
+      // Always update position and timestamp for manual requests
       _lastPosition = currentPos;
+      _lastLocationUpdate = DateTime.now();
       _locationStreamController.add(currentPos);
       notifyListeners();
+      
+      print("Manual location ping completed: ${currentPos.coords.latitude}, ${currentPos.coords.longitude}");
     } catch (e) {
       print("Error getting current position: $e");
     }

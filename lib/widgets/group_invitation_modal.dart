@@ -70,63 +70,336 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return AlertDialog(
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      minChildSize: 0.4,
+      maxChildSize: 0.85,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle indicator
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            
+            // Header with close button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.group_add,
+                    color: colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Group Invitation',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(
+                      Icons.close,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Group info section
+                    _buildGroupInfoCard(theme, colorScheme),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Action buttons
+                    if (_isProcessing)
+                      _buildLoadingState(theme, colorScheme)
+                    else
+                      _buildActionButtons(theme, colorScheme),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupInfoCard(ThemeData theme, ColorScheme colorScheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outline.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
         children: [
-          RandomAvatar(
-            widget.inviter.split(':')[0].replaceFirst('@', ''),
-            height: 80,
-            width: 80,
+          // Group icon with inviter avatar
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Background circle
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.group,
+                  color: colorScheme.primary,
+                  size: 40,
+                ),
+              ),
+              // Inviter avatar in corner
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: colorScheme.surface,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorScheme.shadow.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: RandomAvatar(
+                    widget.inviter.split(':')[0].replaceFirst('@', ''),
+                    height: 32,
+                    width: 32,
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 16),
+          
+          const SizedBox(height: 20),
+          
+          // Group name
           Text(
-            'Would you like to join the group "${widget.groupName}"?',
+            widget.groupName,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16),
           ),
-          SizedBox(height: 15),
-          Text(
-            'Invited by: @${widget.inviter.split(":").first.replaceFirst('@', '')}',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+          
+          const SizedBox(height: 16),
+          
+          // Invitation message
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person,
+                      color: colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Invited by @${widget.inviter.split(":").first.replaceFirst('@', '')}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      color: colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Duration: $expiry',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          Text(
-            'Duration: $expiry',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+          
+          const SizedBox(height: 16),
+          
+          // Join message
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceVariant.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'You\'ll start sharing your location with group members once you join.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: 20),
-          if (_isProcessing)
-            CircularProgressIndicator()
         ],
       ),
-      actions: _isProcessing
-          ? null
-          : [
-        ElevatedButton(
-          onPressed: _declineGroupInvitation,
-          child: Text('Decline', style: TextStyle(color: Colors.red)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.surface,
-            foregroundColor: Colors.red,
-            side: BorderSide(color: Colors.red),
-            minimumSize: Size(100, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
+    );
+  }
+
+  Widget _buildLoadingState(ThemeData theme, ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          CircularProgressIndicator(
+            color: colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Processing invitation...',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      children: [
+        // Join button
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: _acceptGroupInvitation,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              elevation: 0,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.group_add, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Join Group',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onPrimary,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        ElevatedButton(
-          onPressed: _acceptGroupInvitation,
-          child: Text('Accept'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            minimumSize: Size(100, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
+        
+        const SizedBox(height: 12),
+        
+        // Decline button
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton(
+            onPressed: _declineGroupInvitation,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: BorderSide(color: Colors.red.withOpacity(0.5)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.close, size: 20, color: Colors.red),
+                const SizedBox(width: 8),
+                Text(
+                  'Decline',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -149,7 +422,19 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       // Accept the invitation through SyncManager to ensure proper syncing
       await syncManager.acceptInviteAndSync(widget.roomId);
 
-      // Wait briefly for room creation to complete
+      // Close the modal immediately after successful join
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Group invitation accepted.")),
+        );
+      }
+
+      // Now do the cleanup and updates
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Remove invite and update UI
@@ -159,11 +444,6 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       groupsBloc.add(RefreshGroups());
       groupsBloc.add(LoadGroups());
       mapBloc.add(MapLoadUserLocations());
-
-      // Close the modal
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
 
       // Staggered updates to ensure everything syncs properly
       Future.delayed(const Duration(milliseconds: 750), () {
@@ -182,33 +462,40 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         }
       });
 
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Group invitation accepted.")),
-        );
+      // Call the refresh callback if it exists
+      try {
+        await widget.refreshCallback();
+      } catch (callbackError) {
+        print('Error in refresh callback: $callbackError');
+        // Don't throw, as the join was successful
       }
-
-      // Call the refresh callback
-      await widget.refreshCallback();
     } catch (e) {
+      print('Error in _acceptGroupInvitation: $e');
+      print('Error type: ${e.runtimeType}');
+      
       if (mounted) {
-        // Show error message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error accepting invitation: $e")),
-        );
-
-        // Close modal and show invalid invite notice if appropriate
-        Navigator.of(context).pop();
-        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-
-        await showDialog(
-          context: context,
-          builder: (context) => NoticeContinueModal(
-            message: "The invite is no longer valid. It may have been removed.",
-            onContinue: () {},
-          ),
-        );
+        setState(() {
+          _isProcessing = false;
+        });
+        
+        // Only show the invalid invite modal for specific errors
+        if (e.toString().contains('403') || e.toString().contains('not_in_room') || e.toString().contains('Invalid')) {
+          Navigator.of(context).pop();
+          Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+          
+          await showDialog(
+            context: context,
+            builder: (context) => NoticeContinueModal(
+              message: "The invite is no longer valid. It may have been removed.",
+              onContinue: () {},
+            ),
+          );
+        } else {
+          // For other errors, just show a snackbar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error accepting invitation: ${e.toString()}")),
+          );
+        }
       }
     } finally {
       if (mounted) {

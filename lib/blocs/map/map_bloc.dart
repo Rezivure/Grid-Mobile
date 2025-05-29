@@ -27,6 +27,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MapMoveToUser>(_onMapMoveToUser);
     on<MapLoadUserLocations>(_onMapLoadUserLocations);
     on<RemoveUserLocation>(_onRemoveUserLocation);
+    on<MapClearSelection>(_onMapClearSelection);
 
   _locationSubscription = locationRepository.locationUpdates.listen(_onLocationUpdate);
 }
@@ -107,7 +108,8 @@ class MapBloc extends Bloc<MapEvent, MapState> {
         emit(state.copyWith(
             center: userLocationData.position,
             moveCount: state.moveCount + 1,
-            isLoading: false
+            isLoading: false,
+            selectedUserId: event.userId
         ));
       } else {
         print("Latest location not available for user");
@@ -135,5 +137,9 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     } catch (e) {
       emit(state.copyWith(error: 'Error loading user locations: $e'));
     }
+  }
+  
+  void _onMapClearSelection(MapClearSelection event, Emitter<MapState> emit) {
+    emit(state.copyWith(clearSelectedUserId: true));
   }
 }
