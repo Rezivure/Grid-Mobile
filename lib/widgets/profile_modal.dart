@@ -7,6 +7,7 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 
 import '../services/room_service.dart';
 
@@ -160,14 +161,10 @@ class _ProfileModalState extends State<ProfileModal> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
+                          CachedProfileAvatar(
+                            userId: _userId!,
                             radius: 30,
-                            backgroundColor: colorScheme.primary.withOpacity(0.1),
-                            child: RandomAvatar(
-                              _userLocalpart!,
-                              height: 60,
-                              width: 60,
-                            ),
+                            displayName: _userLocalpart,
                           ),
                           SizedBox(width: 16),
                           Expanded(
