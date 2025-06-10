@@ -123,11 +123,16 @@ class OthersProfileService {
   /// Clear cache for a specific user
   Future<void> clearUserProfile(String userId) async {
     try {
+      print('OthersProfileService: Clearing profile for $userId');
+      
       // Remove cached image
       final cacheDir = await _getCacheDirectory();
       final file = File('${cacheDir.path}/${_sanitizeUserId(userId)}.jpg');
       if (await file.exists()) {
         await file.delete();
+        print('OthersProfileService: Deleted cached image file for $userId');
+      } else {
+        print('OthersProfileService: No cached image file found for $userId');
       }
       
       // Remove metadata
@@ -136,9 +141,18 @@ class OthersProfileService {
       
       if (allMetadata != null) {
         final metadata = json.decode(allMetadata) as Map<String, dynamic>;
-        metadata.remove(userId);
-        await prefs.setString(PROFILES_METADATA_KEY, json.encode(metadata));
+        if (metadata.containsKey(userId)) {
+          metadata.remove(userId);
+          await prefs.setString(PROFILES_METADATA_KEY, json.encode(metadata));
+          print('OthersProfileService: Removed metadata for $userId');
+        } else {
+          print('OthersProfileService: No metadata found for $userId');
+        }
       }
+      
+      // Also notify the provider to clear from memory cache
+      _profilePictureProvider?.clearUserCache(userId);
+      print('OthersProfileService: Profile cleared for $userId');
     } catch (e) {
       print('Error clearing profile for $userId: $e');
     }

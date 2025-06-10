@@ -3,12 +3,14 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/models/grid_user.dart';
+import 'package:grid_frontend/services/others_profile_service.dart';
 
 import '../../providers/user_location_provider.dart';
 import '../map/map_event.dart';
@@ -16,20 +18,22 @@ import '../map/map_event.dart';
 class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
   final RoomService roomService;
   final UserRepository userRepository;
+  final RoomRepository roomRepository;
   final LocationRepository locationRepository;
   List<ContactDisplay> _allContacts = []; // Cache for search filtering
   final MapBloc mapBloc;
   final UserLocationProvider userLocationProvider;
   final SharingPreferencesRepository sharingPreferencesRepository;
+  final OthersProfileService _othersProfileService = OthersProfileService();
 
   ContactsBloc({
     required this.roomService,
     required this.userRepository,
+    required this.roomRepository,
     required this.mapBloc,
     required this.locationRepository,
     required this.userLocationProvider,
     required this.sharingPreferencesRepository,
-
   }) : super(ContactsInitial()) {
     on<LoadContacts>(_onLoadContacts);
     on<RefreshContacts>(_onRefreshContacts);
@@ -76,6 +80,25 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
           mapBloc.add(RemoveUserLocation(event.userId));
         }
         await sharingPreferencesRepository.deleteSharingPreferences(event.userId, 'user');
+        
+        // Check if user is in any groups with us
+        final userRooms = await roomRepository.getUserRooms(event.userId);
+        final groupRooms = <String>[];
+        
+        for (final roomId in userRooms) {
+          final room = await roomRepository.getRoomById(roomId);
+          if (room != null && room.isGroup) {
+            groupRooms.add(roomId);
+          }
+        }
+        
+        // If user is not in any groups with us, clear their cached profile picture
+        if (groupRooms.isEmpty) {
+          print("ContactsBloc: User ${event.userId} not in any groups, clearing cached profile picture");
+          await _othersProfileService.clearUserProfile(event.userId);
+        } else {
+          print("ContactsBloc: User ${event.userId} is in ${groupRooms.length} groups, keeping cached profile picture");
+        }
         
         // Reload contacts and update cache
         _allContacts = await _loadContacts();

@@ -154,6 +154,7 @@ void main() async {
             create: (context) => ContactsBloc(
               roomService: context.read<RoomService>(),
               userRepository: context.read<UserRepository>(),
+              roomRepository: context.read<RoomRepository>(),
               mapBloc: context.read<MapBloc>(),
               locationRepository: context.read<LocationRepository>(),
               userLocationProvider: context.read<UserLocationProvider>(),

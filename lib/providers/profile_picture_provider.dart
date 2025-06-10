@@ -38,6 +38,13 @@ class ProfilePictureProvider with ChangeNotifier {
     return _updatedProfiles.remove(userId);
   }
   
+  /// Clear cache for a specific user
+  void clearUserCache(String userId) {
+    _profilePictureCache.remove(userId);
+    _updatedProfiles.add(userId);
+    notifyListeners();
+  }
+  
   /// Clear all caches
   void clearCache() {
     _profilePictureCache.clear();
