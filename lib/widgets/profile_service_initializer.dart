@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
@@ -33,6 +34,16 @@ class _ProfileServiceInitializerState extends State<ProfileServiceInitializer> {
       MessageProcessor.othersProfileService.setProfilePictureProvider(provider);
       MessageProcessor.othersProfileService.setContactsBloc(contactsBloc);
       MessageProcessor.othersProfileService.setGroupsBloc(groupsBloc);
+      
+      // Ensure UserLocationProvider is initialized after hot reload
+      try {
+        final locationProvider = Provider.of<UserLocationProvider>(context, listen: false);
+        if (locationProvider.getAllUserLocations().isEmpty && !locationProvider.isLoading) {
+          locationProvider.refreshLocations();
+        }
+      } catch (e) {
+        // Provider might not be available in all contexts
+      }
     });
   }
   

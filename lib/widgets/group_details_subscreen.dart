@@ -84,6 +84,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       _onSubscreenSelected('group:${widget.room.roomId}');
       context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
       _fadeController.forward();
+      
+      // Refresh user locations to fix hot reload issue
+      final locationProvider = Provider.of<UserLocationProvider>(context, listen: false);
+      if (locationProvider.getAllUserLocations().isEmpty) {
+        locationProvider.refreshLocations();
+      }
     });
   }
 
@@ -517,7 +523,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   }
 
   Widget _buildMemberTile(GridUser user, GroupsLoaded state, 
-      List<UserLocation> userLocations) {
+      List<UserLocation> userLocations, bool isLoadingLocations) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final userLocation = userLocations
@@ -528,9 +534,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         );
 
     final memberStatus = state.getMemberStatus(user.userId);
-    final timeAgoText = userLocation != null
-        ? TimeAgoFormatter.format(userLocation.timestamp)
-        : 'Off Grid';
+    final timeAgoText = isLoadingLocations 
+        ? 'Loading...' 
+        : (userLocation != null
+            ? TimeAgoFormatter.format(userLocation.timestamp)
+            : 'Off Grid');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -872,8 +880,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final userLocations = Provider.of<UserLocationProvider>(context)
-        .getAllUserLocations();
+    final userLocationProvider = Provider.of<UserLocationProvider>(context);
+    final userLocations = userLocationProvider.getAllUserLocations();
+    final isLoadingLocations = userLocationProvider.isLoading;
 
     return BlocBuilder<GroupsBloc, GroupsState>(
       buildWhen: (previous, current) {
@@ -941,6 +950,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                               user,
                               state,
                               userLocations,
+                              isLoadingLocations,
                             );
                           } else {
                             return _buildActionButtons();

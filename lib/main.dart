@@ -116,9 +116,6 @@ void main() async {
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
         ChangeNotifierProvider(create: (_) => ProfilePictureProvider()),
-        ChangeNotifierProvider(
-          create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
-        ),
 
         // Provide the LocationManager
         ChangeNotifierProvider<LocationManager>(
