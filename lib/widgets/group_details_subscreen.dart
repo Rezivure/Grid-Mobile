@@ -6,6 +6,7 @@ import 'package:grid_frontend/widgets/status_indictator.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
@@ -571,14 +572,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                           width: 1.5,
                         ),
                       ),
-                      child: CircleAvatar(
+                      child: CachedProfileAvatar(
+                        userId: user.userId,
                         radius: 22,
-                        backgroundColor: colorScheme.primary.withOpacity(0.1),
-                        child: RandomAvatar(
-                          user.userId.split(':')[0].replaceFirst('@', ''),
-                          height: 44,
-                          width: 44,
-                        ),
+                        displayName: user.displayName,
                       ),
                     ),
                     // Status dot

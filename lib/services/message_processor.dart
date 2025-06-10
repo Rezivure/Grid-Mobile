@@ -55,6 +55,11 @@ class MessageProcessor {
         await _handleProfileAnnouncement(decryptedEvent.senderId, decryptedEvent.content);
         // Don't return as a regular message
         return null;
+      } else if (msgtype == 'grid.group.avatar.announce') {
+        // Handle group avatar announcement
+        await _handleGroupAvatarAnnouncement(roomId, decryptedEvent.senderId, decryptedEvent.content);
+        // Don't return as a regular message
+        return null;
       } else {
         // Attempt to parse location message
         await _handleLocationMessageIfAny(messageData);
@@ -106,6 +111,36 @@ class MessageProcessor {
       }
     } catch (e) {
       print('Error handling profile announcement: $e');
+    }
+  }
+  
+  /// Handle group avatar announcement message
+  Future<void> _handleGroupAvatarAnnouncement(String roomId, String senderId, Map<String, dynamic> content) async {
+    try {
+      print('MessageProcessor: Handling group avatar announcement for room $roomId from $senderId');
+      // Verify sender has permission to change group avatar (power level >= 50)
+      final room = client.getRoomById(roomId);
+      if (room == null) {
+        print('MessageProcessor: Room not found for group avatar announcement');
+        return;
+      }
+      
+      final senderPowerLevel = room.getPowerLevelByUserId(senderId);
+      print('MessageProcessor: Sender power level: $senderPowerLevel');
+      if (senderPowerLevel < 50) {
+        print('MessageProcessor: Sender does not have permission to change group avatar');
+        return;
+      }
+      
+      final avatar = content['avatar'] as Map<String, dynamic>?;
+      if (avatar != null) {
+        print('MessageProcessor: Processing group avatar data: $avatar');
+        await _othersProfileService.processGroupAvatarAnnouncement(roomId, avatar);
+      } else {
+        print('MessageProcessor: No avatar data in content');
+      }
+    } catch (e) {
+      print('MessageProcessor: Error handling group avatar announcement: $e');
     }
   }
 }

@@ -21,18 +21,41 @@ class ProfileAnnouncementService {
     try {
       // Skip if custom homeserver
       if (utils.isCustomHomeserver(client.homeserver.toString())) {
+        print('ProfileAnnouncementService: Skipping - custom homeserver');
         return;
       }
       
+      final room = client.getRoomById(roomId);
+      if (room == null) {
+        print('ProfileAnnouncementService: Room not found: $roomId');
+        return;
+      }
+      
+      // Check if this is a group room
+      final isGroup = room.name.startsWith('Grid:Group:');
+      print('ProfileAnnouncementService: Room $roomId is group: $isGroup, name: ${room.name}');
+      
+      if (isGroup) {
+        // For groups, always announce personal profile picture
+        // Additionally, if we're an admin and a new member joined, announce group avatar
+        final myUserId = client.userID;
+        if (myUserId != null) {
+          final powerLevel = room.getPowerLevelByUserId(myUserId);
+          print('ProfileAnnouncementService: My power level in group: $powerLevel');
+          if (powerLevel >= 50) {
+            // We're an admin, check if group has an avatar to share
+            await _announceGroupAvatarIfExists(roomId);
+          }
+        }
+      }
+      
+      // For both direct rooms AND groups, announce personal profile
       // Get current profile picture metadata
       final metadata = await profilePictureService.getProfilePictureMetadata();
       if (metadata == null) {
         print('No profile picture to announce');
         return;
       }
-      
-      final room = client.getRoomById(roomId);
-      if (room == null) return;
       
       // Skip large groups to prevent spam
       if (room.summary.mJoinedMemberCount != null && 
@@ -121,5 +144,48 @@ class ProfileAnnouncementService {
   Future<void> _updateLastAnnounceTime() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(LAST_ANNOUNCE_KEY, DateTime.now().millisecondsSinceEpoch);
+  }
+  
+  /// Announces group avatar if it exists (for admins when new members join)
+  Future<void> _announceGroupAvatarIfExists(String roomId) async {
+    try {
+      print('ProfileAnnouncementService: Checking for group avatar to announce for room: $roomId');
+      final prefs = await SharedPreferences.getInstance();
+      final allMetadataStr = prefs.getString('group_avatars_metadata');
+      
+      if (allMetadataStr == null) {
+        print('ProfileAnnouncementService: No group avatars metadata found at all');
+        return;
+      }
+      
+      final allMetadata = json.decode(allMetadataStr) as Map<String, dynamic>;
+      final groupMetadata = allMetadata[roomId] as Map<String, dynamic>?;
+      
+      if (groupMetadata == null) {
+        print('ProfileAnnouncementService: No group avatar metadata found for room: $roomId');
+        return;
+      }
+      
+      // Create group avatar announcement
+      final content = {
+        'msgtype': 'grid.group.avatar.announce',
+        'body': 'Group avatar',
+        'avatar': {
+          'url': groupMetadata['url'],
+          'key': groupMetadata['key'],
+          'iv': groupMetadata['iv'],
+          'version': groupMetadata['version'] ?? '1.0',
+          'updated_at': groupMetadata['updated_at'],
+        }
+      };
+      
+      final room = client.getRoomById(roomId);
+      if (room != null) {
+        await room.sendEvent(content);
+        print('Announced group avatar to room: $roomId');
+      }
+    } catch (e) {
+      print('Failed to announce group avatar: $e');
+    }
   }
 }

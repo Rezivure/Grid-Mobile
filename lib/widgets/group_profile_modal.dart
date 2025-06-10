@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
+import 'dart:io';
+import 'dart:convert';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/models/sharing_window.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
+import 'package:grid_frontend/services/profile_announcement_service.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
 import 'package:grid_frontend/widgets/triangle_avatars.dart';
+import 'package:grid_frontend/widgets/cached_group_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
+import 'package:grid_frontend/widgets/profile_picture_modal.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:matrix/matrix.dart' as matrix;
 
 import '../blocs/groups/groups_state.dart';
+import '../blocs/groups/groups_event.dart';
 
 class GroupProfileModal extends StatefulWidget {
   final Room room;
@@ -38,9 +50,13 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
   bool _isEditingPreferences = false;
   List<SharingWindow> _sharingWindows = [];
   bool _membersExpanded = false;
+  bool _isUploadingAvatar = false;
   
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
+  late ProfileAnnouncementService _profileAnnouncementService;
 
   @override
   void initState() {
@@ -52,6 +68,10 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
       curve: Curves.easeOut,
+    );
+    _profileAnnouncementService = ProfileAnnouncementService(
+      client: widget.roomService.client,
+      profilePictureService: _profilePictureService,
     );
     _loadSharingPreferences();
     _fadeController.forward();
@@ -111,7 +131,161 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
     );
     await widget.sharingPreferencesRepo.setSharingPreferences(newPrefs);
   }
+  
+  /// Check if current user has permission to change group avatar
+  Future<bool> _canChangeAvatar() async {
+    try {
+      final room = widget.roomService.client.getRoomById(widget.room.roomId);
+      if (room == null) return false;
+      
+      final myUserId = widget.roomService.client.userID;
+      if (myUserId == null) return false;
+      
+      final powerLevel = room.getPowerLevelByUserId(myUserId);
+      return powerLevel >= 50; // Admin or moderator
+    } catch (e) {
+      print('Error checking avatar permissions: $e');
+      return false;
+    }
+  }
+  
+  /// Show profile picture modal for group avatar
+  void _showGroupAvatarModal() async {
+    // Check if custom homeserver
+    if (isCustomHomeserver(widget.roomService.getMyHomeserver())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Group avatars are only available on default server'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+    
+    // Check permissions
+    final canChange = await _canChangeAvatar();
+    if (!canChange) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Only group admins can change the avatar'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ProfilePictureModal(
+        onImageSelected: _handleGroupAvatarSelected,
+      ),
+    );
+  }
+  
+  /// Handle group avatar selection
+  Future<void> _handleGroupAvatarSelected(File imageFile) async {
+    setState(() {
+      _isUploadingAvatar = true;
+    });
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwtToken = prefs.getString('loginToken');
+      
+      if (jwtToken == null) {
+        throw Exception('No authentication token found');
+      }
+      
+      // Upload the avatar using profile picture service
+      final metadata = await _profilePictureService.uploadProfilePicture(
+        imageFile, 
+        jwtToken
+      );
+      
+      // Create group avatar announcement content
+      final content = {
+        'msgtype': 'grid.group.avatar.announce',
+        'body': 'Group avatar updated',
+        'avatar': {
+          'url': metadata['url'],
+          'key': metadata['key'],
+          'iv': metadata['iv'],
+          'version': metadata['version'] ?? '1.0',
+          'updated_at': metadata['uploadedAt'],
+        }
+      };
+      
+      // Send announcement to the group
+      final room = widget.roomService.client.getRoomById(widget.room.roomId);
+      if (room != null) {
+        await room.sendEvent(content);
+        print('GroupProfileModal: Sent group avatar announcement to room ${widget.room.roomId}');
+        print('GroupProfileModal: Avatar metadata: $metadata');
+      }
+      
+      // Also save the group avatar locally for the uploader
+      await _saveGroupAvatarLocally(metadata);
+      
+      print('Successfully set group avatar for room ${widget.room.roomId}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Group avatar updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } catch (e) {
+      print('Failed to set group avatar: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update group avatar'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingAvatar = false;
+      });
+    }
+  }
 
+  /// Save group avatar metadata locally for the uploader
+  Future<void> _saveGroupAvatarLocally(Map<String, dynamic> metadata) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Get existing group avatars metadata
+      final allMetadataStr = prefs.getString('group_avatars_metadata');
+      final allMetadata = allMetadataStr != null 
+          ? json.decode(allMetadataStr) as Map<String, dynamic>
+          : <String, dynamic>{};
+      
+      // Add this group's avatar metadata
+      allMetadata[widget.room.roomId] = {
+        'url': metadata['url'],
+        'key': metadata['key'],
+        'iv': metadata['iv'],
+        'version': metadata['version'] ?? '1.0',
+        'updated_at': metadata['uploadedAt'],
+        'cached_at': DateTime.now().toIso8601String(),
+      };
+      
+      // Save back to preferences
+      await prefs.setString('group_avatars_metadata', json.encode(allMetadata));
+      
+      // Notify UI to update
+      Provider.of<ProfilePictureProvider>(context, listen: false)
+          .notifyProfileUpdated(widget.room.roomId);
+      
+      // Trigger groups refresh
+      context.read<GroupsBloc>().add(RefreshGroups());
+      
+      print('GroupProfileModal: Saved group avatar metadata locally');
+    } catch (e) {
+      print('Error saving group avatar metadata: $e');
+    }
+  }
+  
   void _openAddSharingPreferenceModal() {
     showModalBottomSheet(
       context: context,
@@ -197,22 +371,79 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       child: Row(
         children: [
           // Modern avatar with subtle glow
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withOpacity(0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+          Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colorScheme.primary.withOpacity(0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: SizedBox(
-              width: 72,
-              height: 72,
-              child: TriangleAvatars(userIds: widget.room.members),
-            ),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: CachedGroupAvatar(
+                    roomId: widget.room.roomId,
+                    memberIds: widget.room.members,
+                    radius: 36,
+                    groupName: _getGroupName(),
+                  ),
+                ),
+              ),
+              if (!isCustomHomeserver(widget.roomService.getMyHomeserver()))
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: FutureBuilder<bool>(
+                    future: _canChangeAvatar(),
+                    builder: (context, snapshot) {
+                      if (snapshot.data == true) {
+                        return GestureDetector(
+                          onTap: _isUploadingAvatar ? null : _showGroupAvatarModal,
+                          child: Container(
+                            padding: EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: colorScheme.outline.withOpacity(0.2),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colorScheme.shadow.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: _isUploadingAvatar
+                                ? SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: colorScheme.primary,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.camera_alt,
+                                    size: 14,
+                                    color: colorScheme.primary,
+                                  ),
+                          ),
+                        );
+                      }
+                      return SizedBox.shrink();
+                    },
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -517,14 +748,10 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                       width: 2,
                     ),
                   ),
-                  child: CircleAvatar(
+                  child: CachedProfileAvatar(
+                    userId: member.userId,
                     radius: 22,
-                    backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: RandomAvatar(
-                      member.userId.split(':')[0].replaceFirst('@', ''),
-                      height: 44,
-                      width: 44,
-                    ),
+                    displayName: member.displayName,
                   ),
                 ),
                 const SizedBox(width: 16),

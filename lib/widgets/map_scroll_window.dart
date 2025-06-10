@@ -17,6 +17,7 @@ import 'groups_subscreen.dart';
 import 'invites_modal.dart';
 import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
+import 'cached_group_avatar.dart';
 import 'add_friend_modal.dart';
 import '../providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -656,7 +657,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   SizedBox(
                     width: 36,
                     height: 36,
-                    child: TriangleAvatars(userIds: room.members),
+                    child: CachedGroupAvatar(
+                      roomId: room.roomId,
+                      memberIds: room.members,
+                      radius: 18,
+                      groupName: groupName,
+                    ),
                   ),
                   if (room.expirationTimestamp > 0)
                     Positioned(

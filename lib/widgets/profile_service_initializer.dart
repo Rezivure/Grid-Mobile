@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:matrix/matrix.dart' as matrix;
 
 class ProfileServiceInitializer extends StatefulWidget {
   final Widget child;
@@ -22,9 +24,15 @@ class _ProfileServiceInitializerState extends State<ProfileServiceInitializer> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ProfilePictureProvider>(context, listen: false);
       final contactsBloc = context.read<ContactsBloc>();
+      final groupsBloc = context.read<GroupsBloc>();
+      final client = Provider.of<matrix.Client>(context, listen: false);
+      
+      // Set the client in ProfilePictureProvider so it can load current user's picture
+      provider.setClient(client);
       
       MessageProcessor.othersProfileService.setProfilePictureProvider(provider);
       MessageProcessor.othersProfileService.setContactsBloc(contactsBloc);
+      MessageProcessor.othersProfileService.setGroupsBloc(groupsBloc);
     });
   }
   

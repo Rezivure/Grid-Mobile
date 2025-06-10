@@ -8,14 +8,19 @@ import 'dart:io';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_event.dart';
 
 class OthersProfileService {
   static const String PROFILES_METADATA_KEY = 'others_profiles_metadata';
+  static const String GROUP_AVATARS_METADATA_KEY = 'group_avatars_metadata';
   static const String CACHE_DIR = 'others_profile_pictures';
+  static const String GROUP_CACHE_DIR = 'group_avatars';
   
   final ProfilePictureService _profilePictureService = ProfilePictureService();
   ProfilePictureProvider? _profilePictureProvider;
   ContactsBloc? _contactsBloc;
+  GroupsBloc? _groupsBloc;
   
   void setProfilePictureProvider(ProfilePictureProvider provider) {
     _profilePictureProvider = provider;
@@ -23,6 +28,10 @@ class OthersProfileService {
   
   void setContactsBloc(ContactsBloc bloc) {
     _contactsBloc = bloc;
+  }
+  
+  void setGroupsBloc(GroupsBloc bloc) {
+    _groupsBloc = bloc;
   }
   
   /// Process a profile announcement message
@@ -67,6 +76,9 @@ class OthersProfileService {
         
         // Trigger contacts refresh to update the list
         _contactsBloc?.add(RefreshContacts());
+        
+        // Also trigger groups refresh to update member lists
+        _groupsBloc?.add(RefreshGroups());
         
         print('Profile announcement processed successfully for $userId');
       } else {
@@ -214,5 +226,170 @@ class OthersProfileService {
   /// Sanitize user ID for filename
   String _sanitizeUserId(String userId) {
     return userId.replaceAll('@', '').replaceAll(':', '_').replaceAll('.', '_');
+  }
+  
+  // ======== GROUP AVATAR METHODS ========
+  
+  /// Process a group avatar announcement message
+  Future<void> processGroupAvatarAnnouncement(String roomId, Map<String, dynamic> avatarData) async {
+    try {
+      final url = avatarData['url'] as String?;
+      final key = avatarData['key'] as String?;
+      final iv = avatarData['iv'] as String?;
+      final updatedAt = avatarData['updated_at'] as String?;
+      
+      if (url == null || key == null || iv == null) {
+        print('Invalid group avatar announcement data for $roomId');
+        return;
+      }
+      
+      // Check if we already have this exact avatar cached
+      final existingAvatar = await getGroupAvatarMetadata(roomId);
+      if (existingAvatar != null && 
+          existingAvatar['url'] == url &&
+          existingAvatar['updated_at'] == updatedAt) {
+        // Already have this exact avatar
+        return;
+      }
+      
+      // Download and cache the new avatar
+      final avatarBytes = await _profilePictureService.downloadProfilePicture(url, key, iv);
+      if (avatarBytes != null) {
+        // Cache the decrypted image
+        await _cacheGroupAvatar(roomId, avatarBytes);
+        
+        // Save metadata
+        await _saveGroupAvatarMetadata(roomId, {
+          'url': url,
+          'key': key,
+          'iv': iv,
+          'updated_at': updatedAt,
+          'cached_at': DateTime.now().toIso8601String(),
+        });
+        
+        // Notify provider to update UI (using roomId as the identifier)
+        _profilePictureProvider?.notifyProfileUpdated(roomId);
+        
+        // Trigger groups refresh to update the list
+        _groupsBloc?.add(RefreshGroups());
+        
+        print('Group avatar announcement processed successfully for $roomId');
+      } else {
+        print('Group avatar announcement failed for $roomId');
+      }
+    } catch (e) {
+      print('Error processing group avatar announcement for $roomId: $e');
+    }
+  }
+  
+  /// Get cached group avatar
+  Future<Uint8List?> getCachedGroupAvatar(String roomId) async {
+    try {
+      final cacheDir = await _getGroupCacheDirectory();
+      final file = File('${cacheDir.path}/${_sanitizeRoomId(roomId)}.jpg');
+      
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+      
+      // Try to download if we have metadata
+      final metadata = await getGroupAvatarMetadata(roomId);
+      if (metadata != null) {
+        final url = metadata['url'] as String?;
+        final key = metadata['key'] as String?;
+        final iv = metadata['iv'] as String?;
+        
+        if (url != null && key != null && iv != null) {
+          final avatarBytes = await _profilePictureService.downloadProfilePicture(url, key, iv);
+          if (avatarBytes != null) {
+            await _cacheGroupAvatar(roomId, avatarBytes);
+            return avatarBytes;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error getting cached group avatar for $roomId: $e');
+    }
+    return null;
+  }
+  
+  /// Get group avatar metadata
+  Future<Map<String, dynamic>?> getGroupAvatarMetadata(String roomId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final allMetadata = prefs.getString(GROUP_AVATARS_METADATA_KEY);
+    
+    if (allMetadata != null) {
+      final metadata = json.decode(allMetadata) as Map<String, dynamic>;
+      return metadata[roomId] as Map<String, dynamic>?;
+    }
+    return null;
+  }
+  
+  /// Clear group avatar
+  Future<void> clearGroupAvatar(String roomId) async {
+    try {
+      // Remove cached image
+      final cacheDir = await _getGroupCacheDirectory();
+      final file = File('${cacheDir.path}/${_sanitizeRoomId(roomId)}.jpg');
+      if (await file.exists()) {
+        await file.delete();
+      }
+      
+      // Remove metadata
+      final prefs = await SharedPreferences.getInstance();
+      final allMetadata = prefs.getString(GROUP_AVATARS_METADATA_KEY);
+      
+      if (allMetadata != null) {
+        final metadata = json.decode(allMetadata) as Map<String, dynamic>;
+        metadata.remove(roomId);
+        await prefs.setString(GROUP_AVATARS_METADATA_KEY, json.encode(metadata));
+      }
+      
+      // Notify provider
+      _profilePictureProvider?.clearUserCache(roomId);
+    } catch (e) {
+      print('Error clearing group avatar for $roomId: $e');
+    }
+  }
+  
+  /// Cache a group avatar
+  Future<void> _cacheGroupAvatar(String roomId, Uint8List imageBytes) async {
+    try {
+      final cacheDir = await _getGroupCacheDirectory();
+      final file = File('${cacheDir.path}/${_sanitizeRoomId(roomId)}.jpg');
+      await file.writeAsBytes(imageBytes);
+    } catch (e) {
+      print('Error caching group avatar: $e');
+    }
+  }
+  
+  /// Save group avatar metadata
+  Future<void> _saveGroupAvatarMetadata(String roomId, Map<String, dynamic> metadata) async {
+    final prefs = await SharedPreferences.getInstance();
+    final allMetadataStr = prefs.getString(GROUP_AVATARS_METADATA_KEY);
+    
+    final allMetadata = allMetadataStr != null 
+        ? json.decode(allMetadataStr) as Map<String, dynamic>
+        : <String, dynamic>{};
+    
+    allMetadata[roomId] = metadata;
+    await prefs.setString(GROUP_AVATARS_METADATA_KEY, json.encode(allMetadata));
+  }
+  
+  /// Get group cache directory
+  Future<Directory> _getGroupCacheDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final cacheDir = Directory('${appDir.path}/$GROUP_CACHE_DIR');
+    
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+    
+    return cacheDir;
+  }
+  
+  /// Sanitize room ID for filename
+  String _sanitizeRoomId(String roomId) {
+    return roomId.replaceAll('!', '').replaceAll(':', '_').replaceAll('.', '_');
   }
 }
