@@ -10,10 +10,14 @@ import 'package:grid_frontend/services/location_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/widgets/profile_picture_modal.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
 
 
 
@@ -35,6 +39,11 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _localpart;
   String? _displayName;
   bool _isEditingDisplayName = false;
+  
+  // Profile picture related
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
+  Uint8List? _profilePictureBytes;
+  bool _isUploadingProfilePic = false;
 
 
   @override
@@ -44,6 +53,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadIncognitoState();
     _loadBatterySaverState();
+    _loadProfilePicture();
   }
 
   bool isCustomHomeserver() {
@@ -144,6 +154,73 @@ class _SettingsPageState extends State<SettingsPage> {
       this.deviceID = deviceId ?? 'Device ID not available';
       this.identityKey = identityKey.isNotEmpty ? identityKey : 'Identity Key not available';
     });
+  }
+  
+  Future<void> _loadProfilePicture() async {
+    try {
+      final profilePicBytes = await _profilePictureService.getLocalProfilePicture();
+      if (profilePicBytes != null && mounted) {
+        setState(() {
+          _profilePictureBytes = profilePicBytes;
+        });
+      }
+    } catch (e) {
+      print('Error loading profile picture: $e');
+    }
+  }
+  
+  Future<void> _handleProfilePictureSelected(File imageFile) async {
+    if (isCustomHomeserver()) return; // Only for default server
+    
+    setState(() {
+      _isUploadingProfilePic = true;
+    });
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwtToken = prefs.getString('loginToken');
+      
+      if (jwtToken == null) {
+        throw Exception('No authentication token found');
+      }
+      
+      // Upload the profile picture
+      final metadata = await _profilePictureService.uploadProfilePicture(
+        imageFile, 
+        jwtToken
+      );
+      
+      // Load the cached picture
+      await _loadProfilePicture();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update profile picture: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingProfilePic = false;
+      });
+    }
+  }
+  
+  void _showProfilePictureModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ProfilePictureModal(
+        onImageSelected: _handleProfilePictureSelected,
+      ),
+    );
   }
 
   void _showInfoModal(String title, String content) {
@@ -426,13 +503,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildAvatar(String username) {
-    return CircleAvatar(
-      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-      child: RandomAvatar(_localpart!, height: 80.0, width: 80.0), // Increased size
-      radius: 50,  // Slightly larger radius
-    );
-  }
 
   // In SettingsPage, update the _logout method:
 
@@ -460,6 +530,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
         // Clear database
         await databaseService.deleteAndReinitialize();
+        
+        // Clear profile picture data
+        await _profilePictureService.clearLocalProfilePicture();
 
         // Clear shared preferences
         await sharedPreferences.clear();
@@ -557,6 +630,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // Clear your local database
       await databaseService.deleteAndReinitialize();
+      
+      // Clear profile picture data
+      await _profilePictureService.clearLocalProfilePicture();
 
       // Clear all shared preferences
       await sharedPreferences.clear();
@@ -1026,6 +1102,7 @@ class _SettingsPageState extends State<SettingsPage> {
         locationManager.stopTracking();
         syncManager.stopSync();
         databaseService.deleteAndReinitialize();
+        await _profilePictureService.clearLocalProfilePicture();
         await sharedPreferences.clear();
 
 
@@ -1301,14 +1378,67 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
-            child: RandomAvatar(
-              _localpart ?? 'Unknown User',
-              height: 80,
-              width: 80,
-            ),
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                child: _profilePictureBytes != null
+                    ? ClipOval(
+                        child: Image.memory(
+                          _profilePictureBytes!,
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : RandomAvatar(
+                        _localpart ?? 'Unknown User',
+                        height: 80,
+                        width: 80,
+                      ),
+              ),
+              if (!isCustomHomeserver())
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _isUploadingProfilePic ? null : _showProfilePictureModal,
+                    child: Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.2),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.shadow.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: _isUploadingProfilePic
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.primary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: colorScheme.primary,
+                            ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           SizedBox(height: 16),
           Row(
