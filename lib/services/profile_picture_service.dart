@@ -62,8 +62,9 @@ class ProfilePictureService {
         // Save metadata locally
         await _saveMetadata(metadata);
         
-        // Cache the encrypted file locally
-        await _cacheEncryptedFile(encryptedBytes, responseData['filename']);
+        // Cache the encrypted file locally - extract just the filename
+        final cacheFilename = responseData['filename'].toString().split('/').last;
+        await _cacheEncryptedFile(encryptedBytes, cacheFilename);
         
         return metadata;
       } else {
@@ -77,8 +78,13 @@ class ProfilePictureService {
   /// Downloads and decrypts a profile picture
   Future<Uint8List?> downloadProfilePicture(String url, String encryptionKey, String iv) async {
     try {
+      // Extract just the filename without path prefixes
+      final urlParts = url.split('/');
+      final filenameWithPath = urlParts.last; // e.g., "p/502d7bde1b8045b5ac3af4ee384adaa0.enc"
+      final filename = filenameWithPath.split('/').last; // Just "502d7bde1b8045b5ac3af4ee384adaa0.enc"
+      
+      
       // Check cache first
-      final filename = url.split('/').last;
       final cachedBytes = await _getCachedFile(filename);
       if (cachedBytes != null) {
         // Decrypt and return cached file
@@ -91,7 +97,7 @@ class ProfilePictureService {
       if (response.statusCode == 200) {
         final encryptedBytes = response.bodyBytes;
         
-        // Cache the encrypted file
+        // Cache the encrypted file with just the filename
         await _cacheEncryptedFile(encryptedBytes, filename);
         
         // Decrypt and return
@@ -100,7 +106,7 @@ class ProfilePictureService {
         throw Exception('Failed to download profile picture');
       }
     } catch (e) {
-      print('Error downloading profile picture: $e');
+      // Silent fail
       return null;
     }
   }
@@ -126,7 +132,7 @@ class ProfilePictureService {
         throw Exception('Failed to delete profile picture: ${response.body}');
       }
     } catch (e) {
-      print('Error deleting profile picture: $e');
+      // Silent fail
       return false;
     }
   }
@@ -160,7 +166,7 @@ class ProfilePictureService {
         await cacheDir.delete(recursive: true);
       }
     } catch (e) {
-      print('Error clearing profile picture cache: $e');
+      // Silent fail
     }
   }
   
@@ -180,10 +186,11 @@ class ProfilePictureService {
   Future<void> _cacheEncryptedFile(Uint8List bytes, String filename) async {
     try {
       final cacheDir = await _getCacheDirectory();
-      final file = File('${cacheDir.path}/$filename');
+      final filePath = '${cacheDir.path}/$filename';
+      final file = File(filePath);
       await file.writeAsBytes(bytes);
     } catch (e) {
-      print('Error caching file: $e');
+      // Silent fail for caching
     }
   }
   
@@ -197,7 +204,7 @@ class ProfilePictureService {
         return await file.readAsBytes();
       }
     } catch (e) {
-      print('Error reading cached file: $e');
+      // Silent fail
     }
     return null;
   }
@@ -208,7 +215,9 @@ class ProfilePictureService {
       final metadata = await getProfilePictureMetadata();
       if (metadata == null) return null;
       
-      final filename = metadata['filename'];
+      // Extract just the filename without path prefixes
+      final filenameWithPath = metadata['filename']; // e.g., "p/502d7bde1b8045b5ac3af4ee384adaa0.enc"
+      final filename = filenameWithPath.split('/').last; // Just "502d7bde1b8045b5ac3af4ee384adaa0.enc"
       final encryptionKey = metadata['key'];
       final iv = metadata['iv'];
       
@@ -220,7 +229,7 @@ class ProfilePictureService {
       // If not cached, download it
       return await downloadProfilePicture(metadata['url'], encryptionKey, iv);
     } catch (e) {
-      print('Error getting local profile picture: $e');
+      // Silent fail
       return null;
     }
   }

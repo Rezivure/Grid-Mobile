@@ -165,7 +165,7 @@ class _SettingsPageState extends State<SettingsPage> {
         });
       }
     } catch (e) {
-      print('Error loading profile picture: $e');
+      // Silent fail - user will see default avatar
     }
   }
   
@@ -193,6 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // Load the cached picture
       await _loadProfilePicture();
       
+      print('Successfully set profile picture');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Profile picture updated successfully'),
@@ -200,9 +201,10 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
     } catch (e) {
+      print('Failed to set profile picture: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to update profile picture: $e'),
+          content: Text('Failed to update profile picture'),
           backgroundColor: Colors.red,
         ),
       );
