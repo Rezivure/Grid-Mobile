@@ -6,6 +6,7 @@ class ProfilePictureProvider with ChangeNotifier {
   final OthersProfileService _othersProfileService = OthersProfileService();
   final Map<String, Uint8List?> _profilePictureCache = {};
   final Set<String> _updatedProfiles = {};
+  final Map<String, int> _profileVersions = {};
   
   /// Get profile picture for a user
   Future<Uint8List?> getProfilePicture(String userId) async {

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
@@ -161,8 +162,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
               }
 
               if (state is ContactsLoaded) {
-                return Consumer<UserLocationProvider>(
-                  builder: (context, locationProvider, child) {
+                return Consumer2<UserLocationProvider, ProfilePictureProvider>(
+                  builder: (context, locationProvider, profileProvider, child) {
                     final contactsWithLocation = _getContactsWithCurrentLocation(
                       state.contacts,
                       locationProvider,

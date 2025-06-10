@@ -6,6 +6,8 @@ import 'package:grid_frontend/utilities/profile_picture_encryption.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 
 class OthersProfileService {
   static const String PROFILES_METADATA_KEY = 'others_profiles_metadata';
@@ -13,9 +15,14 @@ class OthersProfileService {
   
   final ProfilePictureService _profilePictureService = ProfilePictureService();
   ProfilePictureProvider? _profilePictureProvider;
+  ContactsBloc? _contactsBloc;
   
   void setProfilePictureProvider(ProfilePictureProvider provider) {
     _profilePictureProvider = provider;
+  }
+  
+  void setContactsBloc(ContactsBloc bloc) {
+    _contactsBloc = bloc;
   }
   
   /// Process a profile announcement message
@@ -57,6 +64,9 @@ class OthersProfileService {
         
         // Notify provider to update UI
         _profilePictureProvider?.notifyProfileUpdated(userId);
+        
+        // Trigger contacts refresh to update the list
+        _contactsBloc?.add(RefreshContacts());
         
         print('Profile announcement processed successfully for $userId');
       } else {

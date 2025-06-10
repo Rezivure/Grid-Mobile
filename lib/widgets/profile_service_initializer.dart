@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/services/message_processor.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 
 class ProfileServiceInitializer extends StatefulWidget {
   final Widget child;
@@ -19,7 +21,10 @@ class _ProfileServiceInitializerState extends State<ProfileServiceInitializer> {
     // Initialize the connection between OthersProfileService and ProfilePictureProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ProfilePictureProvider>(context, listen: false);
+      final contactsBloc = context.read<ContactsBloc>();
+      
       MessageProcessor.othersProfileService.setProfilePictureProvider(provider);
+      MessageProcessor.othersProfileService.setContactsBloc(contactsBloc);
     });
   }
   
