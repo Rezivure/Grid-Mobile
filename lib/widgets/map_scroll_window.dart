@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/widgets/profile_modal.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
@@ -503,6 +506,32 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     );
   }
 
+  Widget _buildCurrentUserAvatar(String userId) {
+    return FutureBuilder<Uint8List?>(
+      future: ProfilePictureService().getLocalProfilePicture(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data != null) {
+          return CircleAvatar(
+            radius: 18,
+            backgroundImage: MemoryImage(snapshot.data!),
+            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          );
+        }
+        return ClipOval(
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: RandomAvatar(
+              localpart(userId),
+              height: 36,
+              width: 36,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
 
@@ -545,17 +574,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ClipOval(
-              child: SizedBox(
-                width: 36,
-                height: 36,
-                child: RandomAvatar(
-                  localpart(userId),
-                  height: 36,
-                  width: 36,
-                ),
-              ),
-            ),
+            _buildCurrentUserAvatar(userId),
             const SizedBox(height: 4),
             SizedBox(
               width: 68, // Increased width to fit "Contacts" text
