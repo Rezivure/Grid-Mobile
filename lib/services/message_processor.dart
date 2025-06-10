@@ -3,18 +3,22 @@ import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
+import 'package:grid_frontend/services/others_profile_service.dart';
 
 class MessageProcessor {
   final Client client;
   final Encryption encryption;
   final LocationRepository locationRepository;
   final MessageParser messageParser;
+  static final OthersProfileService _othersProfileService = OthersProfileService();
 
   MessageProcessor(
       this.locationRepository,
       this.messageParser,
       this.client,
       ) : encryption = Encryption(client: client);
+      
+  static OthersProfileService get othersProfileService => _othersProfileService;
 
   /// Process a single event from a room. Decrypt if necessary,
   /// then parse and store location messages if found.
@@ -43,9 +47,19 @@ class MessageProcessor {
         'timestamp': decryptedEvent.originServerTs,
       };
 
-      // Attempt to parse location message
-      await _handleLocationMessageIfAny(messageData);
-      return messageData;
+      // Check message type
+      final msgtype = decryptedEvent.content['msgtype'] as String?;
+      
+      if (msgtype == 'grid.profile.announce') {
+        // Handle profile announcement
+        await _handleProfileAnnouncement(decryptedEvent.senderId, decryptedEvent.content);
+        // Don't return as a regular message
+        return null;
+      } else {
+        // Attempt to parse location message
+        await _handleLocationMessageIfAny(messageData);
+        return messageData;
+      }
     }
     // Not a message, return null
     return null;
@@ -80,6 +94,18 @@ class MessageProcessor {
       var confirm = await locationRepository.getLatestLocation(sender);
     } else {
       // It's a message, but not a location message
+    }
+  }
+  
+  /// Handle profile announcement message
+  Future<void> _handleProfileAnnouncement(String senderId, Map<String, dynamic> content) async {
+    try {
+      final profile = content['profile'] as Map<String, dynamic>?;
+      if (profile != null) {
+        await _othersProfileService.processProfileAnnouncement(senderId, profile);
+      }
+    } catch (e) {
+      print('Error handling profile announcement: $e');
     }
   }
 }

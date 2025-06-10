@@ -43,7 +43,7 @@ class ProfilePictureEncryption {
   }
 
   /// Decrypts bytes and returns the decrypted data
-  static Uint8List decryptBytes(Uint8List encryptedBytes, String keyBase64, String ivBase64) {
+  static Uint8List? decryptBytes(Uint8List encryptedBytes, String keyBase64, String ivBase64) {
     try {
       // Decode key and IV
       final key = Key(base64.decode(keyBase64));
@@ -60,7 +60,7 @@ class ProfilePictureEncryption {
       
       return Uint8List.fromList(decrypted);
     } catch (e) {
-      throw Exception('Failed to decrypt data: $e');
+      return null;
     }
   }
 

@@ -18,6 +18,7 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/widgets/profile_picture_modal.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
+import 'package:grid_frontend/services/profile_announcement_service.dart';
 
 
 
@@ -42,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
   
   // Profile picture related
   final ProfilePictureService _profilePictureService = ProfilePictureService();
+  late ProfileAnnouncementService _profileAnnouncementService;
   Uint8List? _profilePictureBytes;
   bool _isUploadingProfilePic = false;
 
@@ -54,6 +56,18 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadIncognitoState();
     _loadBatterySaverState();
     _loadProfilePicture();
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Initialize profile announcement service if not already done
+    final client = Provider.of<Client>(context, listen: false);
+    _profileAnnouncementService = ProfileAnnouncementService(
+      client: client,
+      profilePictureService: _profilePictureService,
+    );
   }
 
   bool isCustomHomeserver() {
@@ -192,6 +206,9 @@ class _SettingsPageState extends State<SettingsPage> {
       
       // Load the cached picture
       await _loadProfilePicture();
+      
+      // Announce to all active rooms
+      await _profileAnnouncementService.announceToAllActiveRooms();
       
       print('Successfully set profile picture');
       ScaffoldMessenger.of(context).showSnackBar(

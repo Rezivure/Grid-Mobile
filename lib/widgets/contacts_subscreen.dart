@@ -7,6 +7,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -392,14 +393,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: CircleAvatar(
+                    child: CachedProfileAvatar(
+                      userId: contact.userId,
                       radius: 22,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 44,
-                        width: 44,
-                      ),
+                      displayName: contact.displayName,
                     ),
                   ),
                   // Online status indicator
@@ -680,14 +677,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    CachedProfileAvatar(
+                      userId: contact.userId,
                       radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
-                      ),
+                      displayName: contact.displayName,
                     ),
                     const SizedBox(width: 12),
                     Expanded(

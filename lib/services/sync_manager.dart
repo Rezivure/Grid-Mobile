@@ -7,12 +7,14 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/services/profile_announcement_service.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -49,6 +51,8 @@ class SyncManager with ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
   String? _sinceToken;
+  
+  late ProfileAnnouncementService _profileAnnouncementService;
 
 
   SyncManager(
@@ -63,7 +67,12 @@ class SyncManager with ChangeNotifier {
       this.groupsBloc,
       this.userLocationProvider,
       this.sharingPreferencesRepository,
-      );
+      ) {
+    _profileAnnouncementService = ProfileAnnouncementService(
+      client: client,
+      profilePictureService: ProfilePictureService(),
+    );
+  }
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
@@ -163,6 +172,15 @@ class SyncManager with ChangeNotifier {
       }).catchError((e) {
         print('Error during resume sync: $e');
       });
+      
+      // Check if we should announce profile based on 6-day interval
+      if (!utils.isCustomHomeserver(client.homeserver.toString())) {
+        _profileAnnouncementService.shouldAnnounceBasedOnTime().then((shouldAnnounce) {
+          if (shouldAnnounce) {
+            _profileAnnouncementService.announceToAllActiveRooms();
+          }
+        });
+      }
     }
   }
 
@@ -495,6 +513,11 @@ class SyncManager with ChangeNotifier {
           }
 
           mapBloc.add(MapLoadUserLocations());
+          
+          // Announce profile picture to the newly joined room
+          if (!utils.isCustomHomeserver(client.homeserver.toString())) {
+            await _profileAnnouncementService.announceToRoom(roomId);
+          }
         }
         return;
       }
@@ -751,7 +774,7 @@ class SyncManager with ChangeNotifier {
     // Check if the room already exists
     final existingRoom = await roomRepository.getRoomById(room.id);
 
-    final isDirect = isDirectRoom(room.name ?? '');
+    final isDirect = utils.isDirectRoom(room.name ?? '');
     final customRoom = GridRoom.Room(
       roomId: room.id,
       name: room.name ?? 'Unnamed Room',
@@ -759,7 +782,7 @@ class SyncManager with ChangeNotifier {
       lastActivity: DateTime.now().toIso8601String(),
       avatarUrl: room.avatar?.toString(),
       members: room.getParticipants().map((p) => p.id).toList(),
-      expirationTimestamp: extractExpirationTimestamp(room.name ?? ''),
+      expirationTimestamp: utils.extractExpirationTimestamp(room.name ?? ''),
     );
 
     if (existingRoom == null) {

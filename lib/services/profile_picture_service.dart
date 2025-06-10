@@ -75,24 +75,46 @@ class ProfilePictureService {
     }
   }
   
+  /// Transforms CDN URL to custom domain URL for authorized access
+  String _transformToCustomDomainUrl(String cdnUrl) {
+    // Extract the path from the CDN URL
+    // e.g., from https://grid-profile-pics-prod.f08131d7f9b7d764c2033eef46278415.r2.cloudflarestorage.com/p/ca9a6caefa984784b6f69991988bb6d0.enc
+    // to https://profile-store.mygrid.app/p/ca9a6caefa984784b6f69991988bb6d0.enc
+    
+    final uri = Uri.parse(cdnUrl);
+    final pathSegments = uri.pathSegments;
+    
+    // Get CDN URL from environment or use default
+    final profileCdnUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';
+    
+    // Reconstruct with custom domain
+    final customDomainUrl = '$profileCdnUrl/${pathSegments.join('/')}';
+    return customDomainUrl;
+  }
+  
   /// Downloads and decrypts a profile picture
   Future<Uint8List?> downloadProfilePicture(String url, String encryptionKey, String iv) async {
     try {
+      // Transform URL to use custom domain for authorization
+      final downloadUrl = _transformToCustomDomainUrl(url);
+      
       // Extract just the filename without path prefixes
-      final urlParts = url.split('/');
+      final urlParts = downloadUrl.split('/');
       final filenameWithPath = urlParts.last; // e.g., "p/502d7bde1b8045b5ac3af4ee384adaa0.enc"
       final filename = filenameWithPath.split('/').last; // Just "502d7bde1b8045b5ac3af4ee384adaa0.enc"
-      
       
       // Check cache first
       final cachedBytes = await _getCachedFile(filename);
       if (cachedBytes != null) {
         // Decrypt and return cached file
-        return ProfilePictureEncryption.decryptBytes(cachedBytes, encryptionKey, iv);
+        final decrypted = ProfilePictureEncryption.decryptBytes(cachedBytes, encryptionKey, iv);
+        if (decrypted != null) {
+          return decrypted;
+        }
       }
       
       // Download from server
-      final response = await http.get(Uri.parse(url));
+      final response = await http.get(Uri.parse(downloadUrl));
       
       if (response.statusCode == 200) {
         final encryptedBytes = response.bodyBytes;
@@ -101,12 +123,12 @@ class ProfilePictureService {
         await _cacheEncryptedFile(encryptedBytes, filename);
         
         // Decrypt and return
-        return ProfilePictureEncryption.decryptBytes(encryptedBytes, encryptionKey, iv);
+        final decrypted = ProfilePictureEncryption.decryptBytes(encryptedBytes, encryptionKey, iv);
+        return decrypted;
       } else {
-        throw Exception('Failed to download profile picture');
+        throw Exception('Failed to download profile picture: ${response.statusCode}');
       }
     } catch (e) {
-      // Silent fail
       return null;
     }
   }
@@ -223,7 +245,10 @@ class ProfilePictureService {
       
       final cachedBytes = await _getCachedFile(filename);
       if (cachedBytes != null) {
-        return ProfilePictureEncryption.decryptBytes(cachedBytes, encryptionKey, iv);
+        final decrypted = ProfilePictureEncryption.decryptBytes(cachedBytes, encryptionKey, iv);
+        if (decrypted != null) {
+          return decrypted;
+        }
       }
       
       // If not cached, download it
