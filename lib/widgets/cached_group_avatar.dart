@@ -49,12 +49,9 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
     super.didChangeDependencies();
     // Check if the provider indicates this avatar was updated
     final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
-    final currentVersion = profileProvider.getProfileVersion(widget.roomId);
-    
-    print('CachedGroupAvatar.didChangeDependencies: Room ${widget.roomId} - Current version: $currentVersion, Last known: $_lastKnownVersion');
+    final currentVersion = profileProvider.getGroupAvatarVersion(widget.roomId);
     
     if (currentVersion > _lastKnownVersion) {
-      print('CachedGroupAvatar: Version changed for ${widget.roomId}, reloading avatar');
       _lastKnownVersion = currentVersion;
       // Force reload the avatar
       _loadGroupAvatar();
@@ -62,14 +59,11 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   }
   
   Future<void> _loadGroupAvatar() async {
-    print('CachedGroupAvatar._loadGroupAvatar: Loading avatar for room ${widget.roomId}');
     setState(() => _isLoading = true);
     
     try {
       // Try to get group avatar first
       final bytes = await _othersProfileService.getCachedGroupAvatar(widget.roomId);
-      
-      print('CachedGroupAvatar._loadGroupAvatar: Got ${bytes?.length ?? 0} bytes for room ${widget.roomId}');
       
       if (mounted) {
         setState(() {
@@ -88,7 +82,19 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   @override
   Widget build(BuildContext context) {
     // Listen to provider for updates to trigger rebuilds
-    context.watch<ProfilePictureProvider>();
+    final profileProvider = context.watch<ProfilePictureProvider>();
+    
+    // Check for version changes on every build
+    final currentVersion = profileProvider.getGroupAvatarVersion(widget.roomId);
+    if (currentVersion > _lastKnownVersion) {
+      _lastKnownVersion = currentVersion;
+      // Schedule a reload after the current build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadGroupAvatar();
+        }
+      });
+    }
     
     return CircleAvatar(
       radius: widget.radius,

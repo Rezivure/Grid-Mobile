@@ -394,10 +394,17 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: CachedProfileAvatar(
-                      userId: contact.userId,
-                      radius: 22,
-                      displayName: contact.displayName,
+                    child: Consumer<ProfilePictureProvider>(
+                      builder: (context, profileProvider, _) {
+                        // Use version as part of the key to force rebuild
+                        final version = profileProvider.getProfileVersion(contact.userId);
+                        return CachedProfileAvatar(
+                          key: ValueKey('${contact.userId}_v$version'),
+                          userId: contact.userId,
+                          radius: 22,
+                          displayName: contact.displayName,
+                        );
+                      },
                     ),
                   ),
                   // Online status indicator

@@ -8,15 +8,18 @@ class ProfilePictureProvider with ChangeNotifier {
   final OthersProfileService _othersProfileService = OthersProfileService();
   final ProfilePictureService _profilePictureService = ProfilePictureService();
   final Map<String, Uint8List?> _profilePictureCache = {};
+  final Map<String, Uint8List?> _groupAvatarCache = {};
   final Set<String> _updatedProfiles = {};
+  final Set<String> _updatedGroups = {};
   final Map<String, int> _profileVersions = {};
+  final Map<String, int> _groupVersions = {};
   Client? _client;
   
   void setClient(Client client) {
     _client = client;
   }
   
-  /// Get profile picture for a user
+  /// Get profile picture for a user or group
   Future<Uint8List?> getProfilePicture(String userId) async {
     // Check memory cache first
     if (_profilePictureCache.containsKey(userId)) {
@@ -43,16 +46,43 @@ class ProfilePictureProvider with ChangeNotifier {
     return null;
   }
   
-  /// Notify that a profile has been updated
+  /// Get group avatar
+  Future<Uint8List?> getGroupAvatar(String roomId) async {
+    // Check memory cache first
+    if (_groupAvatarCache.containsKey(roomId)) {
+      return _groupAvatarCache[roomId];
+    }
+    
+    // Load from disk cache
+    final avatarBytes = await _othersProfileService.getCachedGroupAvatar(roomId);
+    if (avatarBytes != null) {
+      _groupAvatarCache[roomId] = avatarBytes;
+      return avatarBytes;
+    }
+    
+    return null;
+  }
+  
+  /// Notify that a user profile has been updated
   void notifyProfileUpdated(String userId) {
-    print('ProfilePictureProvider.notifyProfileUpdated: Updating $userId');
     // Clear memory cache for this user
     _profilePictureCache.remove(userId);
     _updatedProfiles.add(userId);
     
     // Increment version to ensure widgets detect the change
     _profileVersions[userId] = (_profileVersions[userId] ?? 0) + 1;
-    print('ProfilePictureProvider: Version for $userId is now ${_profileVersions[userId]}');
+    
+    notifyListeners();
+  }
+  
+  /// Notify that a group avatar has been updated
+  void notifyGroupAvatarUpdated(String roomId) {
+    // Clear memory cache for this group
+    _groupAvatarCache.remove(roomId);
+    _updatedGroups.add(roomId);
+    
+    // Increment version to ensure widgets detect the change
+    _groupVersions[roomId] = (_groupVersions[roomId] ?? 0) + 1;
     
     notifyListeners();
   }
@@ -62,9 +92,19 @@ class ProfilePictureProvider with ChangeNotifier {
     return _updatedProfiles.remove(userId);
   }
   
+  /// Check if a group avatar was updated and clear the flag
+  bool wasGroupAvatarUpdated(String roomId) {
+    return _updatedGroups.remove(roomId);
+  }
+  
   /// Get the current version of a profile (for change detection)
   int getProfileVersion(String userId) {
     return _profileVersions[userId] ?? 0;
+  }
+  
+  /// Get the current version of a group avatar (for change detection)
+  int getGroupAvatarVersion(String roomId) {
+    return _groupVersions[roomId] ?? 0;
   }
   
   /// Clear cache for a specific user
@@ -74,9 +114,17 @@ class ProfilePictureProvider with ChangeNotifier {
     notifyListeners();
   }
   
+  /// Clear cache for a specific group
+  void clearGroupCache(String roomId) {
+    _groupAvatarCache.remove(roomId);
+    _updatedGroups.add(roomId);
+    notifyListeners();
+  }
+  
   /// Clear all caches
   void clearCache() {
     _profilePictureCache.clear();
+    _groupAvatarCache.clear();
     notifyListeners();
   }
 }

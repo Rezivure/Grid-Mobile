@@ -200,9 +200,11 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       }
       
       // Upload the avatar using profile picture service
+      // Pass isGroupAvatar: true to prevent overwriting user's profile metadata
       final metadata = await _profilePictureService.uploadProfilePicture(
         imageFile, 
-        jwtToken
+        jwtToken,
+        isGroupAvatar: true
       );
       
       // Create group avatar announcement content
@@ -296,13 +298,14 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       
       if (avatarBytes != null) {
         // Process the group avatar announcement to cache it using the singleton instance
+        // Use forceRefresh since this is the uploader
         await MessageProcessor.othersProfileService.processGroupAvatarAnnouncement(widget.room.roomId, {
           'url': url,
           'key': key,
           'iv': iv,
           'version': metadata['version'] ?? '1.0',
           'updated_at': metadata['uploadedAt'],
-        });
+        }, forceRefresh: true);
         
         // Small delay to ensure cache is written
         await Future.delayed(Duration(milliseconds: 100));
@@ -310,10 +313,15 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         // Notify UI to update
         if (mounted) {
           Provider.of<ProfilePictureProvider>(context, listen: false)
-              .notifyProfileUpdated(widget.room.roomId);
+              .notifyGroupAvatarUpdated(widget.room.roomId);
           
           // Trigger groups refresh
           context.read<GroupsBloc>().add(RefreshGroups());
+          
+          // Force a rebuild of this widget to show the new avatar
+          setState(() {
+            // This will trigger a rebuild and the CachedGroupAvatar will pick up the change
+          });
         }
         
         print('GroupProfileModal: Downloaded and cached group avatar for immediate display');

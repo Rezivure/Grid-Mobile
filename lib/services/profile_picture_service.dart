@@ -15,7 +15,8 @@ class ProfilePictureService {
   final String _baseUrl = '${dotenv.env['GAUTH_URL']!}';
   
   /// Uploads an encrypted profile picture
-  Future<Map<String, dynamic>> uploadProfilePicture(File imageFile, String jwtToken) async {
+  /// Set isGroupAvatar to true when uploading group avatars to prevent profile contamination
+  Future<Map<String, dynamic>> uploadProfilePicture(File imageFile, String jwtToken, {bool isGroupAvatar = false}) async {
     try {
       // Generate encryption key and IV
       final encryptionKey = ProfilePictureEncryption.generateEncryptionKey();
@@ -59,12 +60,14 @@ class ProfilePictureService {
           filename: responseData['filename'],
         );
         
-        // Save metadata locally
-        await _saveMetadata(metadata);
-        
-        // Cache the encrypted file locally - extract just the filename
-        final cacheFilename = responseData['filename'].toString().split('/').last;
-        await _cacheEncryptedFile(encryptedBytes, cacheFilename);
+        // Save metadata locally ONLY if this is not a group avatar
+        if (!isGroupAvatar) {
+          await _saveMetadata(metadata);
+          
+          // Cache the encrypted file locally - extract just the filename
+          final cacheFilename = responseData['filename'].toString().split('/').last;
+          await _cacheEncryptedFile(encryptedBytes, cacheFilename);
+        }
         
         return metadata;
       } else {

@@ -19,6 +19,8 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/widgets/profile_picture_modal.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/services/profile_announcement_service.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
 
 
 
