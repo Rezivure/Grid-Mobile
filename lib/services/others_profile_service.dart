@@ -232,6 +232,7 @@ class OthersProfileService {
   
   /// Process a group avatar announcement message
   Future<void> processGroupAvatarAnnouncement(String roomId, Map<String, dynamic> avatarData) async {
+    print('OthersProfileService.processGroupAvatarAnnouncement: Processing for room $roomId');
     try {
       final url = avatarData['url'] as String?;
       final key = avatarData['key'] as String?;
@@ -248,13 +249,18 @@ class OthersProfileService {
       if (existingAvatar != null && 
           existingAvatar['url'] == url &&
           existingAvatar['updated_at'] == updatedAt) {
-        // Already have this exact avatar
+        print('OthersProfileService: Already have this exact avatar cached for $roomId');
+        // Still notify the UI in case widgets need to reload
+        _profilePictureProvider?.notifyProfileUpdated(roomId);
+        _groupsBloc?.add(RefreshGroups());
         return;
       }
       
       // Download and cache the new avatar
+      print('OthersProfileService: Downloading avatar from $url');
       final avatarBytes = await _profilePictureService.downloadProfilePicture(url, key, iv);
       if (avatarBytes != null) {
+        print('OthersProfileService: Downloaded ${avatarBytes.length} bytes, caching...');
         // Cache the decrypted image
         await _cacheGroupAvatar(roomId, avatarBytes);
         
@@ -267,6 +273,7 @@ class OthersProfileService {
           'cached_at': DateTime.now().toIso8601String(),
         });
         
+        print('OthersProfileService: Notifying UI to update for room $roomId');
         // Notify provider to update UI (using roomId as the identifier)
         _profilePictureProvider?.notifyProfileUpdated(roomId);
         
@@ -275,7 +282,7 @@ class OthersProfileService {
         
         print('Group avatar announcement processed successfully for $roomId');
       } else {
-        print('Group avatar announcement failed for $roomId');
+        print('Group avatar announcement failed for $roomId - no bytes downloaded');
       }
     } catch (e) {
       print('Error processing group avatar announcement for $roomId: $e');

@@ -11,6 +11,8 @@ import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/services/profile_announcement_service.dart';
+import 'package:grid_frontend/services/others_profile_service.dart';
+import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
 import 'package:grid_frontend/widgets/triangle_avatars.dart';
@@ -227,6 +229,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       // Also save the group avatar locally for the uploader
       await _saveGroupAvatarLocally(metadata);
       
+      // Download and cache the image for the uploader
+      await _downloadAndCacheGroupAvatar(metadata);
+      
       print('Successfully set group avatar for room ${widget.room.roomId}');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -273,16 +278,48 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       // Save back to preferences
       await prefs.setString('group_avatars_metadata', json.encode(allMetadata));
       
-      // Notify UI to update
-      Provider.of<ProfilePictureProvider>(context, listen: false)
-          .notifyProfileUpdated(widget.room.roomId);
-      
-      // Trigger groups refresh
-      context.read<GroupsBloc>().add(RefreshGroups());
-      
       print('GroupProfileModal: Saved group avatar metadata locally');
     } catch (e) {
       print('Error saving group avatar metadata: $e');
+    }
+  }
+  
+  /// Download and cache the group avatar for immediate display
+  Future<void> _downloadAndCacheGroupAvatar(Map<String, dynamic> metadata) async {
+    try {
+      final url = metadata['url'] as String;
+      final key = metadata['key'] as String;
+      final iv = metadata['iv'] as String;
+      
+      // Download the avatar
+      final avatarBytes = await _profilePictureService.downloadProfilePicture(url, key, iv);
+      
+      if (avatarBytes != null) {
+        // Process the group avatar announcement to cache it using the singleton instance
+        await MessageProcessor.othersProfileService.processGroupAvatarAnnouncement(widget.room.roomId, {
+          'url': url,
+          'key': key,
+          'iv': iv,
+          'version': metadata['version'] ?? '1.0',
+          'updated_at': metadata['uploadedAt'],
+        });
+        
+        // Small delay to ensure cache is written
+        await Future.delayed(Duration(milliseconds: 100));
+        
+        // Notify UI to update
+        if (mounted) {
+          Provider.of<ProfilePictureProvider>(context, listen: false)
+              .notifyProfileUpdated(widget.room.roomId);
+          
+          // Trigger groups refresh
+          context.read<GroupsBloc>().add(RefreshGroups());
+        }
+        
+        print('GroupProfileModal: Downloaded and cached group avatar for immediate display');
+      }
+    } catch (e) {
+      print('Error downloading and caching group avatar: $e');
     }
   }
   

@@ -45,15 +45,26 @@ class ProfilePictureProvider with ChangeNotifier {
   
   /// Notify that a profile has been updated
   void notifyProfileUpdated(String userId) {
+    print('ProfilePictureProvider.notifyProfileUpdated: Updating $userId');
     // Clear memory cache for this user
     _profilePictureCache.remove(userId);
     _updatedProfiles.add(userId);
+    
+    // Increment version to ensure widgets detect the change
+    _profileVersions[userId] = (_profileVersions[userId] ?? 0) + 1;
+    print('ProfilePictureProvider: Version for $userId is now ${_profileVersions[userId]}');
+    
     notifyListeners();
   }
   
   /// Check if a profile was updated and clear the flag
   bool wasProfileUpdated(String userId) {
     return _updatedProfiles.remove(userId);
+  }
+  
+  /// Get the current version of a profile (for change detection)
+  int getProfileVersion(String userId) {
+    return _profileVersions[userId] ?? 0;
   }
   
   /// Clear cache for a specific user

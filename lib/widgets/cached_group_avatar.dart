@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:typed_data';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/services/others_profile_service.dart';
+import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/widgets/triangle_avatars.dart';
 
 class CachedGroupAvatar extends StatefulWidget {
@@ -26,7 +27,8 @@ class CachedGroupAvatar extends StatefulWidget {
 class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   Uint8List? _avatarBytes;
   bool _isLoading = true;
-  final OthersProfileService _othersProfileService = OthersProfileService();
+  int _lastKnownVersion = 0;
+  OthersProfileService get _othersProfileService => MessageProcessor.othersProfileService;
   
   @override
   void initState() {
@@ -42,12 +44,32 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
     }
   }
   
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check if the provider indicates this avatar was updated
+    final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+    final currentVersion = profileProvider.getProfileVersion(widget.roomId);
+    
+    print('CachedGroupAvatar.didChangeDependencies: Room ${widget.roomId} - Current version: $currentVersion, Last known: $_lastKnownVersion');
+    
+    if (currentVersion > _lastKnownVersion) {
+      print('CachedGroupAvatar: Version changed for ${widget.roomId}, reloading avatar');
+      _lastKnownVersion = currentVersion;
+      // Force reload the avatar
+      _loadGroupAvatar();
+    }
+  }
+  
   Future<void> _loadGroupAvatar() async {
+    print('CachedGroupAvatar._loadGroupAvatar: Loading avatar for room ${widget.roomId}');
     setState(() => _isLoading = true);
     
     try {
       // Try to get group avatar first
       final bytes = await _othersProfileService.getCachedGroupAvatar(widget.roomId);
+      
+      print('CachedGroupAvatar._loadGroupAvatar: Got ${bytes?.length ?? 0} bytes for room ${widget.roomId}');
       
       if (mounted) {
         setState(() {
@@ -65,16 +87,8 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   
   @override
   Widget build(BuildContext context) {
-    // Listen to provider for updates
-    final profileProvider = context.watch<ProfilePictureProvider>();
-    
-    // Check if this group's avatar was updated
-    if (profileProvider.wasProfileUpdated(widget.roomId)) {
-      // Reload the group avatar
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadGroupAvatar();
-      });
-    }
+    // Listen to provider for updates to trigger rebuilds
+    context.watch<ProfilePictureProvider>();
     
     return CircleAvatar(
       radius: widget.radius,
