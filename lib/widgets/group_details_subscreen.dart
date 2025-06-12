@@ -9,13 +9,14 @@ import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import '../blocs/groups/groups_event.dart';
 import '../blocs/groups/groups_state.dart';
@@ -89,6 +90,13 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       final locationProvider = Provider.of<UserLocationProvider>(context, listen: false);
       if (locationProvider.getAllUserLocations().isEmpty) {
         locationProvider.refreshLocations();
+      }
+      
+      // For custom homeservers, trigger immediate avatar check
+      final homeserver = widget.roomService.getMyHomeserver();
+      if (utils.isCustomHomeserver(homeserver)) {
+        final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+        profileProvider.manualCheckForAvatarChanges();
       }
     });
   }
@@ -248,7 +256,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user.displayName ?? localpart(user.userId),
+                            user.displayName ?? utils.localpart(user.userId),
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: colorScheme.onSurface,
@@ -342,7 +350,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             ],
           ),
           content: Text(
-            'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
+            'Are you sure you want to remove "${user.displayName ?? utils.localpart(user.userId)}" from this group?',
             style: TextStyle(
               color: colorScheme.onSurface.withOpacity(0.8),
               height: 1.4,
@@ -605,7 +613,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     children: [
                       // Display name
                       Text(
-                        user.displayName ?? localpart(user.userId),
+                        user.displayName ?? utils.localpart(user.userId),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: colorScheme.onSurface,

@@ -48,6 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late ProfileAnnouncementService _profileAnnouncementService;
   Uint8List? _profilePictureBytes;
   bool _isUploadingProfilePic = false;
+  bool _isLoadingProfilePic = true;
 
 
   @override
@@ -173,15 +174,82 @@ class _SettingsPageState extends State<SettingsPage> {
   }
   
   Future<void> _loadProfilePicture() async {
+    setState(() {
+      _isLoadingProfilePic = true;
+    });
+    
     try {
-      final profilePicBytes = await _profilePictureService.getLocalProfilePicture();
-      if (profilePicBytes != null && mounted) {
-        setState(() {
-          _profilePictureBytes = profilePicBytes;
-        });
+      if (isCustomHomeserver()) {
+        // For custom homeservers, try to load Matrix avatar
+        final client = Provider.of<Client>(context, listen: false);
+        if (client.userID != null) {
+          try {
+            final avatarUrl = await client.getAvatarUrl(client.userID!);
+            if (avatarUrl != null) {
+              // Build the download URL manually
+              final homeserverUrl = client.homeserver;
+              final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+              if (mxcParts.length == 2) {
+                final serverName = mxcParts[0];
+                final mediaId = mxcParts[1];
+                final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+                
+                final response = await client.httpClient.get(downloadUri);
+                if (response.statusCode == 200 && mounted) {
+                  setState(() {
+                    _profilePictureBytes = response.bodyBytes;
+                    _isLoadingProfilePic = false;
+                  });
+                } else if (mounted) {
+                  setState(() {
+                    _isLoadingProfilePic = false;
+                  });
+                }
+              } else if (mounted) {
+                setState(() {
+                  _isLoadingProfilePic = false;
+                });
+              }
+            } else if (mounted) {
+              setState(() {
+                _isLoadingProfilePic = false;
+              });
+            }
+          } catch (e) {
+            print('Error loading Matrix avatar: $e');
+            if (mounted) {
+              setState(() {
+                _isLoadingProfilePic = false;
+              });
+            }
+          }
+        } else if (mounted) {
+          setState(() {
+            _isLoadingProfilePic = false;
+          });
+        }
+      } else {
+        // For default server, use e2ee profile picture
+        final profilePicBytes = await _profilePictureService.getLocalProfilePicture();
+        if (profilePicBytes != null && mounted) {
+          setState(() {
+            _profilePictureBytes = profilePicBytes;
+            _isLoadingProfilePic = false;
+          });
+        } else if (mounted) {
+          setState(() {
+            _isLoadingProfilePic = false;
+          });
+        }
       }
     } catch (e) {
       // Silent fail - user will see default avatar
+      print('Error loading profile picture: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingProfilePic = false;
+        });
+      }
     }
   }
   
@@ -242,6 +310,63 @@ class _SettingsPageState extends State<SettingsPage> {
         onImageSelected: _handleProfilePictureSelected,
       ),
     );
+  }
+  
+  void _showMatrixProfilePictureModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ProfilePictureModal(
+        onImageSelected: _handleMatrixProfilePictureSelected,
+      ),
+    );
+  }
+  
+  Future<void> _handleMatrixProfilePictureSelected(File imageFile) async {
+    setState(() {
+      _isUploadingProfilePic = true;
+    });
+    
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      final imageBytes = await imageFile.readAsBytes();
+      
+      // Upload to Matrix media repository
+      final mxcUri = await client.uploadContent(
+        imageBytes,
+        filename: 'avatar.jpg',
+        contentType: 'image/jpeg',
+      );
+      
+      // Set as user's avatar
+      await client.setAvatarUrl(
+        client.userID!,
+        mxcUri,
+      );
+      
+      // Reload the profile picture
+      await _loadProfilePicture();
+      
+      print('Successfully set Matrix profile picture');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } catch (e) {
+      print('Failed to set Matrix profile picture: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update profile picture'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingProfilePic = false;
+      });
+    }
   }
 
   void _showInfoModal(String title, String content) {
@@ -1413,19 +1538,27 @@ class _SettingsPageState extends State<SettingsPage> {
                           fit: BoxFit.cover,
                         ),
                       )
-                    : RandomAvatar(
-                        _localpart ?? 'Unknown User',
-                        height: 80,
-                        width: 80,
-                      ),
+                    : (_isLoadingProfilePic
+                        ? SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.primary.withOpacity(0.5),
+                            ),
+                          )
+                        : RandomAvatar(
+                            _localpart ?? 'Unknown User',
+                            height: 80,
+                            width: 80,
+                          )),
               ),
-              if (!isCustomHomeserver())
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: _isUploadingProfilePic ? null : _showProfilePictureModal,
-                    child: Container(
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _isUploadingProfilePic ? null : (isCustomHomeserver() ? _showMatrixProfilePictureModal : _showProfilePictureModal),
+                  child: Container(
                       padding: EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: colorScheme.surface,

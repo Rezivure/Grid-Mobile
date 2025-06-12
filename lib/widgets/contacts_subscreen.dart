@@ -61,6 +61,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
+      
+      // For custom homeservers, trigger immediate avatar check
+      final homeserver = widget.roomService.getMyHomeserver();
+      if (utils.isCustomHomeserver(homeserver)) {
+        final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+        profileProvider.manualCheckForAvatarChanges();
+      }
     });
 
     _searchController.addListener(_onSearchChanged);

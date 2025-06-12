@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:grid_frontend/services/others_profile_service.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:matrix/matrix.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 
 class ProfilePictureProvider with ChangeNotifier {
   final OthersProfileService _othersProfileService = OthersProfileService();
@@ -13,10 +15,73 @@ class ProfilePictureProvider with ChangeNotifier {
   final Set<String> _updatedGroups = {};
   final Map<String, int> _profileVersions = {};
   final Map<String, int> _groupVersions = {};
+  final Map<String, Uri?> _lastKnownAvatarUrls = {};
   Client? _client;
+  Timer? _avatarCheckTimer;
   
   void setClient(Client client) {
     _client = client;
+    _startAvatarChangeDetection();
+  }
+  
+  void _startAvatarChangeDetection() {
+    if (_client == null) {
+      print('[ProfilePictureProvider] Cannot start avatar detection - client is null');
+      return;
+    }
+    
+    final homeserver = _client!.homeserver.toString();
+    final isCustom = utils.isCustomHomeserver(homeserver);
+    
+    print('[ProfilePictureProvider] Starting avatar detection - homeserver: $homeserver, isCustom: $isCustom');
+    
+    // Only check for avatar changes on custom homeservers
+    if (isCustom) {
+      // Check every 30 seconds for avatar changes
+      _avatarCheckTimer?.cancel();
+      _avatarCheckTimer = Timer.periodic(Duration(seconds: 30), (_) {
+        _checkForAvatarChanges();
+      });
+      print('[ProfilePictureProvider] Avatar change detection timer started');
+    } else {
+      print('[ProfilePictureProvider] Not a custom homeserver, avatar detection not started');
+    }
+  }
+  
+  Future<void> _checkForAvatarChanges() async {
+    if (_client == null) return;
+    
+    print('[ProfilePictureProvider] Checking for avatar changes...');
+    
+    // Get all cached user IDs
+    final cachedUserIds = {..._profilePictureCache.keys, ..._lastKnownAvatarUrls.keys};
+    print('[ProfilePictureProvider] Checking ${cachedUserIds.length} users for avatar changes');
+    
+    for (final userId in cachedUserIds) {
+      if (userId.startsWith('@')) {  // Only check user IDs, not room IDs
+        try {
+          final currentAvatarUrl = await _client!.getAvatarUrl(userId);
+          final lastKnownUrl = _lastKnownAvatarUrls[userId];
+          
+          if (currentAvatarUrl != lastKnownUrl) {
+            // Avatar has changed
+            print('[ProfilePictureProvider] Avatar changed for $userId');
+            _lastKnownAvatarUrls[userId] = currentAvatarUrl;
+            _profilePictureCache.remove(userId);
+            notifyProfileUpdated(userId);
+          }
+        } catch (e) {
+          // Ignore errors for individual users
+          print('[ProfilePictureProvider] Error checking avatar for $userId: $e');
+        }
+      }
+    }
+  }
+  
+  @override
+  void dispose() {
+    _avatarCheckTimer?.cancel();
+    super.dispose();
   }
   
   /// Get profile picture for a user or group
@@ -28,18 +93,85 @@ class ProfilePictureProvider with ChangeNotifier {
     
     // Check if this is the current user
     if (_client != null && userId == _client!.userID) {
-      // Load current user's profile picture from ProfilePictureService
-      final profileBytes = await _profilePictureService.getLocalProfilePicture();
-      if (profileBytes != null) {
-        _profilePictureCache[userId] = profileBytes;
-        return profileBytes;
+      // Check if custom homeserver
+      final homeserver = _client!.homeserver.toString();
+      final isCustom = utils.isCustomHomeserver(homeserver);
+      
+      if (isCustom) {
+        // For custom homeservers, try Matrix avatar
+        try {
+          final avatarUrl = await _client!.getAvatarUrl(userId);
+          // Store the avatar URL for change detection
+          _lastKnownAvatarUrls[userId] = avatarUrl;
+          
+          if (avatarUrl != null) {
+            // Build the download URL manually
+            final homeserverUrl = _client!.homeserver;
+            final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+            if (mxcParts.length == 2) {
+              final serverName = mxcParts[0];
+              final mediaId = mxcParts[1];
+              final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+              
+              final response = await _client!.httpClient.get(downloadUri);
+              if (response.statusCode == 200) {
+                final avatarBytes = response.bodyBytes;
+                _profilePictureCache[userId] = avatarBytes;
+                return avatarBytes;
+              }
+            }
+          }
+        } catch (e) {
+          print('Error downloading Matrix avatar: $e');
+        }
+      } else {
+        // Load current user's profile picture from ProfilePictureService
+        final profileBytes = await _profilePictureService.getLocalProfilePicture();
+        if (profileBytes != null) {
+          _profilePictureCache[userId] = profileBytes;
+          return profileBytes;
+        }
       }
     } else {
-      // Load from disk cache for other users
-      final profileBytes = await _othersProfileService.getCachedProfilePicture(userId);
-      if (profileBytes != null) {
-        _profilePictureCache[userId] = profileBytes;
-        return profileBytes;
+      // For other users, check if custom homeserver
+      final homeserver = _client?.homeserver.toString() ?? '';
+      final isCustom = utils.isCustomHomeserver(homeserver);
+      
+      if (isCustom) {
+        // Try Matrix avatar for other users on custom homeservers
+        try {
+          final avatarUrl = await _client!.getAvatarUrl(userId);
+          // Store the avatar URL for change detection
+          _lastKnownAvatarUrls[userId] = avatarUrl;
+          print('[ProfilePictureProvider] Stored avatar URL for $userId: $avatarUrl');
+          
+          if (avatarUrl != null) {
+            // Build the download URL manually
+            final homeserverUrl = _client!.homeserver;
+            final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+            if (mxcParts.length == 2) {
+              final serverName = mxcParts[0];
+              final mediaId = mxcParts[1];
+              final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+              
+              final response = await _client!.httpClient.get(downloadUri);
+              if (response.statusCode == 200) {
+                final avatarBytes = response.bodyBytes;
+                _profilePictureCache[userId] = avatarBytes;
+                return avatarBytes;
+              }
+            }
+          }
+        } catch (e) {
+          print('Error downloading Matrix avatar for $userId: $e');
+        }
+      } else {
+        // Load from disk cache for other users
+        final profileBytes = await _othersProfileService.getCachedProfilePicture(userId);
+        if (profileBytes != null) {
+          _profilePictureCache[userId] = profileBytes;
+          return profileBytes;
+        }
       }
     }
     
@@ -126,5 +258,11 @@ class ProfilePictureProvider with ChangeNotifier {
     _profilePictureCache.clear();
     _groupAvatarCache.clear();
     notifyListeners();
+  }
+  
+  /// Manually trigger avatar change check (for testing/debugging)
+  Future<void> manualCheckForAvatarChanges() async {
+    print('[ProfilePictureProvider] Manual avatar check triggered');
+    await _checkForAvatarChanges();
   }
 }
