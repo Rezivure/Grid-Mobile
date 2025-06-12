@@ -5,8 +5,13 @@ import 'dart:io';
 
 class ProfilePictureModal extends StatefulWidget {
   final Function(File) onImageSelected;
+  final bool isCustomHomeserver;
   
-  const ProfilePictureModal({Key? key, required this.onImageSelected}) : super(key: key);
+  const ProfilePictureModal({
+    Key? key, 
+    required this.onImageSelected,
+    this.isCustomHomeserver = false,
+  }) : super(key: key);
 
   @override
   _ProfilePictureModalState createState() => _ProfilePictureModalState();
@@ -209,23 +214,37 @@ class _ProfilePictureModalState extends State<ProfilePictureModal> {
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.05),
+                        color: widget.isCustomHomeserver 
+                            ? Colors.amber.withOpacity(0.1)
+                            : colorScheme.primary.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: widget.isCustomHomeserver
+                              ? Colors.amber.withOpacity(0.3)
+                              : Colors.transparent,
+                          width: 1,
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.lock,
-                            color: colorScheme.primary.withOpacity(0.7),
+                            widget.isCustomHomeserver ? Icons.warning : Icons.lock,
+                            color: widget.isCustomHomeserver 
+                                ? Colors.amber[700]
+                                : colorScheme.primary.withOpacity(0.7),
                             size: 14,
                           ),
                           SizedBox(width: 6),
                           Text(
-                            'End-to-end encrypted',
+                            widget.isCustomHomeserver 
+                                ? 'Stored unencrypted on homeserver'
+                                : 'End-to-end encrypted',
                             style: TextStyle(
                               fontSize: 12,
-                              color: colorScheme.primary.withOpacity(0.7),
+                              color: widget.isCustomHomeserver 
+                                  ? Colors.amber[700]
+                                  : colorScheme.primary.withOpacity(0.7),
                             ),
                           ),
                         ],
