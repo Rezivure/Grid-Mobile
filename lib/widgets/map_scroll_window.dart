@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
@@ -259,7 +260,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   if (_isDropdownExpanded) {
                     _expandController.forward();
                     _fadeController.forward();
-                    _groupsBloc.add(RefreshGroups());
+                    // Only refresh if groups haven't been loaded yet
+                    final currentState = _groupsBloc.state;
+                    if (currentState is! GroupsLoaded || currentState.groups.isEmpty) {
+                      _groupsBloc.add(LoadGroups());
+                    }
                   } else {
                     _expandController.reverse();
                     _fadeController.reverse();
