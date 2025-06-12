@@ -11,7 +11,7 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
@@ -26,6 +26,9 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:matrix/matrix.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -508,29 +511,114 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
   Widget _buildCurrentUserAvatar(String userId) {
-    return FutureBuilder<Uint8List?>(
-      future: ProfilePictureService().getLocalProfilePicture(),
-      builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data != null) {
-          return CircleAvatar(
-            radius: 18,
-            backgroundImage: MemoryImage(snapshot.data!),
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-          );
-        }
-        return ClipOval(
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: RandomAvatar(
-              localpart(userId),
-              height: 36,
+    // Check if custom homeserver
+    final roomService = Provider.of<RoomService>(context, listen: false);
+    final homeserver = roomService.getMyHomeserver();
+    final isCustomServer = utils.isCustomHomeserver(homeserver);
+    
+    if (isCustomServer) {
+      // For custom homeservers, use Matrix avatar
+      return FutureBuilder<Uint8List?>(
+        future: _loadMatrixAvatar(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundImage: MemoryImage(snapshot.data!),
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            );
+          }
+          // Show loading or random avatar
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+              ),
+            );
+          }
+          return ClipOval(
+            child: SizedBox(
               width: 36,
+              height: 36,
+              child: RandomAvatar(
+                utils.localpart(userId),
+                height: 36,
+                width: 36,
+              ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    } else {
+      // For default server, use e2ee profile picture
+      return FutureBuilder<Uint8List?>(
+        future: ProfilePictureService().getLocalProfilePicture(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundImage: MemoryImage(snapshot.data!),
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            );
+          }
+          return ClipOval(
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: RandomAvatar(
+                utils.localpart(userId),
+                height: 36,
+                width: 36,
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
+  
+  Future<Uint8List?> _loadMatrixAvatar() async {
+    try {
+      // Check cache first
+      final cacheDir = await getApplicationDocumentsDirectory();
+      final cacheFile = File('${cacheDir.path}/matrix_avatar_cache');
+      if (await cacheFile.exists()) {
+        return await cacheFile.readAsBytes();
+      }
+      
+      // Load from Matrix server
+      final client = Provider.of<Client>(context, listen: false);
+      if (client.userID != null) {
+        final avatarUrl = await client.getAvatarUrl(client.userID!);
+        if (avatarUrl != null) {
+          final homeserverUrl = client.homeserver;
+          final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+          if (mxcParts.length == 2) {
+            final serverName = mxcParts[0];
+            final mediaId = mxcParts[1];
+            final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+            
+            final response = await client.httpClient.get(downloadUri);
+            if (response.statusCode == 200) {
+              final bytes = response.bodyBytes;
+              // Cache it
+              await cacheFile.writeAsBytes(bytes);
+              return bytes;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading Matrix avatar in map scroll: $e');
+    }
+    return null;
   }
 
   Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
