@@ -24,6 +24,7 @@ import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart' as matrix;
+import 'package:path_provider/path_provider.dart';
 
 import '../blocs/groups/groups_state.dart';
 import '../blocs/groups/groups_event.dart';
@@ -153,17 +154,6 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
   
   /// Show profile picture modal for group avatar
   void _showGroupAvatarModal() async {
-    // Check if custom homeserver
-    if (isCustomHomeserver(widget.roomService.getMyHomeserver())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Group avatars are only available on default server'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
-    
     // Check permissions
     final canChange = await _canChangeAvatar();
     if (!canChange) {
@@ -176,11 +166,16 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       return;
     }
     
+    final isCustomServer = isCustomHomeserver(widget.roomService.getMyHomeserver());
+    
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) => ProfilePictureModal(
-        onImageSelected: _handleGroupAvatarSelected,
+        onImageSelected: isCustomServer 
+            ? _handleMatrixGroupAvatarSelected 
+            : _handleGroupAvatarSelected,
+        isCustomHomeserver: isCustomServer,
       ),
     );
   }
@@ -283,6 +278,71 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       print('GroupProfileModal: Saved group avatar metadata locally');
     } catch (e) {
       print('Error saving group avatar metadata: $e');
+    }
+  }
+  
+  /// Handle Matrix group avatar selection for custom homeservers
+  Future<void> _handleMatrixGroupAvatarSelected(File imageFile) async {
+    setState(() {
+      _isUploadingAvatar = true;
+    });
+    
+    try {
+      final client = widget.roomService.client;
+      final room = client.getRoomById(widget.room.roomId);
+      if (room == null) throw Exception('Room not found');
+      
+      final imageBytes = await imageFile.readAsBytes();
+      
+      // Create MatrixFile from the image
+      final matrixFile = matrix.MatrixFile(
+        bytes: imageBytes,
+        name: 'room_avatar.jpg',
+        mimeType: 'image/jpeg',
+      );
+      
+      // Set as room's avatar
+      await room.setAvatar(matrixFile);
+      
+      // Clear the cache so the new avatar loads
+      final cacheDir = await getApplicationDocumentsDirectory();
+      final cacheFile = File('${cacheDir.path}/room_avatar_${widget.room.roomId}');
+      if (await cacheFile.exists()) {
+        await cacheFile.delete();
+      }
+      
+      print('Successfully set Matrix room avatar for ${widget.room.roomId}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Group avatar updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+      
+      // Force refresh to show new avatar
+      if (mounted) {
+        // Notify UI to update
+        Provider.of<ProfilePictureProvider>(context, listen: false)
+            .notifyGroupAvatarUpdated(widget.room.roomId);
+        
+        // Trigger groups refresh
+        context.read<GroupsBloc>().add(RefreshGroups());
+        
+        // Force a rebuild
+        setState(() {});
+      }
+    } catch (e) {
+      print('Failed to set Matrix room avatar: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update group avatar'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingAvatar = false;
+      });
     }
   }
   
@@ -440,54 +500,53 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                   ),
                 ),
               ),
-              if (!isCustomHomeserver(widget.roomService.getMyHomeserver()))
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: FutureBuilder<bool>(
-                    future: _canChangeAvatar(),
-                    builder: (context, snapshot) {
-                      if (snapshot.data == true) {
-                        return GestureDetector(
-                          onTap: _isUploadingAvatar ? null : _showGroupAvatarModal,
-                          child: Container(
-                            padding: EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: colorScheme.outline.withOpacity(0.2),
-                                width: 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colorScheme.shadow.withOpacity(0.1),
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: FutureBuilder<bool>(
+                  future: _canChangeAvatar(),
+                  builder: (context, snapshot) {
+                    if (snapshot.data == true) {
+                      return GestureDetector(
+                        onTap: _isUploadingAvatar ? null : _showGroupAvatarModal,
+                        child: Container(
+                          padding: EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: colorScheme.outline.withOpacity(0.2),
+                              width: 1,
                             ),
-                            child: _isUploadingAvatar
-                                ? SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: colorScheme.primary,
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.camera_alt,
-                                    size: 14,
+                            boxShadow: [
+                              BoxShadow(
+                                color: colorScheme.shadow.withOpacity(0.1),
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: _isUploadingAvatar
+                              ? SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     color: colorScheme.primary,
                                   ),
-                          ),
-                        );
-                      }
-                      return SizedBox.shrink();
-                    },
-                  ),
+                                )
+                              : Icon(
+                                  Icons.camera_alt,
+                                  size: 14,
+                                  color: colorScheme.primary,
+                                ),
+                        ),
+                      );
+                    }
+                    return SizedBox.shrink();
+                  },
                 ),
+              ),
             ],
           ),
           const SizedBox(width: 20),
