@@ -466,9 +466,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 ? groupsState.groups
                 : <GridRoom.Room>[];
 
-            // Debug info for testing scrolling
+            // Calculate total items for scrolling
             final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
-            print('DEBUG: Total items in horizontal scroller: $totalItems (${groups.length} groups + 1 contact + ${groupsState is GroupsLoading ? 1 : 0} loading)');
 
             return SizedBox(
               height: 100,

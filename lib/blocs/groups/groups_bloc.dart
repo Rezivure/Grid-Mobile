@@ -11,11 +11,14 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 
 import '../../models/grid_user.dart';
 
 class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
+  static const String _tag = 'GroupsBloc';
+  
   final RoomService roomService;
   final RoomRepository roomRepository;
   final UserRepository userRepository;
@@ -47,10 +50,10 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     emit(GroupsLoading());
     try {
       _allGroups = await _loadGroups();
-      // Always emit a new instance of GroupsLoaded to force UI update
-      emit(GroupsLoaded(List.from(_allGroups)));
+      // Emit the groups directly - Equatable will handle equality checks
+      emit(GroupsLoaded(_allGroups));
     } catch (e) {
-      print("GroupsBloc: Error loading groups - $e");
+      Logger.error(_tag, 'Error loading groups: $e');
       emit(GroupsError(e.toString()));
     }
   }
@@ -86,12 +89,12 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         ));
       }
     } catch (e) {
-      print("Error refreshing group members: $e");
+      Logger.error(_tag, 'Error refreshing group members: $e');
     }
   }
 
   Future<void> _onRefreshGroups(RefreshGroups event, Emitter<GroupsState> emit) async {
-    print("GroupsBloc: Handling RefreshGroups event");
+    Logger.debug(_tag, 'Handling RefreshGroups event');
     try {
       final updatedGroups = await _loadGroups();
       _allGroups = updatedGroups;
@@ -116,7 +119,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         } else {
           // Only emit loading state if we don't have detailed member data to preserve
           emit(GroupsLoading());
-          emit(GroupsLoaded(List.from(_allGroups)));
+          emit(GroupsLoaded(_allGroups));
         }
       } else {
         // First time loading - show loading state
@@ -244,7 +247,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
               ));
             }
           } else {
-            emit(GroupsLoaded(List.from(_allGroups)));
+            emit(GroupsLoaded(_allGroups));
           }
         }
       }
@@ -524,7 +527,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     groups.sort((a, b) =>
         DateTime.parse(b.lastActivity).compareTo(DateTime.parse(a.lastActivity))
     );
-    print("Loaded ${groups.length} groups"); // Debug print
+    Logger.debug(_tag, 'Groups loaded', data: {'count': groups.length});
     return groups;
   }
 }

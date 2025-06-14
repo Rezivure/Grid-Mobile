@@ -9,6 +9,7 @@ import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:http/http.dart' as http;
+import 'package:grid_frontend/services/logger_service.dart';
 
 enum RelationshipStatus {
   alreadyFriends,
@@ -17,6 +18,8 @@ enum RelationshipStatus {
 }
 
 class UserService {
+  static const String _tag = 'UserService';
+  
   final Client client;
   final LocationRepository locationRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
@@ -25,11 +28,11 @@ class UserService {
 
   Future<bool> userExists(String userId) async {
     try {
-      print("Checking if $userId exists.");
+      Logger.debug(_tag, 'Checking user exists', data: {'userId': userId});
       final response = await client.getUserProfile(userId);
       return response != null;
     } catch (e) {
-      print('Error checking user existence: $e');
+      Logger.debug(_tag, 'User does not exist', data: {'userId': userId});
       return false;
     }
   }

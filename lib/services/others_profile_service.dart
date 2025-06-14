@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 
@@ -248,7 +249,7 @@ class OthersProfileService {
       if (!forceRefresh && existingAvatar != null && 
           existingAvatar['url'] == url &&
           existingAvatar['updated_at'] == updatedAt) {
-        print('Group avatar already cached for $roomId, but notifying UI anyway');
+        Logger.debug('OthersProfileService', 'Group avatar already cached, notifying UI', data: {'roomId': roomId});
         // Still notify the UI in case widgets need to reload
         _profilePictureProvider?.notifyGroupAvatarUpdated(roomId);
         _groupsBloc?.add(RefreshGroups());

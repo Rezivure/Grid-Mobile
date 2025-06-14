@@ -15,8 +15,11 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
+import 'package:grid_frontend/services/logger_service.dart';
 
 class RoomService {
+  static const String _tag = 'RoomService';
+  
   final UserService userService;
   
   // Track rooms where we've already shared location on join to prevent spam
@@ -80,7 +83,7 @@ class RoomService {
         return false;
       }
     } catch (e) {
-      print('User $matrixUserId does not exist: $e');
+      Logger.warning(_tag, 'User does not exist', data: {'userId': matrixUserId});
       return false;
     }
 
@@ -132,11 +135,15 @@ class RoomService {
         final memberEvent = room.getState('m.room.member', userId);
         if (memberEvent != null) {
           final membership = memberEvent.content['membership'] as String?;
-          print("RoomService: User $userId membership from state in room $roomId: $membership");
+          Logger.debug(_tag, 'User membership from state', data: {
+            'userId': userId,
+            'roomId': roomId,
+            'membership': membership
+          });
           return membership;
         }
       } catch (e) {
-        print("RoomService: Failed to get membership from state: $e");
+        Logger.debug(_tag, 'Failed to get membership from state: $e');
       }
       
       // Fallback to participants list
@@ -146,16 +153,20 @@ class RoomService {
               (user) => user.id == userId,
         );
         final membershipName = participant.membership.name;
-        print("RoomService: User $userId membership from participants in room $roomId: $membershipName");
+        Logger.debug(_tag, 'User membership from participants', data: {
+          'userId': userId,
+          'roomId': roomId,
+          'membership': membershipName
+        });
         return membershipName;
       } catch (e) {
-        print("RoomService: User $userId not found in participants, checking if room was just created");
+        Logger.debug(_tag, 'User not in participants, checking room creation', data: {'userId': userId});
         
         // If this is a direct room that was just created, the invited user might not appear
         // in participants yet, so we assume they're invited
         final roomName = room.name ?? '';
         if (roomName.startsWith('Grid:Direct:')) {
-          print("RoomService: Direct room detected, assuming user $userId is invited");
+          Logger.debug(_tag, 'Direct room - assuming invited status', data: {'userId': userId});
           return 'invite';
         }
         
@@ -605,7 +616,10 @@ class RoomService {
 
         try {
           await room.sendEvent(eventContent);
-          print("Location event sent to room $roomId: ${room.name}  $latitude, $longitude");
+          Logger.info(_tag, '📍 Location shared', data: {
+            'roomId': roomId,
+            'coords': Logger.formatLocation(latitude, longitude)
+          });
 
           // Track the sent message
           _recentlySentMessages.putIfAbsent(roomId, () => {}).add(messageHash);
@@ -630,7 +644,7 @@ class RoomService {
     try {
       // Check if we've already shared location to this room
       if (_roomsWithSharedLocation.contains(roomId)) {
-        print("Already shared location to room $roomId, skipping");
+        Logger.debug(_tag, 'Location already shared recently', data: {'roomId': roomId});
         return;
       }
       
@@ -707,7 +721,7 @@ class RoomService {
 
   Future<void> updateRooms(bg.Location location) async {
     List<Room> rooms = client.rooms;
-    print("Grid: Found ${rooms.length} total rooms to process");
+    Logger.debug(_tag, 'Processing location updates', data: {'totalRooms': rooms.length});
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
@@ -785,11 +799,11 @@ class RoomService {
           }
 
 
-          print("Grid: Sending location event to room ${room.id} / ${room.name}");
+          Logger.info(_tag, 'Sending location event', data: {'roomId': room.id, 'roomName': room.name});
           sendLocationEvent(room.id, location);
-          print("Grid: Location event sent successfully");
+          Logger.info(_tag, 'Location event sent successfully');
         } else {
-          print("Grid: Skipping room ${room.id} - insufficient members");
+          Logger.debug(_tag, 'Skipping room - insufficient members', data: {'roomId': room.id});
         }
 
       } catch (e) {

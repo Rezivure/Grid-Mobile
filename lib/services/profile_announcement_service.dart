@@ -3,8 +3,10 @@ import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/services/logger_service.dart';
 
 class ProfileAnnouncementService {
+  static const String _tag = 'ProfileAnnouncement';
   static const String LAST_ANNOUNCE_KEY = 'last_profile_announce';
   static const int ANNOUNCE_INTERVAL_DAYS = 6;
   
@@ -21,19 +23,23 @@ class ProfileAnnouncementService {
     try {
       // Skip if custom homeserver
       if (utils.isCustomHomeserver(client.homeserver.toString())) {
-        print('ProfileAnnouncementService: Skipping - custom homeserver');
+        Logger.debug(_tag, 'Skipping - custom homeserver');
         return;
       }
       
       final room = client.getRoomById(roomId);
       if (room == null) {
-        print('ProfileAnnouncementService: Room not found: $roomId');
+        Logger.warning(_tag, 'Room not found', data: {'roomId': roomId});
         return;
       }
       
       // Check if this is a group room
       final isGroup = room.name.startsWith('Grid:Group:');
-      print('ProfileAnnouncementService: Room $roomId is group: $isGroup, name: ${room.name}');
+      Logger.debug(_tag, 'Checking room type', data: {
+        'roomId': roomId,
+        'isGroup': isGroup,
+        'name': room.name
+      });
       
       if (isGroup) {
         // For groups, always announce personal profile picture
@@ -41,7 +47,7 @@ class ProfileAnnouncementService {
         final myUserId = client.userID;
         if (myUserId != null) {
           final powerLevel = room.getPowerLevelByUserId(myUserId);
-          print('ProfileAnnouncementService: My power level in group: $powerLevel');
+          Logger.debug(_tag, 'Power level check', data: {'level': powerLevel});
           if (powerLevel >= 50) {
             // We're an admin, check if group has an avatar to share
             await _announceGroupAvatarIfExists(roomId);
@@ -53,7 +59,7 @@ class ProfileAnnouncementService {
       // Get current profile picture metadata
       final metadata = await profilePictureService.getProfilePictureMetadata();
       if (metadata == null) {
-        print('No profile picture to announce');
+        Logger.debug(_tag, 'No profile picture to announce');
         return;
       }
       
@@ -79,9 +85,9 @@ class ProfileAnnouncementService {
       // Send as encrypted message if room supports it
       await room.sendEvent(content);
       
-      print('Announced profile to room: $roomId');
+      Logger.info(_tag, '📸 Profile announced', data: {'roomId': roomId});
     } catch (e) {
-      print('Failed to announce profile to room $roomId: $e');
+      Logger.error(_tag, 'Failed to announce profile: $e', data: {'roomId': roomId});
     }
   }
   
@@ -119,7 +125,7 @@ class ProfileAnnouncementService {
       // Update last announce time
       await _updateLastAnnounceTime();
     } catch (e) {
-      print('Failed to announce to all rooms: $e');
+      Logger.error(_tag, 'Failed bulk announcement: $e');
     }
   }
   
@@ -149,12 +155,12 @@ class ProfileAnnouncementService {
   /// Announces group avatar if it exists (for admins when new members join)
   Future<void> _announceGroupAvatarIfExists(String roomId) async {
     try {
-      print('ProfileAnnouncementService: Checking for group avatar to announce for room: $roomId');
+      Logger.debug(_tag, 'Checking for group avatar to announce', data: {'roomId': roomId});
       final prefs = await SharedPreferences.getInstance();
       final allMetadataStr = prefs.getString('group_avatars_metadata');
       
       if (allMetadataStr == null) {
-        print('ProfileAnnouncementService: No group avatars metadata found at all');
+        Logger.debug(_tag, 'No group avatars metadata found');
         return;
       }
       
@@ -162,7 +168,7 @@ class ProfileAnnouncementService {
       final groupMetadata = allMetadata[roomId] as Map<String, dynamic>?;
       
       if (groupMetadata == null) {
-        print('ProfileAnnouncementService: No group avatar metadata found for room: $roomId');
+        Logger.debug(_tag, 'No group avatar metadata found', data: {'roomId': roomId});
         return;
       }
       
@@ -182,10 +188,10 @@ class ProfileAnnouncementService {
       final room = client.getRoomById(roomId);
       if (room != null) {
         await room.sendEvent(content);
-        print('Announced group avatar to room: $roomId');
+        Logger.info(_tag, 'Group avatar announced', data: {'roomId': roomId});
       }
     } catch (e) {
-      print('Failed to announce group avatar: $e');
+      Logger.error(_tag, 'Failed to announce group avatar: $e');
     }
   }
 }

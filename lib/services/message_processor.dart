@@ -4,8 +4,11 @@ import 'package:grid_frontend/models/user_location.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/others_profile_service.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 class MessageProcessor {
+  static const String _tag = 'MessageProcessor';
+  
   final Client client;
   final Encryption encryption;
   final LocationRepository locationRepository;
@@ -27,7 +30,7 @@ class MessageProcessor {
   Future<Map<String, dynamic>?> processEvent(String roomId, MatrixEvent matrixEvent) async {
     final room = client.getRoomById(roomId);
     if (room == null) {
-      print("Room not found for event ${matrixEvent.eventId}");
+      Logger.warning(_tag, 'Room not found for event', data: {'eventId': matrixEvent.eventId});
       return null;
     }
     // Convert MatrixEvent to Event
@@ -80,7 +83,7 @@ class MessageProcessor {
         : rawTimestamp?.toString();
 
     if (sender == null || timestamp == null) {
-      print('Invalid message sender or timestamp');
+      Logger.warning(_tag, 'Invalid message sender or timestamp');
       return;
     }
 
@@ -95,7 +98,7 @@ class MessageProcessor {
       );
 
       await locationRepository.insertLocation(userLocation);
-      print('Location saved for user: $sender');
+      Logger.debug(_tag, 'Location saved', data: {'userId': sender});
       var confirm = await locationRepository.getLatestLocation(sender);
     } else {
       // It's a message, but not a location message
@@ -110,37 +113,40 @@ class MessageProcessor {
         await _othersProfileService.processProfileAnnouncement(senderId, profile);
       }
     } catch (e) {
-      print('Error handling profile announcement: $e');
+      Logger.error(_tag, 'Failed to handle profile announcement: $e');
     }
   }
   
   /// Handle group avatar announcement message
   Future<void> _handleGroupAvatarAnnouncement(String roomId, String senderId, Map<String, dynamic> content) async {
     try {
-      print('MessageProcessor: Handling group avatar announcement for room $roomId from $senderId');
+      Logger.debug(_tag, 'Handling group avatar announcement', data: {
+      'roomId': roomId,
+      'senderId': senderId
+    });
       // Verify sender has permission to change group avatar (power level >= 50)
       final room = client.getRoomById(roomId);
       if (room == null) {
-        print('MessageProcessor: Room not found for group avatar announcement');
+        Logger.warning(_tag, 'Room not found for group avatar announcement');
         return;
       }
       
       final senderPowerLevel = room.getPowerLevelByUserId(senderId);
-      print('MessageProcessor: Sender power level: $senderPowerLevel');
+      Logger.debug(_tag, 'Sender power level', data: {'level': senderPowerLevel});
       if (senderPowerLevel < 50) {
-        print('MessageProcessor: Sender does not have permission to change group avatar');
+        Logger.warning(_tag, 'Insufficient permissions for group avatar change');
         return;
       }
       
       final avatar = content['avatar'] as Map<String, dynamic>?;
       if (avatar != null) {
-        print('MessageProcessor: Processing group avatar data: $avatar');
+        Logger.debug(_tag, 'Processing group avatar data');
         await _othersProfileService.processGroupAvatarAnnouncement(roomId, avatar);
       } else {
-        print('MessageProcessor: No avatar data in content');
+        Logger.warning(_tag, 'No avatar data in content');
       }
     } catch (e) {
-      print('MessageProcessor: Error handling group avatar announcement: $e');
+      Logger.error(_tag, 'Failed to handle group avatar announcement: $e');
     }
   }
 }

@@ -11,6 +11,7 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/profile_announcement_service.dart';
@@ -32,6 +33,8 @@ import '../models/sharing_preferences.dart';
 
 
 class SyncManager with ChangeNotifier {
+  static const String _tag = 'SyncManager';
+  
   final Client client;
   final RoomService roomService;
   final MessageProcessor messageProcessor;
@@ -81,19 +84,19 @@ class SyncManager with ChangeNotifier {
   Future<void> _loadSinceToken() async {
     final prefs = await SharedPreferences.getInstance();
     _sinceToken = prefs.getString('syncSinceToken');
-    print('[SyncManager] Loaded since token: $_sinceToken');
+    Logger.debug(_tag, 'Loaded since token', data: {'hasToken': _sinceToken != null});
   }
 
   Future<void> _saveSinceToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('syncSinceToken', token);
-    print('[SyncManager] Saved since token: $token');
+    Logger.debug(_tag, 'Saved since token');
   }
 
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    print("Initializing Sync Manager...");
+    Logger.info(_tag, 'Initializing sync manager');
     try {
       await _loadSinceToken();
       await roomService.cleanRooms();
@@ -117,8 +120,9 @@ class SyncManager with ChangeNotifier {
       _processInitialSync(response);
       await startSync();
       _isInitialized = true; // Only set after successful completion
+      Logger.info(_tag, 'Sync manager initialized successfully');
     } catch (e) {
-      print("Error during initialization: $e");
+      Logger.error(_tag, 'Failed to initialize sync manager', error: e);
       // Maybe add some retry logic here
     }
   }
@@ -143,12 +147,16 @@ class SyncManager with ChangeNotifier {
 
       // Process room messages and joins
       syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-        print("Got join update for room: $roomId");
+        // Only log if there are actual updates
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty || 
+            (joinedRoomUpdate.timeline?.events ?? []).isNotEmpty) {
+          Logger.debug(_tag, 'Room update', data: {'roomId': roomId});
+        }
+        
         _processRoomMessages(roomId, joinedRoomUpdate);
 
         // Check if there are any state events before processing
         if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-          print("Found state events, processing join");
           _processRoomJoin(roomId, joinedRoomUpdate);
         }
       });
@@ -466,9 +474,11 @@ class SyncManager with ChangeNotifier {
 
   Future<void> _processRoomJoin(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
     try {
-      print("Processing room join for room: $roomId");
       final stateEvents = joinedRoomUpdate.state ?? [];
-      print("Found ${stateEvents.length} state events");
+      Logger.debug(_tag, 'Processing room join', data: {
+        'roomId': roomId,
+        'stateEvents': stateEvents.length
+      });
 
       // First pass: Check if this is an initial room join
       bool isInitialJoin = false;
@@ -497,7 +507,7 @@ class SyncManager with ChangeNotifier {
 
       // If it's an initial join, process the full room
       if (isInitialJoin) {
-        print("Processing initial room join");
+        Logger.info(_tag, 'Initial room join detected', data: {'roomId': roomId});
         final matrixRoom = client.getRoomById(roomId);
         if (matrixRoom != null) {
           final room = await roomRepository.getRoomById(roomId);
@@ -523,15 +533,17 @@ class SyncManager with ChangeNotifier {
       }
 
       // Second pass: Process individual state events
+      bool needsGroupUpdate = false;
       for (var event in stateEvents) {
-        print("Processing event type: ${event.type}");
+        Logger.debug(_tag, 'Processing event type', data: {'type': event.type});
         if (event.type == 'm.room.member') {
           // Don't process member events for kicked users
           final membershipStatus = event.content['membership'] as String?;
           final prevMembership = event.prevContent?['membership'] as String?;
 
           if (!(prevMembership == 'join' && membershipStatus == 'leave')) {
-            await _processMemberStateEvent(roomId, event);
+            await _processMemberStateEvent(roomId, event, shouldUpdateGroup: false);
+            needsGroupUpdate = true; // Mark that we need to update group after loop
           }
         } else {
           // Process other state events through message processor
@@ -543,13 +555,25 @@ class SyncManager with ChangeNotifier {
           });
         }
       }
+      
+      // Update group bloc once after processing all member events
+      if (needsGroupUpdate) {
+        final room = await roomRepository.getRoomById(roomId);
+        if (room?.isGroup == true) {
+          Logger.debug(_tag, 'Updating group after member changes', data: {'roomId': roomId});
+          groupsBloc.add(UpdateGroup(roomId));
+        }
+      }
     } catch (e) {
-      print('Error processing room join: $e');
+      Logger.error(_tag, 'Error processing room join: $e');
     }
   }
 
-  Future<void> _processMemberStateEvent(String roomId, MatrixEvent event) async {
-    print("Processing member event: ${event.stateKey} with content: ${event.content}");
+  Future<void> _processMemberStateEvent(String roomId, MatrixEvent event, {bool shouldUpdateGroup = true}) async {
+    Logger.debug(_tag, 'Processing member event', data: {
+      'stateKey': event.stateKey,
+      'membership': event.content['membership']
+    });
 
     final room = await roomRepository.getRoomById(roomId);
     if (room == null) return;
@@ -564,7 +588,9 @@ class SyncManager with ChangeNotifier {
             membershipStatus
         );
 
-        groupsBloc.add(UpdateGroup(roomId));
+        if (shouldUpdateGroup) {
+          groupsBloc.add(UpdateGroup(roomId));
+        }
 
         if (membershipStatus == 'invite') {
           try {
@@ -640,21 +666,22 @@ class SyncManager with ChangeNotifier {
             !room.isGroup, // isDirect
           );
 
-          // Update UI based on room type
-          if (room.isGroup) {
-            groupsBloc.add(UpdateGroup(roomId));
-          } else {
-            print("Direct room join detected, refreshing contacts");
+          // UI updates are handled after processing all events
+          if (!room.isGroup) {
+            Logger.debug(_tag, 'Direct room join detected, refreshing contacts');
             contactsBloc.add(RefreshContacts());
           }
           
           // Share location when someone else joins a room we're in
           if (event.stateKey != client.userID) {
-            print("Member ${event.stateKey} joined room $roomId, sharing our location");
+            Logger.info(_tag, 'Member joined room, sharing location', data: {
+              'userId': event.stateKey,
+              'roomId': roomId
+            });
             await roomService.shareCurrentLocationToRoom(roomId);
           }
         } catch (e) {
-          print('Error updating user profile for ${event.stateKey}: $e');
+          Logger.error(_tag, 'Error updating user profile: $e', data: {'userId': event.stateKey});
         }
       } else if (membershipStatus == 'leave') {
         await _handleMemberLeave(roomId, event.stateKey);
@@ -704,19 +731,11 @@ class SyncManager with ChangeNotifier {
             mapBloc.add(RemoveUserLocation(userId));
           }
 
-          // Update UI with staggered refreshes
-          groupsBloc.add(LoadGroupMembers(roomId));
-          groupsBloc.add(UpdateGroup(roomId));
+          // Update group once after member leave
           groupsBloc.add(RefreshGroups());
 
-          // Additional delayed updates to ensure sync
-          Future.delayed(const Duration(milliseconds: 500), () {
-            groupsBloc.add(LoadGroups());
-            groupsBloc.add(LoadGroupMembers(roomId));
-          });
-
         } catch (e) {
-          print('Error processing group member leave: $e');
+          Logger.error(_tag, 'Error processing group member leave: $e');
         }
       } else {
         // Handle direct room cleanup
@@ -794,16 +813,20 @@ class SyncManager with ChangeNotifier {
     if (existingRoom == null) {
       // Insert new room
       await roomRepository.insertRoom(customRoom);
-      print('Inserted new room: ${room.id}');
+      Logger.info(_tag, 'Room created', data: {'roomId': room.id, 'name': customRoom.name});
     } else {
       // Update existing room
       await roomRepository.updateRoom(customRoom);
-      print('Updated existing room: ${room.id}');
+      Logger.debug(_tag, 'Room updated', data: {'roomId': room.id});
     }
 
     // Sync participants
     final currentParticipants = customRoom.members;
     final existingParticipants = await roomRepository.getRoomParticipants(room.id);
+    
+    // Track if this is a group room (do this once, outside the loop)
+    final isGroupRoom = customRoom.isGroup;
+    bool shouldUpdateGroup = false;
 
     for (var participantId in currentParticipants) {
       try {
@@ -847,9 +870,8 @@ class SyncManager with ChangeNotifier {
           }
         }
 
-        final customRoom = await roomRepository.getRoomById(room.id);
-        if (customRoom?.isGroup ?? false) {
-
+        // Handle group preferences only once per room
+        if (isGroupRoom) {
           final existingGroupPrefs =
           await sharingPreferencesRepository.getSharingPreferences(room.id, 'group');
           if (existingGroupPrefs == null) {
@@ -862,19 +884,17 @@ class SyncManager with ChangeNotifier {
             await sharingPreferencesRepository.setSharingPreferences(
                 defaultGroupPrefs);
           }
-
-          print('Updating group in bloc: ${room.id}');
-          groupsBloc.add(UpdateGroup(room.id));
+          shouldUpdateGroup = true;  // Mark that we need to update the group bloc
         }
-        print('Processed user ${participantId} in room ${room.id}');
+        Logger.debug(_tag, 'User processed', data: {'userId': participantId, 'roomId': room.id});
         
         // If this is a direct room and someone other than us just joined, share location
         if (isDirect && participantId != client.userID && !existingParticipants.contains(participantId)) {
-          print("New user $participantId joined direct room ${room.id}, sharing our location");
+          Logger.info(_tag, 'New user joined direct room', data: {'userId': participantId, 'roomId': room.id});
           await roomService.shareCurrentLocationToRoom(room.id);
         }
       } catch (e) {
-        print('Error fetching profile for user $participantId: $e');
+        Logger.error(_tag, 'Error fetching user profile: $e', data: {'userId': participantId});
       }
     }
 
@@ -882,8 +902,14 @@ class SyncManager with ChangeNotifier {
     for (var participant in existingParticipants) {
       if (!currentParticipants.contains(participant)) {
         await roomRepository.removeRoomParticipant(room.id, participant);
-        print('Removed participant $participant from room ${room.id}');
+        Logger.debug(_tag, 'Removed participant', data: {'userId': participant, 'roomId': room.id});
       }
+    }
+    
+    // Update group bloc only once after processing all participants
+    if (shouldUpdateGroup && isGroupRoom) {
+      Logger.debug(_tag, 'Updating group in bloc', data: {'roomId': room.id});
+      groupsBloc.add(UpdateGroup(room.id));
     }
   }
 

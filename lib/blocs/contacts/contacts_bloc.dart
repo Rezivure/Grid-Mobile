@@ -4,18 +4,20 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
-import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/services/others_profile_service.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 import '../../providers/user_location_provider.dart';
 import '../map/map_event.dart';
 
 class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
+  static const String _tag = 'ContactsBloc';
+  
   final RoomService roomService;
   final UserRepository userRepository;
   final RoomRepository roomRepository;
@@ -52,14 +54,18 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
   }
 
   Future<void> _onRefreshContacts(RefreshContacts event, Emitter<ContactsState> emit) async {
-    print("ContactsBloc: Handling RefreshContacts event");
     try {
       final updatedContacts = await _loadContacts();
       _allContacts = updatedContacts; // Update the cache
-      print("ContactsBloc: Emitting ContactsLoaded with ${updatedContacts.length} contacts");
-      emit(ContactsLoaded(List.from(_allContacts))); // Always emit a new state
+      
+      // Only log if contact count changed
+      if (state is ContactsLoaded && (state as ContactsLoaded).contacts.length != updatedContacts.length) {
+        Logger.info(_tag, 'Contacts updated', data: {'count': updatedContacts.length});
+      }
+      
+      emit(ContactsLoaded(_allContacts)); // Equatable will handle equality
     } catch (e) {
-      print("ContactsBloc: Error in RefreshContacts - $e");
+      Logger.error(_tag, 'Failed to refresh contacts', error: e);
       emit(ContactsError(e.toString()));
     }
   }
@@ -67,9 +73,8 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
 
   Future<void> _onDeleteContact(DeleteContact event, Emitter<ContactsState> emit) async {
     try {
-      print("ContactsBloc: Deleting contact ${event.userId}");
+      Logger.info(_tag, 'Deleting contact', data: {'userId': event.userId});
       final roomId = await userRepository.getDirectRoomForContact(event.userId);
-      print("ContactsBloc: Found room $roomId for contact ${event.userId}");
       
       if (roomId != null) {
         await roomService.leaveRoom(roomId);
@@ -94,23 +99,24 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
         
         // If user is not in any groups with us, clear their cached profile picture
         if (groupRooms.isEmpty) {
-          print("ContactsBloc: User ${event.userId} not in any groups, clearing cached profile picture");
+          Logger.debug(_tag, 'Clearing cached profile picture', data: {'userId': event.userId});
           await _othersProfileService.clearUserProfile(event.userId);
-        } else {
-          print("ContactsBloc: User ${event.userId} is in ${groupRooms.length} groups, keeping cached profile picture");
         }
         
         // Reload contacts and update cache
         _allContacts = await _loadContacts();
-        print("ContactsBloc: After deletion, loaded ${_allContacts.length} contacts");
+        Logger.info(_tag, 'Contact deleted successfully', data: {
+          'userId': event.userId,
+          'remainingContacts': _allContacts.length
+        });
         
         // Force emit with new list to ensure UI updates
-        emit(ContactsLoaded(List.from(_allContacts)));
+        emit(ContactsLoaded(_allContacts));
       } else {
-        print("ContactsBloc: No room found for contact ${event.userId}, cannot delete");
+        Logger.warning(_tag, 'No room found for contact deletion', data: {'userId': event.userId});
       }
     } catch (e) {
-      print("ContactsBloc: Error deleting contact ${event.userId}: $e");
+      Logger.error(_tag, 'Failed to delete contact', error: e, data: {'userId': event.userId});
       emit(ContactsError(e.toString()));
     }
   }
@@ -153,17 +159,24 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
           final storedStatus = userRelationship['membershipStatus'] as String?;
           if (storedStatus != null) {
             membershipStatus = storedStatus;
-            print("ContactsBloc: Using stored membership status: $membershipStatus for ${contact.userId}");
+            Logger.debug(_tag, 'Using stored membership status', data: {
+              'status': membershipStatus,
+              'userId': contact.userId
+            });
           }
         }
         
         // If no stored status, fall back to Matrix room status
         if (membershipStatus == null) {
           membershipStatus = await roomService.getUserRoomMembership(directRoomId, contact.userId);
-          print("ContactsBloc: Contact ${contact.userId} has Matrix membership status: $membershipStatus in room $directRoomId");
+          Logger.debug(_tag, 'Matrix membership status', data: {
+            'userId': contact.userId,
+            'status': membershipStatus,
+            'roomId': directRoomId
+          });
         }
       } else {
-        print("ContactsBloc: No direct room found for contact ${contact.userId}");
+        Logger.debug(_tag, 'No direct room found', data: {'userId': contact.userId});
       }
       
       contactDisplays.add(ContactDisplay(
@@ -175,14 +188,17 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
       ));
     }
     
-    print("ContactsBloc: Loaded ${contactDisplays.length} contacts");
+    Logger.debug(_tag, 'Contacts loaded', data: {'count': contactDisplays.length});
     return contactDisplays;
   }
 
   // Handle new contact invitation immediately (similar to GroupsBloc.handleNewMemberInvited)
   Future<void> handleNewContactInvited(String roomId, String userId) async {
     try {
-      print("ContactsBloc: Handling new contact invite for $userId in room $roomId");
+      Logger.info(_tag, 'New contact invite', data: {
+        'userId': userId,
+        'roomId': roomId
+      });
 
       // Get user profile and insert/update user
       final profileInfo = await roomService.client.getUserProfile(userId);
@@ -205,10 +221,11 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
 
       // Force refresh contacts to show the new contact immediately
       add(RefreshContacts());
-      
-      print("ContactsBloc: New contact invite handled successfully");
     } catch (e) {
-      print("ContactsBloc: Error handling new contact invite: $e");
+      Logger.error(_tag, 'Failed to handle contact invite', error: e, data: {
+        'userId': userId,
+        'roomId': roomId
+      });
     }
   }
 }
