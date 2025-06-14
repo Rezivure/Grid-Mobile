@@ -28,6 +28,10 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   List<Room> _allGroups = [];
   Timer? _memberUpdateDebouncer;
   bool _isUpdatingMembers = false;
+  
+  // Track recent updates to prevent spam
+  final Map<String, DateTime> _recentUpdates = {};
+  static const Duration _updateThreshold = Duration(milliseconds: 500);
 
   GroupsBloc({
     required this.roomService,
@@ -111,7 +115,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
           // Don't emit loading state when preserving detailed member data
           // to avoid flickering and status resets
           emit(GroupsLoaded(
-            List.from(_allGroups),
+            _allGroups,
             selectedRoomId: currentState.selectedRoomId,
             selectedRoomMembers: currentState.selectedRoomMembers,
             membershipStatuses: currentState.membershipStatuses,
@@ -124,7 +128,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
       } else {
         // First time loading - show loading state
         emit(GroupsLoading());
-        emit(GroupsLoaded(List.from(_allGroups)));
+        emit(GroupsLoaded(_allGroups));
       }
 
     } catch (e) {
@@ -197,7 +201,21 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
   Future<void> _onUpdateGroup(UpdateGroup event, Emitter<GroupsState> emit) async {
     try {
-      print("GroupsBloc: Handling UpdateGroup for room ${event.roomId}");
+      // Check if we recently updated this room
+      final lastUpdate = _recentUpdates[event.roomId];
+      if (lastUpdate != null && DateTime.now().difference(lastUpdate) < _updateThreshold) {
+        Logger.debug(_tag, 'Skipping UpdateGroup - too recent', data: {'roomId': event.roomId});
+        return;
+      }
+      _recentUpdates[event.roomId] = DateTime.now();
+      
+      // Clean up old entries
+      if (_recentUpdates.length > 50) {
+        final cutoff = DateTime.now().subtract(_updateThreshold * 2);
+        _recentUpdates.removeWhere((_, time) => time.isBefore(cutoff));
+      }
+      
+      Logger.debug(_tag, 'Handling UpdateGroup', data: {'roomId': event.roomId});
       final room = await roomRepository.getRoomById(event.roomId);
       if (room != null) {
         final index = _allGroups.indexWhere((g) => g.roomId == event.roomId);
@@ -208,7 +226,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
             // Get updated member data if this is the selected room
             if (currentState.selectedRoomId == event.roomId) {
-              print("GroupsBloc: Updating members for selected room");
+              Logger.debug(_tag, 'Updating members for selected room');
               final members = await userRepository.getGroupParticipants();
               final filteredMembers = members.where(
                       (user) => room.members.contains(user.userId)
@@ -226,13 +244,16 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
                     user.userId,
                   );
                   membershipStatuses[user.userId] = status ?? 'join';
-                  print("GroupsBloc: Updated status for ${user.userId} to ${status ?? 'join'}");
+                  Logger.debug(_tag, 'Updated member status', data: {
+                    'userId': user.userId,
+                    'status': status ?? 'join'
+                  });
                 }),
               );
 
-              print("GroupsBloc: Emitting new state with ${filteredMembers.length} members");
+              Logger.debug(_tag, 'Emitting state with members', data: {'count': filteredMembers.length});
               emit(GroupsLoaded(
-                List.from(_allGroups),
+                _allGroups,
                 selectedRoomId: currentState.selectedRoomId,
                 selectedRoomMembers: filteredMembers,
                 membershipStatuses: membershipStatuses,
@@ -240,7 +261,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
             } else {
               // Just update the groups list if this isn't the selected room
               emit(GroupsLoaded(
-                List.from(_allGroups),
+                _allGroups,
                 selectedRoomId: currentState.selectedRoomId,
                 selectedRoomMembers: currentState.selectedRoomMembers,
                 membershipStatuses: currentState.membershipStatuses,
