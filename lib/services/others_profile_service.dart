@@ -249,10 +249,8 @@ class OthersProfileService {
       if (!forceRefresh && existingAvatar != null && 
           existingAvatar['url'] == url &&
           existingAvatar['updated_at'] == updatedAt) {
-        Logger.debug('OthersProfileService', 'Group avatar already cached, notifying UI', data: {'roomId': roomId});
-        // Still notify the UI in case widgets need to reload
-        _profilePictureProvider?.notifyGroupAvatarUpdated(roomId);
-        _groupsBloc?.add(RefreshGroups());
+        Logger.debug('OthersProfileService', 'Group avatar already cached, skipping', data: {'roomId': roomId});
+        // Don't notify if already cached - this prevents infinite loops
         return;
       }
       

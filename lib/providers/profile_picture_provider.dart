@@ -16,8 +16,11 @@ class ProfilePictureProvider with ChangeNotifier {
   final Map<String, int> _profileVersions = {};
   final Map<String, int> _groupVersions = {};
   final Map<String, Uri?> _lastKnownAvatarUrls = {};
+  final Map<String, DateTime> _lastGroupUpdateTime = {};
   Client? _client;
   Timer? _avatarCheckTimer;
+  Timer? _notifyTimer;
+  bool _pendingNotify = false;
   
   void setClient(Client client) {
     _client = client;
@@ -81,7 +84,19 @@ class ProfilePictureProvider with ChangeNotifier {
   @override
   void dispose() {
     _avatarCheckTimer?.cancel();
+    _notifyTimer?.cancel();
     super.dispose();
+  }
+  
+  void _throttledNotify() {
+    if (_pendingNotify) return;
+    
+    _pendingNotify = true;
+    _notifyTimer?.cancel();
+    _notifyTimer = Timer(Duration(milliseconds: 100), () {
+      _pendingNotify = false;
+      notifyListeners();
+    });
   }
   
   /// Get profile picture for a user or group
@@ -204,11 +219,20 @@ class ProfilePictureProvider with ChangeNotifier {
     // Increment version to ensure widgets detect the change
     _profileVersions[userId] = (_profileVersions[userId] ?? 0) + 1;
     
-    notifyListeners();
+    _throttledNotify();
   }
   
   /// Notify that a group avatar has been updated
   void notifyGroupAvatarUpdated(String roomId) {
+    // Prevent rapid-fire updates for the same room
+    final now = DateTime.now();
+    final lastUpdate = _lastGroupUpdateTime[roomId];
+    if (lastUpdate != null && now.difference(lastUpdate).inMilliseconds < 500) {
+      print('[ProfilePictureProvider] Skipping rapid update for room $roomId');
+      return;
+    }
+    _lastGroupUpdateTime[roomId] = now;
+    
     // Clear memory cache for this group
     _groupAvatarCache.remove(roomId);
     _updatedGroups.add(roomId);
@@ -216,6 +240,10 @@ class ProfilePictureProvider with ChangeNotifier {
     // Increment version to ensure widgets detect the change
     _groupVersions[roomId] = (_groupVersions[roomId] ?? 0) + 1;
     
+    // Log version increment for debugging
+    print('[ProfilePictureProvider] Group avatar version for $roomId: ${_groupVersions[roomId]}');
+    
+    // Notify immediately for user-initiated updates
     notifyListeners();
   }
   
@@ -243,21 +271,21 @@ class ProfilePictureProvider with ChangeNotifier {
   void clearUserCache(String userId) {
     _profilePictureCache.remove(userId);
     _updatedProfiles.add(userId);
-    notifyListeners();
+    _throttledNotify();
   }
   
   /// Clear cache for a specific group
   void clearGroupCache(String roomId) {
     _groupAvatarCache.remove(roomId);
     _updatedGroups.add(roomId);
-    notifyListeners();
+    _throttledNotify();
   }
   
   /// Clear all caches
   void clearCache() {
     _profilePictureCache.clear();
     _groupAvatarCache.clear();
-    notifyListeners();
+    _throttledNotify();
   }
   
   /// Manually trigger avatar change check (for testing/debugging)

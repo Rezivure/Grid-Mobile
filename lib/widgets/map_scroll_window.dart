@@ -30,6 +30,7 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:matrix/matrix.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -42,6 +43,8 @@ enum SubscreenOption { contacts, groups, invites, groupDetails }
 
 class _MapScrollWindowState extends State<MapScrollWindow> 
     with TickerProviderStateMixin {
+  static const String _tag = 'MapScrollWindow';
+  
   late final RoomService _roomService;
   late final UserService _userService;
   late final LocationRepository _locationRepository;
@@ -55,6 +58,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
   bool _isScrollingContent = false;
+  
+  // Cache user ID to prevent repeated calls
+  String? _cachedUserId;
+  Future<String?>? _userIdFuture;
 
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
@@ -95,6 +102,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     );
 
     _groupsBloc.add(LoadGroups());
+    
+    // Initialize user ID future once
+    _userIdFuture = _userService.getMyUserId().then((id) {
+      _cachedUserId = id;
+      return id;
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
@@ -429,9 +442,18 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget _buildModernHorizontalScroller(ColorScheme colorScheme) {
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
+        Logger.debug(_tag, 'BlocBuilder rebuild triggered', data: {
+          'stateType': groupsState.runtimeType.toString(),
+          'groupsCount': groupsState is GroupsLoaded ? groupsState.groups.length : 0
+        });
         return FutureBuilder<String?>(
-          future: _userService.getMyUserId(),
+          future: _userIdFuture,
           builder: (context, userSnapshot) {
+            Logger.debug(_tag, 'FutureBuilder rebuild triggered', data: {
+              'connectionState': userSnapshot.connectionState.toString(),
+              'hasData': userSnapshot.hasData,
+              'cachedUserId': _cachedUserId
+            });
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return Container(
                 height: 100,
@@ -465,6 +487,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             final groups = (groupsState is GroupsLoaded)
                 ? groupsState.groups
                 : <GridRoom.Room>[];
+            
+            Logger.debug(_tag, 'Groups in state', data: {
+              'count': groups.length,
+              'groupIds': groups.map((g) => g.roomId).toList()
+            });
 
             // Calculate total items for scrolling
             final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
@@ -702,6 +729,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   DateTime.now().millisecondsSinceEpoch ~/ 1000));
 
       final isSelected = _selectedLabel == groupName;
+      
+      Logger.debug(_tag, 'Building group option', data: {
+        'roomId': room.roomId,
+        'groupName': groupName,
+        'memberCount': room.members.length
+      });
 
       return GestureDetector(
         onTap: () {

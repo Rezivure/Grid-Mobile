@@ -121,9 +121,11 @@ class MessageProcessor {
   Future<void> _handleGroupAvatarAnnouncement(String roomId, String senderId, Map<String, dynamic> content) async {
     try {
       Logger.debug(_tag, 'Handling group avatar announcement', data: {
-      'roomId': roomId,
-      'senderId': senderId
-    });
+        'roomId': roomId,
+        'senderId': senderId,
+        'updatedAt': content['avatar']?['updated_at']
+      });
+      
       // Verify sender has permission to change group avatar (power level >= 50)
       final room = client.getRoomById(roomId);
       if (room == null) {

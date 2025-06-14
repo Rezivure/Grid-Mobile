@@ -56,8 +56,16 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
         // Store initial avatar URL
         _lastAvatarUrl = room.avatar?.toString();
         
-        // Listen for state events
+        // Listen for state events with debouncing
+        DateTime? _lastUpdate;
         _stateSubscription = room.onUpdate.stream.listen((syncUpdate) {
+          // Debounce updates to prevent excessive refreshing
+          final now = DateTime.now();
+          if (_lastUpdate != null && now.difference(_lastUpdate!).inMilliseconds < 500) {
+            return;
+          }
+          _lastUpdate = now;
+          
           // Check if avatar changed
           final newAvatarUrl = room.avatar?.toString();
           if (newAvatarUrl != _lastAvatarUrl) {
@@ -78,6 +86,9 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
       await cacheFile.delete();
       print('Cleared avatar cache for room ${widget.roomId}');
     }
+    
+    // Clear internal state
+    _avatarBytes = null;
     
     // Reload avatar
     if (mounted) {
@@ -107,6 +118,7 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
     final currentVersion = profileProvider.getGroupAvatarVersion(widget.roomId);
     
     if (currentVersion > _lastKnownVersion) {
+      print('CachedGroupAvatar: Version changed for ${widget.roomId} from $_lastKnownVersion to $currentVersion');
       _lastKnownVersion = currentVersion;
       // Force reload the avatar
       _loadGroupAvatar();
@@ -114,7 +126,12 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   }
   
   Future<void> _loadGroupAvatar() async {
-    setState(() => _isLoading = true);
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+      _avatarBytes = null; // Clear old avatar to force refresh
+    });
     
     try {
       // Check if custom homeserver
@@ -200,16 +217,17 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   
   @override
   Widget build(BuildContext context) {
-    // Listen to provider for updates to trigger rebuilds
-    final profileProvider = context.watch<ProfilePictureProvider>();
+    // Listen to provider but only for this specific room's updates
+    final profileProvider = Provider.of<ProfilePictureProvider>(context);
     
-    // Check for version changes on every build
+    // Check for version changes specific to this room
     final currentVersion = profileProvider.getGroupAvatarVersion(widget.roomId);
     if (currentVersion > _lastKnownVersion) {
       _lastKnownVersion = currentVersion;
       // Schedule a reload after the current build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
+          print('CachedGroupAvatar: Reloading due to version change for ${widget.roomId}');
           _loadGroupAvatar();
         }
       });
