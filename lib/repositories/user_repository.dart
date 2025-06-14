@@ -138,11 +138,12 @@ class UserRepository {
   Future<List<GridUser>> getDirectContacts() async {
     final db = await _databaseService.database;
 
-    // query for direct contacts
+    // query for direct contacts - only return users who have a valid room
     final results = await db.rawQuery('''
     SELECT DISTINCT u.*
     FROM Users u
     JOIN UserRelationships ur ON u.userId = ur.userId
+    JOIN Rooms r ON ur.roomId = r.roomId
     WHERE ur.isDirect = 1
   ''');
     return results.map((map) => GridUser.fromMap(map)).toList();
@@ -271,5 +272,42 @@ class UserRepository {
     }
 
     return null;
+  }
+
+  /// Finds and returns orphaned UserRelationships (relationships without corresponding rooms)
+  Future<List<Map<String, dynamic>>> getOrphanedRelationships() async {
+    final db = await _databaseService.database;
+    
+    final orphanedRelationships = await db.rawQuery('''
+      SELECT ur.userId, ur.roomId, ur.isDirect
+      FROM UserRelationships ur
+      LEFT JOIN Rooms r ON ur.roomId = r.roomId
+      WHERE r.roomId IS NULL
+    ''');
+    
+    return orphanedRelationships;
+  }
+
+  /// Safely removes orphaned relationships after verifying they don't exist on server
+  Future<int> cleanupOrphanedRelationships(Set<String> validServerRoomIds) async {
+    final db = await _databaseService.database;
+    int cleanedCount = 0;
+    
+    // Only clean up relationships for rooms that we've confirmed don't exist on server
+    final orphaned = await getOrphanedRelationships();
+    
+    for (final relationship in orphaned) {
+      final roomId = relationship['roomId'] as String;
+      final userId = relationship['userId'] as String;
+      
+      // Only remove if this room is NOT in the valid server rooms set
+      if (!validServerRoomIds.contains(roomId)) {
+        await removeUserRelationship(userId, roomId);
+        cleanedCount++;
+        print("UserRepository: Removed orphaned relationship for $userId in non-existent room $roomId");
+      }
+    }
+    
+    return cleanedCount;
   }
 }

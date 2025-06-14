@@ -647,6 +647,12 @@ class SyncManager with ChangeNotifier {
             print("Direct room join detected, refreshing contacts");
             contactsBloc.add(RefreshContacts());
           }
+          
+          // Share location when someone else joins a room we're in
+          if (event.stateKey != client.userID) {
+            print("Member ${event.stateKey} joined room $roomId, sharing our location");
+            await roomService.shareCurrentLocationToRoom(roomId);
+          }
         } catch (e) {
           print('Error updating user profile for ${event.stateKey}: $e');
         }
@@ -861,6 +867,12 @@ class SyncManager with ChangeNotifier {
           groupsBloc.add(UpdateGroup(room.id));
         }
         print('Processed user ${participantId} in room ${room.id}');
+        
+        // If this is a direct room and someone other than us just joined, share location
+        if (isDirect && participantId != client.userID && !existingParticipants.contains(participantId)) {
+          print("New user $participantId joined direct room ${room.id}, sharing our location");
+          await roomService.shareCurrentLocationToRoom(room.id);
+        }
       } catch (e) {
         print('Error fetching profile for user $participantId: $e');
       }
@@ -1083,7 +1095,14 @@ class SyncManager with ChangeNotifier {
       // 6. Clean up orphaned users
       await _cleanupOrphanedUsers();
       
-      // 7. Refresh UI
+      // 7. Clean up orphaned relationships (only for rooms confirmed not on server)
+      final validServerRoomIds = serverRooms.map((r) => r.id).toSet();
+      final cleanedRelationships = await userRepository.cleanupOrphanedRelationships(validServerRoomIds);
+      if (cleanedRelationships > 0) {
+        print("[SyncManager] Cleaned up $cleanedRelationships orphaned user relationships");
+      }
+      
+      // 8. Refresh UI
       contactsBloc.add(RefreshContacts());
       groupsBloc.add(RefreshGroups());
       mapBloc.add(MapLoadUserLocations());

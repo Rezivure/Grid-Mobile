@@ -18,6 +18,9 @@ import 'package:grid_frontend/models/room.dart' as GridRoom;
 
 class RoomService {
   final UserService userService;
+  
+  // Track rooms where we've already shared location on join to prevent spam
+  final Set<String> _roomsWithSharedLocation = {};
   final Client client;
   final UserRepository userRepository;
   final UserKeysRepository userKeysRepository;
@@ -285,6 +288,10 @@ class RoomService {
         await leaveRoom(roomId);
         return false; // Invalid invite
       }
+      
+      // Share location to the newly joined room
+      await shareCurrentLocationToRoom(roomId);
+      
       return true; // Successfully joined
     } catch (e) {
       print("Error during acceptInvitation: $e");
@@ -328,11 +335,20 @@ class RoomService {
         String leaveReason = '';
 
         // Check if it's a Grid room (direct or group)
-        if (room.name.startsWith("Grid:")) {
-          print("Checking Grid room: ${room.name}");
+        // Check if room name exists and is a Grid room
+        final roomName = room.name ?? '';
+        
+        if (roomName.isEmpty) {
+          // Don't leave rooms with empty names - they might be newly created
+          print("Room ${room.id} has empty name, skipping cleanup (might be newly created)");
+          continue;
+        }
+        
+        if (roomName.startsWith("Grid:")) {
+          print("Checking Grid room: $roomName");
 
-          if (room.name.contains("Grid:Group:")) {
-            final roomNameParts = room.name.split(":");
+          if (roomName.contains("Grid:Group:")) {
+            final roomNameParts = roomName.split(":");
             if (roomNameParts.length >= 4) {
               final expirationTimestamp = int.tryParse(roomNameParts[2]) ?? 0;
               print("Group room ${room.id} expiration: $expirationTimestamp");
@@ -342,7 +358,7 @@ class RoomService {
                 leaveReason = 'expired group';
               }
             }
-          } else if (room.name.contains("Grid:Direct:")) {
+          } else if (roomName.contains("Grid:Direct:")) {
             print("Checking direct room: ${room.id} with ${participants.length} participants");
 
             if (participants.length <= 1) {
@@ -355,9 +371,21 @@ class RoomService {
             }
           }
         } else {
-          print("Found non-Grid room: ${room.name}");
-          shouldLeave = true;
-          leaveReason = 'non-Grid room';
+          // Only leave non-Grid rooms if we're certain they're not Grid rooms
+          // Check if it might be a Grid room by looking at participants
+          bool mightBeGridRoom = false;
+          
+          // If it's a direct room with 2 participants, it might be a Grid room with unsynced name
+          if (participants.length == 2 && room.isDirectChat) {
+            mightBeGridRoom = true;
+            print("Room ${room.id} might be a Grid direct room with unsynced name");
+          }
+          
+          if (!mightBeGridRoom) {
+            print("Found non-Grid room: $roomName");
+            shouldLeave = true;
+            leaveReason = 'non-Grid room';
+          }
         }
 
         // Extra checks for any room type
@@ -595,6 +623,74 @@ class RoomService {
     } else {
       print("Room $roomId not found");
     }
+  }
+
+  /// Shares current location to a specific room (used on room join)
+  Future<void> shareCurrentLocationToRoom(String roomId) async {
+    try {
+      // Check if we've already shared location to this room
+      if (_roomsWithSharedLocation.contains(roomId)) {
+        print("Already shared location to room $roomId, skipping");
+        return;
+      }
+      
+      final room = client.getRoomById(roomId);
+      if (room == null) {
+        print("Cannot share location - room $roomId not found");
+        return;
+      }
+
+      // Mark this room as having received location share
+      _roomsWithSharedLocation.add(roomId);
+
+      // Always get a fresh location for room join (similar to manual ping)
+      try {
+        print("Getting fresh location for room join...");
+        final currentPos = await bg.BackgroundGeolocation.getCurrentPosition(
+          samples: 3, // Take multiple samples for better accuracy
+          timeout: 30,
+          maximumAge: 0, // Force fresh location
+          persist: false,
+          desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // High accuracy
+        );
+        
+        final latitude = currentPos.coords.latitude;
+        final longitude = currentPos.coords.longitude;
+        
+        if (latitude != null && longitude != null) {
+          await _sendLocationEventToRoom(room, latitude, longitude, "Current location (shared on join)");
+        } else {
+          print("Failed to get valid coordinates from location");
+        }
+      } catch (e) {
+        print("Failed to get location for room join: $e");
+        // Fallback: try to use last known location if available
+        final locationManager = LocationManager();
+        final lastKnown = locationManager.currentLatLng;
+        if (lastKnown != null) {
+          print("Using last known location as fallback");
+          await _sendLocationEventToRoom(room, lastKnown.latitude, lastKnown.longitude, "Last known location (shared on join)");
+        }
+      }
+    } catch (e) {
+      print("Failed to share location on room join: $e");
+      // Remove from set if sharing failed
+      _roomsWithSharedLocation.remove(roomId);
+    }
+  }
+  
+  /// Helper method to send location event to a room
+  Future<void> _sendLocationEventToRoom(Room room, double latitude, double longitude, String description) async {
+    final eventContent = {
+      'msgtype': 'm.location',
+      'body': 'Current location',
+      'geo_uri': 'geo:$latitude,$longitude',
+      'description': description,
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    await room.sendEvent(eventContent);
+    print("Location shared to room ${room.id}: $latitude, $longitude");
   }
 
   Future<int> getRoomMemberCount(String roomId) async {
