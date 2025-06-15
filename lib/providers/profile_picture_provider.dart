@@ -285,6 +285,17 @@ class ProfilePictureProvider with ChangeNotifier {
   void clearCache() {
     _profilePictureCache.clear();
     _groupAvatarCache.clear();
+    _updatedProfiles.clear();
+    _updatedGroups.clear();
+    _profileVersions.clear();
+    _groupVersions.clear();
+    _lastKnownAvatarUrls.clear();
+    _lastGroupUpdateTime.clear();
+    
+    // Cancel avatar checking timer
+    _avatarCheckTimer?.cancel();
+    _avatarCheckTimer = null;
+    
     _throttledNotify();
   }
   

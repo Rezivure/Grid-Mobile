@@ -6,6 +6,7 @@ import 'package:random_avatar/random_avatar.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
@@ -20,6 +21,7 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/widgets/profile_picture_modal.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/services/profile_announcement_service.dart';
+import 'package:grid_frontend/services/others_profile_service.dart';
 import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -747,6 +749,14 @@ class _SettingsPageState extends State<SettingsPage> {
         // Clear profile picture data
         await _profilePictureService.clearLocalProfilePicture();
         
+        // Clear all profile picture caches
+        final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+        profileProvider.clearCache();
+        
+        // Clear others' profile data
+        final othersProfileService = OthersProfileService();
+        await othersProfileService.clearAllProfiles();
+        
         // Clear Matrix avatar cache if custom homeserver
         if (isCustomHomeserver()) {
           try {
@@ -762,6 +772,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
         // Clear shared preferences
         await sharedPreferences.clear();
+        
+        // Clear secure storage (encryption keys)
+        try {
+          const secureStorage = FlutterSecureStorage();
+          await secureStorage.deleteAll();
+        } catch (e) {
+          print('Error clearing secure storage: $e');
+        }
 
         try {
           if (client.isLogged()) {
