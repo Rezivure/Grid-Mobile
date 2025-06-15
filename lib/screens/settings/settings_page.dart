@@ -6,14 +6,25 @@ import 'package:random_avatar/random_avatar.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:async';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/widgets/profile_picture_modal.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
+import 'package:grid_frontend/services/profile_announcement_service.dart';
+import 'package:grid_frontend/services/others_profile_service.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
+import 'package:path_provider/path_provider.dart';
 
 
 
@@ -35,6 +46,15 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _localpart;
   String? _displayName;
   bool _isEditingDisplayName = false;
+  
+  // Profile picture related
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
+  late ProfileAnnouncementService _profileAnnouncementService;
+  Uint8List? _profilePictureBytes;
+  bool _isUploadingProfilePic = false;
+  bool _isLoadingProfilePic = true;
+  bool _hasInitializedAvatar = false;
+  bool _isInitializing = true;
 
 
   @override
@@ -44,12 +64,53 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadIncognitoState();
     _loadBatterySaverState();
+    _loadProfilePicture();
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Initialize profile announcement service if not already done
+    final client = Provider.of<Client>(context, listen: false);
+    _profileAnnouncementService = ProfileAnnouncementService(
+      client: client,
+      profilePictureService: _profilePictureService,
+    );
   }
 
   bool isCustomHomeserver() {
     final roomService = Provider.of<RoomService>(context, listen: false);
     final homeserver = roomService.getMyHomeserver();
     return utils.isCustomHomeserver(homeserver);
+  }
+  
+  Future<String> _getMatrixAvatarCachePath() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return '${appDir.path}/matrix_avatar_cache';
+  }
+  
+  Future<Uint8List?> _getCachedMatrixAvatar() async {
+    try {
+      final cachePath = await _getMatrixAvatarCachePath();
+      final cacheFile = File(cachePath);
+      if (await cacheFile.exists()) {
+        return await cacheFile.readAsBytes();
+      }
+    } catch (e) {
+      print('Error reading cached Matrix avatar: $e');
+    }
+    return null;
+  }
+  
+  Future<void> _cacheMatrixAvatar(Uint8List bytes) async {
+    try {
+      final cachePath = await _getMatrixAvatarCachePath();
+      final cacheFile = File(cachePath);
+      await cacheFile.writeAsBytes(bytes);
+    } catch (e) {
+      print('Error caching Matrix avatar: $e');
+    }
   }
 
   Future<void> _loadUser() async {
@@ -144,6 +205,237 @@ class _SettingsPageState extends State<SettingsPage> {
       this.deviceID = deviceId ?? 'Device ID not available';
       this.identityKey = identityKey.isNotEmpty ? identityKey : 'Identity Key not available';
     });
+  }
+  
+  Future<void> _loadProfilePicture() async {
+    // Set initial loading state based on homeserver type
+    if (!isCustomHomeserver()) {
+      setState(() {
+        _isLoadingProfilePic = true;
+      });
+    }
+    // For custom homeservers, keep _isInitializing = true until we know if there's an avatar
+    
+    try {
+      if (isCustomHomeserver()) {
+        // For custom homeservers, check cache first
+        final cachedAvatar = await _getCachedMatrixAvatar();
+        if (cachedAvatar != null && mounted) {
+          setState(() {
+            _profilePictureBytes = cachedAvatar;
+            _isInitializing = false;
+          });
+        }
+        
+        // Then try to load Matrix avatar from server
+        final client = Provider.of<Client>(context, listen: false);
+        if (client.userID != null) {
+          try {
+            final avatarUrl = await client.getAvatarUrl(client.userID!);
+            if (avatarUrl != null) {
+              // Build the download URL manually
+              final homeserverUrl = client.homeserver;
+              final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+              if (mxcParts.length == 2) {
+                final serverName = mxcParts[0];
+                final mediaId = mxcParts[1];
+                final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+                
+                final response = await client.httpClient.get(downloadUri);
+                if (response.statusCode == 200 && mounted) {
+                  final avatarBytes = response.bodyBytes;
+                  // Cache the avatar
+                  await _cacheMatrixAvatar(avatarBytes);
+                  setState(() {
+                    _profilePictureBytes = avatarBytes;
+                    _isInitializing = false;
+                  });
+                } else {
+                  // Failed to load avatar, show random avatar if no cache
+                  if (mounted && cachedAvatar == null) {
+                    setState(() {
+                      _isInitializing = false;
+                    });
+                  }
+                }
+              } else {
+                // Invalid avatar URL format, show random avatar if no cache
+                if (mounted && cachedAvatar == null) {
+                  setState(() {
+                    _isInitializing = false;
+                  });
+                }
+              }
+            } else {
+              // No avatar set, show random avatar if no cache
+              if (mounted && cachedAvatar == null) {
+                setState(() {
+                  _isInitializing = false;
+                });
+              }
+            }
+          } catch (e) {
+            print('Error loading Matrix avatar: $e');
+            // Error loading avatar, show random avatar if no cache
+            if (mounted && cachedAvatar == null) {
+              setState(() {
+                _isInitializing = false;
+              });
+            }
+          }
+        } else {
+          // No user ID, show random avatar if no cache
+          if (mounted && cachedAvatar == null) {
+            setState(() {
+              _isInitializing = false;
+            });
+          }
+        }
+      } else {
+        // For default server, use e2ee profile picture
+        final profilePicBytes = await _profilePictureService.getLocalProfilePicture();
+        if (profilePicBytes != null && mounted) {
+          setState(() {
+            _profilePictureBytes = profilePicBytes;
+            _isLoadingProfilePic = false;
+          });
+        } else if (mounted) {
+          setState(() {
+            _isLoadingProfilePic = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Silent fail - user will see default avatar
+      print('Error loading profile picture: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingProfilePic = false;
+          _isInitializing = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _handleProfilePictureSelected(File imageFile) async {
+    if (isCustomHomeserver()) return; // Only for default server
+    
+    setState(() {
+      _isUploadingProfilePic = true;
+    });
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwtToken = prefs.getString('loginToken');
+      
+      if (jwtToken == null) {
+        throw Exception('No authentication token found');
+      }
+      
+      // Upload the profile picture
+      final metadata = await _profilePictureService.uploadProfilePicture(
+        imageFile, 
+        jwtToken
+      );
+      
+      // Load the cached picture
+      await _loadProfilePicture();
+      
+      // Announce to all active rooms
+      await _profileAnnouncementService.announceToAllActiveRooms();
+      
+      print('Successfully set profile picture');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } catch (e) {
+      print('Failed to set profile picture: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update profile picture'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingProfilePic = false;
+      });
+    }
+  }
+  
+  void _showProfilePictureModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ProfilePictureModal(
+        onImageSelected: _handleProfilePictureSelected,
+      ),
+    );
+  }
+  
+  void _showMatrixProfilePictureModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => ProfilePictureModal(
+        onImageSelected: _handleMatrixProfilePictureSelected,
+        isCustomHomeserver: true,
+      ),
+    );
+  }
+  
+  Future<void> _handleMatrixProfilePictureSelected(File imageFile) async {
+    setState(() {
+      _isUploadingProfilePic = true;
+    });
+    
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      final imageBytes = await imageFile.readAsBytes();
+      
+      // Upload to Matrix media repository
+      final mxcUri = await client.uploadContent(
+        imageBytes,
+        filename: 'avatar.jpg',
+        contentType: 'image/jpeg',
+      );
+      
+      // Set as user's avatar
+      await client.setAvatarUrl(
+        client.userID!,
+        mxcUri,
+      );
+      
+      // Update the profile picture immediately after successful upload
+      await _cacheMatrixAvatar(imageBytes);
+      setState(() {
+        _profilePictureBytes = imageBytes;
+        _isInitializing = false;
+      });
+      
+      print('Successfully set Matrix profile picture');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated successfully'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } catch (e) {
+      print('Failed to set Matrix profile picture: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update profile picture'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isUploadingProfilePic = false;
+      });
+    }
   }
 
   void _showInfoModal(String title, String content) {
@@ -426,13 +718,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildAvatar(String username) {
-    return CircleAvatar(
-      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-      child: RandomAvatar(_localpart!, height: 80.0, width: 80.0), // Increased size
-      radius: 50,  // Slightly larger radius
-    );
-  }
 
   // In SettingsPage, update the _logout method:
 
@@ -460,9 +745,44 @@ class _SettingsPageState extends State<SettingsPage> {
 
         // Clear database
         await databaseService.deleteAndReinitialize();
+        
+        // Clear profile picture data
+        await _profilePictureService.clearLocalProfilePicture();
+        
+        // Clear all profile picture caches
+        final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+        profileProvider.clearCache();
+        
+        // Clear others' profile data
+        final othersProfileService = OthersProfileService();
+        await othersProfileService.clearAllProfiles();
+        
+        // Clear Matrix avatar cache if custom homeserver
+        if (isCustomHomeserver()) {
+          try {
+            final cachePath = await _getMatrixAvatarCachePath();
+            final cacheFile = File(cachePath);
+            if (await cacheFile.exists()) {
+              await cacheFile.delete();
+            }
+          } catch (e) {
+            print('Error clearing Matrix avatar cache: $e');
+          }
+        }
 
         // Clear shared preferences
         await sharedPreferences.clear();
+        
+        // Clear only profile-related keys from secure storage
+        try {
+          const secureStorage = FlutterSecureStorage();
+          // Only delete profile picture related keys
+          await secureStorage.delete(key: 'profile_pic_metadata');
+          await secureStorage.delete(key: 'others_profiles_metadata');
+          await secureStorage.delete(key: 'group_avatars_metadata');
+        } catch (e) {
+          print('Error clearing secure storage: $e');
+        }
 
         try {
           if (client.isLogged()) {
@@ -557,6 +877,22 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // Clear your local database
       await databaseService.deleteAndReinitialize();
+      
+      // Clear profile picture data
+      await _profilePictureService.clearLocalProfilePicture();
+      
+      // Clear Matrix avatar cache if custom homeserver
+      if (isCustomHomeserver()) {
+        try {
+          final cachePath = await _getMatrixAvatarCachePath();
+          final cacheFile = File(cachePath);
+          if (await cacheFile.exists()) {
+            await cacheFile.delete();
+          }
+        } catch (e) {
+          print('Error clearing Matrix avatar cache: $e');
+        }
+      }
 
       // Clear all shared preferences
       await sharedPreferences.clear();
@@ -1026,6 +1362,19 @@ class _SettingsPageState extends State<SettingsPage> {
         locationManager.stopTracking();
         syncManager.stopSync();
         databaseService.deleteAndReinitialize();
+        await _profilePictureService.clearLocalProfilePicture();
+        
+        // Clear Matrix avatar cache
+        try {
+          final cachePath = await _getMatrixAvatarCachePath();
+          final cacheFile = File(cachePath);
+          if (await cacheFile.exists()) {
+            await cacheFile.delete();
+          }
+        } catch (e) {
+          print('Error clearing Matrix avatar cache: $e');
+        }
+        
         await sharedPreferences.clear();
 
 
@@ -1301,14 +1650,84 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
-            child: RandomAvatar(
-              _localpart ?? 'Unknown User',
-              height: 80,
-              width: 80,
-            ),
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                child: (_isInitializing && isCustomHomeserver())
+                    ? SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.primary.withOpacity(0.5),
+                        ),
+                      )
+                    : _profilePictureBytes != null
+                        ? ClipOval(
+                            child: Image.memory(
+                              _profilePictureBytes!,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : (_isLoadingProfilePic && !isCustomHomeserver()
+                            ? SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colorScheme.primary.withOpacity(0.5),
+                                ),
+                              )
+                            : RandomAvatar(
+                                _localpart ?? 'Unknown User',
+                                height: 80,
+                                width: 80,
+                              )),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _isUploadingProfilePic ? null : (isCustomHomeserver() ? _showMatrixProfilePictureModal : _showProfilePictureModal),
+                  child: Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.2),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.shadow.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: _isUploadingProfilePic
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.primary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: colorScheme.primary,
+                            ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           SizedBox(height: 16),
           Row(

@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -59,6 +61,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
+      
+      // For custom homeservers, trigger immediate avatar check
+      final homeserver = widget.roomService.getMyHomeserver();
+      if (utils.isCustomHomeserver(homeserver)) {
+        final profileProvider = Provider.of<ProfilePictureProvider>(context, listen: false);
+        profileProvider.manualCheckForAvatarChanges();
+      }
     });
 
     _searchController.addListener(_onSearchChanged);
@@ -160,8 +169,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
               }
 
               if (state is ContactsLoaded) {
-                return Consumer<UserLocationProvider>(
-                  builder: (context, locationProvider, child) {
+                return Consumer2<UserLocationProvider, ProfilePictureProvider>(
+                  builder: (context, locationProvider, profileProvider, child) {
                     final contactsWithLocation = _getContactsWithCurrentLocation(
                       state.contacts,
                       locationProvider,
@@ -392,14 +401,17 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 44,
-                        width: 44,
-                      ),
+                    child: Consumer<ProfilePictureProvider>(
+                      builder: (context, profileProvider, _) {
+                        // Use version as part of the key to force rebuild
+                        final version = profileProvider.getProfileVersion(contact.userId);
+                        return CachedProfileAvatar(
+                          key: ValueKey('${contact.userId}_v$version'),
+                          userId: contact.userId,
+                          radius: 22,
+                          displayName: contact.displayName,
+                        );
+                      },
                     ),
                   ),
                   // Online status indicator
@@ -680,14 +692,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    CachedProfileAvatar(
+                      userId: contact.userId,
                       radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
-                      ),
+                      displayName: contact.displayName,
                     ),
                     const SizedBox(width: 12),
                     Expanded(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 
 class UserMapMarker extends StatefulWidget {
@@ -289,12 +290,9 @@ class _UserMapMarkerState extends State<UserMapMarker>
                                     width: 1,
                                   ),
                                 ),
-                                child: ClipOval(
-                                  child: RandomAvatar(
-                                    username,
-                                    height: 44,
-                                    width: 44,
-                                  ),
+                                child: CachedProfileAvatar(
+                                  userId: widget.userId,
+                                  radius: 22,
                                 ),
                               ),
                             ),

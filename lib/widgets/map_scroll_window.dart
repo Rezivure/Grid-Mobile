@@ -1,19 +1,24 @@
+import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
+import 'package:grid_frontend/services/profile_picture_service.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/widgets/profile_modal.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
 import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
+import 'cached_group_avatar.dart';
 import 'add_friend_modal.dart';
 import '../providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -22,6 +27,10 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:matrix/matrix.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -34,6 +43,8 @@ enum SubscreenOption { contacts, groups, invites, groupDetails }
 
 class _MapScrollWindowState extends State<MapScrollWindow> 
     with TickerProviderStateMixin {
+  static const String _tag = 'MapScrollWindow';
+  
   late final RoomService _roomService;
   late final UserService _userService;
   late final LocationRepository _locationRepository;
@@ -47,6 +58,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
   bool _isScrollingContent = false;
+  
+  // Cache user ID to prevent repeated calls
+  String? _cachedUserId;
+  Future<String?>? _userIdFuture;
 
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
@@ -87,6 +102,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     );
 
     _groupsBloc.add(LoadGroups());
+    
+    // Initialize user ID future once
+    _userIdFuture = _userService.getMyUserId().then((id) {
+      _cachedUserId = id;
+      return id;
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
@@ -252,7 +273,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   if (_isDropdownExpanded) {
                     _expandController.forward();
                     _fadeController.forward();
-                    _groupsBloc.add(RefreshGroups());
+                    // Only refresh if groups haven't been loaded yet
+                    final currentState = _groupsBloc.state;
+                    if (currentState is! GroupsLoaded || currentState.groups.isEmpty) {
+                      _groupsBloc.add(LoadGroups());
+                    }
                   } else {
                     _expandController.reverse();
                     _fadeController.reverse();
@@ -417,9 +442,18 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget _buildModernHorizontalScroller(ColorScheme colorScheme) {
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
+        Logger.debug(_tag, 'BlocBuilder rebuild triggered', data: {
+          'stateType': groupsState.runtimeType.toString(),
+          'groupsCount': groupsState is GroupsLoaded ? groupsState.groups.length : 0
+        });
         return FutureBuilder<String?>(
-          future: _userService.getMyUserId(),
+          future: _userIdFuture,
           builder: (context, userSnapshot) {
+            Logger.debug(_tag, 'FutureBuilder rebuild triggered', data: {
+              'connectionState': userSnapshot.connectionState.toString(),
+              'hasData': userSnapshot.hasData,
+              'cachedUserId': _cachedUserId
+            });
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return Container(
                 height: 100,
@@ -453,10 +487,14 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             final groups = (groupsState is GroupsLoaded)
                 ? groupsState.groups
                 : <GridRoom.Room>[];
+            
+            Logger.debug(_tag, 'Groups in state', data: {
+              'count': groups.length,
+              'groupIds': groups.map((g) => g.roomId).toList()
+            });
 
-            // Debug info for testing scrolling
+            // Calculate total items for scrolling
             final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
-            print('DEBUG: Total items in horizontal scroller: $totalItems (${groups.length} groups + 1 contact + ${groupsState is GroupsLoading ? 1 : 0} loading)');
 
             return SizedBox(
               height: 100,
@@ -503,6 +541,133 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     );
   }
 
+  Widget _buildCurrentUserAvatar(String userId) {
+    // Check if custom homeserver
+    final roomService = Provider.of<RoomService>(context, listen: false);
+    final homeserver = roomService.getMyHomeserver();
+    final isCustomServer = utils.isCustomHomeserver(homeserver);
+    
+    if (isCustomServer) {
+      // For custom homeservers, use Matrix avatar
+      return FutureBuilder<Uint8List?>(
+        future: _loadMatrixAvatar(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundImage: MemoryImage(snapshot.data!),
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            );
+          }
+          // Show loading or random avatar
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+              ),
+            );
+          }
+          return ClipOval(
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: RandomAvatar(
+                utils.localpart(userId),
+                height: 36,
+                width: 36,
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      // For default server, use e2ee profile picture
+      return FutureBuilder<Uint8List?>(
+        future: ProfilePictureService().getLocalProfilePicture(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return CircleAvatar(
+              radius: 18,
+              backgroundImage: MemoryImage(snapshot.data!),
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            );
+          }
+          return ClipOval(
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: RandomAvatar(
+                utils.localpart(userId),
+                height: 36,
+                width: 36,
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
+  
+  Future<Uint8List?> _loadMatrixAvatar() async {
+    try {
+      final client = Provider.of<Client>(context, listen: false);
+      if (client.userID == null) return null;
+      
+      final avatarUrl = await client.getAvatarUrl(client.userID!);
+      if (avatarUrl == null) return null;
+      
+      // Use URL-based cache filename
+      final cacheDir = await getApplicationDocumentsDirectory();
+      final urlHash = avatarUrl.toString().hashCode.toString();
+      final cacheFile = File('${cacheDir.path}/user_avatar_${client.userID}_$urlHash.jpg');
+      
+      // Clean up old cache files
+      final dir = Directory(cacheDir.path);
+      final pattern = 'user_avatar_${client.userID}_';
+      await for (final file in dir.list()) {
+        if (file is File && file.path.contains(pattern) && !file.path.endsWith('_$urlHash.jpg')) {
+          try {
+            await file.delete();
+            Logger.debug(_tag, 'Deleted old user avatar cache');
+          } catch (e) {
+            // Ignore
+          }
+        }
+      }
+      
+      // Check if current avatar is cached
+      if (await cacheFile.exists()) {
+        return await cacheFile.readAsBytes();
+      }
+      
+      // Download from server
+      final homeserverUrl = client.homeserver;
+      final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+      if (mxcParts.length == 2) {
+        final serverName = mxcParts[0];
+        final mediaId = mxcParts[1];
+        final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+        
+        final response = await client.httpClient.get(downloadUri);
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          await cacheFile.writeAsBytes(bytes);
+          return bytes;
+        }
+      }
+    } catch (e) {
+      Logger.debug(_tag, 'Error loading Matrix avatar: $e');
+    }
+    return null;
+  }
+
   Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
 
@@ -545,17 +710,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ClipOval(
-              child: SizedBox(
-                width: 36,
-                height: 36,
-                child: RandomAvatar(
-                  localpart(userId),
-                  height: 36,
-                  width: 36,
-                ),
-              ),
-            ),
+            _buildCurrentUserAvatar(userId),
             const SizedBox(height: 4),
             SizedBox(
               width: 68, // Increased width to fit "Contacts" text
@@ -590,6 +745,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   DateTime.now().millisecondsSinceEpoch ~/ 1000));
 
       final isSelected = _selectedLabel == groupName;
+      
+      Logger.debug(_tag, 'Building group option', data: {
+        'roomId': room.roomId,
+        'groupName': groupName,
+        'memberCount': room.members.length
+      });
 
       return GestureDetector(
         onTap: () {
@@ -637,7 +798,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   SizedBox(
                     width: 36,
                     height: 36,
-                    child: TriangleAvatars(userIds: room.members),
+                    child: CachedGroupAvatar(
+                      roomId: room.roomId,
+                      memberIds: room.members,
+                      radius: 18,
+                      groupName: groupName,
+                    ),
                   ),
                   if (room.expirationTimestamp > 0)
                     Positioned(

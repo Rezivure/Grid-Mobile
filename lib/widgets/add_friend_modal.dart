@@ -11,6 +11,7 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 import '../blocs/groups/groups_bloc.dart';
 import '../blocs/groups/groups_event.dart';
@@ -33,6 +34,8 @@ class AddFriendModal extends StatefulWidget {
 
 
 class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStateMixin {
+  static const String _tag = 'AddFriendModal';
+  
   // Add Contact variables
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
@@ -190,7 +193,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         });
       }
       try {
-        print('AddFriendModal: Checking if user exists: $normalizedUserId');
+        Logger.info(_tag, 'Checking if user exists', data: {'userId': normalizedUserId});
         bool userExists = await widget.userService.userExists(normalizedUserId);
         if (!userExists) {
           if (mounted) {
@@ -221,9 +224,9 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
               try {
                 final contactsBloc = context.read<ContactsBloc>();
                 await contactsBloc.handleNewContactInvited(directRoom.id, normalizedUserId);
-                print('AddFriendModal: Handled new contact invite via ContactsBloc');
+                Logger.debug(_tag, 'Contact invite handled via ContactsBloc');
               } catch (e) {
-                print('AddFriendModal: Error calling ContactsBloc: $e');
+                Logger.error(_tag, 'Failed to notify ContactsBloc', error: e);
               }
             }
           }
@@ -281,7 +284,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     controller.scannedDataStream.listen((scanData) async {
       if (!hasScanned) {
         String scannedUserId = scanData.code ?? '';
-        print('Scanned QR Code: $scannedUserId');
+        Logger.info(_tag, 'QR code scanned', data: {'userId': scannedUserId});
 
         if (scannedUserId.isNotEmpty) {
           hasScanned = true;
@@ -300,7 +303,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
             _addContact();
           });
         } else {
-          print('QR Code data is empty');
+          Logger.warning(_tag, 'Empty QR code data');
         }
       }
     });
@@ -414,11 +417,14 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       final normalizedMembers = _members.map((username) {
         // username in _members is already lowercase and without @ prefix
         // Just pass them as-is, the room service will handle the @ prefix
-        print('Passing member to room service: $username');
+        Logger.debug(_tag, 'Adding member', data: {'username': username});
         return username;
       }).toList();
       
-      print('Creating group with members: $normalizedMembers');
+      Logger.info(_tag, 'Creating group', data: {
+        'members': normalizedMembers,
+        'duration': _isForever ? 'forever' : '${_sliderValue.round()} hours'
+      });
       
       // Create the group and get the room ID
       final roomId = await widget.roomService.createGroup(groupName, normalizedMembers, durationInHours);

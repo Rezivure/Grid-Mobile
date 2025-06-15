@@ -106,6 +106,8 @@ class StatusIndicator extends StatelessWidget {
       return Colors.orange;
     } else if (timeAgo.contains('d ago')) {
       return Colors.red;
+    } else if (timeAgo == 'Loading...') {
+      return colorScheme.onSurface.withOpacity(0.3);
     } else {
       return colorScheme.onSurface.withOpacity(0.4);
     }
@@ -120,6 +122,8 @@ class StatusIndicator extends StatelessWidget {
       return Icons.schedule;
     } else if (timeAgo.contains('d ago')) {
       return Icons.access_time;
+    } else if (timeAgo == 'Loading...') {
+      return Icons.hourglass_empty;
     } else {
       return Icons.circle_outlined;
     }
@@ -136,6 +140,10 @@ class StatusIndicator extends StatelessWidget {
       return timeAgo;
     } else if (timeAgo.contains('d ago')) {
       return timeAgo;
+    } else if (timeAgo == 'Loading...') {
+      return 'Loading...';
+    } else if (timeAgo == 'Off Grid') {
+      return 'Offline';
     } else {
       return 'Offline';
     }

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'dart:io' show Platform;
 
 class UserInfoBubble extends StatelessWidget {
@@ -384,8 +385,6 @@ class UserInfoBubble extends StatelessWidget {
                   children: [
                     // Avatar
                     Container(
-                      width: 40,
-                      height: 40,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
@@ -393,12 +392,10 @@ class UserInfoBubble extends StatelessWidget {
                           width: 2,
                         ),
                       ),
-                      child: ClipOval(
-                        child: RandomAvatar(
-                          localpart(userId),
-                          height: 40,
-                          width: 40,
-                        ),
+                      child: CachedProfileAvatar(
+                        userId: userId,
+                        radius: 20,
+                        displayName: userName,
                       ),
                     ),
                     const SizedBox(width: 12),

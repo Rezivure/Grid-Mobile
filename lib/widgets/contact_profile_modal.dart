@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/cached_profile_avatar.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -488,14 +489,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 ),
               ],
             ),
-            child: CircleAvatar(
+            child: CachedProfileAvatar(
+              userId: widget.contact.userId,
               radius: 32,
-              backgroundColor: colorScheme.primary.withOpacity(0.1),
-              child: RandomAvatar(
-                userLocalpart,
-                height: 64,
-                width: 64,
-              ),
+              displayName: widget.contact.displayName,
             ),
           ),
           

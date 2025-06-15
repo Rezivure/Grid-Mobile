@@ -11,11 +11,14 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
+import 'package:grid_frontend/services/logger_service.dart';
 
 
 import '../../models/grid_user.dart';
 
 class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
+  static const String _tag = 'GroupsBloc';
+  
   final RoomService roomService;
   final RoomRepository roomRepository;
   final UserRepository userRepository;
@@ -25,6 +28,10 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
   List<Room> _allGroups = [];
   Timer? _memberUpdateDebouncer;
   bool _isUpdatingMembers = false;
+  
+  // Track recent updates to prevent spam
+  final Map<String, DateTime> _recentUpdates = {};
+  static const Duration _updateThreshold = Duration(milliseconds: 500);
 
   GroupsBloc({
     required this.roomService,
@@ -47,10 +54,10 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     emit(GroupsLoading());
     try {
       _allGroups = await _loadGroups();
-      // Always emit a new instance of GroupsLoaded to force UI update
-      emit(GroupsLoaded(List.from(_allGroups)));
+      // Emit the groups directly - Equatable will handle equality checks
+      emit(GroupsLoaded(_allGroups));
     } catch (e) {
-      print("GroupsBloc: Error loading groups - $e");
+      Logger.error(_tag, 'Error loading groups: $e');
       emit(GroupsError(e.toString()));
     }
   }
@@ -86,12 +93,12 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         ));
       }
     } catch (e) {
-      print("Error refreshing group members: $e");
+      Logger.error(_tag, 'Error refreshing group members: $e');
     }
   }
 
   Future<void> _onRefreshGroups(RefreshGroups event, Emitter<GroupsState> emit) async {
-    print("GroupsBloc: Handling RefreshGroups event");
+    Logger.debug(_tag, 'Handling RefreshGroups event');
     try {
       final updatedGroups = await _loadGroups();
       _allGroups = updatedGroups;
@@ -108,7 +115,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
           // Don't emit loading state when preserving detailed member data
           // to avoid flickering and status resets
           emit(GroupsLoaded(
-            List.from(_allGroups),
+            _allGroups,
             selectedRoomId: currentState.selectedRoomId,
             selectedRoomMembers: currentState.selectedRoomMembers,
             membershipStatuses: currentState.membershipStatuses,
@@ -116,12 +123,12 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
         } else {
           // Only emit loading state if we don't have detailed member data to preserve
           emit(GroupsLoading());
-          emit(GroupsLoaded(List.from(_allGroups)));
+          emit(GroupsLoaded(_allGroups));
         }
       } else {
         // First time loading - show loading state
         emit(GroupsLoading());
-        emit(GroupsLoaded(List.from(_allGroups)));
+        emit(GroupsLoaded(_allGroups));
       }
 
     } catch (e) {
@@ -194,7 +201,21 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
   Future<void> _onUpdateGroup(UpdateGroup event, Emitter<GroupsState> emit) async {
     try {
-      print("GroupsBloc: Handling UpdateGroup for room ${event.roomId}");
+      // Check if we recently updated this room
+      final lastUpdate = _recentUpdates[event.roomId];
+      if (lastUpdate != null && DateTime.now().difference(lastUpdate) < _updateThreshold) {
+        Logger.debug(_tag, 'Skipping UpdateGroup - too recent', data: {'roomId': event.roomId});
+        return;
+      }
+      _recentUpdates[event.roomId] = DateTime.now();
+      
+      // Clean up old entries
+      if (_recentUpdates.length > 50) {
+        final cutoff = DateTime.now().subtract(_updateThreshold * 2);
+        _recentUpdates.removeWhere((_, time) => time.isBefore(cutoff));
+      }
+      
+      Logger.debug(_tag, 'Handling UpdateGroup', data: {'roomId': event.roomId});
       final room = await roomRepository.getRoomById(event.roomId);
       if (room != null) {
         final index = _allGroups.indexWhere((g) => g.roomId == event.roomId);
@@ -205,7 +226,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
 
             // Get updated member data if this is the selected room
             if (currentState.selectedRoomId == event.roomId) {
-              print("GroupsBloc: Updating members for selected room");
+              Logger.debug(_tag, 'Updating members for selected room');
               final members = await userRepository.getGroupParticipants();
               final filteredMembers = members.where(
                       (user) => room.members.contains(user.userId)
@@ -223,13 +244,16 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
                     user.userId,
                   );
                   membershipStatuses[user.userId] = status ?? 'join';
-                  print("GroupsBloc: Updated status for ${user.userId} to ${status ?? 'join'}");
+                  Logger.debug(_tag, 'Updated member status', data: {
+                    'userId': user.userId,
+                    'status': status ?? 'join'
+                  });
                 }),
               );
 
-              print("GroupsBloc: Emitting new state with ${filteredMembers.length} members");
+              Logger.debug(_tag, 'Emitting state with members', data: {'count': filteredMembers.length});
               emit(GroupsLoaded(
-                List.from(_allGroups),
+                _allGroups,
                 selectedRoomId: currentState.selectedRoomId,
                 selectedRoomMembers: filteredMembers,
                 membershipStatuses: membershipStatuses,
@@ -237,14 +261,14 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
             } else {
               // Just update the groups list if this isn't the selected room
               emit(GroupsLoaded(
-                List.from(_allGroups),
+                _allGroups,
                 selectedRoomId: currentState.selectedRoomId,
                 selectedRoomMembers: currentState.selectedRoomMembers,
                 membershipStatuses: currentState.membershipStatuses,
               ));
             }
           } else {
-            emit(GroupsLoaded(List.from(_allGroups)));
+            emit(GroupsLoaded(_allGroups));
           }
         }
       }
@@ -524,7 +548,7 @@ class GroupsBloc extends Bloc<GroupsEvent, GroupsState> {
     groups.sort((a, b) =>
         DateTime.parse(b.lastActivity).compareTo(DateTime.parse(a.lastActivity))
     );
-    print("Loaded ${groups.length} groups"); // Debug print
+    Logger.debug(_tag, 'Groups loaded', data: {'count': groups.length});
     return groups;
   }
 }

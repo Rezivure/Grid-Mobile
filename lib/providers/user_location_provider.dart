@@ -7,6 +7,7 @@ class UserLocationProvider with ChangeNotifier {
   final Map<String, UserLocation> _userLocations = {};
   final LocationRepository locationRepository;
   final UserRepository userRepository;
+  bool _isLoading = true;
 
   UserLocationProvider(this.locationRepository, this.userRepository) {
     _initializeLocations();
@@ -17,13 +18,21 @@ class UserLocationProvider with ChangeNotifier {
 
   }
 
+  bool get isLoading => _isLoading;
+
 
   Future<void> _initializeLocations() async {
-    final locations = await locationRepository.getAllLatestLocations(); // Use getAllLatestLocations instead
-    for (var location in locations) {
-      _userLocations[location.userId] = location;
+    try {
+      final locations = await locationRepository.getAllLatestLocations(); // Use getAllLatestLocations instead
+      for (var location in locations) {
+        _userLocations[location.userId] = location;
+      }
+    } catch (e) {
+      print('Error initializing locations: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   // Modify getLastSeen to return the most recent timestamp
@@ -85,5 +94,12 @@ class UserLocationProvider with ChangeNotifier {
   void clearAllLocations() {
     _userLocations.clear();
     notifyListeners();
+  }
+
+  // Method to manually refresh locations (useful after hot reload)
+  Future<void> refreshLocations() async {
+    _isLoading = true;
+    notifyListeners();
+    await _initializeLocations();
   }
 }

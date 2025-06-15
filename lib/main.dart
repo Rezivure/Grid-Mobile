@@ -22,6 +22,7 @@ import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
+import 'package:grid_frontend/providers/profile_picture_provider.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
@@ -38,6 +39,7 @@ import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
+import 'package:grid_frontend/widgets/profile_service_initializer.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 
 
@@ -113,9 +115,7 @@ void main() async {
           create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
-        ChangeNotifierProvider(
-          create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
-        ),
+        ChangeNotifierProvider(create: (_) => ProfilePictureProvider()),
 
         // Provide the LocationManager
         ChangeNotifierProvider<LocationManager>(
@@ -151,6 +151,7 @@ void main() async {
             create: (context) => ContactsBloc(
               roomService: context.read<RoomService>(),
               userRepository: context.read<UserRepository>(),
+              roomRepository: context.read<RoomRepository>(),
               mapBloc: context.read<MapBloc>(),
               locationRepository: context.read<LocationRepository>(),
               userLocationProvider: context.read<UserLocationProvider>(),
@@ -197,8 +198,9 @@ void main() async {
             )..startSync(),
           ),
         ],
-        child: MaterialApp(
-          title: 'Grid App',
+        child: ProfileServiceInitializer(
+          child: MaterialApp(
+            title: 'Grid App',
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(
@@ -243,6 +245,7 @@ void main() async {
             '/signup': (context) => SignUpScreen(),
             '/main': (context) => const MapTab(),
           },
+        ),
         ),
       ),
     ),
