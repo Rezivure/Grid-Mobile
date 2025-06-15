@@ -37,6 +37,7 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   OthersProfileService get _othersProfileService => MessageProcessor.othersProfileService;
   StreamSubscription? _stateSubscription;
   String? _lastAvatarUrl;
+  Timer? _reloadTimer;
   
   @override
   void initState() {
@@ -56,22 +57,30 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
         // Store initial avatar URL
         _lastAvatarUrl = room.avatar?.toString();
         
-        // Listen for state events with debouncing
-        DateTime? _lastUpdate;
-        _stateSubscription = room.onUpdate.stream.listen((syncUpdate) {
-          // Debounce updates to prevent excessive refreshing
-          final now = DateTime.now();
-          if (_lastUpdate != null && now.difference(_lastUpdate!).inMilliseconds < 500) {
-            return;
-          }
-          _lastUpdate = now;
-          
+        // Listen for sync events and filter for this room
+        _stateSubscription = client.onSync.stream
+            .where((sync) => sync.rooms?.join?.containsKey(widget.roomId) ?? false)
+            .listen((_) {
           // Check if avatar changed
-          final newAvatarUrl = room.avatar?.toString();
-          if (newAvatarUrl != _lastAvatarUrl) {
-            print('Group avatar changed for room ${widget.roomId}: $_lastAvatarUrl -> $newAvatarUrl');
-            _lastAvatarUrl = newAvatarUrl;
-            _onAvatarChanged();
+          final room = client.getRoomById(widget.roomId);
+          if (room != null) {
+            final newAvatarUrl = room.avatar?.toString();
+            if (newAvatarUrl != _lastAvatarUrl) {
+              print('[CachedGroupAvatar] Avatar URL changed for room ${widget.roomId}');
+              print('[CachedGroupAvatar] Old: $_lastAvatarUrl');
+              print('[CachedGroupAvatar] New: $newAvatarUrl');
+              _lastAvatarUrl = newAvatarUrl;
+              
+              // Cancel any pending reload
+              _reloadTimer?.cancel();
+              
+              // Schedule reload with a small delay to ensure Matrix client is updated
+              _reloadTimer = Timer(Duration(milliseconds: 100), () {
+                if (mounted) {
+                  _onAvatarChanged();
+                }
+              });
+            }
           }
         });
       }
@@ -79,19 +88,30 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   }
   
   Future<void> _onAvatarChanged() async {
+    print('[CachedGroupAvatar] Processing avatar change for room ${widget.roomId}');
+    
     // Clear cache
     final cacheDir = await getApplicationDocumentsDirectory();
     final cacheFile = File('${cacheDir.path}/room_avatar_${widget.roomId}');
     if (await cacheFile.exists()) {
       await cacheFile.delete();
-      print('Cleared avatar cache for room ${widget.roomId}');
+      print('[CachedGroupAvatar] Cleared cache file for room ${widget.roomId}');
     }
     
-    // Clear internal state
-    _avatarBytes = null;
+    // Clear internal state to force UI update
+    if (mounted) {
+      setState(() {
+        _avatarBytes = null;
+        _isLoading = true;
+      });
+    }
+    
+    // Add a small delay to ensure server has processed the change
+    await Future.delayed(Duration(milliseconds: 200));
     
     // Reload avatar
     if (mounted) {
+      print('[CachedGroupAvatar] Reloading avatar for room ${widget.roomId}');
       _loadGroupAvatar();
     }
   }
@@ -99,6 +119,7 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   @override
   void dispose() {
     _stateSubscription?.cancel();
+    _reloadTimer?.cancel();
     super.dispose();
   }
   
@@ -179,38 +200,66 @@ class _CachedGroupAvatarState extends State<CachedGroupAvatar> {
   
   Future<Uint8List?> _loadMatrixRoomAvatar() async {
     try {
-      // Check cache first
-      final cacheDir = await getApplicationDocumentsDirectory();
-      final cacheFile = File('${cacheDir.path}/room_avatar_${widget.roomId}');
-      if (await cacheFile.exists()) {
-        return await cacheFile.readAsBytes();
-      }
-      
-      // Load from Matrix server
       final client = Provider.of<Client>(context, listen: false);
       final room = client.getRoomById(widget.roomId);
-      if (room != null) {
-        final avatarUrl = room.avatar;
-        if (avatarUrl != null) {
-          final homeserverUrl = client.homeserver;
-          final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
-          if (mxcParts.length == 2) {
-            final serverName = mxcParts[0];
-            final mediaId = mxcParts[1];
-            final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
-            
-            final response = await client.httpClient.get(downloadUri);
-            if (response.statusCode == 200) {
-              final bytes = response.bodyBytes;
-              // Cache it
-              await cacheFile.writeAsBytes(bytes);
-              return bytes;
-            }
+      if (room == null) {
+        print('[CachedGroupAvatar] Room not found: ${widget.roomId}');
+        return null;
+      }
+      
+      final avatarUrl = room.avatar;
+      if (avatarUrl == null) {
+        print('[CachedGroupAvatar] No avatar URL for room: ${widget.roomId}');
+        return null;
+      }
+      
+      // Generate cache file path based on avatar URL to invalidate on change
+      final cacheDir = await getApplicationDocumentsDirectory();
+      final urlHash = avatarUrl.toString().hashCode.toString();
+      final cacheFile = File('${cacheDir.path}/room_avatar_${widget.roomId}_$urlHash.jpg');
+      
+      // Clean up old cache files with different hashes
+      final dir = Directory(cacheDir.path);
+      final pattern = 'room_avatar_${widget.roomId}_';
+      await for (final file in dir.list()) {
+        if (file is File && file.path.contains(pattern) && !file.path.endsWith('_$urlHash.jpg')) {
+          try {
+            await file.delete();
+            print('[CachedGroupAvatar] Deleted old cache: ${file.path}');
+          } catch (e) {
+            // Ignore deletion errors
           }
         }
       }
+      
+      // Check if current avatar is cached
+      if (await cacheFile.exists()) {
+        print('[CachedGroupAvatar] Using cached avatar for room: ${widget.roomId}');
+        return await cacheFile.readAsBytes();
+      }
+      
+      // Download from Matrix server
+      print('[CachedGroupAvatar] Downloading avatar from server for room: ${widget.roomId}');
+      final homeserverUrl = client.homeserver;
+      final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+      if (mxcParts.length == 2) {
+        final serverName = mxcParts[0];
+        final mediaId = mxcParts[1];
+        final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+        
+        final response = await client.httpClient.get(downloadUri);
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          // Cache with URL-based filename
+          await cacheFile.writeAsBytes(bytes);
+          print('[CachedGroupAvatar] Cached new avatar for room: ${widget.roomId}');
+          return bytes;
+        } else {
+          print('[CachedGroupAvatar] Failed to download avatar: ${response.statusCode}');
+        }
+      }
     } catch (e) {
-      print('Error loading Matrix room avatar: $e');
+      print('[CachedGroupAvatar] Error loading Matrix room avatar: $e');
     }
     return null;
   }

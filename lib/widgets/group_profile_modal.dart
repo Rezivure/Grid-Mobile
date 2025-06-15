@@ -308,14 +308,33 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       // Set as room's avatar
       await room.setAvatar(matrixFile);
       
-      // Clear the cache so the new avatar loads
-      final cacheDir = await getApplicationDocumentsDirectory();
-      final cacheFile = File('${cacheDir.path}/room_avatar_${widget.room.roomId}');
-      if (await cacheFile.exists()) {
-        await cacheFile.delete();
+      print('Successfully set Matrix room avatar for ${widget.room.roomId}');
+      
+      // Wait a moment for the server to process
+      await Future.delayed(Duration(milliseconds: 500));
+      
+      // Force sync to get the updated avatar URL
+      try {
+        await widget.roomService.client.sync();
+      } catch (e) {
+        print('Error forcing sync: $e');
       }
       
-      print('Successfully set Matrix room avatar for ${widget.room.roomId}');
+      // Clear all cache files for this room
+      final cacheDir = await getApplicationDocumentsDirectory();
+      final dir = Directory(cacheDir.path);
+      final pattern = 'room_avatar_${widget.room.roomId}';
+      await for (final file in dir.list()) {
+        if (file is File && file.path.contains(pattern)) {
+          try {
+            await file.delete();
+            print('Deleted avatar cache: ${file.path}');
+          } catch (e) {
+            // Ignore
+          }
+        }
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Group avatar updated successfully'),

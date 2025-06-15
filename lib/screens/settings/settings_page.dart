@@ -773,10 +773,13 @@ class _SettingsPageState extends State<SettingsPage> {
         // Clear shared preferences
         await sharedPreferences.clear();
         
-        // Clear secure storage (encryption keys)
+        // Clear only profile-related keys from secure storage
         try {
           const secureStorage = FlutterSecureStorage();
-          await secureStorage.deleteAll();
+          // Only delete profile picture related keys
+          await secureStorage.delete(key: 'profile_pic_metadata');
+          await secureStorage.delete(key: 'others_profiles_metadata');
+          await secureStorage.delete(key: 'group_avatars_metadata');
         } catch (e) {
           print('Error clearing secure storage: $e');
         }

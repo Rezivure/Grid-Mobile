@@ -617,37 +617,53 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   
   Future<Uint8List?> _loadMatrixAvatar() async {
     try {
-      // Check cache first
+      final client = Provider.of<Client>(context, listen: false);
+      if (client.userID == null) return null;
+      
+      final avatarUrl = await client.getAvatarUrl(client.userID!);
+      if (avatarUrl == null) return null;
+      
+      // Use URL-based cache filename
       final cacheDir = await getApplicationDocumentsDirectory();
-      final cacheFile = File('${cacheDir.path}/matrix_avatar_cache');
+      final urlHash = avatarUrl.toString().hashCode.toString();
+      final cacheFile = File('${cacheDir.path}/user_avatar_${client.userID}_$urlHash.jpg');
+      
+      // Clean up old cache files
+      final dir = Directory(cacheDir.path);
+      final pattern = 'user_avatar_${client.userID}_';
+      await for (final file in dir.list()) {
+        if (file is File && file.path.contains(pattern) && !file.path.endsWith('_$urlHash.jpg')) {
+          try {
+            await file.delete();
+            Logger.debug(_tag, 'Deleted old user avatar cache');
+          } catch (e) {
+            // Ignore
+          }
+        }
+      }
+      
+      // Check if current avatar is cached
       if (await cacheFile.exists()) {
         return await cacheFile.readAsBytes();
       }
       
-      // Load from Matrix server
-      final client = Provider.of<Client>(context, listen: false);
-      if (client.userID != null) {
-        final avatarUrl = await client.getAvatarUrl(client.userID!);
-        if (avatarUrl != null) {
-          final homeserverUrl = client.homeserver;
-          final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
-          if (mxcParts.length == 2) {
-            final serverName = mxcParts[0];
-            final mediaId = mxcParts[1];
-            final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
-            
-            final response = await client.httpClient.get(downloadUri);
-            if (response.statusCode == 200) {
-              final bytes = response.bodyBytes;
-              // Cache it
-              await cacheFile.writeAsBytes(bytes);
-              return bytes;
-            }
-          }
+      // Download from server
+      final homeserverUrl = client.homeserver;
+      final mxcParts = avatarUrl.toString().replaceFirst('mxc://', '').split('/');
+      if (mxcParts.length == 2) {
+        final serverName = mxcParts[0];
+        final mediaId = mxcParts[1];
+        final downloadUri = Uri.parse('$homeserverUrl/_matrix/media/v3/download/$serverName/$mediaId');
+        
+        final response = await client.httpClient.get(downloadUri);
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          await cacheFile.writeAsBytes(bytes);
+          return bytes;
         }
       }
     } catch (e) {
-      print('Error loading Matrix avatar in map scroll: $e');
+      Logger.debug(_tag, 'Error loading Matrix avatar: $e');
     }
     return null;
   }
