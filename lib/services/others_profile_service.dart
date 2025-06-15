@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/services/profile_picture_service.dart';
-import 'package:grid_frontend/utilities/profile_picture_encryption.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:grid_frontend/providers/profile_picture_provider.dart';
@@ -19,6 +18,7 @@ class OthersProfileService {
   static const String GROUP_CACHE_DIR = 'group_avatars';
   
   final ProfilePictureService _profilePictureService = ProfilePictureService();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   ProfilePictureProvider? _profilePictureProvider;
   ContactsBloc? _contactsBloc;
   GroupsBloc? _groupsBloc;
@@ -123,12 +123,15 @@ class OthersProfileService {
   
   /// Get profile metadata for a user
   Future<Map<String, dynamic>?> getProfileMetadata(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final allMetadata = prefs.getString(PROFILES_METADATA_KEY);
-    
-    if (allMetadata != null) {
-      final metadata = json.decode(allMetadata) as Map<String, dynamic>;
-      return metadata[userId] as Map<String, dynamic>?;
+    try {
+      final allMetadata = await _secureStorage.read(key: PROFILES_METADATA_KEY);
+      
+      if (allMetadata != null) {
+        final metadata = json.decode(allMetadata) as Map<String, dynamic>;
+        return metadata[userId] as Map<String, dynamic>?;
+      }
+    } catch (e) {
+      print('Error reading profile metadata: $e');
     }
     return null;
   }
@@ -149,14 +152,16 @@ class OthersProfileService {
       }
       
       // Remove metadata
-      final prefs = await SharedPreferences.getInstance();
-      final allMetadata = prefs.getString(PROFILES_METADATA_KEY);
+      final allMetadata = await _secureStorage.read(key: PROFILES_METADATA_KEY);
       
       if (allMetadata != null) {
         final metadata = json.decode(allMetadata) as Map<String, dynamic>;
         if (metadata.containsKey(userId)) {
           metadata.remove(userId);
-          await prefs.setString(PROFILES_METADATA_KEY, json.encode(metadata));
+          await _secureStorage.write(
+            key: PROFILES_METADATA_KEY,
+            value: json.encode(metadata)
+          );
           print('OthersProfileService: Removed metadata for $userId');
         } else {
           print('OthersProfileService: No metadata found for $userId');
@@ -181,8 +186,7 @@ class OthersProfileService {
       }
       
       // Clear metadata
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(PROFILES_METADATA_KEY);
+      await _secureStorage.delete(key: PROFILES_METADATA_KEY);
     } catch (e) {
       print('Error clearing all profiles: $e');
     }
@@ -201,15 +205,17 @@ class OthersProfileService {
   
   /// Save profile metadata
   Future<void> _saveProfileMetadata(String userId, Map<String, dynamic> metadata) async {
-    final prefs = await SharedPreferences.getInstance();
-    final allMetadataStr = prefs.getString(PROFILES_METADATA_KEY);
+    final allMetadataStr = await _secureStorage.read(key: PROFILES_METADATA_KEY);
     
     final allMetadata = allMetadataStr != null 
         ? json.decode(allMetadataStr) as Map<String, dynamic>
         : <String, dynamic>{};
     
     allMetadata[userId] = metadata;
-    await prefs.setString(PROFILES_METADATA_KEY, json.encode(allMetadata));
+    await _secureStorage.write(
+      key: PROFILES_METADATA_KEY,
+      value: json.encode(allMetadata)
+    );
   }
   
   /// Get cache directory
@@ -317,12 +323,15 @@ class OthersProfileService {
   
   /// Get group avatar metadata
   Future<Map<String, dynamic>?> getGroupAvatarMetadata(String roomId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final allMetadata = prefs.getString(GROUP_AVATARS_METADATA_KEY);
-    
-    if (allMetadata != null) {
-      final metadata = json.decode(allMetadata) as Map<String, dynamic>;
-      return metadata[roomId] as Map<String, dynamic>?;
+    try {
+      final allMetadata = await _secureStorage.read(key: GROUP_AVATARS_METADATA_KEY);
+      
+      if (allMetadata != null) {
+        final metadata = json.decode(allMetadata) as Map<String, dynamic>;
+        return metadata[roomId] as Map<String, dynamic>?;
+      }
+    } catch (e) {
+      print('Error reading group avatar metadata: $e');
     }
     return null;
   }
@@ -338,13 +347,15 @@ class OthersProfileService {
       }
       
       // Remove metadata
-      final prefs = await SharedPreferences.getInstance();
-      final allMetadata = prefs.getString(GROUP_AVATARS_METADATA_KEY);
+      final allMetadata = await _secureStorage.read(key: GROUP_AVATARS_METADATA_KEY);
       
       if (allMetadata != null) {
         final metadata = json.decode(allMetadata) as Map<String, dynamic>;
         metadata.remove(roomId);
-        await prefs.setString(GROUP_AVATARS_METADATA_KEY, json.encode(metadata));
+        await _secureStorage.write(
+          key: GROUP_AVATARS_METADATA_KEY, 
+          value: json.encode(metadata)
+        );
       }
       
       // Notify provider
@@ -367,15 +378,17 @@ class OthersProfileService {
   
   /// Save group avatar metadata
   Future<void> _saveGroupAvatarMetadata(String roomId, Map<String, dynamic> metadata) async {
-    final prefs = await SharedPreferences.getInstance();
-    final allMetadataStr = prefs.getString(GROUP_AVATARS_METADATA_KEY);
+    final allMetadataStr = await _secureStorage.read(key: GROUP_AVATARS_METADATA_KEY);
     
     final allMetadata = allMetadataStr != null 
         ? json.decode(allMetadataStr) as Map<String, dynamic>
         : <String, dynamic>{};
     
     allMetadata[roomId] = metadata;
-    await prefs.setString(GROUP_AVATARS_METADATA_KEY, json.encode(allMetadata));
+    await _secureStorage.write(
+      key: GROUP_AVATARS_METADATA_KEY,
+      value: json.encode(allMetadata)
+    );
   }
   
   /// Get group cache directory

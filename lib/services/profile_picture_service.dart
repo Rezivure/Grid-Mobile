@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/profile_picture_encryption.dart';
@@ -13,6 +14,7 @@ class ProfilePictureService {
   static const String CACHE_DIR = 'profile_pictures';
   
   final String _baseUrl = '${dotenv.env['GAUTH_URL']!}';
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   
   /// Uploads an encrypted profile picture
   /// Set isGroupAvatar to true when uploading group avatars to prevent profile contamination
@@ -164,25 +166,29 @@ class ProfilePictureService {
   
   /// Gets the current profile picture metadata
   Future<Map<String, dynamic>?> getProfilePictureMetadata() async {
-    final prefs = await SharedPreferences.getInstance();
-    final metadataString = prefs.getString(PREF_PROFILE_PIC_METADATA);
-    
-    if (metadataString != null) {
-      return json.decode(metadataString);
+    try {
+      final metadataString = await _secureStorage.read(key: PREF_PROFILE_PIC_METADATA);
+      
+      if (metadataString != null) {
+        return json.decode(metadataString);
+      }
+    } catch (e) {
+      print('Error reading secure storage: $e');
     }
     return null;
   }
   
   /// Saves profile picture metadata
   Future<void> _saveMetadata(Map<String, dynamic> metadata) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(PREF_PROFILE_PIC_METADATA, json.encode(metadata));
+    await _secureStorage.write(
+      key: PREF_PROFILE_PIC_METADATA, 
+      value: json.encode(metadata)
+    );
   }
   
   /// Clears local profile picture data
   Future<void> clearLocalProfilePicture() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(PREF_PROFILE_PIC_METADATA);
+    await _secureStorage.delete(key: PREF_PROFILE_PIC_METADATA);
     
     // Clear cache directory
     try {

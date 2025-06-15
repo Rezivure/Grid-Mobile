@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/models/sharing_window.dart';
@@ -254,10 +255,10 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
   /// Save group avatar metadata locally for the uploader
   Future<void> _saveGroupAvatarLocally(Map<String, dynamic> metadata) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      const secureStorage = FlutterSecureStorage();
       
       // Get existing group avatars metadata
-      final allMetadataStr = prefs.getString('group_avatars_metadata');
+      final allMetadataStr = await secureStorage.read(key: 'group_avatars_metadata');
       final allMetadata = allMetadataStr != null 
           ? json.decode(allMetadataStr) as Map<String, dynamic>
           : <String, dynamic>{};
@@ -272,10 +273,13 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         'cached_at': DateTime.now().toIso8601String(),
       };
       
-      // Save back to preferences
-      await prefs.setString('group_avatars_metadata', json.encode(allMetadata));
+      // Save back to secure storage
+      await secureStorage.write(
+        key: 'group_avatars_metadata',
+        value: json.encode(allMetadata)
+      );
       
-      print('GroupProfileModal: Saved group avatar metadata locally');
+      print('GroupProfileModal: Saved group avatar metadata securely');
     } catch (e) {
       print('Error saving group avatar metadata: $e');
     }
