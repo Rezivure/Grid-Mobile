@@ -21,6 +21,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
 
 
 
@@ -1414,6 +1415,9 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
         
+        // Clear UserAvatar cache as well
+        UserAvatar.clearCache(userId);
+        
         await _loadCachedAvatar();
         
         // Step 5 will broadcast to rooms
@@ -1566,6 +1570,9 @@ class _SettingsPageState extends State<SettingsPage> {
         // Clear static cache for this user
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
+        
+        // Clear UserAvatar cache as well
+        UserAvatar.clearCache(userId);
         
         await _loadCachedAvatar();
         print('[Matrix Avatar] Reload complete');
