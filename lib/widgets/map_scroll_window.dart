@@ -22,6 +22,7 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'group_avatar.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -637,7 +638,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   SizedBox(
                     width: 36,
                     height: 36,
-                    child: TriangleAvatars(userIds: room.members),
+                    child: GroupAvatar(
+                      roomId: room.roomId,
+                      memberIds: room.members,
+                      size: 36,
+                    ),
                   ),
                   if (room.expirationTimestamp > 0)
                     Positioned(
