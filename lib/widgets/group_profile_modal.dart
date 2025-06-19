@@ -11,6 +11,20 @@ import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
 import 'package:grid_frontend/widgets/triangle_avatars.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:matrix/matrix.dart' hide Room;
+import 'package:provider/provider.dart';
 
 import '../blocs/groups/groups_state.dart';
 
@@ -39,6 +53,13 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
   List<SharingWindow> _sharingWindows = [];
   bool _membersExpanded = false;
   
+  // Group avatar state
+  static final Map<String, Uint8List> _groupAvatarCache = {};
+  Uint8List? _groupAvatarBytes;
+  bool _isLoadingGroupAvatar = false;
+  bool _hasLoadedGroupAvatar = false;
+  bool _isCurrentUserAdmin = false;
+  
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -54,6 +75,8 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       curve: Curves.easeOut,
     );
     _loadSharingPreferences();
+    _checkAdminStatus();
+    _loadGroupAvatar();
     _fadeController.forward();
   }
 
@@ -74,6 +97,127 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       setState(() {
         _sharingWindows = prefs.shareWindows ?? [];
         _alwaysShare = prefs.activeSharing;
+      });
+    }
+  }
+
+  void _checkAdminStatus() {
+    final client = widget.roomService.client;
+    final currentUserId = client.userID ?? '';
+    final powerLevel = widget.roomService.getUserPowerLevel(
+      widget.room.roomId,
+      currentUserId,
+    );
+    setState(() {
+      _isCurrentUserAdmin = powerLevel == 100;
+    });
+  }
+
+  Future<void> _loadGroupAvatar() async {
+    final roomId = widget.room.roomId;
+    
+    // Check static cache first
+    if (_groupAvatarCache.containsKey(roomId)) {
+      print('[Group Avatar Load] Using avatar from static cache');
+      setState(() {
+        _groupAvatarBytes = _groupAvatarCache[roomId];
+        _isLoadingGroupAvatar = false;
+      });
+      return;
+    }
+    
+    if (_hasLoadedGroupAvatar) {
+      print('[Group Avatar Load] Already attempted load, skipping');
+      return;
+    }
+    
+    print('[Group Avatar Load] Starting avatar load for room: $roomId');
+    _hasLoadedGroupAvatar = true;
+    
+    try {
+      setState(() {
+        _isLoadingGroupAvatar = true;
+      });
+
+      final secureStorage = FlutterSecureStorage();
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Check if it's a Matrix avatar or encrypted avatar
+      final isMatrixAvatar = prefs.getBool('group_avatar_is_matrix_$roomId') ?? false;
+      
+      // Check secure storage for avatar data
+      final avatarDataStr = await secureStorage.read(key: 'group_avatar_$roomId');
+      if (avatarDataStr != null) {
+        final avatarData = json.decode(avatarDataStr);
+        final uri = avatarData['uri'];
+        final keyBase64 = avatarData['key'];
+        final ivBase64 = avatarData['iv'];
+        
+        if (uri != null && keyBase64 != null && ivBase64 != null) {
+          if (isMatrixAvatar) {
+            // Download from Matrix
+            final client = Provider.of<Client>(context, listen: false);
+            final mxcUri = Uri.parse(uri);
+            final serverName = mxcUri.host;
+            final mediaId = mxcUri.path.substring(1);
+            
+            print('[Group Avatar Load] Downloading encrypted file from Matrix');
+            final file = await client.getContent(serverName, mediaId);
+            
+            // Decrypt
+            final key = encrypt.Key.fromBase64(keyBase64);
+            final iv = encrypt.IV.fromBase64(ivBase64);
+            final encrypter = encrypt.Encrypter(encrypt.AES(key));
+            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+            
+            final avatarBytes = Uint8List.fromList(decrypted);
+            _groupAvatarCache[roomId] = avatarBytes;
+            
+            setState(() {
+              _groupAvatarBytes = avatarBytes;
+              _isLoadingGroupAvatar = false;
+            });
+          } else {
+            // Download from R2
+            print('[Group Avatar Load] Downloading from R2: $uri');
+            final response = await http.get(Uri.parse(uri));
+            
+            if (response.statusCode == 200) {
+              // Decrypt
+              final key = encrypt.Key.fromBase64(keyBase64);
+              final iv = encrypt.IV.fromBase64(ivBase64);
+              final encrypter = encrypt.Encrypter(encrypt.AES(key));
+              final encrypted = encrypt.Encrypted(response.bodyBytes);
+              final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+              
+              final avatarBytes = Uint8List.fromList(decrypted);
+              _groupAvatarCache[roomId] = avatarBytes;
+              
+              setState(() {
+                _groupAvatarBytes = avatarBytes;
+                _isLoadingGroupAvatar = false;
+              });
+            } else {
+              setState(() {
+                _isLoadingGroupAvatar = false;
+              });
+            }
+          }
+        } else {
+          setState(() {
+            _isLoadingGroupAvatar = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isLoadingGroupAvatar = false;
+        });
+      }
+    } catch (e) {
+      print('[Group Avatar Load] Error: $e');
+      setState(() {
+        _isLoadingGroupAvatar = false;
       });
     }
   }
@@ -189,6 +333,294 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
     );
   }
 
+  Future<void> _pickAndUploadGroupAvatar() async {
+    try {
+      // Pick image with heavy compression for small avatar
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 50,
+        maxWidth: 256,
+        maxHeight: 256,
+      );
+      
+      if (image == null) return;
+      
+      setState(() {
+        _isLoadingGroupAvatar = true;
+      });
+      
+      // Show encryption notice modal
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) {
+            final colorScheme = Theme.of(context).colorScheme;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: CircularProgressIndicator(
+                            color: colorScheme.primary,
+                            strokeWidth: 3,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Uploading group avatar',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'End-to-end encrypted',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      }
+      
+      // Crop the image
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Group Photo',
+            toolbarColor: Theme.of(context).colorScheme.primary,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: Theme.of(context).colorScheme.primary,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+          IOSUiSettings(
+            title: 'Crop Group Photo',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+            doneButtonTitle: 'Done',
+            cancelButtonTitle: 'Cancel',
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+        ],
+      );
+      
+      if (croppedFile == null) {
+        if (mounted) Navigator.of(context).pop();
+        setState(() {
+          _isLoadingGroupAvatar = false;
+        });
+        return;
+      }
+      
+      // Check if using custom homeserver
+      final client = Provider.of<Client>(context, listen: false);
+      final homeserver = client.homeserver.toString();
+      final isCustomServer = utils.isCustomHomeserver(homeserver);
+      
+      if (isCustomServer) {
+        await _uploadGroupAvatarToMatrix(croppedFile.path);
+      } else {
+        await _uploadGroupAvatarToR2(croppedFile.path);
+      }
+      
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      print('[Group Avatar Upload] Error: $e');
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload group avatar: $e')),
+        );
+      }
+      setState(() {
+        _isLoadingGroupAvatar = false;
+      });
+    }
+  }
+  
+  Future<void> _uploadGroupAvatarToR2(String imagePath) async {
+    try {
+      // Generate encryption key and IV
+      final key = encrypt.Key.fromSecureRandom(32);
+      final iv = encrypt.IV.fromSecureRandom(16);
+      
+      // Read and encrypt the image
+      final imageBytes = await File(imagePath).readAsBytes();
+      final encrypter = encrypt.Encrypter(encrypt.AES(key));
+      final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
+      
+      // Get JWT token
+      final prefs = await SharedPreferences.getInstance();
+      final jwt = prefs.getString('loginToken');
+      
+      if (jwt == null) {
+        throw Exception('No authentication token found');
+      }
+      
+      // Upload to middleware
+      final middlewareUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app';
+      print('[Group Avatar Upload] Using middleware URL: $middlewareUrl/upload-profile-pic');
+      print('[Group Avatar Upload] JWT token present: ${jwt != null}');
+      
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$middlewareUrl/upload-profile-pic'),
+      );
+      
+      // Add JWT token
+      request.headers['Authorization'] = 'Bearer $jwt';
+      print('[Group Avatar Upload] Authorization header set');
+      
+      // Add encrypted file
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          encrypted.bytes,
+          filename: 'avatar.enc',
+          contentType: http_parser.MediaType('application', 'octet-stream'),
+        ),
+      );
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        final filename = responseData['filename'];
+        
+        // Construct CDN URL
+        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';
+        final cdnUrl = '$cdnBaseUrl/$filename';
+        
+        print('[Group Avatar Upload] Success! CDN URL: $cdnUrl');
+        
+        // Store in secure storage
+        final secureStorage = FlutterSecureStorage();
+        final avatarData = {
+          'uri': cdnUrl,
+          'key': key.base64,
+          'iv': iv.base64,
+        };
+        
+        await secureStorage.write(
+          key: 'group_avatar_${widget.room.roomId}',
+          value: json.encode(avatarData),
+        );
+        
+        // Mark as non-matrix avatar
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('group_avatar_is_matrix_${widget.room.roomId}', false);
+        
+        // Update cache and UI
+        final decryptedBytes = Uint8List.fromList(imageBytes);
+        _groupAvatarCache[widget.room.roomId] = decryptedBytes;
+        
+        setState(() {
+          _groupAvatarBytes = decryptedBytes;
+          _isLoadingGroupAvatar = false;
+        });
+      } else {
+        print('[Group Avatar Upload R2] Failed with status ${response.statusCode}');
+        print('[Group Avatar Upload R2] Response body: ${response.body}');
+        throw Exception('Upload failed with status ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      print('[Group Avatar Upload R2] Error: $e');
+      rethrow;
+    }
+  }
+  
+  Future<void> _uploadGroupAvatarToMatrix(String imagePath) async {
+    try {
+      // Generate encryption key and IV
+      final key = encrypt.Key.fromSecureRandom(32);
+      final iv = encrypt.IV.fromSecureRandom(16);
+      
+      // Read and encrypt the image
+      final imageBytes = await File(imagePath).readAsBytes();
+      final encrypter = encrypt.Encrypter(encrypt.AES(key));
+      final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
+      
+      // Upload to Matrix media store
+      final client = Provider.of<Client>(context, listen: false);
+      
+      print('[Group Avatar Upload Matrix] Uploading encrypted file to Matrix media store');
+      final uploadResponse = await client.uploadContent(
+        encrypted.bytes,
+        filename: 'group_avatar_${DateTime.now().millisecondsSinceEpoch}.enc',
+        contentType: 'application/octet-stream',
+      );
+      
+      final mxcUri = uploadResponse.toString();
+      print('[Group Avatar Upload Matrix] Uploaded to: $mxcUri');
+      
+      // Store encryption keys in secure storage
+      final secureStorage = FlutterSecureStorage();
+      final avatarData = {
+        'uri': mxcUri,
+        'key': key.base64,
+        'iv': iv.base64,
+      };
+      
+      await secureStorage.write(
+        key: 'group_avatar_${widget.room.roomId}',
+        value: json.encode(avatarData),
+      );
+      
+      // Mark as matrix avatar
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('group_avatar_is_matrix_${widget.room.roomId}', true);
+      
+      // Update cache and UI
+      final decryptedBytes = Uint8List.fromList(imageBytes);
+      _groupAvatarCache[widget.room.roomId] = decryptedBytes;
+      
+      setState(() {
+        _groupAvatarBytes = decryptedBytes;
+        _isLoadingGroupAvatar = false;
+      });
+    } catch (e) {
+      print('[Group Avatar Upload Matrix] Error: $e');
+      rethrow;
+    }
+  }
+
   Widget _buildModernHeader() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -208,10 +640,74 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                 ),
               ],
             ),
-            child: SizedBox(
-              width: 72,
-              height: 72,
-              child: TriangleAvatars(userIds: widget.room.members),
+            child: Stack(
+              children: [
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: _groupAvatarBytes != null
+                      ? ClipOval(
+                          child: Image.memory(
+                            _groupAvatarBytes!,
+                            fit: BoxFit.cover,
+                            width: 72,
+                            height: 72,
+                          ),
+                        )
+                      : TriangleAvatars(userIds: widget.room.members),
+                ),
+                if (_isLoadingGroupAvatar)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_isCurrentUserAdmin && !_isLoadingGroupAvatar)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: GestureDetector(
+                      onTap: _pickAndUploadGroupAvatar,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colorScheme.surface,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorScheme.shadow.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.camera_alt,
+                          color: colorScheme.onPrimary,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: 20),
