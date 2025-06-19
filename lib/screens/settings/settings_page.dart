@@ -30,6 +30,9 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  // Static cache for avatar to persist across widget recreations
+  static final Map<String, Uint8List> _avatarCache = {};
+  static final Map<String, String> _avatarUriCache = {};
 
   String? deviceID;
   String? identityKey;
@@ -1406,6 +1409,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarBytes = null;
         _cachedAvatarUri = null;
         _hasLoadedAvatar = false; // Reset flag to allow reload
+        
+        // Clear static cache for this user
+        _avatarCache.remove(userId);
+        _avatarUriCache.remove(userId);
+        
         await _loadCachedAvatar();
         
         // Step 5 will broadcast to rooms
@@ -1554,6 +1562,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarBytes = null;
         _cachedAvatarUri = null;
         _hasLoadedAvatar = false; // Reset flag to allow reload
+        
+        // Clear static cache for this user
+        _avatarCache.remove(userId);
+        _avatarUriCache.remove(userId);
+        
         await _loadCachedAvatar();
         print('[Matrix Avatar] Reload complete');
 
@@ -1578,13 +1591,27 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadCachedAvatar() async {
-    // Only load once per widget lifecycle
-    if (_hasLoadedAvatar) {
-      print('[Avatar Load] Already loaded, skipping');
+    final client = Provider.of<Client>(context, listen: false);
+    final userId = client.userID ?? '';
+    
+    // Check static cache first
+    if (_avatarCache.containsKey(userId)) {
+      print('[Avatar Load] Using avatar from static cache');
+      setState(() {
+        _avatarBytes = _avatarCache[userId];
+        _cachedAvatarUri = _avatarUriCache[userId];
+        _isLoadingAvatar = false;
+      });
       return;
     }
     
-    print('[Avatar Load] Starting avatar load');
+    // Only load once per widget lifecycle
+    if (_hasLoadedAvatar) {
+      print('[Avatar Load] Already attempted load, skipping');
+      return;
+    }
+    
+    print('[Avatar Load] Starting avatar load - not in cache');
     _hasLoadedAvatar = true;
     
     try {
@@ -1592,8 +1619,6 @@ class _SettingsPageState extends State<SettingsPage> {
         _isLoadingAvatar = true;
       });
 
-      final client = Provider.of<Client>(context, listen: false);
-      final userId = client.userID ?? '';
       final secureStorage = FlutterSecureStorage();
       
       // First check if custom server (Matrix avatar)
@@ -1630,12 +1655,18 @@ class _SettingsPageState extends State<SettingsPage> {
             final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
+            final avatarBytes = Uint8List.fromList(decrypted);
+            
+            // Update static cache
+            _avatarCache[userId] = avatarBytes;
+            _avatarUriCache[userId] = uri;
+            
             setState(() {
-              _avatarBytes = Uint8List.fromList(decrypted);
+              _avatarBytes = avatarBytes;
               _cachedAvatarUri = uri; // Cache the Matrix URI
               _isLoadingAvatar = false;
             });
-            print('[Matrix Avatar Load] Avatar decrypted and set in UI');
+            print('[Matrix Avatar Load] Avatar decrypted and set in UI and cache');
           } else {
             print('[Matrix Avatar Load] Missing encryption keys or URI');
             setState(() {
@@ -1685,8 +1716,14 @@ class _SettingsPageState extends State<SettingsPage> {
               final encrypted = encrypt.Encrypted(response.bodyBytes);
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
               
+              final avatarBytes = Uint8List.fromList(decrypted);
+              
+              // Update static cache
+              _avatarCache[userId] = avatarBytes;
+              _avatarUriCache[userId] = uri;
+              
               setState(() {
-                _avatarBytes = Uint8List.fromList(decrypted);
+                _avatarBytes = avatarBytes;
                 _cachedAvatarUri = uri; // Cache the URI
                 _isLoadingAvatar = false;
               });
