@@ -14,6 +14,9 @@ import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'dart:io';
 
 
 
@@ -957,6 +960,309 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final ImagePicker picker = ImagePicker();
+
+    // Show dialog to choose between camera and gallery
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 360),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.account_circle,
+                      color: colorScheme.primary,
+                      size: 32,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Title
+                  Text(
+                    'Update Profile Photo',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  
+                  // Options
+                  InkWell(
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.camera_alt,
+                              color: colorScheme.primary,
+                              size: 24,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Take Photo',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Use your camera',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  InkWell(
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.photo_library,
+                              color: colorScheme.primary,
+                              size: 24,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Choose from Gallery',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Select existing photo',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  
+                  // End-to-end encryption notice
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 14,
+                          color: colorScheme.primary,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'End-to-end encrypted',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Cancel button
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) return;
+
+    try {
+      // Pick image
+      final XFile? image = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+
+      if (image == null) return;
+
+      // Step 2: Apply circular cropping
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Avatar',
+            toolbarColor: colorScheme.primary,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: colorScheme.primary,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+          IOSUiSettings(
+            title: 'Crop Avatar',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+            doneButtonTitle: 'Done',
+            cancelButtonTitle: 'Cancel',
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+        ],
+      );
+
+      if (croppedFile == null) return;
+
+      // Step 2: Determine server type
+      final client = Provider.of<Client>(context, listen: false);
+      final roomService = Provider.of<RoomService>(context, listen: false);
+      final homeserver = roomService.getMyHomeserver();
+      final isCustomServer = utils.isCustomHomeserver(homeserver);
+
+      // Log for debugging
+      print('Avatar upload - Homeserver: $homeserver, IsCustom: $isCustomServer');
+
+      // For now, show server type detection result
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isCustomServer 
+              ? 'Custom homeserver detected - will use Matrix media store' 
+              : 'Default homeserver detected - will use encrypted R2 storage'
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: colorScheme.primary,
+        ),
+      );
+
+      // Step 3 will implement the actual upload logic
+      // For custom servers: Upload to Matrix media store
+      // For default servers: Encrypt and upload to R2
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to process image: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
 
   Future<void> _deleteAccount() async {
 
@@ -1301,14 +1607,37 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
-            child: RandomAvatar(
-              _localpart ?? 'Unknown User',
-              height: 80,
-              width: 80,
-            ),
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                child: RandomAvatar(
+                  _localpart ?? 'Unknown User',
+                  height: 80,
+                  width: 80,
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _pickAndUploadAvatar,
+                  child: Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 16),
           Row(
