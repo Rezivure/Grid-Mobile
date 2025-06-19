@@ -5,52 +5,55 @@ import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
+import 'package:random_avatar/random_avatar.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'triangle_avatars.dart';
+import '../utilities/utils.dart';
 
-class GroupAvatar extends StatefulWidget {
-  final String roomId;
-  final List<String> memberIds;
+class UserAvatar extends StatefulWidget {
+  final String userId;
   final double size;
 
-  const GroupAvatar({
+  const UserAvatar({
     Key? key,
-    required this.roomId,
-    required this.memberIds,
-    this.size = 72,
+    required this.userId,
+    this.size = 40,
   }) : super(key: key);
 
   @override
-  _GroupAvatarState createState() => _GroupAvatarState();
+  _UserAvatarState createState() => _UserAvatarState();
   
-  // Static method to clear cache for a specific group
-  static void clearCache(String roomId) {
-    _GroupAvatarState._groupAvatarCache.remove(roomId);
+  // Static method to clear cache for a specific user
+  static void clearCache(String userId) {
+    _UserAvatarState._avatarCache.remove(userId);
   }
   
   // Static method to clear all cache
   static void clearAllCache() {
-    _GroupAvatarState._groupAvatarCache.clear();
+    _UserAvatarState._avatarCache.clear();
   }
 }
 
-class _GroupAvatarState extends State<GroupAvatar> {
-  static final Map<String, Uint8List> _groupAvatarCache = {};
+class _UserAvatarState extends State<UserAvatar> {
+  static final Map<String, Uint8List> _avatarCache = {};
   Uint8List? _avatarBytes;
   bool _isLoading = false;
+  bool _hasAttemptedLoad = false;
 
   @override
   void initState() {
     super.initState();
-    _loadGroupAvatar();
+    _loadUserAvatar();
   }
 
-  Future<void> _loadGroupAvatar() async {
+  Future<void> _loadUserAvatar() async {
+    if (_hasAttemptedLoad) return;
+    _hasAttemptedLoad = true;
+
     // Check static cache first
-    if (_groupAvatarCache.containsKey(widget.roomId)) {
+    if (_avatarCache.containsKey(widget.userId)) {
       setState(() {
-        _avatarBytes = _groupAvatarCache[widget.roomId];
+        _avatarBytes = _avatarCache[widget.userId];
       });
       return;
     }
@@ -64,10 +67,15 @@ class _GroupAvatarState extends State<GroupAvatar> {
       final prefs = await SharedPreferences.getInstance();
       
       // Check if it's a Matrix avatar or encrypted avatar
-      final isMatrixAvatar = prefs.getBool('group_avatar_is_matrix_${widget.roomId}') ?? false;
+      // For the current user, check without userId suffix
+      final client = Provider.of<Client>(context, listen: false);
+      final isCurrentUser = widget.userId == client.userID;
+      final isMatrixAvatar = isCurrentUser 
+          ? (prefs.getBool('avatar_is_matrix') ?? false)
+          : (prefs.getBool('avatar_is_matrix_${widget.userId}') ?? false);
       
       // Check secure storage for avatar data
-      final avatarDataStr = await secureStorage.read(key: 'group_avatar_${widget.roomId}');
+      final avatarDataStr = await secureStorage.read(key: 'avatar_${widget.userId}');
       if (avatarDataStr != null) {
         final avatarData = json.decode(avatarDataStr);
         final uri = avatarData['uri'];
@@ -92,7 +100,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
-            _groupAvatarCache[widget.roomId] = avatarBytes;
+            _avatarCache[widget.userId] = avatarBytes;
             
             setState(() {
               _avatarBytes = avatarBytes;
@@ -111,7 +119,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
               
               final avatarBytes = Uint8List.fromList(decrypted);
-              _groupAvatarCache[widget.roomId] = avatarBytes;
+              _avatarCache[widget.userId] = avatarBytes;
               
               setState(() {
                 _avatarBytes = avatarBytes;
@@ -134,7 +142,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
         });
       }
     } catch (e) {
-      print('[Group Avatar] Error loading avatar: $e');
+      print('[User Avatar] Error loading avatar for ${widget.userId}: $e');
       setState(() {
         _isLoading = false;
       });
@@ -173,11 +181,15 @@ class _GroupAvatarState extends State<GroupAvatar> {
       );
     }
 
-    // Fallback to triangle avatars
+    // Fallback to random avatar
     return SizedBox(
       width: widget.size,
       height: widget.size,
-      child: TriangleAvatars(userIds: widget.memberIds),
+      child: RandomAvatar(
+        localpart(widget.userId),
+        height: widget.size,
+        width: widget.size,
+      ),
     );
   }
 }

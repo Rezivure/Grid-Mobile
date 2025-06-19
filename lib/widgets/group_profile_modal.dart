@@ -25,6 +25,7 @@ import 'dart:typed_data';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:matrix/matrix.dart' hide Room;
 import 'package:provider/provider.dart';
+import 'group_avatar.dart';
 
 import '../blocs/groups/groups_state.dart';
 
@@ -551,6 +552,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         final decryptedBytes = Uint8List.fromList(imageBytes);
         _groupAvatarCache[widget.room.roomId] = decryptedBytes;
         
+        // Clear GroupAvatar widget cache
+        GroupAvatar.clearCache(widget.room.roomId);
+        
         setState(() {
           _groupAvatarBytes = decryptedBytes;
           _isLoadingGroupAvatar = false;
@@ -610,6 +614,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       // Update cache and UI
       final decryptedBytes = Uint8List.fromList(imageBytes);
       _groupAvatarCache[widget.room.roomId] = decryptedBytes;
+      
+      // Clear GroupAvatar widget cache
+      GroupAvatar.clearCache(widget.room.roomId);
       
       setState(() {
         _groupAvatarBytes = decryptedBytes;
