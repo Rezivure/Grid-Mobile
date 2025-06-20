@@ -292,6 +292,7 @@ class _UserMapMarkerState extends State<UserMapMarker>
                                 ),
                                 child: ClipOval(
                                   child: UserAvatar(
+                                    key: ValueKey('avatar_${widget.userId}'),
                                     userId: widget.userId,
                                     size: 44,
                                   ),
