@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/models/contact_display.dart';
-import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
 
 import '../models/sharing_window.dart';
 import '../models/sharing_preferences.dart';
@@ -460,6 +461,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   }
 
   Widget _buildModernHeader(ThemeData theme, ColorScheme colorScheme, String userLocalpart) {
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -491,10 +496,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             child: CircleAvatar(
               radius: 32,
               backgroundColor: colorScheme.primary.withOpacity(0.1),
-              child: RandomAvatar(
-                userLocalpart,
-                height: 64,
-                width: 64,
+              child: UserAvatar(
+                userId: widget.contact.userId,
+                size: 64,
               ),
             ),
           ),
@@ -515,7 +519,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  formatUserId(widget.contact.userId),
+                  showFullMatrixId ? widget.contact.userId : utils.formatUserId(widget.contact.userId),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurface.withOpacity(0.6),
                   ),
@@ -527,9 +531,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           // Copy button
           IconButton(
             onPressed: () {
-              final textToCopy = formatUserId(widget.contact.userId).contains(":")
-                  ? widget.contact.userId.substring(1)
-                  : userLocalpart;
+              final textToCopy = showFullMatrixId
+                  ? widget.contact.userId.substring(1)  // Remove @ for custom homeserver
+                  : userLocalpart;  // Just localpart for default server
               
               Clipboard.setData(ClipboardData(text: textToCopy));
               setState(() => _copied = true);
