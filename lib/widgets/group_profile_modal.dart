@@ -26,6 +26,8 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:matrix/matrix.dart' hide Room;
 import 'package:provider/provider.dart';
 import 'group_avatar.dart';
+import 'user_avatar.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 import '../blocs/groups/groups_state.dart';
 
@@ -387,18 +389,12 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                         ),
                       ),
                     ),
-                    SizedBox(height: 20),
+                    SizedBox(height: 12),
                     Text(
-                      'Uploading group avatar',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'End-to-end encrypted',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.primary,
+                      'Uploading',
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -559,6 +555,14 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
           _groupAvatarBytes = decryptedBytes;
           _isLoadingGroupAvatar = false;
         });
+        
+        // Announce group avatar update to this room
+        print('[Group Avatar Upload] Announcing group avatar to room ${widget.room.roomId}');
+        print('[Group Avatar Upload] Room name: ${widget.room.name}');
+        final client = Provider.of<Client>(context, listen: false);
+        final avatarService = AvatarAnnouncementService(client);
+        await avatarService.announceGroupAvatarToRoom(widget.room.roomId);
+        print('[Group Avatar Upload] Announcement sent');
       } else {
         print('[Group Avatar Upload R2] Failed with status ${response.statusCode}');
         print('[Group Avatar Upload R2] Response body: ${response.body}');
@@ -622,6 +626,13 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         _groupAvatarBytes = decryptedBytes;
         _isLoadingGroupAvatar = false;
       });
+      
+      // Announce group avatar update to this room
+      print('[Group Avatar Upload Matrix] Announcing group avatar to room ${widget.room.roomId}');
+      print('[Group Avatar Upload Matrix] Room name: ${widget.room.name}');
+      final avatarService = AvatarAnnouncementService(client);
+      await avatarService.announceGroupAvatarToRoom(widget.room.roomId);
+      print('[Group Avatar Upload Matrix] Announcement sent');
     } catch (e) {
       print('[Group Avatar Upload Matrix] Error: $e');
       rethrow;
@@ -1023,10 +1034,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                   child: CircleAvatar(
                     radius: 22,
                     backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: RandomAvatar(
-                      member.userId.split(':')[0].replaceFirst('@', ''),
-                      height: 44,
-                      width: 44,
+                    child: UserAvatar(
+                      userId: member.userId,
+                      size: 44,
                     ),
                   ),
                 ),

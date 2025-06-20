@@ -22,6 +22,7 @@ import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 
 
@@ -1420,7 +1421,10 @@ class _SettingsPageState extends State<SettingsPage> {
         
         await _loadCachedAvatar();
         
-        // Step 5 will broadcast to rooms
+        // Step 5: Broadcast avatar announcement to all rooms
+        print('[Avatar Upload] Broadcasting avatar announcement to all rooms');
+        final avatarService = AvatarAnnouncementService(client);
+        await avatarService.broadcastProfPicToAllRooms();
       } else {
         throw Exception('Upload failed: ${response.body}');
       }
@@ -1577,7 +1581,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await _loadCachedAvatar();
         print('[Matrix Avatar] Reload complete');
 
-        // Step 5 will broadcast to rooms (though Matrix typically handles this automatically)
+        // Step 5: Broadcast avatar announcement to all rooms
+        print('[Matrix Avatar] Broadcasting avatar announcement to all rooms');
+        final avatarService = AvatarAnnouncementService(client);
+        await avatarService.broadcastProfPicToAllRooms();
       } else {
         throw Exception('Failed to upload avatar to Matrix');
       }
