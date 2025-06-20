@@ -23,14 +23,20 @@ class UserAvatar extends StatefulWidget {
   @override
   _UserAvatarState createState() => _UserAvatarState();
   
+  // Static notifier for cache invalidation
+  static final _cacheInvalidationNotifier = ValueNotifier<String?>(null);
+  
   // Static method to clear cache for a specific user
   static void clearCache(String userId) {
     _UserAvatarState._avatarCache.remove(userId);
+    // Notify all listening widgets
+    _cacheInvalidationNotifier.value = userId;
   }
   
   // Static method to clear all cache
   static void clearAllCache() {
     _UserAvatarState._avatarCache.clear();
+    _cacheInvalidationNotifier.value = '*'; // Special value to indicate all cache cleared
   }
 }
 
@@ -38,29 +44,66 @@ class _UserAvatarState extends State<UserAvatar> {
   static final Map<String, Uint8List> _avatarCache = {};
   Uint8List? _avatarBytes;
   bool _isLoading = false;
-  bool _hasAttemptedLoad = false;
+  String? _loadedUserId;
 
   @override
   void initState() {
     super.initState();
     _loadUserAvatar();
+    
+    // Listen for cache invalidation
+    UserAvatar._cacheInvalidationNotifier.addListener(_onCacheInvalidated);
+  }
+  
+  @override
+  void dispose() {
+    UserAvatar._cacheInvalidationNotifier.removeListener(_onCacheInvalidated);
+    super.dispose();
+  }
+  
+  void _onCacheInvalidated() {
+    final invalidatedUserId = UserAvatar._cacheInvalidationNotifier.value;
+    if (invalidatedUserId == widget.userId || invalidatedUserId == '*') {
+      // Force reload if this user's cache was invalidated
+      _loadedUserId = null;
+      _avatarBytes = null;
+      _loadUserAvatar();
+    }
+  }
+
+  @override
+  void didUpdateWidget(UserAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload avatar if userId changed
+    if (oldWidget.userId != widget.userId) {
+      _loadedUserId = null;
+      _avatarBytes = null;
+      _loadUserAvatar();
+    }
   }
 
   Future<void> _loadUserAvatar() async {
-    if (_hasAttemptedLoad) return;
-    _hasAttemptedLoad = true;
+    // Don't reload if we already loaded this user's avatar
+    if (_loadedUserId == widget.userId && _avatarBytes != null) return;
+    
+    _loadedUserId = widget.userId;
 
     // Check static cache first
     if (_avatarCache.containsKey(widget.userId)) {
-      setState(() {
-        _avatarBytes = _avatarCache[widget.userId];
-      });
+      if (mounted) {
+        setState(() {
+          _avatarBytes = _avatarCache[widget.userId];
+        });
+      }
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _avatarBytes = null; // Clear any previous avatar
+      });
+    }
 
     try {
       final secureStorage = FlutterSecureStorage();
@@ -102,10 +145,12 @@ class _UserAvatarState extends State<UserAvatar> {
             final avatarBytes = Uint8List.fromList(decrypted);
             _avatarCache[widget.userId] = avatarBytes;
             
-            setState(() {
-              _avatarBytes = avatarBytes;
-              _isLoading = false;
-            });
+            if (mounted) {
+              setState(() {
+                _avatarBytes = avatarBytes;
+                _isLoading = false;
+              });
+            }
           } else {
             // Download from R2
             final response = await http.get(Uri.parse(uri));
@@ -121,31 +166,41 @@ class _UserAvatarState extends State<UserAvatar> {
               final avatarBytes = Uint8List.fromList(decrypted);
               _avatarCache[widget.userId] = avatarBytes;
               
-              setState(() {
-                _avatarBytes = avatarBytes;
-                _isLoading = false;
-              });
+              if (mounted) {
+                setState(() {
+                  _avatarBytes = avatarBytes;
+                  _isLoading = false;
+                });
+              }
             } else {
-              setState(() {
-                _isLoading = false;
-              });
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+              }
             }
           }
         } else {
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        }
+      } else {
+        if (mounted) {
           setState(() {
             _isLoading = false;
           });
         }
-      } else {
+      }
+    } catch (e) {
+      print('[User Avatar] Error loading avatar for ${widget.userId}: $e');
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
-    } catch (e) {
-      print('[User Avatar] Error loading avatar for ${widget.userId}: $e');
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
