@@ -683,10 +683,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
+                      child: UserAvatar(
+                        userId: contact.userId,
+                        size: 40,
                       ),
                     ),
                     const SizedBox(width: 12),

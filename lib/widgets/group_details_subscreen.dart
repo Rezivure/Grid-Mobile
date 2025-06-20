@@ -197,6 +197,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final colorScheme = theme.colorScheme;
     final canKick = await _canCurrentUserKick();
     
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
+    
     if (!mounted) return;
     
     showModalBottomSheet(
@@ -230,10 +234,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        user.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
+                      child: UserAvatar(
+                        userId: user.userId,
+                        size: 40,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -249,7 +252,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                             ),
                           ),
                           Text(
-                            '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            showFullMatrixId 
+                                ? user.userId
+                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),
