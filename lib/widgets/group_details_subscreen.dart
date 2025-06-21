@@ -10,6 +10,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
+import 'user_avatar.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -196,6 +197,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final colorScheme = theme.colorScheme;
     final canKick = await _canCurrentUserKick();
     
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
+    
     if (!mounted) return;
     
     showModalBottomSheet(
@@ -229,10 +234,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        user.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
+                      child: UserAvatar(
+                        userId: user.userId,
+                        size: 40,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -248,7 +252,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                             ),
                           ),
                           Text(
-                            '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            showFullMatrixId 
+                                ? user.userId
+                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),
@@ -519,6 +525,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       List<UserLocation> userLocations) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    
+    // Check if using custom homeserver
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
     final userLocation = userLocations
         .cast<UserLocation?>()
         .firstWhere(
@@ -574,10 +584,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       child: CircleAvatar(
                         radius: 22,
                         backgroundColor: colorScheme.primary.withOpacity(0.1),
-                        child: RandomAvatar(
-                          user.userId.split(':')[0].replaceFirst('@', ''),
-                          height: 44,
-                          width: 44,
+                        child: UserAvatar(
+                          userId: user.userId,
+                          size: 44,
                         ),
                       ),
                     ),
@@ -614,7 +623,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       
                       // User ID subtitle
                       Text(
-                        '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                        showFullMatrixId 
+                            ? user.userId
+                            : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurface.withOpacity(0.6),
                           fontSize: 12,

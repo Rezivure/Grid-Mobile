@@ -9,11 +9,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 
 
@@ -23,6 +32,9 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  // Static cache for avatar to persist across widget recreations
+  static final Map<String, Uint8List> _avatarCache = {};
+  static final Map<String, String> _avatarUriCache = {};
 
   String? deviceID;
   String? identityKey;
@@ -35,6 +47,10 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _localpart;
   String? _displayName;
   bool _isEditingDisplayName = false;
+  Uint8List? _avatarBytes;
+  bool _isLoadingAvatar = false;
+  String? _cachedAvatarUri; // Track the URI to avoid re-downloading
+  bool _hasLoadedAvatar = false; // Track if we've attempted to load avatar
 
 
   @override
@@ -44,6 +60,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadIncognitoState();
     _loadBatterySaverState();
+    _loadCachedAvatar();
   }
 
   bool isCustomHomeserver() {
@@ -957,6 +974,798 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final ImagePicker picker = ImagePicker();
+
+    // Show dialog to choose between camera and gallery
+    final source = await showDialog<ImageSource>(
+      context: context,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(maxWidth: 360),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Icon
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.account_circle,
+                      color: colorScheme.primary,
+                      size: 32,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Title
+                  Text(
+                    'Update Profile Photo',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  
+                  // Options
+                  InkWell(
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.camera_alt,
+                              color: colorScheme.primary,
+                              size: 24,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Take Photo',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Use your camera',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  InkWell(
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.photo_library,
+                              color: colorScheme.primary,
+                              size: 24,
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Choose from Gallery',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Select existing photo',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  
+                  // End-to-end encryption notice
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 14,
+                          color: colorScheme.primary,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'End-to-end encrypted',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Cancel button
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) return;
+
+    try {
+      // Pick image
+      final XFile? image = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+
+      if (image == null) return;
+
+      // Step 2: Apply circular cropping
+      final croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Avatar',
+            toolbarColor: colorScheme.primary,
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: colorScheme.primary,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+          IOSUiSettings(
+            title: 'Crop Avatar',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+            aspectRatioPickerButtonHidden: true,
+            rotateButtonsHidden: false,
+            rotateClockwiseButtonHidden: false,
+            doneButtonTitle: 'Done',
+            cancelButtonTitle: 'Cancel',
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+            cropStyle: CropStyle.circle,
+          ),
+        ],
+      );
+
+      if (croppedFile == null) return;
+
+      // Step 2: Determine server type
+      final client = Provider.of<Client>(context, listen: false);
+      final roomService = Provider.of<RoomService>(context, listen: false);
+      final homeserver = roomService.getMyHomeserver();
+      final isCustomServer = utils.isCustomHomeserver(homeserver);
+
+      // Log for debugging
+      print('Avatar upload - Homeserver: $homeserver, IsCustom: $isCustomServer');
+
+      if (isCustomServer) {
+        // Step 6: Custom homeserver - Upload to Matrix media store
+        await _uploadAvatarToMatrix(croppedFile.path);
+      } else {
+        // Step 3: Default homeserver - Encrypt and upload to R2
+        await _uploadAvatarToR2(croppedFile.path);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to process image: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _uploadAvatarToR2(String imagePath) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final secureStorage = FlutterSecureStorage();
+    
+    try {
+      // Show subtle loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black12,
+        builder: (context) => Center(
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CircularProgressIndicator(
+                      color: colorScheme.primary,
+                      strokeWidth: 3,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Uploading',
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Read image file
+      final imageFile = File(imagePath);
+      final imageBytes = await imageFile.readAsBytes();
+
+      // Generate encryption key and IV
+      final key = encrypt.Key.fromSecureRandom(32); // 256-bit key
+      final iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV
+      
+      // Encrypt the image
+      final encrypter = encrypt.Encrypter(encrypt.AES(key));
+      final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
+
+      // Get JWT token
+      final prefs = await SharedPreferences.getInstance();
+      final jwt = prefs.getString('loginToken');
+      
+      if (jwt == null) {
+        throw Exception('No authentication token found');
+      }
+
+      // Get middleware URL (GAUTH_URL)
+      final middlewareUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app';
+      
+      // Create multipart request to middleware
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$middlewareUrl/upload-profile-pic'),
+      );
+      
+      // Add JWT token
+      request.headers['Authorization'] = 'Bearer $jwt';
+      
+      // Add encrypted file
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          encrypted.bytes,
+          filename: 'avatar.enc',
+          contentType: http_parser.MediaType('application', 'octet-stream'),
+        ),
+      );
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        final filename = responseData['filename'];
+        
+        // Construct CDN URL using the filename
+        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';
+        final cdnUrl = '$cdnBaseUrl/$filename';
+
+        // Store encryption metadata in secure storage
+        final client = Provider.of<Client>(context, listen: false);
+        final userId = client.userID ?? '';
+        
+        final avatarData = {
+          'uri': cdnUrl,
+          'key': key.base64,
+          'iv': iv.base64,
+          'filename': filename,
+        };
+        
+        await secureStorage.write(
+          key: 'avatar_$userId',
+          value: json.encode(avatarData),
+        );
+
+        // Also store in SharedPreferences for quick access
+        await prefs.setString('avatar_uri', cdnUrl);
+        await prefs.setBool('avatar_is_matrix', false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Avatar uploaded successfully'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: colorScheme.primary,
+          ),
+        );
+
+        // Step 4: Clear cache and reload the avatar to display it
+        _avatarBytes = null;
+        _cachedAvatarUri = null;
+        _hasLoadedAvatar = false; // Reset flag to allow reload
+        
+        // Clear static cache for this user
+        _avatarCache.remove(userId);
+        _avatarUriCache.remove(userId);
+        
+        // Clear UserAvatar cache as well
+        UserAvatar.clearCache(userId);
+        
+        await _loadCachedAvatar();
+        
+        // Step 5: Broadcast avatar announcement to all rooms
+        print('[Avatar Upload] Broadcasting avatar announcement to all rooms');
+        final avatarService = AvatarAnnouncementService(client);
+        await avatarService.broadcastProfPicToAllRooms();
+      } else {
+        throw Exception('Upload failed: ${response.body}');
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to upload avatar: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _uploadAvatarToMatrix(String imagePath) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final secureStorage = FlutterSecureStorage();
+    
+    try {
+      // Show subtle loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black12,
+        builder: (context) => Center(
+          child: Material(
+            type: MaterialType.transparency,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CircularProgressIndicator(
+                      color: colorScheme.primary,
+                      strokeWidth: 3,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Uploading',
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Get Matrix client
+      final client = Provider.of<Client>(context, listen: false);
+      
+      // Read image file
+      final imageFile = File(imagePath);
+      final imageBytes = await imageFile.readAsBytes();
+      
+      // Generate encryption key and IV (same as R2)
+      final key = encrypt.Key.fromSecureRandom(32); // 256-bit key
+      final iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV
+      
+      // Encrypt the image
+      final encrypter = encrypt.Encrypter(encrypt.AES(key));
+      final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
+      
+      // Upload encrypted file to Matrix media store
+      print('[Matrix Avatar] Starting upload of encrypted file to Matrix media store');
+      final uploadResp = await client.uploadContent(
+        encrypted.bytes,
+        filename: 'avatar.enc',
+        contentType: 'application/octet-stream',
+      );
+      print('[Matrix Avatar] Upload response: $uploadResp');
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (uploadResp != null) {
+        // Optionally set the avatar URL in Matrix profile (encrypted version)
+        // This is optional - you might not want to set it since it's encrypted
+        // print('[Matrix Avatar] Setting avatar URL in Matrix profile');
+        // await client.setAvatarUrl(
+        //   client.userID!,
+        //   uploadResp,
+        // );
+        // print('[Matrix Avatar] Avatar URL set successfully');
+
+        // Store the mxc URL and encryption keys in secure storage
+        final userId = client.userID ?? '';
+        print('[Matrix Avatar] Storing encrypted avatar data for user: $userId');
+        final avatarData = {
+          'uri': uploadResp.toString(),
+          'key': key.base64,
+          'iv': iv.base64,
+          'isMatrix': true, // Flag to indicate this is a Matrix URL
+        };
+        
+        await secureStorage.write(
+          key: 'avatar_$userId',
+          value: json.encode(avatarData),
+        );
+        print('[Matrix Avatar] Stored in secure storage');
+
+        // Also store in SharedPreferences for quick access
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('avatar_uri', uploadResp.toString());
+        await prefs.setBool('avatar_is_matrix', true);
+        print('[Matrix Avatar] Stored in SharedPreferences');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Avatar uploaded successfully'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: colorScheme.primary,
+          ),
+        );
+
+        // Step 4: Clear cache and reload the avatar to display it
+        print('[Matrix Avatar] Clearing cache and reloading avatar');
+        _avatarBytes = null;
+        _cachedAvatarUri = null;
+        _hasLoadedAvatar = false; // Reset flag to allow reload
+        
+        // Clear static cache for this user
+        _avatarCache.remove(userId);
+        _avatarUriCache.remove(userId);
+        
+        // Clear UserAvatar cache as well
+        UserAvatar.clearCache(userId);
+        
+        await _loadCachedAvatar();
+        print('[Matrix Avatar] Reload complete');
+
+        // Step 5: Broadcast avatar announcement to all rooms
+        print('[Matrix Avatar] Broadcasting avatar announcement to all rooms');
+        final avatarService = AvatarAnnouncementService(client);
+        await avatarService.broadcastProfPicToAllRooms();
+      } else {
+        throw Exception('Failed to upload avatar to Matrix');
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to upload avatar: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadCachedAvatar() async {
+    final client = Provider.of<Client>(context, listen: false);
+    final userId = client.userID ?? '';
+    
+    // Check static cache first
+    if (_avatarCache.containsKey(userId)) {
+      print('[Avatar Load] Using avatar from static cache');
+      setState(() {
+        _avatarBytes = _avatarCache[userId];
+        _cachedAvatarUri = _avatarUriCache[userId];
+        _isLoadingAvatar = false;
+      });
+      return;
+    }
+    
+    // Only load once per widget lifecycle
+    if (_hasLoadedAvatar) {
+      print('[Avatar Load] Already attempted load, skipping');
+      return;
+    }
+    
+    print('[Avatar Load] Starting avatar load - not in cache');
+    _hasLoadedAvatar = true;
+    
+    try {
+      setState(() {
+        _isLoadingAvatar = true;
+      });
+
+      final secureStorage = FlutterSecureStorage();
+      
+      // First check if custom server (Matrix avatar)
+      final prefs = await SharedPreferences.getInstance();
+      final isMatrixAvatar = prefs.getBool('avatar_is_matrix') ?? false;
+      
+      if (isMatrixAvatar) {
+        // For custom servers, check secure storage for encrypted avatar
+        print('[Matrix Avatar Load] Loading avatar for Matrix user: $userId');
+        
+        final avatarDataStr = await secureStorage.read(key: 'avatar_$userId');
+        if (avatarDataStr != null) {
+          final avatarData = json.decode(avatarDataStr);
+          final uri = avatarData['uri'];
+          final keyBase64 = avatarData['key'];
+          final ivBase64 = avatarData['iv'];
+          
+          if (uri != null && keyBase64 != null && ivBase64 != null) {
+            // Parse mxc:// URL to get server name and media ID
+            final mxcUri = Uri.parse(uri);
+            final serverName = mxcUri.host;
+            final mediaId = mxcUri.path.substring(1); // Remove leading /
+            
+            print('[Matrix Avatar Load] Downloading encrypted file from Matrix: server=$serverName, mediaId=$mediaId');
+            final file = await client.getContent(serverName, mediaId);
+            print('[Matrix Avatar Load] Downloaded ${file.data.length} encrypted bytes');
+            
+            // Decrypt
+            final key = encrypt.Key.fromBase64(keyBase64);
+            final iv = encrypt.IV.fromBase64(ivBase64);
+            final encrypter = encrypt.Encrypter(encrypt.AES(key));
+            
+            // Convert to Encrypted object and decrypt
+            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+            
+            final avatarBytes = Uint8List.fromList(decrypted);
+            
+            // Update static cache
+            _avatarCache[userId] = avatarBytes;
+            _avatarUriCache[userId] = uri;
+            
+            setState(() {
+              _avatarBytes = avatarBytes;
+              _cachedAvatarUri = uri; // Cache the Matrix URI
+              _isLoadingAvatar = false;
+            });
+            print('[Matrix Avatar Load] Avatar decrypted and set in UI and cache');
+          } else {
+            print('[Matrix Avatar Load] Missing encryption keys or URI');
+            setState(() {
+              _isLoadingAvatar = false;
+            });
+          }
+        } else {
+          print('[Matrix Avatar Load] No avatar data in secure storage');
+          setState(() {
+            _isLoadingAvatar = false;
+          });
+        }
+      } else {
+        // For default servers, check secure storage
+        final avatarDataStr = await secureStorage.read(key: 'avatar_$userId');
+        if (avatarDataStr != null) {
+          final avatarData = json.decode(avatarDataStr);
+          final uri = avatarData['uri'];
+          final keyBase64 = avatarData['key'];
+          final ivBase64 = avatarData['iv'];
+          
+          if (uri != null && keyBase64 != null && ivBase64 != null) {
+            // Download encrypted file
+            // print('Downloading avatar from: $uri');
+            final response = await http.get(Uri.parse(uri));
+            // print('Response status: ${response.statusCode}');
+            // print('Response content-type: ${response.headers['content-type']}');
+            
+            if (response.statusCode == 200) {
+              // Check if response is HTML (error page)
+              final contentType = response.headers['content-type'] ?? '';
+              if (contentType.contains('text/html')) {
+                // print('Error: Received HTML instead of image data');
+                // print('Response body: ${response.body.substring(0, 200)}...');
+                setState(() {
+                  _isLoadingAvatar = false;
+                });
+                return;
+              }
+              
+              // Decrypt
+              final key = encrypt.Key.fromBase64(keyBase64);
+              final iv = encrypt.IV.fromBase64(ivBase64);
+              final encrypter = encrypt.Encrypter(encrypt.AES(key));
+              
+              // Convert response bytes to Encrypted object
+              final encrypted = encrypt.Encrypted(response.bodyBytes);
+              final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+              
+              final avatarBytes = Uint8List.fromList(decrypted);
+              
+              // Update static cache
+              _avatarCache[userId] = avatarBytes;
+              _avatarUriCache[userId] = uri;
+              
+              setState(() {
+                _avatarBytes = avatarBytes;
+                _cachedAvatarUri = uri; // Cache the URI
+                _isLoadingAvatar = false;
+              });
+            } else {
+              print('Failed to download avatar: ${response.statusCode}');
+              setState(() {
+                _isLoadingAvatar = false;
+              });
+            }
+          } else {
+            setState(() {
+              _isLoadingAvatar = false;
+            });
+          }
+        } else {
+          setState(() {
+            _isLoadingAvatar = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading cached avatar: $e');
+      setState(() {
+        _isLoadingAvatar = false;
+      });
+    }
+  }
+
 
   Future<void> _deleteAccount() async {
 
@@ -1301,14 +2110,51 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
-            child: RandomAvatar(
-              _localpart ?? 'Unknown User',
-              height: 80,
-              width: 80,
-            ),
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                child: _isLoadingAvatar
+                    ? CircularProgressIndicator(
+                        color: colorScheme.primary,
+                        strokeWidth: 2,
+                      )
+                    : _avatarBytes != null
+                        ? ClipOval(
+                            child: Image.memory(
+                              _avatarBytes!,
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : RandomAvatar(
+                            _localpart ?? 'Unknown User',
+                            height: 80,
+                            width: 80,
+                          ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _pickAndUploadAvatar,
+                  child: Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           SizedBox(height: 16),
           Row(

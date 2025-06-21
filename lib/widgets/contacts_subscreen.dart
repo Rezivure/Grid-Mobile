@@ -13,6 +13,7 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'user_avatar.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/contacts/contacts_state.dart';
@@ -395,10 +396,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     child: CircleAvatar(
                       radius: 22,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 44,
-                        width: 44,
+                      child: UserAvatar(
+                        userId: contact.userId,
+                        size: 44,
                       ),
                     ),
                   ),
@@ -683,10 +683,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: RandomAvatar(
-                        contact.userId.split(':')[0].replaceFirst('@', ''),
-                        height: 40,
-                        width: 40,
+                      child: UserAvatar(
+                        userId: contact.userId,
+                        size: 40,
                       ),
                     ),
                     const SizedBox(width: 12),
