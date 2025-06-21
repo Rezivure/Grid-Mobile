@@ -3,10 +3,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
 
 import '../services/room_service.dart';
 
@@ -163,10 +163,9 @@ class _ProfileModalState extends State<ProfileModal> {
                           CircleAvatar(
                             radius: 30,
                             backgroundColor: colorScheme.primary.withOpacity(0.1),
-                            child: RandomAvatar(
-                              _userLocalpart!,
-                              height: 60,
-                              width: 60,
+                            child: UserAvatar(
+                              userId: _userId!,
+                              size: 60,
                             ),
                           ),
                           SizedBox(width: 16),
