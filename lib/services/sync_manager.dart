@@ -11,6 +11,7 @@ import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
@@ -599,6 +600,32 @@ class SyncManager with ChangeNotifier {
 
       if (membershipStatus == 'join') {
         try {
+          // Check if this is a new member joining (not us)
+          final prevMembership = event.prevContent?['membership'] as String?;
+          if (event.stateKey != client.userID && prevMembership != 'join') {
+            print("New member joined: ${event.stateKey}, sending avatar announcements");
+            
+            // Send our profile picture to the new member
+            try {
+              final avatarService = AvatarAnnouncementService(client);
+              await avatarService.announceProfPicToRoom(roomId);
+              
+              // If it's a group and we're admin, also send group avatar
+              if (room.isGroup) {
+                final matrixRoom = client.getRoomById(roomId);
+                if (matrixRoom != null) {
+                  final myPowerLevel = matrixRoom.getPowerLevelByUserId(client.userID!);
+                  if (myPowerLevel >= 100) {
+                    print("Sending group avatar to new member as admin");
+                    await avatarService.announceGroupAvatarToRoom(roomId);
+                  }
+                }
+              }
+            } catch (e) {
+              print('Error sending avatar announcements to new member: $e');
+            }
+          }
+          
           // Update or create user profile
           final profileInfo = await client.getUserProfile(event.stateKey!);
           final gridUser = GridUser.GridUser(
@@ -872,6 +899,15 @@ class SyncManager with ChangeNotifier {
         if (room != null) {
           // Force process the room even if membership hasn't updated yet
           await processJoinedRoom(room);
+          
+          // Send our avatar announcement to existing members
+          try {
+            print("Sending avatar announcement after joining room");
+            final avatarService = AvatarAnnouncementService(client);
+            await avatarService.announceProfPicToRoom(roomId);
+          } catch (e) {
+            print('Error sending avatar announcement after joining: $e');
+          }
         }
         
         // Refresh groups to show the new room
