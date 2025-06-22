@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'triangle_avatars.dart';
+import '../services/avatar_cache_service.dart';
 
 class GroupAvatar extends StatefulWidget {
   final String roomId;
@@ -25,35 +26,73 @@ class GroupAvatar extends StatefulWidget {
   _GroupAvatarState createState() => _GroupAvatarState();
   
   // Static method to clear cache for a specific group
-  static void clearCache(String roomId) {
-    _GroupAvatarState._groupAvatarCache.remove(roomId);
+  static Future<void> clearCache(String roomId) async {
+    await _GroupAvatarState._cacheService.remove('group_$roomId');
   }
   
   // Static method to clear all cache
-  static void clearAllCache() {
-    _GroupAvatarState._groupAvatarCache.clear();
+  static Future<void> clearAllCache() async {
+    // Clear all group avatars from cache
+    final cachedIds = _GroupAvatarState._cacheService.getCachedUserIds();
+    for (final id in cachedIds) {
+      if (id.startsWith('group_')) {
+        await _GroupAvatarState._cacheService.remove(id);
+      }
+    }
   }
 }
 
 class _GroupAvatarState extends State<GroupAvatar> {
-  static final Map<String, Uint8List> _groupAvatarCache = {};
+  static final AvatarCacheService _cacheService = AvatarCacheService();
+  static bool _cacheInitialized = false;
   Uint8List? _avatarBytes;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
+    _initializeAndLoad();
+  }
+  
+  Future<void> _initializeAndLoad() async {
+    // Initialize cache on first use
+    if (!_cacheInitialized) {
+      _cacheInitialized = true;
+      await _cacheService.initialize();
+    }
+    
+    // Check persistent cache first - this survives hot reloads
+    final cacheKey = 'group_${widget.roomId}';
+    final cachedAvatar = _cacheService.get(cacheKey);
+    if (cachedAvatar != null) {
+      if (mounted) {
+        setState(() {
+          _avatarBytes = cachedAvatar;
+        });
+      }
+      return;
+    }
+    
+    // If not in cache, load it
     _loadGroupAvatar();
   }
 
   Future<void> _loadGroupAvatar() async {
-    // Check static cache first
-    if (_groupAvatarCache.containsKey(widget.roomId)) {
+    final cacheKey = 'group_${widget.roomId}';
+    
+    print('[Group Avatar Load] Starting avatar load for room: ${widget.roomId}');
+    
+    // Check cache again in case it was loaded while initializing
+    final cachedAvatar = _cacheService.get(cacheKey);
+    if (cachedAvatar != null) {
+      print('[Group Avatar Load] Found in cache, using cached avatar');
       setState(() {
-        _avatarBytes = _groupAvatarCache[widget.roomId];
+        _avatarBytes = cachedAvatar;
       });
       return;
     }
+    
+    print('[Group Avatar Load] Not in cache, will download');
 
     setState(() {
       _isLoading = true;
@@ -92,7 +131,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
-            _groupAvatarCache[widget.roomId] = avatarBytes;
+            await _cacheService.put(cacheKey, avatarBytes);
             
             setState(() {
               _avatarBytes = avatarBytes;
@@ -100,6 +139,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
             });
           } else {
             // Download from R2
+            print('[Group Avatar Load] Downloading from R2: $uri');
             final response = await http.get(Uri.parse(uri));
             
             if (response.statusCode == 200) {
@@ -111,7 +151,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
               
               final avatarBytes = Uint8List.fromList(decrypted);
-              _groupAvatarCache[widget.roomId] = avatarBytes;
+              await _cacheService.put(cacheKey, avatarBytes);
               
               setState(() {
                 _avatarBytes = avatarBytes;
