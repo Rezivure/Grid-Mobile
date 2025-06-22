@@ -549,7 +549,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         _groupAvatarCache[widget.room.roomId] = decryptedBytes;
         
         // Clear GroupAvatar widget cache
-        GroupAvatar.clearCache(widget.room.roomId);
+        await GroupAvatar.clearCache(widget.room.roomId);
         
         setState(() {
           _groupAvatarBytes = decryptedBytes;
@@ -620,7 +620,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       _groupAvatarCache[widget.room.roomId] = decryptedBytes;
       
       // Clear GroupAvatar widget cache
-      GroupAvatar.clearCache(widget.room.roomId);
+      await GroupAvatar.clearCache(widget.room.roomId);
       
       setState(() {
         _groupAvatarBytes = decryptedBytes;
@@ -660,40 +660,12 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Stack(
               children: [
-                SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: _groupAvatarBytes != null
-                      ? ClipOval(
-                          child: Image.memory(
-                            _groupAvatarBytes!,
-                            fit: BoxFit.cover,
-                            width: 72,
-                            height: 72,
-                          ),
-                        )
-                      : TriangleAvatars(userIds: widget.room.members),
+                GroupAvatar(
+                  roomId: widget.room.roomId,
+                  memberIds: widget.room.members,
+                  size: 72,
                 ),
-                if (_isLoadingGroupAvatar)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (_isCurrentUserAdmin && !_isLoadingGroupAvatar)
+                if (_isCurrentUserAdmin)
                   Positioned(
                     right: 0,
                     bottom: 0,

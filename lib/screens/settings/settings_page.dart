@@ -1417,7 +1417,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarUriCache.remove(userId);
         
         // Clear UserAvatar cache as well
-        UserAvatar.clearCache(userId);
+        await UserAvatar.clearCache(userId);
         
         await _loadCachedAvatar();
         
@@ -1576,7 +1576,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarUriCache.remove(userId);
         
         // Clear UserAvatar cache as well
-        UserAvatar.clearCache(userId);
+        await UserAvatar.clearCache(userId);
         
         await _loadCachedAvatar();
         print('[Matrix Avatar] Reload complete');
@@ -2091,6 +2091,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // Helper Methods for New UI
   Widget _buildProfileSection(ThemeData theme, ColorScheme colorScheme) {
+    final client = Provider.of<Client>(context, listen: false);
+    
     return Container(
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -2112,28 +2114,17 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           Stack(
             children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: colorScheme.primary.withOpacity(0.1),
-                child: _isLoadingAvatar
-                    ? CircularProgressIndicator(
-                        color: colorScheme.primary,
-                        strokeWidth: 2,
-                      )
-                    : _avatarBytes != null
-                        ? ClipOval(
-                            child: Image.memory(
-                              _avatarBytes!,
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : RandomAvatar(
-                            _localpart ?? 'Unknown User',
-                            height: 80,
-                            width: 80,
-                          ),
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colorScheme.primary.withOpacity(0.1),
+                ),
+                child: UserAvatar(
+                  userId: client.userID ?? '',
+                  size: 100,
+                ),
               ),
               Positioned(
                 bottom: 0,

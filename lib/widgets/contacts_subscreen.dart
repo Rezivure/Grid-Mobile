@@ -83,7 +83,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       _isRefreshing = false;
     }
   }
-
+  
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
@@ -171,16 +171,16 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     return contactsWithLocation.isEmpty
                         ? _buildEmptyState(colorScheme)
                         : ListView.builder(
-                      controller: widget.scrollController,
-                      itemCount: contactsWithLocation.length,
-                      padding: const EdgeInsets.all(16.0),
-                      itemBuilder: (context, index) {
-                        final contact = contactsWithLocation[index];
+                            controller: widget.scrollController,
+                            itemCount: contactsWithLocation.length,
+                            padding: const EdgeInsets.all(16.0),
+                            itemBuilder: (context, index) {
+                              final contact = contactsWithLocation[index];
 
-                        return _buildModernContactCard(contact, colorScheme, theme);
+                              return _buildModernContactCard(contact, colorScheme, theme);
 
-                      },
-                    );
+                            },
+                          );
                   },
                 );
               }
@@ -393,13 +393,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatar(
-                        userId: contact.userId,
-                        size: 44,
-                      ),
+                    child: UserAvatar(
+                      userId: contact.userId,
+                      size: 44,
                     ),
                   ),
                   // Online status indicator

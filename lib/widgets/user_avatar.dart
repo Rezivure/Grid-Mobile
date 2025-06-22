@@ -9,6 +9,7 @@ import 'package:random_avatar/random_avatar.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../utilities/utils.dart';
+import '../services/avatar_cache_service.dart';
 
 class UserAvatar extends StatefulWidget {
   final String userId;
@@ -27,32 +28,75 @@ class UserAvatar extends StatefulWidget {
   static final _cacheInvalidationNotifier = ValueNotifier<String?>(null);
   
   // Static method to clear cache for a specific user
-  static void clearCache(String userId) {
-    _UserAvatarState._avatarCache.remove(userId);
+  static Future<void> clearCache(String userId) async {
+    await _UserAvatarState._cacheService.remove(userId);
     // Notify all listening widgets
     _cacheInvalidationNotifier.value = userId;
   }
   
   // Static method to clear all cache
-  static void clearAllCache() {
-    _UserAvatarState._avatarCache.clear();
+  static Future<void> clearAllCache() async {
+    await _UserAvatarState._cacheService.clear();
     _cacheInvalidationNotifier.value = '*'; // Special value to indicate all cache cleared
   }
+  
+  // Static method to notify widgets that an avatar has been updated
+  static void notifyAvatarUpdated(String userId) {
+    _cacheInvalidationNotifier.value = userId;
+  }
+  
+  // Expose the notifier for external listeners
+  static ValueNotifier<String?> get avatarUpdateNotifier => _cacheInvalidationNotifier;
 }
 
 class _UserAvatarState extends State<UserAvatar> {
-  static final Map<String, Uint8List> _avatarCache = {};
+  static final AvatarCacheService _cacheService = AvatarCacheService();
+  static bool _cacheInitialized = false;
   Uint8List? _avatarBytes;
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _loadedUserId;
+  bool _hasCheckedCache = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserAvatar();
     
     // Listen for cache invalidation
     UserAvatar._cacheInvalidationNotifier.addListener(_onCacheInvalidated);
+    
+    _initializeAndLoad();
+  }
+  
+  Future<void> _initializeAndLoad() async {
+    // Initialize cache on first use
+    if (!_cacheInitialized) {
+      _cacheInitialized = true;
+      await _cacheService.initialize();
+    }
+    
+    // Check persistent cache first - this survives hot reloads
+    final cachedAvatar = _cacheService.get(widget.userId);
+    if (cachedAvatar != null) {
+      if (mounted) {
+        setState(() {
+          _avatarBytes = cachedAvatar;
+          _loadedUserId = widget.userId;
+          _isLoading = false;
+          _hasCheckedCache = true;
+        });
+      }
+      return;
+    }
+    
+    // Mark that we've checked the cache
+    if (mounted) {
+      setState(() {
+        _hasCheckedCache = true;
+      });
+    }
+    
+    // If not in cache, load it
+    _loadUserAvatar();
   }
   
   @override
@@ -64,10 +108,17 @@ class _UserAvatarState extends State<UserAvatar> {
   void _onCacheInvalidated() {
     final invalidatedUserId = UserAvatar._cacheInvalidationNotifier.value;
     if (invalidatedUserId == widget.userId || invalidatedUserId == '*') {
-      // Force reload if this user's cache was invalidated
-      _loadedUserId = null;
-      _avatarBytes = null;
-      _loadUserAvatar();
+      // For avatar updates, always reload from secure storage
+      // This ensures we get the latest avatar even if cache timing is off
+      if (invalidatedUserId == widget.userId && invalidatedUserId != '*') {
+        // Don't clear current avatar, just reload with force flag
+        _loadUserAvatar(forceReload: true);
+      } else {
+        // For cache clear ('*'), do full reload
+        _loadedUserId = null;
+        _avatarBytes = null;
+        _loadUserAvatar();
+      }
     }
   }
 
@@ -82,17 +133,21 @@ class _UserAvatarState extends State<UserAvatar> {
     }
   }
 
-  Future<void> _loadUserAvatar() async {
-    // Don't reload if we already loaded this user's avatar
-    if (_loadedUserId == widget.userId && _avatarBytes != null) return;
+  Future<void> _loadUserAvatar({bool forceReload = false}) async {
+    // Don't reload if we already have the avatar bytes for this user (unless forced)
+    if (!forceReload && _loadedUserId == widget.userId && _avatarBytes != null) return;
+    
+    // Also check if we're already loading to prevent duplicate requests
+    if (_isLoading && _loadedUserId == widget.userId) return;
     
     _loadedUserId = widget.userId;
 
-    // Check static cache first
-    if (_avatarCache.containsKey(widget.userId)) {
+    // Check persistent cache first
+    final cachedAvatar = _cacheService.get(widget.userId);
+    if (cachedAvatar != null) {
       if (mounted) {
         setState(() {
-          _avatarBytes = _avatarCache[widget.userId];
+          _avatarBytes = cachedAvatar;
         });
       }
       return;
@@ -101,7 +156,7 @@ class _UserAvatarState extends State<UserAvatar> {
     if (mounted) {
       setState(() {
         _isLoading = true;
-        _avatarBytes = null; // Clear any previous avatar
+        // Don't clear existing avatar - keep showing it while loading the new one
       });
     }
 
@@ -143,7 +198,7 @@ class _UserAvatarState extends State<UserAvatar> {
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
-            _avatarCache[widget.userId] = avatarBytes;
+            await _cacheService.put(widget.userId, avatarBytes);
             
             if (mounted) {
               setState(() {
@@ -164,7 +219,7 @@ class _UserAvatarState extends State<UserAvatar> {
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
               
               final avatarBytes = Uint8List.fromList(decrypted);
-              _avatarCache[widget.userId] = avatarBytes;
+              await _cacheService.put(widget.userId, avatarBytes);
               
               if (mounted) {
                 setState(() {
@@ -206,7 +261,28 @@ class _UserAvatarState extends State<UserAvatar> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    // Add RepaintBoundary to isolate repaints
+    return RepaintBoundary(
+      child: _buildAvatar(context),
+    );
+  }
+  
+  Widget _buildAvatar(BuildContext context) {
+    // If we have avatar bytes, show them immediately
+    if (_avatarBytes != null) {
+      return ClipOval(
+        child: Image.memory(
+          _avatarBytes!,
+          fit: BoxFit.cover,
+          width: widget.size,
+          height: widget.size,
+          gaplessPlayback: true, // Prevent flicker when updating
+        ),
+      );
+    }
+
+    // Only show loading if we haven't checked cache yet
+    if (_isLoading && !_hasCheckedCache) {
       return SizedBox(
         width: widget.size,
         height: widget.size,
@@ -225,18 +301,7 @@ class _UserAvatarState extends State<UserAvatar> {
       );
     }
 
-    if (_avatarBytes != null) {
-      return ClipOval(
-        child: Image.memory(
-          _avatarBytes!,
-          fit: BoxFit.cover,
-          width: widget.size,
-          height: widget.size,
-        ),
-      );
-    }
-
-    // Fallback to random avatar
+    // Fallback to random avatar only after we've checked for a profile pic
     return SizedBox(
       width: widget.size,
       height: widget.size,

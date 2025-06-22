@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/widgets/group_avatar.dart';
+import 'package:grid_frontend/services/avatar_cache_service.dart';
 
 class MessageProcessor {
   final Client client;
@@ -18,6 +19,7 @@ class MessageProcessor {
   final LocationRepository locationRepository;
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  
 
   MessageProcessor(
       this.locationRepository,
@@ -135,7 +137,7 @@ class MessageProcessor {
       await prefs.remove('avatar_is_matrix_$sender');
       
       // Clear the avatar cache
-      UserAvatar.clearCache(sender);
+      await UserAvatar.clearCache(sender);
 
       // Determine if it's a Matrix URL or R2 URL
       final isMatrixUrl = avatarUrl.startsWith('mxc://');
@@ -199,7 +201,7 @@ class MessageProcessor {
       await prefs.remove('group_avatar_is_matrix_$roomId');
       
       // Clear the avatar cache
-      GroupAvatar.clearCache(roomId);
+      await GroupAvatar.clearCache(roomId);
 
       // Determine if it's a Matrix URL or R2 URL
       final isMatrixUrl = avatarUrl.startsWith('mxc://');
@@ -258,7 +260,16 @@ class MessageProcessor {
       final encrypted = encrypt.Encrypted(encryptedData);
       final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
       
+      // Store in the persistent cache
+      final avatarBytes = Uint8List.fromList(decrypted);
+      final AvatarCacheService cacheService = AvatarCacheService();
+      await cacheService.initialize();
+      await cacheService.put(userId, avatarBytes);
+      
       print('[Avatar Processing] Successfully downloaded and decrypted avatar for $userId');
+      
+      // Notify all UserAvatar widgets to refresh for this user
+      UserAvatar.notifyAvatarUpdated(userId);
       
     } catch (e) {
       print('[Avatar Processing] Error pre-downloading avatar: $e');

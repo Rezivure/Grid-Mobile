@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'dart:io' show Platform;
 
 class UserInfoBubble extends StatelessWidget {
@@ -394,10 +394,9 @@ class UserInfoBubble extends StatelessWidget {
                         ),
                       ),
                       child: ClipOval(
-                        child: RandomAvatar(
-                          localpart(userId),
-                          height: 40,
-                          width: 40,
+                        child: UserAvatar(
+                          userId: userId,
+                          size: 40,
                         ),
                       ),
                     ),
