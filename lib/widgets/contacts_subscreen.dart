@@ -14,9 +14,12 @@ import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'user_avatar.dart';
+import 'user_avatar_bloc.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
 import '../blocs/contacts/contacts_state.dart';
+import '../blocs/avatar/avatar_bloc.dart';
+import '../blocs/avatar/avatar_state.dart';
 import 'contact_profile_modal.dart';
 import 'add_friend_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -58,6 +61,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       }
     });
 
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
     });
@@ -83,7 +87,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
       _isRefreshing = false;
     }
   }
-
+  
+  
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
@@ -135,23 +140,29 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
           hintText: 'Search Contacts',
         ),
         Expanded(
-          child: BlocConsumer<ContactsBloc, ContactsState>(
-            listener: (context, state) {
-              // Show snackbar for error states
-              if (state is ContactsError) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error: ${state.message}'),
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                );
-              }
+          child: BlocListener<AvatarBloc, AvatarState>(
+            listenWhen: (previous, current) => previous.updateCounter != current.updateCounter,
+            listener: (context, avatarState) {
+              // Force rebuild when avatar updates occur
+              setState(() {});
             },
-            builder: (context, state) {
+            child: BlocConsumer<ContactsBloc, ContactsState>(
+              listener: (context, state) {
+                // Show snackbar for error states
+                if (state is ContactsError) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${state.message}'),
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  );
+                }
+              },
+              builder: (context, state) {
               if (state is ContactsLoading) {
                 return _buildLoadingState();
               }
@@ -171,22 +182,23 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     return contactsWithLocation.isEmpty
                         ? _buildEmptyState(colorScheme)
                         : ListView.builder(
-                      controller: widget.scrollController,
-                      itemCount: contactsWithLocation.length,
-                      padding: const EdgeInsets.all(16.0),
-                      itemBuilder: (context, index) {
-                        final contact = contactsWithLocation[index];
+                            controller: widget.scrollController,
+                            itemCount: contactsWithLocation.length,
+                            padding: const EdgeInsets.all(16.0),
+                            itemBuilder: (context, index) {
+                              final contact = contactsWithLocation[index];
 
-                        return _buildModernContactCard(contact, colorScheme, theme);
+                              return _buildModernContactCard(contact, colorScheme, theme);
 
-                      },
-                    );
+                            },
+                          );
                   },
                 );
               }
 
               return const Center(child: Text('No contacts'));
             },
+            ),
           ),
         ),
       ],
@@ -393,13 +405,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                         width: 1.5,
                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatar(
-                        userId: contact.userId,
-                        size: 44,
-                      ),
+                    child: UserAvatarBloc(
+                      userId: contact.userId,
+                      size: 44,
                     ),
                   ),
                   // Online status indicator
@@ -683,7 +691,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatar(
+                      child: UserAvatarBloc(
                         userId: contact.userId,
                         size: 40,
                       ),

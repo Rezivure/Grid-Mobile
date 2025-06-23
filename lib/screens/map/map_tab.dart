@@ -287,14 +287,25 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
 
-  void _onMarkerTap(String userId, LatLng position) {
+  void _onMarkerTap(String userId, LatLng position) async {
     // Update map state with selected user
     context.read<MapBloc>().add(MapMoveToUser(userId));
+    
+    // Fetch user display name
+    String displayName = userId.split(':')[0].replaceFirst('@', ''); // Default fallback
+    try {
+      final user = await userRepository.getUserById(userId);
+      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
+        displayName = user.displayName!;
+      }
+    } catch (e) {
+      print('Error fetching user display name: $e');
+    }
     
     setState(() {
       _selectedUserId = userId;
       _bubblePosition = position;
-      _selectedUserName = userId.split(':')[0].replaceFirst('@', '');
+      _selectedUserName = displayName;
     });
   }
 

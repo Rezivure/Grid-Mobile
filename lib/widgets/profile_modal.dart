@@ -6,7 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/services/user_service.dart';
-import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 
 import '../services/room_service.dart';
 
@@ -163,7 +163,7 @@ class _ProfileModalState extends State<ProfileModal> {
                           CircleAvatar(
                             radius: 30,
                             backgroundColor: colorScheme.primary.withOpacity(0.1),
-                            child: UserAvatar(
+                            child: UserAvatarBloc(
                               userId: _userId!,
                               size: 60,
                             ),

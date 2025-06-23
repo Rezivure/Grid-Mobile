@@ -10,7 +10,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
-import 'user_avatar.dart';
+import 'user_avatar_bloc.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -234,7 +234,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatar(
+                      child: UserAvatarBloc(
                         userId: user.userId,
                         size: 40,
                       ),
@@ -584,7 +584,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       child: CircleAvatar(
                         radius: 22,
                         backgroundColor: colorScheme.primary.withOpacity(0.1),
-                        child: UserAvatar(
+                        child: UserAvatarBloc(
                           userId: user.userId,
                           size: 44,
                         ),
