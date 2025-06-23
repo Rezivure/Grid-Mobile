@@ -22,7 +22,12 @@ import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'package:grid_frontend/services/avatar_cache_service.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 
 
@@ -51,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isLoadingAvatar = false;
   String? _cachedAvatarUri; // Track the URI to avoid re-downloading
   bool _hasLoadedAvatar = false; // Track if we've attempted to load avatar
+  int _avatarUpdateCounter = 0; // Force UserAvatar widget rebuild
 
 
   @override
@@ -1416,10 +1422,18 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
         
-        // Clear UserAvatar cache as well
-        UserAvatar.clearCache(userId);
+        // Notify AvatarBloc about the update
+        final avatarBloc = context.read<AvatarBloc>();
+        avatarBloc.add(AvatarUpdateReceived(
+          userId: userId,
+          avatarUrl: cdnUrl,
+          encryptionKey: key.base64,
+          encryptionIv: iv.base64,
+          isMatrixUrl: false,
+        ));
         
-        await _loadCachedAvatar();
+        // Force rebuild to show the new avatar
+        setState(() {});
         
         // Step 5: Broadcast avatar announcement to all rooms
         print('[Avatar Upload] Broadcasting avatar announcement to all rooms');
@@ -1575,10 +1589,19 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
         
-        // Clear UserAvatar cache as well
-        UserAvatar.clearCache(userId);
+        // Notify AvatarBloc about the update
+        final avatarBloc = context.read<AvatarBloc>();
+        avatarBloc.add(AvatarUpdateReceived(
+          userId: userId,
+          avatarUrl: uploadResp.toString(),
+          encryptionKey: key.base64,
+          encryptionIv: iv.base64,
+          isMatrixUrl: true,
+        ));
         
-        await _loadCachedAvatar();
+        // Force rebuild to show the new avatar
+        setState(() {});
+        
         print('[Matrix Avatar] Reload complete');
 
         // Step 5: Broadcast avatar announcement to all rooms
@@ -2091,6 +2114,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // Helper Methods for New UI
   Widget _buildProfileSection(ThemeData theme, ColorScheme colorScheme) {
+    final client = Provider.of<Client>(context, listen: false);
+    
     return Container(
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -2112,28 +2137,17 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           Stack(
             children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: colorScheme.primary.withOpacity(0.1),
-                child: _isLoadingAvatar
-                    ? CircularProgressIndicator(
-                        color: colorScheme.primary,
-                        strokeWidth: 2,
-                      )
-                    : _avatarBytes != null
-                        ? ClipOval(
-                            child: Image.memory(
-                              _avatarBytes!,
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : RandomAvatar(
-                            _localpart ?? 'Unknown User',
-                            height: 80,
-                            width: 80,
-                          ),
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colorScheme.primary.withOpacity(0.1),
+                ),
+                child: UserAvatarBloc(
+                  userId: client.userID ?? '',
+                  size: 100,
+                ),
               ),
               Positioned(
                 bottom: 0,

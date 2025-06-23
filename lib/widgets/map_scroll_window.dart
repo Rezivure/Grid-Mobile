@@ -23,7 +23,8 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'group_avatar.dart';
-import 'user_avatar.dart';
+import 'group_avatar_bloc.dart';
+import 'user_avatar_bloc.dart';
 
 class MapScrollWindow extends StatefulWidget {
   const MapScrollWindow({Key? key}) : super(key: key);
@@ -550,7 +551,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             SizedBox(
               width: 36,
               height: 36,
-              child: UserAvatar(
+              child: UserAvatarBloc(
                 userId: userId,
                 size: 36,
               ),
@@ -636,7 +637,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   SizedBox(
                     width: 36,
                     height: 36,
-                    child: GroupAvatar(
+                    child: GroupAvatarBloc(
                       roomId: room.roomId,
                       memberIds: room.members,
                       size: 36,

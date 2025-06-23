@@ -1,72 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
+import 'package:random_avatar/random_avatar.dart';
+import '../utilities/utils.dart';
+import '../blocs/avatar/avatar_bloc.dart';
+import '../blocs/avatar/avatar_event.dart';
+import '../blocs/avatar/avatar_state.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
-import 'package:random_avatar/random_avatar.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import '../utilities/utils.dart';
-import '../services/avatar_cache_service.dart';
+import 'group_avatar_cache_service.dart';
+import 'triangle_avatars.dart';
 
-class UserAvatar extends StatefulWidget {
-  final String userId;
+class GroupAvatarBloc extends StatefulWidget {
+  final String roomId;
   final double size;
+  final List<String>? memberIds;
 
-  const UserAvatar({
+  const GroupAvatarBloc({
     Key? key,
-    required this.userId,
+    required this.roomId,
     this.size = 40,
+    this.memberIds,
   }) : super(key: key);
 
   @override
-  _UserAvatarState createState() => _UserAvatarState();
-  
-  // Static notifier for cache invalidation
-  static final _cacheInvalidationNotifier = ValueNotifier<String?>(null);
-  
-  // Static method to clear cache for a specific user
-  static Future<void> clearCache(String userId) async {
-    await _UserAvatarState._cacheService.remove(userId);
-    // Notify all listening widgets
-    _cacheInvalidationNotifier.value = userId;
-  }
-  
-  // Static method to clear all cache
-  static Future<void> clearAllCache() async {
-    await _UserAvatarState._cacheService.clear();
-    _cacheInvalidationNotifier.value = '*'; // Special value to indicate all cache cleared
-  }
-  
-  // Static method to notify widgets that an avatar has been updated
-  static void notifyAvatarUpdated(String userId) {
-    _cacheInvalidationNotifier.value = userId;
-  }
-  
-  // Expose the notifier for external listeners
-  static ValueNotifier<String?> get avatarUpdateNotifier => _cacheInvalidationNotifier;
+  _GroupAvatarBlocState createState() => _GroupAvatarBlocState();
 }
 
-class _UserAvatarState extends State<UserAvatar> {
-  static final AvatarCacheService _cacheService = AvatarCacheService();
+class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
+  static final GroupAvatarCacheService _cacheService = GroupAvatarCacheService();
   static bool _cacheInitialized = false;
+  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   Uint8List? _avatarBytes;
   bool _isLoading = true;
-  String? _loadedUserId;
+  String? _loadedRoomId;
   bool _hasCheckedCache = false;
 
   @override
   void initState() {
     super.initState();
-    
-    // Listen for cache invalidation
-    UserAvatar._cacheInvalidationNotifier.addListener(_onCacheInvalidated);
-    
     _initializeAndLoad();
   }
-  
+
   Future<void> _initializeAndLoad() async {
     // Initialize cache on first use
     if (!_cacheInitialized) {
@@ -74,13 +54,13 @@ class _UserAvatarState extends State<UserAvatar> {
       await _cacheService.initialize();
     }
     
-    // Check persistent cache first - this survives hot reloads
-    final cachedAvatar = _cacheService.get(widget.userId);
+    // Check persistent cache first
+    final cachedAvatar = _cacheService.get(widget.roomId);
     if (cachedAvatar != null) {
       if (mounted) {
         setState(() {
           _avatarBytes = cachedAvatar;
-          _loadedUserId = widget.userId;
+          _loadedRoomId = widget.roomId;
           _isLoading = false;
           _hasCheckedCache = true;
         });
@@ -96,84 +76,58 @@ class _UserAvatarState extends State<UserAvatar> {
     }
     
     // If not in cache, load it
-    _loadUserAvatar();
-  }
-  
-  @override
-  void dispose() {
-    UserAvatar._cacheInvalidationNotifier.removeListener(_onCacheInvalidated);
-    super.dispose();
-  }
-  
-  void _onCacheInvalidated() {
-    final invalidatedUserId = UserAvatar._cacheInvalidationNotifier.value;
-    if (invalidatedUserId == widget.userId || invalidatedUserId == '*') {
-      // For avatar updates, always reload from secure storage
-      // This ensures we get the latest avatar even if cache timing is off
-      if (invalidatedUserId == widget.userId && invalidatedUserId != '*') {
-        // Don't clear current avatar, just reload with force flag
-        _loadUserAvatar(forceReload: true);
-      } else {
-        // For cache clear ('*'), do full reload
-        _loadedUserId = null;
-        _avatarBytes = null;
-        _loadUserAvatar();
-      }
-    }
+    _loadGroupAvatar();
   }
 
   @override
-  void didUpdateWidget(UserAvatar oldWidget) {
+  void didUpdateWidget(GroupAvatarBloc oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reload avatar if userId changed
-    if (oldWidget.userId != widget.userId) {
-      _loadedUserId = null;
+    // Reload avatar if roomId changed
+    if (oldWidget.roomId != widget.roomId) {
+      _loadedRoomId = null;
       _avatarBytes = null;
-      _loadUserAvatar();
+      _loadGroupAvatar();
     }
   }
 
-  Future<void> _loadUserAvatar({bool forceReload = false}) async {
-    // Don't reload if we already have the avatar bytes for this user (unless forced)
-    if (!forceReload && _loadedUserId == widget.userId && _avatarBytes != null) return;
+  Future<void> _loadGroupAvatar({bool forceReload = false}) async {
+    // Don't reload if we already have the avatar bytes for this room (unless forced)
+    if (!forceReload && _loadedRoomId == widget.roomId && _avatarBytes != null) return;
     
     // Also check if we're already loading to prevent duplicate requests
-    if (_isLoading && _loadedUserId == widget.userId) return;
+    if (_isLoading && _loadedRoomId == widget.roomId && !forceReload) return;
     
-    _loadedUserId = widget.userId;
+    _loadedRoomId = widget.roomId;
 
-    // Check persistent cache first
-    final cachedAvatar = _cacheService.get(widget.userId);
-    if (cachedAvatar != null) {
-      if (mounted) {
-        setState(() {
-          _avatarBytes = cachedAvatar;
-        });
+    // Check persistent cache first (unless force reloading)
+    if (!forceReload) {
+      final cachedAvatar = _cacheService.get(widget.roomId);
+      if (cachedAvatar != null) {
+        if (mounted) {
+          setState(() {
+            _avatarBytes = cachedAvatar;
+            _isLoading = false;
+          });
+        }
+        return;
       }
-      return;
     }
 
     if (mounted) {
       setState(() {
         _isLoading = true;
-        // Don't clear existing avatar - keep showing it while loading the new one
       });
     }
 
     try {
-      final secureStorage = FlutterSecureStorage();
       final prefs = await SharedPreferences.getInstance();
+      final client = Provider.of<Client>(context, listen: false);
       
       // Check if it's a Matrix avatar or encrypted avatar
-      // For the current user, check without userId suffix
-      final client = Provider.of<Client>(context, listen: false);
-      final isCurrentUser = widget.userId == client.userID;
-      final isMatrixAvatar = isCurrentUser 
-          ? (prefs.getBool('avatar_is_matrix') ?? false)
-          : (prefs.getBool('avatar_is_matrix_${widget.userId}') ?? false);
+      final isMatrixAvatar = prefs.getBool('group_avatar_is_matrix_${widget.roomId}') ?? false;
       
       // Check secure storage for avatar data
-      final avatarDataStr = await secureStorage.read(key: 'avatar_${widget.userId}');
+      final avatarDataStr = await secureStorage.read(key: 'group_avatar_${widget.roomId}');
       if (avatarDataStr != null) {
         final avatarData = json.decode(avatarDataStr);
         final uri = avatarData['uri'];
@@ -183,7 +137,6 @@ class _UserAvatarState extends State<UserAvatar> {
         if (uri != null && keyBase64 != null && ivBase64 != null) {
           if (isMatrixAvatar) {
             // Download from Matrix
-            final client = Provider.of<Client>(context, listen: false);
             final mxcUri = Uri.parse(uri);
             final serverName = mxcUri.host;
             final mediaId = mxcUri.path.substring(1);
@@ -198,7 +151,7 @@ class _UserAvatarState extends State<UserAvatar> {
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
-            await _cacheService.put(widget.userId, avatarBytes);
+            await _cacheService.put(widget.roomId, avatarBytes);
             
             if (mounted) {
               setState(() {
@@ -219,7 +172,7 @@ class _UserAvatarState extends State<UserAvatar> {
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
               
               final avatarBytes = Uint8List.fromList(decrypted);
-              await _cacheService.put(widget.userId, avatarBytes);
+              await _cacheService.put(widget.roomId, avatarBytes);
               
               if (mounted) {
                 setState(() {
@@ -250,7 +203,7 @@ class _UserAvatarState extends State<UserAvatar> {
         }
       }
     } catch (e) {
-      print('[User Avatar] Error loading avatar for ${widget.userId}: $e');
+      print('[Group Avatar] Error loading avatar for ${widget.roomId}: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -261,12 +214,16 @@ class _UserAvatarState extends State<UserAvatar> {
 
   @override
   Widget build(BuildContext context) {
-    // Add RepaintBoundary to isolate repaints
-    return RepaintBoundary(
+    return BlocListener<AvatarBloc, AvatarState>(
+      listenWhen: (previous, current) => previous.updateCounter != current.updateCounter,
+      listener: (context, state) {
+        // Force reload when avatar state updates
+        _loadGroupAvatar(forceReload: true);
+      },
       child: _buildAvatar(context),
     );
   }
-  
+
   Widget _buildAvatar(BuildContext context) {
     // If we have avatar bytes, show them immediately
     if (_avatarBytes != null) {
@@ -301,14 +258,34 @@ class _UserAvatarState extends State<UserAvatar> {
       );
     }
 
-    // Fallback to random avatar only after we've checked for a profile pic
-    return SizedBox(
+    // Fallback to TriangleAvatars if memberIds provided, otherwise default group icon
+    if (widget.memberIds != null && widget.memberIds!.isNotEmpty) {
+      // TriangleAvatars has a fixed size of 60x60 (radius 30)
+      // So we need to scale it to match the requested size
+      final scale = widget.size / 60.0;
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Transform.scale(
+          scale: scale,
+          child: TriangleAvatars(
+            userIds: widget.memberIds!,
+          ),
+        ),
+      );
+    }
+    
+    return Container(
       width: widget.size,
       height: widget.size,
-      child: RandomAvatar(
-        localpart(widget.userId),
-        height: widget.size,
-        width: widget.size,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Icons.group,
+        size: widget.size * 0.6,
+        color: Theme.of(context).colorScheme.primary,
       ),
     );
   }

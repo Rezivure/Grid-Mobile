@@ -3,7 +3,6 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
-import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/models/contact_display.dart';
