@@ -26,7 +26,10 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:matrix/matrix.dart' hide Room;
 import 'package:provider/provider.dart';
 import 'group_avatar.dart';
-import 'user_avatar.dart';
+import 'group_avatar_bloc.dart';
+import 'user_avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 import '../blocs/groups/groups_state.dart';
@@ -548,8 +551,15 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         final decryptedBytes = Uint8List.fromList(imageBytes);
         _groupAvatarCache[widget.room.roomId] = decryptedBytes;
         
-        // Clear GroupAvatar widget cache
-        await GroupAvatar.clearCache(widget.room.roomId);
+        // Notify AvatarBloc about the update
+        final avatarBloc = context.read<AvatarBloc>();
+        avatarBloc.add(GroupAvatarUpdateReceived(
+          roomId: widget.room.roomId,
+          avatarUrl: cdnUrl,
+          encryptionKey: key.base64,
+          encryptionIv: iv.base64,
+          isMatrixUrl: false,
+        ));
         
         setState(() {
           _groupAvatarBytes = decryptedBytes;
@@ -619,8 +629,15 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       final decryptedBytes = Uint8List.fromList(imageBytes);
       _groupAvatarCache[widget.room.roomId] = decryptedBytes;
       
-      // Clear GroupAvatar widget cache
-      await GroupAvatar.clearCache(widget.room.roomId);
+      // Notify AvatarBloc about the update
+      final avatarBloc = context.read<AvatarBloc>();
+      avatarBloc.add(GroupAvatarUpdateReceived(
+        roomId: widget.room.roomId,
+        avatarUrl: mxcUri,
+        encryptionKey: key.base64,
+        encryptionIv: iv.base64,
+        isMatrixUrl: true,
+      ));
       
       setState(() {
         _groupAvatarBytes = decryptedBytes;
@@ -660,7 +677,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Stack(
               children: [
-                GroupAvatar(
+                GroupAvatarBloc(
                   roomId: widget.room.roomId,
                   memberIds: widget.room.members,
                   size: 72,
@@ -1006,7 +1023,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                   child: CircleAvatar(
                     radius: 22,
                     backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: UserAvatar(
+                    child: UserAvatarBloc(
                       userId: member.userId,
                       size: 44,
                     ),

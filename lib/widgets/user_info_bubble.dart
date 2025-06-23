@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'dart:io' show Platform;
 
 class UserInfoBubble extends StatelessWidget {
@@ -394,7 +394,7 @@ class UserInfoBubble extends StatelessWidget {
                         ),
                       ),
                       child: ClipOval(
-                        child: UserAvatar(
+                        child: UserAvatarBloc(
                           userId: userId,
                           size: 40,
                         ),

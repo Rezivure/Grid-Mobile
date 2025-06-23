@@ -5,7 +5,7 @@ import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
-import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 
 import '../models/sharing_window.dart';
 import '../models/sharing_preferences.dart';
@@ -496,7 +496,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             child: CircleAvatar(
               radius: 32,
               backgroundColor: colorScheme.primary.withOpacity(0.1),
-              child: UserAvatar(
+              child: UserAvatarBloc(
                 userId: widget.contact.userId,
                 size: 64,
               ),
