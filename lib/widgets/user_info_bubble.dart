@@ -407,7 +407,7 @@ class UserInfoBubble extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            formatUserId(userId),
+                            userName,
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: colorScheme.onSurface,
