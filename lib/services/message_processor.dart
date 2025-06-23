@@ -12,6 +12,8 @@ import 'dart:typed_data';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/widgets/group_avatar.dart';
 import 'package:grid_frontend/services/avatar_cache_service.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 
 class MessageProcessor {
   final Client client;
@@ -19,12 +21,14 @@ class MessageProcessor {
   final LocationRepository locationRepository;
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final AvatarBloc? avatarBloc;
   
 
   MessageProcessor(
       this.locationRepository,
       this.messageParser,
       this.client,
+      {this.avatarBloc}
       ) : encryption = Encryption(client: client);
 
   /// Process a single event from a room. Decrypt if necessary,
@@ -131,36 +135,49 @@ class MessageProcessor {
 
       print('[Avatar Processing] Processing avatar announcement from $sender');
 
-      // Clear any existing avatar data for this user
-      await secureStorage.delete(key: 'avatar_$sender');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('avatar_is_matrix_$sender');
-      
-      // Clear the avatar cache
-      await UserAvatar.clearCache(sender);
+      // Use AvatarBloc if available
+      if (avatarBloc != null) {
+        // Send avatar update event to bloc
+        avatarBloc!.add(AvatarUpdateReceived(
+          userId: sender,
+          avatarUrl: avatarUrl,
+          encryptionKey: key,
+          encryptionIv: iv,
+          isMatrixUrl: avatarUrl.startsWith('mxc://'),
+        ));
+      } else {
+        // Fallback to old behavior if no bloc
+        // Clear any existing avatar data for this user
+        await secureStorage.delete(key: 'avatar_$sender');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('avatar_is_matrix_$sender');
+        
+        // Clear the avatar cache
+        await UserAvatar.clearCache(sender);
 
-      // Determine if it's a Matrix URL or R2 URL
-      final isMatrixUrl = avatarUrl.startsWith('mxc://');
+        // Determine if it's a Matrix URL or R2 URL
+        final isMatrixUrl = avatarUrl.startsWith('mxc://');
 
-      // Store the new avatar data
-      final avatarData = {
-        'uri': avatarUrl,
-        'key': key,
-        'iv': iv,
-      };
-      
-      await secureStorage.write(
-        key: 'avatar_$sender',
-        value: json.encode(avatarData),
-      );
-      
-      // Store whether it's a Matrix avatar
-      await prefs.setBool('avatar_is_matrix_$sender', isMatrixUrl);
-      
-      print('[Avatar Processing] Stored avatar data for $sender (isMatrix: $isMatrixUrl)');
-      
-      // Download and cache the avatar immediately
-      await _downloadAndCacheAvatar(sender, avatarUrl, key, iv, isMatrixUrl);
+        // Store the new avatar data
+        final avatarData = {
+          'uri': avatarUrl,
+          'key': key,
+          'iv': iv,
+        };
+        
+        await secureStorage.write(
+          key: 'avatar_$sender',
+          value: json.encode(avatarData),
+        );
+        
+        // Store whether it's a Matrix avatar
+        await prefs.setBool('avatar_is_matrix_$sender', isMatrixUrl);
+        
+        print('[Avatar Processing] Stored avatar data for $sender (isMatrix: $isMatrixUrl)');
+        
+        // Download and cache the avatar immediately
+        await _downloadAndCacheAvatar(sender, avatarUrl, key, iv, isMatrixUrl);
+      }
       
     } catch (e) {
       print('[Avatar Processing] Error handling avatar announcement: $e');
@@ -195,36 +212,95 @@ class MessageProcessor {
 
       print('[Group Avatar Processing] Processing group avatar announcement for room $roomId');
 
-      // Clear any existing avatar data for this group
-      await secureStorage.delete(key: 'group_avatar_$roomId');
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('group_avatar_is_matrix_$roomId');
-      
-      // Clear the avatar cache
-      await GroupAvatar.clearCache(roomId);
+      // Use AvatarBloc if available
+      if (avatarBloc != null) {
+        // Send group avatar update event to bloc
+        avatarBloc!.add(GroupAvatarUpdateReceived(
+          roomId: roomId,
+          avatarUrl: avatarUrl,
+          encryptionKey: key,
+          encryptionIv: iv,
+          isMatrixUrl: avatarUrl.startsWith('mxc://'),
+        ));
+      } else {
+        // Fallback to old behavior if no bloc
+        // Clear any existing avatar data for this group
+        await secureStorage.delete(key: 'group_avatar_$roomId');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('group_avatar_is_matrix_$roomId');
+        
+        // Clear the avatar cache
+        await GroupAvatar.clearCache(roomId);
 
-      // Determine if it's a Matrix URL or R2 URL
-      final isMatrixUrl = avatarUrl.startsWith('mxc://');
+        // Determine if it's a Matrix URL or R2 URL
+        final isMatrixUrl = avatarUrl.startsWith('mxc://');
 
-      // Store the new avatar data
-      final avatarData = {
-        'uri': avatarUrl,
-        'key': key,
-        'iv': iv,
-      };
-      
-      await secureStorage.write(
-        key: 'group_avatar_$roomId',
-        value: json.encode(avatarData),
-      );
-      
-      // Store whether it's a Matrix avatar
-      await prefs.setBool('group_avatar_is_matrix_$roomId', isMatrixUrl);
-      
-      print('[Group Avatar Processing] Stored group avatar data for room $roomId (isMatrix: $isMatrixUrl)');
+        // Store the new avatar data
+        final avatarData = {
+          'uri': avatarUrl,
+          'key': key,
+          'iv': iv,
+        };
+        
+        await secureStorage.write(
+          key: 'group_avatar_$roomId',
+          value: json.encode(avatarData),
+        );
+        
+        // Store whether it's a Matrix avatar
+        await prefs.setBool('group_avatar_is_matrix_$roomId', isMatrixUrl);
+        
+        print('[Group Avatar Processing] Stored group avatar data for room $roomId (isMatrix: $isMatrixUrl)');
+      }
       
     } catch (e) {
       print('[Group Avatar Processing] Error handling group avatar announcement: $e');
+    }
+  }
+
+  /// Download and cache group avatar for immediate display
+  Future<void> _downloadAndCacheGroupAvatar(String roomId, String avatarUrl, String keyBase64, String ivBase64, bool isMatrix) async {
+    try {
+      print('[Group Avatar Processing] Pre-downloading group avatar for room $roomId');
+      
+      Uint8List encryptedData;
+      
+      if (isMatrix) {
+        // Download from Matrix
+        final mxcUri = Uri.parse(avatarUrl);
+        final serverName = mxcUri.host;
+        final mediaId = mxcUri.path.substring(1);
+        
+        final file = await client.getContent(serverName, mediaId);
+        encryptedData = Uint8List.fromList(file.data);
+      } else {
+        // Download from R2
+        final response = await http.get(Uri.parse(avatarUrl));
+        if (response.statusCode != 200) {
+          print('[Group Avatar Processing] Failed to download avatar from R2: ${response.statusCode}');
+          return;
+        }
+        encryptedData = response.bodyBytes;
+      }
+      
+      // Decrypt the avatar
+      final key = encrypt.Key.fromBase64(keyBase64);
+      final iv = encrypt.IV.fromBase64(ivBase64);
+      final encrypter = encrypt.Encrypter(encrypt.AES(key));
+      final encrypted = encrypt.Encrypted(encryptedData);
+      final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+      
+      // Store in the persistent cache
+      final avatarBytes = Uint8List.fromList(decrypted);
+      // Note: GroupAvatar should have its own cache service similar to UserAvatar
+      // For now, just notify the update
+      
+      print('[Group Avatar Processing] Successfully downloaded and decrypted group avatar for room $roomId');
+      
+      // Note: Group avatar notification should be handled through AvatarBloc
+      
+    } catch (e) {
+      print('[Group Avatar Processing] Error pre-downloading group avatar: $e');
     }
   }
 

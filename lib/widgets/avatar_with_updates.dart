@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'user_avatar.dart';
+import 'user_avatar_bloc.dart';
 
-/// A wrapper widget that ensures UserAvatar updates are reflected in lists
-class AvatarWithUpdates extends StatefulWidget {
+/// A wrapper widget that ensures UserAvatarBloc updates are reflected in lists
+/// With the new BLoC pattern, this is now just a simple wrapper that passes through to UserAvatarBloc
+class AvatarWithUpdates extends StatelessWidget {
   final String userId;
   final double size;
   
@@ -13,33 +14,9 @@ class AvatarWithUpdates extends StatefulWidget {
   }) : super(key: key);
   
   @override
-  State<AvatarWithUpdates> createState() => _AvatarWithUpdatesState();
-}
-
-class _AvatarWithUpdatesState extends State<AvatarWithUpdates> {
-  @override
-  void initState() {
-    super.initState();
-    UserAvatar.avatarUpdateNotifier.addListener(_onAvatarUpdate);
-  }
-  
-  @override
-  void dispose() {
-    UserAvatar.avatarUpdateNotifier.removeListener(_onAvatarUpdate);
-    super.dispose();
-  }
-  
-  void _onAvatarUpdate() {
-    final updatedUserId = UserAvatar.avatarUpdateNotifier.value;
-    if (updatedUserId == widget.userId && mounted) {
-      print('[AvatarWithUpdates] Received update for ${widget.userId}, rebuilding...');
-      setState(() {});
-    }
-  }
-  
-  @override
   Widget build(BuildContext context) {
-    return UserAvatar(
+    // UserAvatarBloc already handles updates through the BLoC pattern
+    return UserAvatarBloc(
       userId: widget.userId,
       size: widget.size,
     );

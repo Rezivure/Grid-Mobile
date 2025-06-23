@@ -36,6 +36,7 @@ import 'screens/map/map_tab.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
@@ -93,7 +94,6 @@ void main() async {
   final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
-  final messageProcessor = MessageProcessor(locationRepository, messageParser, client);
 
   runApp(
     MultiProvider(
@@ -140,6 +140,9 @@ void main() async {
       ],
       child: MultiBlocProvider(
         providers: [
+          BlocProvider<AvatarBloc>(
+            create: (context) => AvatarBloc(client: client),
+          ),
           BlocProvider<MapBloc>(
             create: (context) => MapBloc(
               locationManager: context.read<LocationManager>(),
@@ -167,34 +170,50 @@ void main() async {
               userLocationProvider: context.read<UserLocationProvider>(),
             ),
           ),
-          ChangeNotifierProxyProvider3<MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
-            create: (context) => SyncManager(
-              client,
-              messageProcessor,
-              roomRepository,
-              userRepository,
-              roomService,
-              context.read<MapBloc>(),
-              context.read<ContactsBloc>(),
-              locationRepository,
-              context.read<GroupsBloc>(),
-              context.read<UserLocationProvider>(),
-              context.read<SharingPreferencesRepository>(),
-            )..startSync(),
-            update: (context, mapBloc, contactsBloc, groupsBloc, previous) =>
-            previous ?? SyncManager(
-              client,
-              messageProcessor,
-              roomRepository,
-              userRepository,
-              roomService,
-              mapBloc,
-              contactsBloc,
-              locationRepository,
-              groupsBloc,
-              context.read<UserLocationProvider>(),
-              sharingPreferencesRepository,
-            )..startSync(),
+          ChangeNotifierProxyProvider4<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
+            create: (context) {
+              final messageProcessor = MessageProcessor(
+                locationRepository, 
+                messageParser, 
+                client,
+                avatarBloc: context.read<AvatarBloc>(),
+              );
+              return SyncManager(
+                client,
+                messageProcessor,
+                roomRepository,
+                userRepository,
+                roomService,
+                context.read<MapBloc>(),
+                context.read<ContactsBloc>(),
+                locationRepository,
+                context.read<GroupsBloc>(),
+                context.read<UserLocationProvider>(),
+                context.read<SharingPreferencesRepository>(),
+              )..startSync();
+            },
+            update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, previous) {
+              if (previous != null) return previous;
+              final messageProcessor = MessageProcessor(
+                locationRepository, 
+                messageParser, 
+                client,
+                avatarBloc: avatarBloc,
+              );
+              return SyncManager(
+                client,
+                messageProcessor,
+                roomRepository,
+                userRepository,
+                roomService,
+                mapBloc,
+                contactsBloc,
+                locationRepository,
+                groupsBloc,
+                context.read<UserLocationProvider>(),
+                sharingPreferencesRepository,
+              )..startSync();
+            },
           ),
         ],
         child: MaterialApp(
