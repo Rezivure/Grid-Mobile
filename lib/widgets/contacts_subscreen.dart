@@ -22,6 +22,7 @@ import '../blocs/avatar/avatar_bloc.dart';
 import '../blocs/avatar/avatar_state.dart';
 import 'contact_profile_modal.dart';
 import 'add_friend_modal.dart';
+import 'location_history_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -752,6 +753,32 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.history,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View History',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showLocationHistory(contact);
+                },
+              ),
+              
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
                     color: Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -864,6 +891,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+  
+  void _showLocationHistory(ContactDisplay contact) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return LocationHistoryModal(
+          userId: contact.userId,
+          userName: contact.displayName,
+          avatarUrl: contact.avatarUrl,
         );
       },
     );
