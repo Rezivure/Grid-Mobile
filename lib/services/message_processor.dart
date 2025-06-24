@@ -1,4 +1,5 @@
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:matrix/encryption/encryption.dart';
@@ -19,6 +20,7 @@ class MessageProcessor {
   final Client client;
   final Encryption encryption;
   final LocationRepository locationRepository;
+  final LocationHistoryRepository locationHistoryRepository;
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
@@ -26,6 +28,7 @@ class MessageProcessor {
 
   MessageProcessor(
       this.locationRepository,
+      this.locationHistoryRepository,
       this.messageParser,
       this.client,
       {this.avatarBloc}
@@ -101,6 +104,9 @@ class MessageProcessor {
       await locationRepository.insertLocation(userLocation);
       print('Location saved for user: $sender');
       var confirm = await locationRepository.getLatestLocation(sender);
+      
+      // Also save to location history
+      await locationHistoryRepository.addLocationPoint(sender, locationData['latitude']!, locationData['longitude']!);
     } else {
       // It's a message, but not a location message
     }

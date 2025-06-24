@@ -11,6 +11,7 @@ import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
@@ -23,6 +24,7 @@ class RoomService {
   final UserKeysRepository userKeysRepository;
   final RoomRepository roomRepository;
   final LocationRepository locationRepository;
+  final LocationHistoryRepository locationHistoryRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
 
   // Tracks recent messages/location updates sent to prevent redundant messages
@@ -42,6 +44,7 @@ class RoomService {
       this.userKeysRepository,
       this.roomRepository,
       this.locationRepository,
+      this.locationHistoryRepository,
       this.sharingPreferencesRepository,
       LocationManager locationManager, // Inject LocationManager
       ) {
@@ -585,6 +588,12 @@ class RoomService {
           // Trim history if needed
           if (_recentlySentMessages[roomId]!.length > _maxMessageHistory) {
             _recentlySentMessages[roomId]!.remove(_recentlySentMessages[roomId]!.first);
+          }
+          
+          // Save to location history for current user
+          final myUserId = client.userID;
+          if (myUserId != null) {
+            await locationHistoryRepository.addLocationPoint(myUserId, latitude, longitude);
           }
         } catch (e) {
           print("Failed to send location event: $e");
