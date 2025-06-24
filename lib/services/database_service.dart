@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -27,14 +28,20 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,  // Reset to version 1 since we don't need migrations
+      version: 2,  // Increment version for new LocationHistory table
       onCreate: (db, version) async {
         await _initializeEncryptionKey();
         await UserRepository.createTables(db);
         await RoomRepository.createTables(db);
         await LocationRepository.createTable(db);
+        await LocationHistoryRepository.createTable(db);
         await SharingPreferencesRepository.createTable(db);
         await UserKeysRepository.createTable(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await LocationHistoryRepository.createTable(db);
+        }
       },
     );
   }
@@ -64,7 +71,7 @@ class DatabaseService {
   /// Clear all data from the database
   Future<void> clearAllData() async {
     final db = await database;
-    final tables = ['Users', 'UserLocations', 'Rooms', 'SharingPreferences', 'UserKeys'];
+    final tables = ['Users', 'UserLocations', 'LocationHistory', 'Rooms', 'SharingPreferences', 'UserKeys'];
     for (final table in tables) {
       await db.delete(table);
     }
