@@ -24,6 +24,7 @@ import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
+import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -183,6 +184,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Refresh satellite token when app resumes if using satellite maps
     if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
       _refreshSatelliteTokenIfNeeded();
+    }
+    
+    // Force avatar refresh when app resumes from background
+    if (state == AppLifecycleState.resumed) {
+      // Reinitialize avatar cache to reload from persistent storage
+      Future.delayed(const Duration(milliseconds: 500), () {
+        // Trigger a visual update by notifying all avatar widgets
+        UserAvatar.notifyAvatarUpdated('*'); // Special value to refresh all
+        setState(() {}); // Force map rebuild
+      });
     }
   }
 
@@ -486,11 +497,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Balance between showing both points and not zooming out too far
     double zoomLevel;
     if (minDistance < 100) {
-      zoomLevel = 16.0; // Very close (slightly reduced for safety)
+      zoomLevel = 14.0; // Very close - street level (reduced from 16 to prevent tile loading issues)
     } else if (minDistance < 500) {
-      zoomLevel = 14.5; // Walking distance
+      zoomLevel = 13.5; // Walking distance
     } else if (minDistance < 1000) {
-      zoomLevel = 13.5; // Close neighborhood
+      zoomLevel = 13.0; // Close neighborhood
     } else if (minDistance < 5000) {
       zoomLevel = 11.5; // Same area
     } else if (minDistance < 20000) {
