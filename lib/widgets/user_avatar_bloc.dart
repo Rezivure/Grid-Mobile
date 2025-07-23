@@ -63,6 +63,16 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> {
           );
         }
         
+        // If no avatar data and not loading, request it
+        if (!isLoading && avatarData == null) {
+          // Request avatar load on next frame to avoid building during build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              context.read<AvatarBloc>().add(LoadAvatar(widget.userId));
+            }
+          });
+        }
+        
         // Show loading indicator if loading
         if (isLoading) {
           return SizedBox(

@@ -749,31 +749,32 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 },
               ),
               
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.history,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'View History',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showLocationHistory(contact);
-                },
-              ),
+              // Commented out for this release - history feature only for groups
+              // ListTile(
+              //   leading: Container(
+              //     padding: const EdgeInsets.all(8),
+              //     decoration: BoxDecoration(
+              //       color: colorScheme.primary.withOpacity(0.1),
+              //       borderRadius: BorderRadius.circular(8),
+              //     ),
+              //     child: Icon(
+              //       Icons.history,
+              //       color: colorScheme.primary,
+              //       size: 20,
+              //     ),
+              //   ),
+              //   title: Text(
+              //     'View History',
+              //     style: TextStyle(
+              //       color: colorScheme.onSurface,
+              //       fontWeight: FontWeight.w500,
+              //     ),
+              //   ),
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     _showLocationHistory(contact);
+              //   },
+              // ),
               
               ListTile(
                 leading: Container(

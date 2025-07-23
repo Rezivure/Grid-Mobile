@@ -24,7 +24,7 @@ class _AppInitializerState extends State<AppInitializer>
     
     // Simple fade and scale animation
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
     
@@ -47,8 +47,8 @@ class _AppInitializerState extends State<AppInitializer>
   
 
   Future<void> _initializeApp() async {
-    // Show splash for minimum time to ensure smooth UX
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // Reduced splash time for faster app launch
+    await Future.delayed(const Duration(milliseconds: 400));
     
     if (!mounted) return;
     
@@ -59,7 +59,7 @@ class _AppInitializerState extends State<AppInitializer>
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => const MapTab(),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 200),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -71,7 +71,7 @@ class _AppInitializerState extends State<AppInitializer>
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => WelcomeScreen(),
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 200),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },

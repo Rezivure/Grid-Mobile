@@ -20,6 +20,8 @@ import 'package:http/http.dart' as http;
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
@@ -188,11 +190,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     
     // Force avatar refresh when app resumes from background
     if (state == AppLifecycleState.resumed) {
-      // Reinitialize avatar cache to reload from persistent storage
+      // Force the avatar bloc to refresh all avatars
       Future.delayed(const Duration(milliseconds: 500), () {
-        // Trigger a visual update by notifying all avatar widgets
-        UserAvatar.notifyAvatarUpdated('*'); // Special value to refresh all
-        setState(() {}); // Force map rebuild
+        if (mounted) {
+          // Trigger refresh of all avatars in the BLoC
+          context.read<AvatarBloc>().add(RefreshAllAvatars());
+          // Force all UserAvatarBloc widgets to reload
+          setState(() {}); // Force widget tree rebuild
+        }
       });
     }
   }
@@ -949,7 +954,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             ),
             // Rotating compass needle
             Transform.rotate(
-              angle: -_currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
+              angle: _currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
               child: CustomPaint(
                 size: Size(28, 28),
                 painter: CompassPainter(
