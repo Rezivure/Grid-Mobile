@@ -76,6 +76,8 @@ flutter:
     - assets/logos/Brand-Pattern-Low-color.png
     - assets/lottie/lottie-phone-pin.json
     - assets/lottie/lottie-phone-verify.json
+    - assets/extras/satellite.png
+    - assets/extras/basemaps.png
     - .env
 
   fonts:
