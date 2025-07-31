@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -35,6 +36,7 @@ import 'package:grid_frontend/widgets/onboarding_modal.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/widgets/app_initializer.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -89,6 +91,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Track map movement completion
   Timer? _mapMoveTimer;
   String? _targetUserId;
+  
+  // Track app pause time for restart logic
+  DateTime? _pausedTime;
   
   // Map style selector
   bool _showMapSelector = false;
@@ -181,24 +186,36 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedTime = DateTime.now();
+    }
+    
+    if (state == AppLifecycleState.resumed && _pausedTime != null) {
+      final pauseDuration = DateTime.now().difference(_pausedTime!);
+      
+      // If app was paused for more than 30 seconds, restart from splash
+      if (pauseDuration.inSeconds > 30) {
+        print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - restarting from splash');
+        
+        // Navigate to splash screen to ensure full initialization
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => AppInitializer(client: context.read<Client>()),
+            ),
+            (route) => false,
+          );
+        }
+        return;
+      }
+    }
+    
+    // Normal resume handling for short pauses
     _syncManager.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
     // Refresh satellite token when app resumes if using satellite maps
     if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
       _refreshSatelliteTokenIfNeeded();
-    }
-    
-    // Force avatar refresh when app resumes from background
-    if (state == AppLifecycleState.resumed) {
-      // Force the avatar bloc to refresh all avatars
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          // Trigger refresh of all avatars in the BLoC
-          context.read<AvatarBloc>().add(RefreshAllAvatars());
-          // Force all UserAvatarBloc widgets to reload
-          setState(() {}); // Force widget tree rebuild
-        }
-      });
     }
   }
 
@@ -657,6 +674,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     onMapReady: () {
                       print('[SMART ZOOM] Map is ready!');
                       setState(() => _isMapReady = true);
+                      
+                      // Force tile loading by slightly moving the map
+                      Future.delayed(const Duration(milliseconds: 100), () {
+                        if (mounted && _mapController.camera.center != null) {
+                          // Tiny movement to trigger tile loading
+                          final currentCenter = _mapController.camera.center;
+                          _mapController.move(
+                            LatLng(
+                              currentCenter.latitude + 0.00001,
+                              currentCenter.longitude + 0.00001,
+                            ),
+                            _mapController.camera.zoom,
+                          );
+                          // Move back immediately
+                          _mapController.move(currentCenter, _mapController.camera.zoom);
+                        }
+                      });
                       
                       // Calculate optimal zoom when map is ready
                       if (!_initialZoomCalculated) {

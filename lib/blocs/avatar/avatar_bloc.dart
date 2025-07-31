@@ -111,10 +111,12 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       // Update state and cache
       final newCache = Map<String, Uint8List>.from(state.avatarCache);
       final newLastUpdated = Map<String, DateTime>.from(state.lastUpdated);
+      final newFailedAttempts = Map<String, DateTime>.from(state.failedAttempts);
       newLoadingStates[event.userId] = false;
       
       newCache[event.userId] = avatarBytes;
       newLastUpdated[event.userId] = DateTime.now();
+      newFailedAttempts.remove(event.userId); // Clear any previous failure
       
       // Store in persistent cache
       await cacheService.put(event.userId, avatarBytes);
@@ -123,6 +125,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
         avatarCache: newCache,
         loadingStates: newLoadingStates,
         lastUpdated: newLastUpdated,
+        failedAttempts: newFailedAttempts,
         updateCounter: state.updateCounter + 1,
       ));
       
@@ -131,10 +134,16 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
     } catch (e) {
       print('[AvatarBloc] Error processing avatar update: $e');
       
-      // Update loading state to false on error
+      // Update loading state to false on error and track failed attempt
       final newLoadingStates = Map<String, bool>.from(state.loadingStates);
+      final newFailedAttempts = Map<String, DateTime>.from(state.failedAttempts);
       newLoadingStates[event.userId] = false;
-      emit(state.copyWith(loadingStates: newLoadingStates));
+      newFailedAttempts[event.userId] = DateTime.now();
+      
+      emit(state.copyWith(
+        loadingStates: newLoadingStates,
+        failedAttempts: newFailedAttempts,
+      ));
     }
   }
 
@@ -175,6 +184,11 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
     // Check if already cached
     if (state.avatarCache.containsKey(event.userId)) {
       return;
+    }
+    
+    // Check if this avatar recently failed to load
+    if (state.hasRecentlyFailed(event.userId)) {
+      return; // Skip loading to prevent spam
     }
     
     // Check persistent cache

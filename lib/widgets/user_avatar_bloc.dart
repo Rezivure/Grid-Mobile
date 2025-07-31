@@ -63,8 +63,8 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> {
           );
         }
         
-        // If no avatar data and not loading, request it
-        if (!isLoading && avatarData == null) {
+        // If no avatar data and not loading, request it (unless it recently failed)
+        if (!isLoading && avatarData == null && !state.hasRecentlyFailed(widget.userId)) {
           // Request avatar load on next frame to avoid building during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
