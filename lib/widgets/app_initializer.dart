@@ -24,7 +24,7 @@ class _AppInitializerState extends State<AppInitializer>
     
     // Simple fade and scale animation
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 200),
       vsync: this,
     );
     
@@ -36,7 +36,10 @@ class _AppInitializerState extends State<AppInitializer>
     // Start simple fade in
     _fadeController.forward();
     
-    _initializeApp();
+    // Schedule initialization after the current frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeApp();
+    });
   }
 
   @override
@@ -47,8 +50,8 @@ class _AppInitializerState extends State<AppInitializer>
   
 
   Future<void> _initializeApp() async {
-    // Reduced splash time for faster app launch
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Add a minimal delay to ensure the widget is fully built
+    await Future.delayed(const Duration(milliseconds: 100));
     
     if (!mounted) return;
     
@@ -59,7 +62,7 @@ class _AppInitializerState extends State<AppInitializer>
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => const MapTab(),
-          transitionDuration: const Duration(milliseconds: 200),
+          transitionDuration: const Duration(milliseconds: 150),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -71,7 +74,7 @@ class _AppInitializerState extends State<AppInitializer>
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => WelcomeScreen(),
-          transitionDuration: const Duration(milliseconds: 200),
+          transitionDuration: const Duration(milliseconds: 150),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -80,19 +83,6 @@ class _AppInitializerState extends State<AppInitializer>
     }
   }
 
-  Widget _buildModernLogo() {
-    return Container(
-      width: 120,
-      height: 120,
-      child: Image.asset(
-        'assets/logos/png-file-2.png',
-        fit: BoxFit.contain,
-      ),
-    );
-  }
-
-
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -100,10 +90,11 @@ class _AppInitializerState extends State<AppInitializer>
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Center(
-          child: _buildModernLogo(),
+      body: Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(
+            colorScheme.primary,
+          ),
         ),
       ),
     );
