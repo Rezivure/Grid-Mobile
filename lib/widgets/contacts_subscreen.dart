@@ -22,6 +22,7 @@ import '../blocs/avatar/avatar_bloc.dart';
 import '../blocs/avatar/avatar_state.dart';
 import 'contact_profile_modal.dart';
 import 'add_friend_modal.dart';
+import 'location_history_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -115,17 +116,48 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   List<ContactDisplay> _getContactsWithCurrentLocation(
       List<ContactDisplay> contacts,
       UserLocationProvider locationProvider) {
-    return contacts.map((contact) {
+    // Create a list with both the formatted time and the actual timestamp for sorting
+    final contactsWithTimestamp = contacts.map((contact) {
       final lastSeenTimestamp = locationProvider.getLastSeen(contact.userId);
       final formattedLastSeen = TimeAgoFormatter.format(lastSeenTimestamp);
 
-      return ContactDisplay(
-        userId: contact.userId,
-        displayName: contact.displayName,
-        avatarUrl: contact.avatarUrl,
-        lastSeen: formattedLastSeen,
-      );
+      return {
+        'contact': ContactDisplay(
+          userId: contact.userId,
+          displayName: contact.displayName,
+          avatarUrl: contact.avatarUrl,
+          lastSeen: formattedLastSeen,
+          membershipStatus: contact.membershipStatus,
+        ),
+        'timestamp': lastSeenTimestamp,
+      };
     }).toList();
+
+    // Sort by timestamp (most recent first)
+    contactsWithTimestamp.sort((a, b) {
+      final timestampA = a['timestamp'] as String?;
+      final timestampB = b['timestamp'] as String?;
+      
+      // Handle null timestamps (put them at the end)
+      if (timestampA == null && timestampB == null) return 0;
+      if (timestampA == null) return 1;
+      if (timestampB == null) return -1;
+      
+      // Parse and compare timestamps
+      try {
+        final dateA = DateTime.parse(timestampA);
+        final dateB = DateTime.parse(timestampB);
+        return dateB.compareTo(dateA); // Descending order (most recent first)
+      } catch (e) {
+        // If parsing fails, treat as equal
+        return 0;
+      }
+    });
+
+    // Return only the sorted ContactDisplay objects
+    return contactsWithTimestamp
+        .map((item) => item['contact'] as ContactDisplay)
+        .toList();
   }
 
   @override
@@ -748,6 +780,33 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
                 },
               ),
               
+              // Commented out for this release - history feature only for groups
+              // ListTile(
+              //   leading: Container(
+              //     padding: const EdgeInsets.all(8),
+              //     decoration: BoxDecoration(
+              //       color: colorScheme.primary.withOpacity(0.1),
+              //       borderRadius: BorderRadius.circular(8),
+              //     ),
+              //     child: Icon(
+              //       Icons.history,
+              //       color: colorScheme.primary,
+              //       size: 20,
+              //     ),
+              //   ),
+              //   title: Text(
+              //     'View History',
+              //     style: TextStyle(
+              //       color: colorScheme.onSurface,
+              //       fontWeight: FontWeight.w500,
+              //     ),
+              //   ),
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     _showLocationHistory(contact);
+              //   },
+              // ),
+              
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
@@ -864,6 +923,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+  
+  void _showLocationHistory(ContactDisplay contact) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return LocationHistoryModal(
+          userId: contact.userId,
+          userName: contact.displayName,
+          avatarUrl: contact.avatarUrl,
         );
       },
     );

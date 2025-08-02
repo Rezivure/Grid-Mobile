@@ -23,7 +23,9 @@ import '../services/user_service.dart';
 import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
 import 'group_profile_modal.dart';
+import 'location_history_modal.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
@@ -520,6 +522,195 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       ),
     );
   }
+  
+  void _showGroupDetailsMenu() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Group info header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: GroupAvatarBloc(
+                        roomId: widget.room.roomId,
+                        memberIds: widget.room.members,
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.room.name.split(':').length >= 5 
+                                ? widget.room.name.split(':')[3]
+                                : widget.room.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '${_filteredMembers.length} members',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Menu options
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Group Details',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                      ),
+                      child: GroupProfileModal(
+                        room: widget.room,
+                        roomService: widget.roomService,
+                        sharingPreferencesRepo: widget.sharingPreferencesRepository,
+                        onMemberAdded: () {
+                          Navigator.pop(context);
+                          _showAddGroupMemberModal();
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+              
+              // Group History - commented out for this release
+              // ListTile(
+              //   leading: Container(
+              //     padding: const EdgeInsets.all(8),
+              //     decoration: BoxDecoration(
+              //       color: colorScheme.primary.withOpacity(0.1),
+              //       borderRadius: BorderRadius.circular(8),
+              //     ),
+              //     child: Icon(
+              //       Icons.history,
+              //       color: colorScheme.primary,
+              //       size: 20,
+              //     ),
+              //   ),
+              //   title: Text(
+              //     'Group History',
+              //     style: TextStyle(
+              //       color: colorScheme.onSurface,
+              //       fontWeight: FontWeight.w500,
+              //     ),
+              //   ),
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     showModalBottomSheet(
+              //       context: context,
+              //       isScrollControlled: true,
+              //       backgroundColor: Colors.transparent,
+              //       builder: (BuildContext context) {
+              //         return LocationHistoryModal(
+              //           userId: widget.room.roomId,
+              //           userName: widget.room.name.split(':').length >= 5 
+              //               ? widget.room.name.split(':')[3]
+              //               : widget.room.name,
+              //           memberIds: _filteredMembers.map((m) => m.userId).toList(),
+              //         );
+              //       },
+              //     );
+              //   },
+              // ),
+              
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.exit_to_app_outlined,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Leave Group',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: _isLeaving 
+                    ? null 
+                    : () {
+                        Navigator.pop(context);
+                        _showLeaveConfirmationDialog();
+                      },
+              ),
+              
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildMemberTile(GridUser user, GroupsLoaded state, 
       List<UserLocation> userLocations) {
@@ -788,96 +979,34 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     
     return Container(
       padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // Group Settings Button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: _isProcessing ? null : () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => Container(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.8,
-                    ),
-                    child: GroupProfileModal(
-                      room: widget.room,
-                      roomService: widget.roomService,
-                      sharingPreferencesRepo: widget.sharingPreferencesRepository,
-                      onMemberAdded: () {
-                        Navigator.pop(context);
-                        _showAddGroupMemberModal();
-                      },
-                    ),
-                  ),
-                );
-              },
-              icon: Icon(
-                Icons.settings_outlined,
-                size: 20,
-                color: colorScheme.onPrimary,
-              ),
-              label: Text(
-                'Group Settings',
-                style: TextStyle(
-                  color: colorScheme.onPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+      child: SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _isProcessing ? null : () {
+            _showGroupDetailsMenu();
+          },
+          icon: Icon(
+            Icons.more_horiz,
+            size: 20,
+            color: colorScheme.onPrimary,
+          ),
+          label: Text(
+            'Group Details',
+            style: TextStyle(
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          
-          const SizedBox(height: 12),
-          
-          // Leave Group Button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
-              icon: _isLeaving
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        color: colorScheme.error,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Icon(
-                      Icons.exit_to_app_outlined,
-                      size: 20,
-                      color: colorScheme.error,
-                    ),
-              label: Text(
-                _isLeaving ? 'Leaving...' : 'Leave Group',
-                style: TextStyle(
-                  color: colorScheme.error,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colorScheme.error,
-                side: BorderSide(color: colorScheme.error),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

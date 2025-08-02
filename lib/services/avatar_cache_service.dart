@@ -43,9 +43,36 @@ class AvatarCacheService {
     }
   }
   
+  /// Reload memory cache from persistent storage (useful after app resume)
+  Future<void> reloadFromPersistent() async {
+    _memoryCache.clear();
+    _isInitialized = false;
+    await initialize();
+  }
+  
   /// Get avatar from cache
   Uint8List? get(String userId) {
-    return _memoryCache[userId];
+    // First check memory cache
+    final memoryData = _memoryCache[userId];
+    if (memoryData != null) {
+      return memoryData;
+    }
+    
+    // If not in memory but should be (based on persistent storage), try to reload it
+    SharedPreferences.getInstance().then((prefs) {
+      final base64Data = prefs.getString('$_cacheKeyPrefix$userId');
+      if (base64Data != null) {
+        try {
+          final bytes = base64Decode(base64Data);
+          _memoryCache[userId] = bytes;
+          print('[AvatarCache] Reloaded avatar for $userId from persistent storage');
+        } catch (e) {
+          print('[AvatarCache] Error reloading avatar for $userId: $e');
+        }
+      }
+    });
+    
+    return null;
   }
   
   /// Store avatar in cache (both memory and persistent)

@@ -28,6 +28,7 @@ import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 
 
 
@@ -1349,7 +1350,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       // Get middleware URL (GAUTH_URL)
-      final middlewareUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app';
+      final middlewareUrl = dotenv.env['GAUTH_URL'];
       
       // Create multipart request to middleware
       final request = http.MultipartRequest(
@@ -1382,7 +1383,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final filename = responseData['filename'];
         
         // Construct CDN URL using the filename
-        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';
+        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'];
         final cdnUrl = '$cdnBaseUrl/$filename';
 
         // Store encryption metadata in secure storage
@@ -2037,6 +2038,30 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             SizedBox(height: 24),
+
+            // Subscriptions Section (only for default homeserver)
+            if (!isCustomHomeserver()) ...[
+              _buildSectionCard(
+                theme: theme,
+                colorScheme: colorScheme,
+                title: 'Subscriptions',
+                children: [
+                  _buildMenuOption(
+                    icon: Icons.credit_card,
+                    title: 'Manage Subscriptions',
+                    subtitle: 'View and manage your subscriptions',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+                      );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+              SizedBox(height: 24),
+            ],
 
             // Support & Information Section
             _buildSectionCard(
