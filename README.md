@@ -24,7 +24,7 @@
 
 
 <div align="center">
-  <img src="https://i.imgur.com/1r3A978.png" alt="appstore" width="75%" />
+  <img src="https://imgur.com/a/l0uGRfw" alt="appstore" width="75%" />
 </div>
 
 
@@ -39,9 +39,7 @@
 
 ## Roadmap
 
-<div align="center">
-  <img src="https://i.imgur.com/61Q26Ih.png" alt="appstore" width="75%" />
-</div>
+Check back soon for an updated roadmap!
 
 ## Getting Started With the App
 If you wish to develop/contribute PRs to application, follow the steps below:
