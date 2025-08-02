@@ -7,9 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/models/location_history.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
+import 'package:grid_frontend/services/subscription_service.dart';
 
 class LocationHistoryModal extends StatefulWidget {
   final String userId;
@@ -45,6 +47,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   String? _selectedMemberId; // For group view, which member is selected
   bool _showAllMembers = false; // Toggle for showing all members vs single
   bool _mapReady = false;
+  String _currentMapStyle = 'base';
+  String? _satelliteMapToken;
+  final SubscriptionService _subscriptionService = SubscriptionService();
   
   @override
   void initState() {
@@ -59,10 +64,28 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   Future<void> _initializeMap() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
       
-      _mapTheme = ProtomapsThemes.light();
-      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
+      // Load the user's map style preference
+      _currentMapStyle = prefs.getString('selected_map_style') ?? 'base';
+      
+      // Check if user has subscription for satellite maps
+      if (_currentMapStyle == 'satellite') {
+        final hasSubscription = await _subscriptionService.hasActiveSubscription();
+        if (hasSubscription) {
+          // Get satellite map token
+          _satelliteMapToken = await _subscriptionService.getMapToken();
+        } else {
+          // No subscription, fallback to base maps
+          _currentMapStyle = 'base';
+        }
+      }
+      
+      // Initialize base map provider (still needed for fallback)
+      if (_currentMapStyle == 'base') {
+        final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
+        _mapTheme = ProtomapsThemes.light();
+        _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
+      }
       
       if (mounted) {
         setState(() {});
@@ -146,6 +169,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           }
         });
       }
+      
       _currentTime = _latestTime;
       _updateCurrentPositions();
       _setupInitialMapView();
@@ -538,13 +562,14 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       ],
                     ),
                   )
-                else if (_tileProvider == null)
+                else if (_currentMapStyle == 'base' && _tileProvider == null)
                   Center(
                     child: CircularProgressIndicator(
                       color: colorScheme.primary,
                     ),
                   )
-                else if (_tileProvider != null)
+                else if ((_currentMapStyle == 'base' && _tileProvider != null) || 
+                         (_currentMapStyle == 'satellite' && _satelliteMapToken != null))
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: FlutterMap(
@@ -555,7 +580,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                                 ? _calculateCenterPoint(_currentPositions.values.toList())
                                 : _currentPositions.values.first)
                             : const LatLng(37.7749, -122.4194), // Default to SF
-                        initialZoom: _showAllMembers ? 11.0 : 13.0,
+                        initialZoom: _showAllMembers ? 9.0 : 11.0,
                         onMapReady: () {
                           setState(() {
                             _mapReady = true;
@@ -569,14 +594,28 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         },
                       ),
                       children: [
-                        VectorTileLayer(
-                          theme: _mapTheme,
-                          tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                          fileCacheTtl: const Duration(days: 14),
-                          memoryTileDataCacheMaxSize: 80,
-                          memoryTileCacheMaxSize: 100,
-                          concurrency: 5,
-                        ),
+                        // Map tiles - either base or satellite
+                        if (_currentMapStyle == 'base' && _tileProvider != null)
+                          VectorTileLayer(
+                            theme: _mapTheme,
+                            tileProviders: TileProviders({'protomaps': _tileProvider!}),
+                            fileCacheTtl: const Duration(days: 14),
+                            memoryTileDataCacheMaxSize: 80,
+                            memoryTileCacheMaxSize: 100,
+                            concurrency: 5,
+                          )
+                        else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
+                          TileLayer(
+                            urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
+                            tileProvider: NetworkTileProvider(
+                              headers: {
+                                'Authorization': 'Bearer $_satelliteMapToken',
+                              },
+                            ),
+                            maxZoom: 20,
+                            maxNativeZoom: 20,
+                            tileSize: 256,
+                          ),
                         
                         // Draw paths
                         if (_locationHistory != null && _currentTime != null)

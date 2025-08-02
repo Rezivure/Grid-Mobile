@@ -201,6 +201,7 @@ class RoomService {
     return 0;
   }
 
+
   List<User> getFilteredParticipants(Room room, String searchText) {
     final lowerSearchText = searchText.toLowerCase();
     return room

@@ -98,6 +98,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Map style selector
   bool _showMapSelector = false;
   String _currentMapStyle = 'base'; // 'base' or 'satellite'
+  
+  // Avatar check timer
+  Timer? _avatarCheckTimer;
+  int _avatarCheckAttempts = 0;
   final SubscriptionService _subscriptionService = SubscriptionService();
   String? _satelliteMapToken;
   
@@ -149,6 +153,122 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     
     // Listen for location updates to trigger zoom calculation
     _locationManager.addListener(_onLocationUpdate);
+    
+    // ALWAYS check and refresh avatars on MapTab init
+    // This catches background launch cases where AppInitializer is skipped
+    print('[MapTab] Initializing - will check avatars in 1 second...');
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        _checkAndRefreshAvatarsIfNeeded();
+        _startPeriodicAvatarCheck();
+      }
+    });
+  }
+  
+  void _startPeriodicAvatarCheck() {
+    // Cancel any existing timer
+    _avatarCheckTimer?.cancel();
+    _avatarCheckAttempts = 0;
+    
+    // Check every 2 seconds, up to 10 times
+    _avatarCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      _avatarCheckAttempts++;
+      
+      final avatarBloc = context.read<AvatarBloc>();
+      final mapBloc = context.read<MapBloc>();
+      final hasUsers = mapBloc.state.userLocations.isNotEmpty;
+      final hasAvatars = avatarBloc.state.avatarCache.isNotEmpty;
+      
+      print('[MapTab] Periodic avatar check #$_avatarCheckAttempts - hasUsers: $hasUsers, hasAvatars: $hasAvatars');
+      
+      // If we have users but no avatars, try to load them
+      if (hasUsers && !hasAvatars) {
+        print('[MapTab] Users found but no avatars - attempting to load...');
+        
+        // Try to reinitialize and load avatars
+        avatarBloc.cacheService.initialize().then((_) {
+          for (final userLocation in mapBloc.state.userLocations) {
+            avatarBloc.add(LoadAvatar(userLocation.userId));
+          }
+        });
+      }
+      
+      // Stop checking after 10 attempts or if avatars are loaded
+      if (_avatarCheckAttempts >= 10 || hasAvatars) {
+        print('[MapTab] Stopping periodic avatar check - attempts: $_avatarCheckAttempts, hasAvatars: $hasAvatars');
+        timer.cancel();
+        
+        // Final attempt - if still no avatars after all checks, force restart
+        if (hasUsers && !hasAvatars && mounted) {
+          print('[MapTab] Final avatar check failed - forcing app restart');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => AppInitializer(client: context.read<Client>()),
+            ),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
+  
+  void _checkAndRefreshAvatarsIfNeeded() async {
+    // Wait a moment for the UI to settle
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (!mounted) return;
+    
+    final avatarBloc = context.read<AvatarBloc>();
+    
+    // Always force refresh avatars on startup to handle background launch issues
+    print('[MapTab] Forcing avatar refresh on startup...');
+    
+    // Force refresh all avatars
+    avatarBloc.add(RefreshAllAvatars());
+    
+    // Reinitialize the avatar cache service
+    await avatarBloc.cacheService.initialize();
+    
+    // Wait a bit more for services to initialize
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (!mounted) return;
+    
+    // Get all user IDs that might need avatars
+    final mapBloc = context.read<MapBloc>();
+    final userLocations = mapBloc.state.userLocations;
+    
+    // Request load for each user location
+    for (final userLocation in userLocations) {
+      avatarBloc.add(LoadAvatar(userLocation.userId));
+    }
+    
+    // Also load current user's avatar
+    final client = context.read<Client>();
+    if (client.userID != null) {
+      avatarBloc.add(LoadAvatar(client.userID!));
+    }
+    
+    // Check again after a delay and force restart if still no avatars
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      
+      // If still no avatars and we expect some, force a full restart
+      if (avatarBloc.state.avatarCache.isEmpty && userLocations.isNotEmpty) {
+        print('[MapTab] Still no avatars after refresh - forcing app restart');
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => AppInitializer(client: context.read<Client>()),
+          ),
+          (route) => false,
+        );
+      }
+    });
   }
   
   void _onLocationUpdate() {
@@ -176,6 +296,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void dispose() {
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
+    _avatarCheckTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _locationManager.removeListener(_onLocationUpdate);
     _mapController.dispose();

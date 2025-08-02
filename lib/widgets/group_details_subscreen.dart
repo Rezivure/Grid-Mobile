@@ -636,44 +636,45 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 },
               ),
               
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.history,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'Group History',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (BuildContext context) {
-                      return LocationHistoryModal(
-                        userId: widget.room.roomId,
-                        userName: widget.room.name.split(':').length >= 5 
-                            ? widget.room.name.split(':')[3]
-                            : widget.room.name,
-                        memberIds: _filteredMembers.map((m) => m.userId).toList(),
-                      );
-                    },
-                  );
-                },
-              ),
+              // Group History - commented out for this release
+              // ListTile(
+              //   leading: Container(
+              //     padding: const EdgeInsets.all(8),
+              //     decoration: BoxDecoration(
+              //       color: colorScheme.primary.withOpacity(0.1),
+              //       borderRadius: BorderRadius.circular(8),
+              //     ),
+              //     child: Icon(
+              //       Icons.history,
+              //       color: colorScheme.primary,
+              //       size: 20,
+              //     ),
+              //   ),
+              //   title: Text(
+              //     'Group History',
+              //     style: TextStyle(
+              //       color: colorScheme.onSurface,
+              //       fontWeight: FontWeight.w500,
+              //     ),
+              //   ),
+              //   onTap: () {
+              //     Navigator.pop(context);
+              //     showModalBottomSheet(
+              //       context: context,
+              //       isScrollControlled: true,
+              //       backgroundColor: Colors.transparent,
+              //       builder: (BuildContext context) {
+              //         return LocationHistoryModal(
+              //           userId: widget.room.roomId,
+              //           userName: widget.room.name.split(':').length >= 5 
+              //               ? widget.room.name.split(':')[3]
+              //               : widget.room.name,
+              //           memberIds: _filteredMembers.map((m) => m.userId).toList(),
+              //         );
+              //       },
+              //     );
+              //   },
+              // ),
               
               ListTile(
                 leading: Container(
