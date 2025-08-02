@@ -1204,4 +1204,43 @@ class SyncManager with ChangeNotifier {
       print("[SyncManager] Error cleaning up orphaned users: $e");
     }
   }
+  
+  // Public method to manually trigger cleanup of orphaned location data
+  Future<void> cleanupOrphanedLocationData() async {
+    try {
+      print("[SyncManager] Starting manual cleanup of orphaned location data...");
+      
+      // Get all locations from the database
+      final allLocations = await locationRepository.getAllLatestLocations();
+      
+      for (final location in allLocations) {
+        // Skip own user
+        if (location.userId == client.userID) continue;
+        
+        // Check if user exists in any rooms
+        final userRooms = await roomRepository.getUserRooms(location.userId);
+        final directRoom = await userRepository.getDirectRoomForContact(location.userId);
+        
+        if (userRooms.isEmpty && directRoom == null) {
+          print("[SyncManager] Found orphaned location for user: ${location.userId}");
+          await locationRepository.deleteUserLocations(location.userId);
+          mapBloc.add(RemoveUserLocation(location.userId));
+          
+          // Also check if the user record itself is orphaned
+          final user = await userRepository.getUserById(location.userId);
+          if (user != null) {
+            print("[SyncManager] Also removing orphaned user record: ${location.userId}");
+            await userRepository.deleteUser(location.userId);
+          }
+        }
+      }
+      
+      // Refresh map after cleanup
+      mapBloc.add(MapLoadUserLocations());
+      
+      print("[SyncManager] Orphaned location cleanup complete");
+    } catch (e) {
+      print("[SyncManager] Error during manual location cleanup: $e");
+    }
+  }
 }

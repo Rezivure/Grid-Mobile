@@ -9,6 +9,7 @@ import 'package:matrix/matrix.dart';
 
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
@@ -87,11 +88,12 @@ void main() async {
   final roomRepository = RoomRepository(databaseService);
   final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
   final locationRepository = LocationRepository(databaseService);
+  final locationHistoryRepository = LocationHistoryRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
-  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, sharingPreferencesRepository, locationManager);
+  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, locationHistoryRepository, sharingPreferencesRepository, locationManager);
 
   final messageParser = MessageParser();
 
@@ -101,6 +103,7 @@ void main() async {
         Provider<Client>.value(value: client),
         Provider<DatabaseService>.value(value: databaseService),
         Provider<LocationRepository>.value(value: locationRepository),
+        Provider<LocationHistoryRepository>.value(value: locationHistoryRepository),
         Provider<UserKeysRepository>.value(value: userKeysRepository),
         Provider<UserService>.value(value: userService),
         Provider<UserRepository>.value(value: userRepository),
@@ -132,6 +135,7 @@ void main() async {
               userKeysRepository,
               roomRepository,
               locationRepository,
+              locationHistoryRepository,
               sharingPreferencesRepository,
               locationManager,
             );
@@ -173,7 +177,8 @@ void main() async {
           ChangeNotifierProxyProvider4<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
             create: (context) {
               final messageProcessor = MessageProcessor(
-                locationRepository, 
+                locationRepository,
+                locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: context.read<AvatarBloc>(),
@@ -195,7 +200,8 @@ void main() async {
             update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, previous) {
               if (previous != null) return previous;
               final messageProcessor = MessageProcessor(
-                locationRepository, 
+                locationRepository,
+                locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: avatarBloc,

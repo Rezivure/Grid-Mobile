@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 1.0.5+114
+version: 1.0.6+118
 
 environment:
   sdk: '>=3.3.3 <4.0.0'
@@ -76,6 +76,8 @@ flutter:
     - assets/logos/Brand-Pattern-Low-color.png
     - assets/lottie/lottie-phone-pin.json
     - assets/lottie/lottie-phone-verify.json
+    - assets/extras/satellite.png
+    - assets/extras/basemaps.png
     - .env
 
   fonts:

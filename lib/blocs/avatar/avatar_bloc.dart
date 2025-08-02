@@ -13,7 +13,14 @@ import '../../widgets/group_avatar.dart';
 
 class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
   final Client client;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+    ),
+  );
   final AvatarCacheService cacheService = AvatarCacheService();
   bool _cacheInitialized = false;
 
@@ -79,6 +86,15 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('avatar_is_matrix_${event.userId}', event.isMatrixUrl);
       
+      // Also store a fallback copy in SharedPreferences for background access
+      final fallbackData = {
+        'uri': event.avatarUrl,
+        'key': event.encryptionKey,
+        'iv': event.encryptionIv,
+        'isMatrix': event.isMatrixUrl,
+      };
+      await prefs.setString('avatar_fallback_${event.userId}', json.encode(fallbackData));
+      
       // Download and decrypt the avatar
       Uint8List encryptedData;
       
@@ -111,10 +127,12 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       // Update state and cache
       final newCache = Map<String, Uint8List>.from(state.avatarCache);
       final newLastUpdated = Map<String, DateTime>.from(state.lastUpdated);
+      final newFailedAttempts = Map<String, DateTime>.from(state.failedAttempts);
       newLoadingStates[event.userId] = false;
       
       newCache[event.userId] = avatarBytes;
       newLastUpdated[event.userId] = DateTime.now();
+      newFailedAttempts.remove(event.userId); // Clear any previous failure
       
       // Store in persistent cache
       await cacheService.put(event.userId, avatarBytes);
@@ -123,6 +141,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
         avatarCache: newCache,
         loadingStates: newLoadingStates,
         lastUpdated: newLastUpdated,
+        failedAttempts: newFailedAttempts,
         updateCounter: state.updateCounter + 1,
       ));
       
@@ -131,10 +150,16 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
     } catch (e) {
       print('[AvatarBloc] Error processing avatar update: $e');
       
-      // Update loading state to false on error
+      // Update loading state to false on error and track failed attempt
       final newLoadingStates = Map<String, bool>.from(state.loadingStates);
+      final newFailedAttempts = Map<String, DateTime>.from(state.failedAttempts);
       newLoadingStates[event.userId] = false;
-      emit(state.copyWith(loadingStates: newLoadingStates));
+      newFailedAttempts[event.userId] = DateTime.now();
+      
+      emit(state.copyWith(
+        loadingStates: newLoadingStates,
+        failedAttempts: newFailedAttempts,
+      ));
     }
   }
 
@@ -177,6 +202,11 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       return;
     }
     
+    // Check if this avatar recently failed to load
+    if (state.hasRecentlyFailed(event.userId)) {
+      return; // Skip loading to prevent spam
+    }
+    
     // Check persistent cache
     final cachedAvatar = cacheService.get(event.userId);
     if (cachedAvatar != null) {
@@ -189,30 +219,61 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       return;
     }
     
-    // Load from secure storage
-    try {
-      final avatarDataStr = await secureStorage.read(key: 'avatar_${event.userId}');
-      if (avatarDataStr != null) {
-        final avatarData = json.decode(avatarDataStr);
-        final uri = avatarData['uri'];
-        final keyBase64 = avatarData['key'];
-        final ivBase64 = avatarData['iv'];
-        
-        if (uri != null && keyBase64 != null && ivBase64 != null) {
-          final prefs = await SharedPreferences.getInstance();
-          final isMatrixAvatar = prefs.getBool('avatar_is_matrix_${event.userId}') ?? false;
+    // Load from secure storage with retry logic
+    int retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        final avatarDataStr = await secureStorage.read(key: 'avatar_${event.userId}');
+        if (avatarDataStr != null) {
+          final avatarData = json.decode(avatarDataStr);
+          final uri = avatarData['uri'];
+          final keyBase64 = avatarData['key'];
+          final ivBase64 = avatarData['iv'];
           
-          add(AvatarUpdateReceived(
-            userId: event.userId,
-            avatarUrl: uri,
-            encryptionKey: keyBase64,
-            encryptionIv: ivBase64,
-            isMatrixUrl: isMatrixAvatar,
-          ));
+          if (uri != null && keyBase64 != null && ivBase64 != null) {
+            final prefs = await SharedPreferences.getInstance();
+            final isMatrixAvatar = prefs.getBool('avatar_is_matrix_${event.userId}') ?? false;
+            
+            add(AvatarUpdateReceived(
+              userId: event.userId,
+              avatarUrl: uri,
+              encryptionKey: keyBase64,
+              encryptionIv: ivBase64,
+              isMatrixUrl: isMatrixAvatar,
+            ));
+          }
+        }
+        break; // Success, exit loop
+      } catch (e) {
+        retryCount++;
+        print('[AvatarBloc] Error loading avatar for ${event.userId} (attempt $retryCount/$maxRetries): $e');
+        
+        if (retryCount < maxRetries) {
+          // Wait before retrying
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        } else {
+          // All retries failed, try SharedPreferences fallback
+          print('[AvatarBloc] Secure storage failed, trying SharedPreferences fallback...');
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final fallbackData = prefs.getString('avatar_fallback_${event.userId}');
+            if (fallbackData != null) {
+              final avatarData = json.decode(fallbackData);
+              add(AvatarUpdateReceived(
+                userId: event.userId,
+                avatarUrl: avatarData['uri'],
+                encryptionKey: avatarData['key'],
+                encryptionIv: avatarData['iv'],
+                isMatrixUrl: avatarData['isMatrix'] ?? false,
+              ));
+            }
+          } catch (fallbackError) {
+            print('[AvatarBloc] Fallback also failed: $fallbackError');
+          }
         }
       }
-    } catch (e) {
-      print('[AvatarBloc] Error loading avatar for ${event.userId}: $e');
     }
   }
 
