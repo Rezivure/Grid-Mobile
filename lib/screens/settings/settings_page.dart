@@ -1263,15 +1263,6 @@ class _SettingsPageState extends State<SettingsPage> {
         // Android - skip cropping for now due to crash bug
         print('[Avatar] Skipping cropper on Android due to plugin bug');
         finalImagePath = image.path;
-        
-        // Show a message to the user
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Note: Image cropping temporarily disabled on Android'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
 
       // Step 2: Determine server type
