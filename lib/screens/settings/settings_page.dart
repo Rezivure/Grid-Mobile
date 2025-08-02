@@ -29,6 +29,7 @@ import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
+import 'dart:io' show Platform;
 
 
 
@@ -1206,7 +1207,13 @@ class _SettingsPageState extends State<SettingsPage> {
     if (source == null) return;
 
     try {
+      // Add small delay for Android to prevent race condition
+      if (Platform.isAndroid) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      
       // Pick image
+      print('[Avatar] Starting image picker...');
       final XFile? image = await picker.pickImage(
         source: source,
         imageQuality: 85,
@@ -1214,39 +1221,58 @@ class _SettingsPageState extends State<SettingsPage> {
         maxHeight: 1024,
       );
 
-      if (image == null) return;
+      if (image == null) {
+        print('[Avatar] Image picker cancelled');
+        return;
+      }
+      
+      print('[Avatar] Image picked successfully: ${image.path}');
 
-      // Step 2: Apply circular cropping
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: image.path,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop Avatar',
-            toolbarColor: colorScheme.primary,
-            toolbarWidgetColor: Colors.white,
-            activeControlsWidgetColor: colorScheme.primary,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            hideBottomControls: false,
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-            cropStyle: CropStyle.circle,
+      // Step 2: Apply circular cropping (skip on Android due to v8.0.2 crash)
+      String finalImagePath;
+      
+      if (Platform.isIOS) {
+        // iOS - use the cropper as normal
+        CroppedFile? croppedFile;
+        try {
+          croppedFile = await ImageCropper().cropImage(
+            sourcePath: image.path,
+            uiSettings: [
+              IOSUiSettings(
+                title: 'Crop Avatar',
+                aspectRatioLockEnabled: true,
+                resetAspectRatioEnabled: false,
+                aspectRatioPickerButtonHidden: true,
+                rotateButtonsHidden: false,
+                rotateClockwiseButtonHidden: false,
+                doneButtonTitle: 'Done',
+                cancelButtonTitle: 'Cancel',
+                aspectRatioPresets: [CropAspectRatioPreset.square],
+                cropStyle: CropStyle.circle,
+              ),
+            ],
+          );
+        } catch (e) {
+          print('Image cropper error: $e');
+          return;
+        }
+        
+        if (croppedFile == null) return;
+        finalImagePath = croppedFile.path;
+      } else {
+        // Android - skip cropping for now due to crash bug
+        print('[Avatar] Skipping cropper on Android due to plugin bug');
+        finalImagePath = image.path;
+        
+        // Show a message to the user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Note: Image cropping temporarily disabled on Android'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
           ),
-          IOSUiSettings(
-            title: 'Crop Avatar',
-            aspectRatioLockEnabled: true,
-            resetAspectRatioEnabled: false,
-            aspectRatioPickerButtonHidden: true,
-            rotateButtonsHidden: false,
-            rotateClockwiseButtonHidden: false,
-            doneButtonTitle: 'Done',
-            cancelButtonTitle: 'Cancel',
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-            cropStyle: CropStyle.circle,
-          ),
-        ],
-      );
-
-      if (croppedFile == null) return;
+        );
+      }
 
       // Step 2: Determine server type
       final client = Provider.of<Client>(context, listen: false);
@@ -1259,10 +1285,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (isCustomServer) {
         // Step 6: Custom homeserver - Upload to Matrix media store
-        await _uploadAvatarToMatrix(croppedFile.path);
+        await _uploadAvatarToMatrix(finalImagePath);
       } else {
         // Step 3: Default homeserver - Encrypt and upload to R2
-        await _uploadAvatarToR2(croppedFile.path);
+        await _uploadAvatarToR2(finalImagePath);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
