@@ -1383,7 +1383,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final filename = responseData['filename'];
         
         // Construct CDN URL using the filename
-        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'];
+        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';;
         final cdnUrl = '$cdnBaseUrl/$filename';
 
         // Store encryption metadata in secure storage
@@ -1402,7 +1402,7 @@ class _SettingsPageState extends State<SettingsPage> {
           value: json.encode(avatarData),
         );
 
-        // Also store in SharedPreferences for quick access
+        // Also store in Shar edPreferences for quick access
         await prefs.setString('avatar_uri', cdnUrl);
         await prefs.setBool('avatar_is_matrix', false);
 
