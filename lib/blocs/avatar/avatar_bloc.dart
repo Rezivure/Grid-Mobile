@@ -13,14 +13,7 @@ import '../../widgets/group_avatar.dart';
 
 class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
   final Client client;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-    ),
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
-  );
+  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarCacheService cacheService = AvatarCacheService();
   bool _cacheInitialized = false;
 
