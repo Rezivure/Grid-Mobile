@@ -24,7 +24,7 @@
 
 
 <div align="center">
-  <img src="https://imgur.com/a/l0uGRfw" alt="appstore" width="75%" />
+  <img src="https://i.imgur.com/8c2dlnE.png" alt="appstore" width="75%" />
 </div>
 
 
@@ -37,7 +37,7 @@
 - **Self-Hosted Capability** Grid is designed to enable users to easily self host their own backend server and map tile provider for complete control over how they share.
 
 
-## Roadmap
+## Roadmap 
 
 Check back soon for an updated roadmap!
 
