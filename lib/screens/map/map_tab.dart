@@ -102,6 +102,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Avatar check timer
   Timer? _avatarCheckTimer;
   int _avatarCheckAttempts = 0;
+  bool _hasAttemptedRestart = false;  // Track if we've already tried restarting
   final SubscriptionService _subscriptionService = SubscriptionService();
   String? _satelliteMapToken;
   
@@ -203,9 +204,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         print('[MapTab] Stopping periodic avatar check - attempts: $_avatarCheckAttempts, hasAvatars: $hasAvatars');
         timer.cancel();
         
-        // Final attempt - if still no avatars after all checks, force restart
-        if (hasUsers && !hasAvatars && mounted) {
-          print('[MapTab] Final avatar check failed - forcing app restart');
+        // Final attempt - if still no avatars after all checks, try ONE restart only
+        if (hasUsers && !hasAvatars && mounted && !_hasAttemptedRestart) {
+          print('[MapTab] Final avatar check failed - attempting ONE app restart');
+          _hasAttemptedRestart = true;  // Set flag to prevent infinite loop
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
               builder: (context) => AppInitializer(client: context.read<Client>()),
@@ -254,13 +256,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       avatarBloc.add(LoadAvatar(client.userID!));
     }
     
-    // Check again after a delay and force restart if still no avatars
+    // Check again after a delay and try ONE restart if needed
     Future.delayed(const Duration(seconds: 3), () {
       if (!mounted) return;
       
-      // If still no avatars and we expect some, force a full restart
-      if (avatarBloc.state.avatarCache.isEmpty && userLocations.isNotEmpty) {
-        print('[MapTab] Still no avatars after refresh - forcing app restart');
+      if (avatarBloc.state.avatarCache.isEmpty && userLocations.isNotEmpty && !_hasAttemptedRestart) {
+        print('[MapTab] Still no avatars after refresh - attempting ONE app restart');
+        _hasAttemptedRestart = true;  // Set flag to prevent infinite loop
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (context) => AppInitializer(client: context.read<Client>()),

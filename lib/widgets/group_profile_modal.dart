@@ -31,6 +31,7 @@ import 'user_avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'dart:io' show Platform;
 
 import '../blocs/groups/groups_state.dart';
 
@@ -409,42 +410,51 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         );
       }
       
-      // Crop the image
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: image.path,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop Group Photo',
-            toolbarColor: Theme.of(context).colorScheme.primary,
-            toolbarWidgetColor: Colors.white,
-            activeControlsWidgetColor: Theme.of(context).colorScheme.primary,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            hideBottomControls: false,
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-            cropStyle: CropStyle.circle,
-          ),
-          IOSUiSettings(
-            title: 'Crop Group Photo',
-            aspectRatioLockEnabled: true,
-            resetAspectRatioEnabled: false,
-            aspectRatioPickerButtonHidden: true,
-            rotateButtonsHidden: false,
-            rotateClockwiseButtonHidden: false,
-            doneButtonTitle: 'Done',
-            cancelButtonTitle: 'Cancel',
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-            cropStyle: CropStyle.circle,
-          ),
-        ],
-      );
+      // Crop the image (skip on Android due to v8.0.2 crash)
+      String finalImagePath;
       
-      if (croppedFile == null) {
-        if (mounted) Navigator.of(context).pop();
-        setState(() {
-          _isLoadingGroupAvatar = false;
-        });
-        return;
+      if (Platform.isIOS) {
+        // iOS - use the cropper as normal
+        CroppedFile? croppedFile;
+        try {
+          croppedFile = await ImageCropper().cropImage(
+            sourcePath: image.path,
+            uiSettings: [
+              IOSUiSettings(
+                title: 'Crop Group Photo',
+                aspectRatioLockEnabled: true,
+                resetAspectRatioEnabled: false,
+                aspectRatioPickerButtonHidden: true,
+                rotateButtonsHidden: false,
+                rotateClockwiseButtonHidden: false,
+                doneButtonTitle: 'Done',
+                cancelButtonTitle: 'Cancel',
+                aspectRatioPresets: [CropAspectRatioPreset.square],
+                cropStyle: CropStyle.circle,
+              ),
+            ],
+          );
+        } catch (e) {
+          print('Image cropper error: $e');
+          if (mounted) Navigator.of(context).pop();
+          setState(() {
+            _isLoadingGroupAvatar = false;
+          });
+          return;
+        }
+        
+        if (croppedFile == null) {
+          if (mounted) Navigator.of(context).pop();
+          setState(() {
+            _isLoadingGroupAvatar = false;
+          });
+          return;
+        }
+        finalImagePath = croppedFile.path;
+      } else {
+        // Android - skip cropping for now due to crash bug
+        print('[Group Avatar] Skipping cropper on Android due to plugin bug');
+        finalImagePath = image.path;
       }
       
       // Check if using custom homeserver
@@ -453,9 +463,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       final isCustomServer = utils.isCustomHomeserver(homeserver);
       
       if (isCustomServer) {
-        await _uploadGroupAvatarToMatrix(croppedFile.path);
+        await _uploadGroupAvatarToMatrix(finalImagePath);
       } else {
-        await _uploadGroupAvatarToR2(croppedFile.path);
+        await _uploadGroupAvatarToR2(finalImagePath);
       }
       
       if (mounted) Navigator.of(context).pop();
