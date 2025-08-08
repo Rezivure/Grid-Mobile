@@ -50,6 +50,7 @@ dependencies:
   package_info_plus: ^8.1.2
   image_picker: ^1.1.2
   image_cropper: ^8.0.2
+  in_app_purchase: ^3.2.0
 
 
 flutter_launcher_icons:
