@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/apple_subscription_service.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   @override
@@ -16,11 +18,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _subscriptionData;
   String? _error;
+  final AppleSubscriptionService _appleService = AppleSubscriptionService();
 
   @override
   void initState() {
     super.initState();
     _checkSubscriptionStatus();
+    if (Platform.isIOS) {
+      _appleService.initialize();
+    }
+  }
+  
+  @override
+  void dispose() {
+    if (Platform.isIOS) {
+      _appleService.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _checkSubscriptionStatus() async {
@@ -69,46 +83,62 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   Future<void> _openCheckout() async {
-    final client = Provider.of<Client>(context, listen: false);
-    final userId = client.userID?.split(':')[0].replaceAll('@', '') ?? '';
-    
-    final subscribeUrl = dotenv.env['SUBSCRIBE_URL'] ?? '';
-    final checkoutUrl = '$subscribeUrl/checkout?userId=${Uri.encodeComponent(userId)}';
-    
-    if (await canLaunch(checkoutUrl)) {
-      await launch(checkoutUrl);
+    if (Platform.isIOS) {
+      // Use Apple In-App Purchase
+      await _appleService.purchaseSubscription(context);
+      // After purchase, refresh subscription status
+      Future.delayed(Duration(seconds: 2), () {
+        _checkSubscriptionStatus();
+      });
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open checkout')),
-      );
+      // Use Stripe for Android/Web
+      final client = Provider.of<Client>(context, listen: false);
+      final userId = client.userID?.split(':')[0].replaceAll('@', '') ?? '';
+      
+      final subscribeUrl = dotenv.env['SUBSCRIBE_URL'] ?? '';
+      final checkoutUrl = '$subscribeUrl/checkout?userId=${Uri.encodeComponent(userId)}';
+      
+      if (await canLaunch(checkoutUrl)) {
+        await launch(checkoutUrl);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open checkout')),
+        );
+      }
     }
   }
 
   Future<void> _openManageSubscription() async {
-    final client = Provider.of<Client>(context, listen: false);
-    final userId = client.userID?.split(':')[0].replaceAll('@', '') ?? '';
-    
-    // Get subscription data
-    final stripeCustomerId = _subscriptionData?['stripe_customer_id'] ?? '';
-    final subscriptionExpires = _subscriptionData?['subscription_expires'] ?? '';
-    final subscriptionType = _subscriptionData?['subscription_type'] ?? '';
-    final autoRenew = _subscriptionData?['auto_renew'] ?? false;
-    
-    // Build URL with all necessary parameters
-    final subscribeUrl = dotenv.env['SUBSCRIBE_URL'] ?? '';
-    final manageUrl = '$subscribeUrl/manage'
-        '?userId=${Uri.encodeComponent(userId)}'
-        '&customerId=${Uri.encodeComponent(stripeCustomerId)}'
-        '&expires=${Uri.encodeComponent(subscriptionExpires)}'
-        '&type=${Uri.encodeComponent(subscriptionType)}'
-        '&autoRenew=${Uri.encodeComponent(autoRenew.toString())}';
-    
-    if (await canLaunch(manageUrl)) {
-      await launch(manageUrl);
+    if (Platform.isIOS) {
+      // Open Apple's subscription management
+      await _appleService.openManageSubscriptions();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open subscription management')),
-      );
+      // Use Stripe management for Android/Web
+      final client = Provider.of<Client>(context, listen: false);
+      final userId = client.userID?.split(':')[0].replaceAll('@', '') ?? '';
+      
+      // Get subscription data
+      final stripeCustomerId = _subscriptionData?['stripe_customer_id'] ?? '';
+      final subscriptionExpires = _subscriptionData?['subscription_expires'] ?? '';
+      final subscriptionType = _subscriptionData?['subscription_type'] ?? '';
+      final autoRenew = _subscriptionData?['auto_renew'] ?? false;
+      
+      // Build URL with all necessary parameters
+      final subscribeUrl = dotenv.env['SUBSCRIBE_URL'] ?? '';
+      final manageUrl = '$subscribeUrl/manage'
+          '?userId=${Uri.encodeComponent(userId)}'
+          '&customerId=${Uri.encodeComponent(stripeCustomerId)}'
+          '&expires=${Uri.encodeComponent(subscriptionExpires)}'
+          '&type=${Uri.encodeComponent(subscriptionType)}'
+          '&autoRenew=${Uri.encodeComponent(autoRenew.toString())}';
+      
+      if (await canLaunch(manageUrl)) {
+        await launch(manageUrl);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open subscription management')),
+        );
+      }
     }
   }
 
