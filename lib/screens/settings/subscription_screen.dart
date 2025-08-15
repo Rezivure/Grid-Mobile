@@ -19,6 +19,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Map<String, dynamic>? _subscriptionData;
   String? _error;
   final AppleSubscriptionService _appleService = AppleSubscriptionService();
+  bool _isPurchasing = false;
 
   @override
   void initState() {
@@ -84,12 +85,34 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   Future<void> _openCheckout() async {
     if (Platform.isIOS) {
+      setState(() {
+        _isPurchasing = true;
+      });
+      
+      // Clear any previous purchase state
+      _appleService.clearPurchaseState();
+      
       // Use Apple In-App Purchase
       await _appleService.purchaseSubscription(context);
-      // After purchase, refresh subscription status
-      Future.delayed(Duration(seconds: 2), () {
-        _checkSubscriptionStatus();
+      
+      // Wait a moment for purchase to process
+      await Future.delayed(Duration(milliseconds: 500));
+      
+      setState(() {
+        _isPurchasing = false;
       });
+      
+      // Check result and show appropriate feedback
+      if (_appleService.lastSuccessfulPurchase != null) {
+        _showSuccessModal();
+      } else if (_appleService.lastError != null) {
+        // Check if user canceled (error code 2 is user canceled)
+        if (_appleService.lastError!.code == 'storekit_cancelled_payment') {
+          _showFloatingSnackBar('Purchase canceled', isError: false);
+        } else {
+          _showFloatingSnackBar('Unable to complete purchase', isError: true);
+        }
+      }
     } else {
       // Use Stripe for Android/Web
       final client = Provider.of<Client>(context, listen: false);
@@ -142,6 +165,193 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     }
   }
 
+  void _showFloatingSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+            fontSize: 15,
+          ),
+        ),
+        backgroundColor: isError 
+            ? Colors.red.shade400 
+            : Theme.of(context).colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: 20,
+          left: 20,
+          right: 20,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        duration: Duration(seconds: 3),
+        elevation: 6,
+      ),
+    );
+  }
+  
+  void _showSuccessModal() {
+    bool isLoading = false;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final colorScheme = Theme.of(context).colorScheme;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: colorScheme.surface,
+              child: Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: colorScheme.surface,
+                  border: Border.all(
+                    color: colorScheme.primary.withOpacity(0.2),
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.check_circle_outline,
+                        color: colorScheme.primary,
+                        size: 48,
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Thank You!',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Your subscription greatly helps keep Grid running and independent.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: colorScheme.onSurface.withOpacity(0.8),
+                        height: 1.4,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.primary.withOpacity(0.15),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.security,
+                            color: colorScheme.primary,
+                            size: 20,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Satellite maps are privately routed through Cloudflare for enhanced privacy.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : () async {
+                          setState(() {
+                            isLoading = true;
+                          });
+                          
+                          // Poll for subscription to be active
+                          bool subscriptionActive = false;
+                          for (int i = 0; i < 20; i++) { // Try for up to 10 seconds
+                            await _checkSubscriptionStatus();
+                            if (_subscriptionData?['is_active'] == true) {
+                              subscriptionActive = true;
+                              break;
+                            }
+                            await Future.delayed(Duration(milliseconds: 500));
+                          }
+                          
+                          if (mounted) {
+                            Navigator.of(context).pop();
+                            if (!subscriptionActive) {
+                              _showFloatingSnackBar('Subscription is being processed...', isError: false);
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: colorScheme.primary.withOpacity(0.6),
+                          padding: EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: isLoading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              'Continue',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -459,7 +669,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: _openCheckout,
+                      onPressed: _isPurchasing ? null : _openCheckout,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
@@ -467,14 +677,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: Text(
-                        'Subscribe',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      child: _isPurchasing
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              'Subscribe',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
                 ],
