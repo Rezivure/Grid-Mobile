@@ -2,7 +2,7 @@ buildscript {
     ext.kotlin_version = '1.9.10' // Keep it stable and known-working
     ext {
         compileSdkVersion = 35
-        targetSdkVersion = 34
+        targetSdkVersion = 35
         minSdkVersion = 21
         appCompatVersion = "1.4.2"
         playServicesLocationVersion = "21.0.1"
@@ -12,7 +12,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath "com.android.tools.build:gradle:8.2.1"
+        classpath "com.android.tools.build:gradle:8.3.2"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.10"
     }
 }
