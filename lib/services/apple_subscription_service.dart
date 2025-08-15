@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
@@ -7,6 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppleSubscriptionService {
   static const String satelliteMonthlyId = 'app.mygrid.grid_satellite_monthly';
@@ -32,11 +36,17 @@ class AppleSubscriptionService {
       return;
     }
     
+    if (Platform.isIOS) {
+      final InAppPurchaseStoreKitPlatformAddition iosPlatformAddition =
+          _inAppPurchase.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+      await iosPlatformAddition.setDelegate(_ApplePaymentQueueDelegate());
+    }
+    
     final Stream<List<PurchaseDetails>> purchaseUpdated = _inAppPurchase.purchaseStream;
     _subscription = purchaseUpdated.listen(
       _onPurchaseUpdate,
       onDone: () => _subscription.cancel(),
-      onError: (error) => print('Purchase stream error: $error'),
+      onError: (error) => {},
     );
     
     await loadProducts();
@@ -50,7 +60,7 @@ class AppleSubscriptionService {
     );
     
     if (response.error != null) {
-      print('Error loading products: ${response.error}');
+      print('Error loading products: ${response.error!.message}');
       return;
     }
     
@@ -63,9 +73,13 @@ class AppleSubscriptionService {
   }
   
   Future<void> purchaseSubscription(BuildContext context) async {
+    print('[IAP] Starting purchase flow...');
+    
     if (_products.isEmpty) {
+      print('[IAP] No products loaded, attempting to load...');
       await loadProducts();
       if (_products.isEmpty) {
+        print('[IAP] Still no products after loading attempt');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Subscription not available')),
         );
@@ -74,22 +88,54 @@ class AppleSubscriptionService {
     }
     
     final ProductDetails productDetails = _products.first;
+    print('[IAP] Purchasing product: ${productDetails.id}');
     
     final client = Provider.of<Client>(context, listen: false);
     final userId = client.userID?.split(':')[0].replaceAll('@', '') ?? '';
+    print('[IAP] User ID for purchase: $userId');
+    
+    // Get UUID from backend
+    String? userUuid;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwt = prefs.getString('loginToken');
+      
+      if (jwt == null) {
+        throw Exception('Not authenticated');
+      }
+      
+      final response = await http.get(
+        Uri.parse('${dotenv.env['GAUTH_URL']}/api/user/uuid'),
+        headers: {'Authorization': 'Bearer $jwt'},
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        userUuid = data['uuid'];
+        print('[IAP] Got UUID from backend: $userUuid');
+      } else {
+        throw Exception('Failed to get UUID');
+      }
+    } catch (e) {
+      print('[IAP] Error getting UUID: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to initialize purchase')),
+      );
+      return;
+    }
     
     try {
       final PurchaseParam purchaseParam = PurchaseParam(
         productDetails: productDetails,
-        applicationUserName: userId,
+        applicationUserName: userUuid,  // Pass UUID instead of username
       );
       
-      await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+      print('[IAP] Calling buyNonConsumable...');
+      bool result = await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
+      print('[IAP] buyNonConsumable returned: $result');
     } catch (e) {
-      print('Purchase error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Purchase failed')),
-      );
+      print('[IAP] Purchase error: $e');
+      _showErrorSnackBar(context, 'Unable to complete purchase');
     }
   }
   
@@ -102,19 +148,25 @@ class AppleSubscriptionService {
   }
   
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
+    print('[IAP] Purchase update received: ${purchaseDetailsList.length} items');
     for (PurchaseDetails purchaseDetails in purchaseDetailsList) {
+      print('[IAP] Purchase status: ${purchaseDetails.status}, productID: ${purchaseDetails.productID}');
+      print('[IAP] Purchase ID: ${purchaseDetails.purchaseID}');
+      print('[IAP] Transaction date: ${purchaseDetails.transactionDate}');
+      
       if (purchaseDetails.status == PurchaseStatus.pending) {
-        print('Purchase pending...');
+        print('[IAP] Purchase pending...');
       } else if (purchaseDetails.status == PurchaseStatus.error) {
-        print('Purchase error: ${purchaseDetails.error}');
+        print('[IAP] Purchase error: ${purchaseDetails.error?.code} - ${purchaseDetails.error?.message}');
         _handleError(purchaseDetails.error!);
       } else if (purchaseDetails.status == PurchaseStatus.purchased ||
                  purchaseDetails.status == PurchaseStatus.restored) {
-        print('Purchase successful: ${purchaseDetails.productID}');
+        print('[IAP] Purchase successful/restored: ${purchaseDetails.productID}');
         _verifyAndDeliverProduct(purchaseDetails);
       }
       
       if (purchaseDetails.pendingCompletePurchase) {
+        print('[IAP] Completing purchase...');
         _inAppPurchase.completePurchase(purchaseDetails);
       }
     }
@@ -123,11 +175,27 @@ class AppleSubscriptionService {
   }
   
   void _verifyAndDeliverProduct(PurchaseDetails purchaseDetails) {
-    print('Purchase verified: ${purchaseDetails.productID}');
+    // Store the successful purchase for the UI to handle
+    _lastSuccessfulPurchase = purchaseDetails;
   }
   
+  PurchaseDetails? _lastSuccessfulPurchase;
+  PurchaseDetails? get lastSuccessfulPurchase => _lastSuccessfulPurchase;
+  
   void _handleError(IAPError error) {
-    print('Purchase error: ${error.code} - ${error.message}');
+    _lastError = error;
+  }
+  
+  IAPError? _lastError;
+  IAPError? get lastError => _lastError;
+  
+  bool _wasCanceled = false;
+  bool get wasCanceled => _wasCanceled;
+  
+  void clearPurchaseState() {
+    _lastSuccessfulPurchase = null;
+    _lastError = null;
+    _wasCanceled = false;
   }
   
   Future<bool> hasActiveSubscription() async {
@@ -143,7 +211,46 @@ class AppleSubscriptionService {
     }
   }
   
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.all(20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+  
   void dispose() {
+    if (Platform.isIOS) {
+      final InAppPurchaseStoreKitPlatformAddition iosPlatformAddition =
+          _inAppPurchase.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+      iosPlatformAddition.setDelegate(null);
+    }
     _subscription.cancel();
+  }
+}
+
+class _ApplePaymentQueueDelegate implements SKPaymentQueueDelegateWrapper {
+  @override
+  bool shouldContinueTransaction(
+      SKPaymentTransactionWrapper transaction, SKStorefrontWrapper storefront) {
+    return true;
+  }
+
+  @override
+  bool shouldShowPriceConsent() {
+    return false;
   }
 }
