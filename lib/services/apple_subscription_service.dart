@@ -21,6 +21,7 @@ class AppleSubscriptionService {
   bool _isAvailable = false;
   List<ProductDetails> _products = [];
   List<PurchaseDetails> _purchases = [];
+  bool _isActivePurchaseAttempt = false;
   
   bool get isAvailable => _isAvailable;
   List<ProductDetails> get products => _products;
@@ -74,6 +75,7 @@ class AppleSubscriptionService {
   
   Future<void> purchaseSubscription(BuildContext context) async {
     print('[IAP] Starting purchase flow...');
+    _isActivePurchaseAttempt = true;
     
     if (_products.isEmpty) {
       print('[IAP] No products loaded, attempting to load...');
@@ -153,21 +155,35 @@ class AppleSubscriptionService {
       print('[IAP] Purchase status: ${purchaseDetails.status}, productID: ${purchaseDetails.productID}');
       print('[IAP] Purchase ID: ${purchaseDetails.purchaseID}');
       print('[IAP] Transaction date: ${purchaseDetails.transactionDate}');
+      print('[IAP] Is active purchase attempt: $_isActivePurchaseAttempt');
       
       if (purchaseDetails.status == PurchaseStatus.pending) {
         print('[IAP] Purchase pending...');
       } else if (purchaseDetails.status == PurchaseStatus.error) {
         print('[IAP] Purchase error: ${purchaseDetails.error?.code} - ${purchaseDetails.error?.message}');
-        _handleError(purchaseDetails.error!);
+        if (_isActivePurchaseAttempt) {
+          _handleError(purchaseDetails.error!);
+        }
       } else if (purchaseDetails.status == PurchaseStatus.purchased ||
                  purchaseDetails.status == PurchaseStatus.restored) {
         print('[IAP] Purchase successful/restored: ${purchaseDetails.productID}');
-        _verifyAndDeliverProduct(purchaseDetails);
+        // Only set lastSuccessfulPurchase if user actively initiated purchase
+        if (_isActivePurchaseAttempt && purchaseDetails.status == PurchaseStatus.purchased) {
+          _verifyAndDeliverProduct(purchaseDetails);
+        }
       }
       
       if (purchaseDetails.pendingCompletePurchase) {
         print('[IAP] Completing purchase...');
         _inAppPurchase.completePurchase(purchaseDetails);
+      }
+      
+      // Reset flag after processing a user-initiated purchase
+      if (_isActivePurchaseAttempt && 
+          (purchaseDetails.status == PurchaseStatus.purchased || 
+           purchaseDetails.status == PurchaseStatus.error ||
+           purchaseDetails.status == PurchaseStatus.canceled)) {
+        _isActivePurchaseAttempt = false;
       }
     }
     
@@ -196,6 +212,7 @@ class AppleSubscriptionService {
     _lastSuccessfulPurchase = null;
     _lastError = null;
     _wasCanceled = false;
+    _isActivePurchaseAttempt = false;
   }
   
   Future<bool> hasActiveSubscription() async {
