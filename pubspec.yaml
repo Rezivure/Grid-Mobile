@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 1.0.7+121
+version: 1.0.8+122
 
 environment:
   sdk: '>=3.3.3 <4.0.0'
@@ -50,6 +50,7 @@ dependencies:
   package_info_plus: ^8.1.2
   image_picker: ^1.1.2
   image_cropper: ^8.0.2
+  in_app_purchase: ^3.2.0
 
 
 flutter_launcher_icons:
