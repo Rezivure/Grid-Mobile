@@ -646,7 +646,52 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
                 
                 if (!hasSubscription || !isActive) ...[
-                  SizedBox(height: 20),
+                  SizedBox(height: 16),
+                  // Subscription Details
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colorScheme.outline.withOpacity(0.1),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Monthly Subscription',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            Text(
+                              '\$4.99/month',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Auto-renews monthly. Cancel anytime.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 16),
                   Container(
                     width: double.infinity,
                     height: 48,
@@ -695,6 +740,42 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                               ),
                             ),
                     ),
+                  ),
+                  SizedBox(height: 12),
+                  // Terms and Privacy Links
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: _openTermsOfUse,
+                        child: Text(
+                          'Terms of Use',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        ' • ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurface.withOpacity(0.4),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _openPrivacyPolicy,
+                        child: Text(
+                          'Privacy Policy',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 
@@ -904,6 +985,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       return '${months[date.month - 1]} ${date.day}, ${date.year}';
     } catch (e) {
       return dateString;
+    }
+  }
+
+  Future<void> _openTermsOfUse() async {
+    const url = 'https://mygrid.app/terms';
+    if (await canLaunch(url)) {
+      await launch(url);
+    }
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    const url = 'https://mygrid.app/privacy';
+    if (await canLaunch(url)) {
+      await launch(url);
     }
   }
 }
