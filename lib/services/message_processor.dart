@@ -15,6 +15,7 @@ import 'package:grid_frontend/widgets/group_avatar.dart';
 import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 class MessageProcessor {
   final Client client;
@@ -24,6 +25,7 @@ class MessageProcessor {
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
+  final MapIconSyncService? mapIconSyncService;
   
 
   MessageProcessor(
@@ -31,7 +33,8 @@ class MessageProcessor {
       this.locationHistoryRepository,
       this.messageParser,
       this.client,
-      {this.avatarBloc}
+      {this.avatarBloc,
+      this.mapIconSyncService}
       ) : encryption = Encryption(client: client);
 
   /// Process a single event from a room. Decrypt if necessary,
@@ -62,11 +65,14 @@ class MessageProcessor {
       };
 
       // Check message type and handle accordingly
-      final msgType = decryptedEvent.content['msgtype'];
+      final msgType = decryptedEvent.content['msgtype'] as String?;
       if (msgType == 'm.avatar.announcement') {
         await _handleAvatarAnnouncement(messageData);
       } else if (msgType == 'm.group.avatar.announcement') {
         await _handleGroupAvatarAnnouncement(messageData, roomId);
+      } else if (_isMapIconEvent(msgType)) {
+        // Handle map icon events
+        await _handleMapIconEvent(roomId, messageData);
       } else {
         // Attempt to parse location message
         await _handleLocationMessageIfAny(messageData);
@@ -355,6 +361,47 @@ class MessageProcessor {
       
     } catch (e) {
       print('[Avatar Processing] Error pre-downloading avatar: $e');
+    }
+  }
+  
+  /// Checks if a message type is a map icon event
+  bool _isMapIconEvent(String? msgType) {
+    if (msgType == null) return false;
+    return msgType == MapIconSyncService.eventTypeCreate ||
+           msgType == MapIconSyncService.eventTypeUpdate ||
+           msgType == MapIconSyncService.eventTypeDelete ||
+           msgType == MapIconSyncService.eventTypeState;
+  }
+  
+  /// Handles map icon events
+  Future<void> _handleMapIconEvent(String roomId, Map<String, dynamic> messageData) async {
+    try {
+      // Skip if we don't have the sync service
+      if (mapIconSyncService == null) {
+        print('[MapIcon] MapIconSyncService not available, skipping event');
+        return;
+      }
+      
+      final content = messageData['content'] as Map<String, dynamic>?;
+      if (content == null) {
+        print('[MapIcon] Invalid map icon event - missing content');
+        return;
+      }
+      
+      final senderId = messageData['sender'] as String?;
+      
+      // Don't process our own events (we already have them locally)
+      if (senderId == client.userID) {
+        print('[MapIcon] Skipping own map icon event');
+        return;
+      }
+      
+      // Process the icon event
+      await mapIconSyncService!.processIconEvent(roomId, content);
+      
+      print('[MapIcon] Processed map icon event of type: ${content['msgtype']}');
+    } catch (e) {
+      print('[MapIcon] Error handling map icon event: $e');
     }
   }
 }

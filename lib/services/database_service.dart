@@ -9,6 +9,7 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -28,7 +29,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,  // Increment version for new LocationHistory table
+      version: 3,  // Increment version for new MapIcons table
       onCreate: (db, version) async {
         await _initializeEncryptionKey();
         await UserRepository.createTables(db);
@@ -37,10 +38,14 @@ class DatabaseService {
         await LocationHistoryRepository.createTable(db);
         await SharingPreferencesRepository.createTable(db);
         await UserKeysRepository.createTable(db);
+        await MapIconRepository.createTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await LocationHistoryRepository.createTable(db);
+        }
+        if (oldVersion < 3) {
+          await MapIconRepository.createTable(db);
         }
       },
     );
@@ -71,7 +76,7 @@ class DatabaseService {
   /// Clear all data from the database
   Future<void> clearAllData() async {
     final db = await database;
-    final tables = ['Users', 'UserLocations', 'LocationHistory', 'Rooms', 'SharingPreferences', 'UserKeys'];
+    final tables = ['Users', 'UserLocations', 'LocationHistory', 'Rooms', 'SharingPreferences', 'UserKeys', 'MapIcons'];
     for (final table in tables) {
       await db.delete(table);
     }
