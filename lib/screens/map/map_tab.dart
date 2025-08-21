@@ -23,6 +23,9 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_event.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_state.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
@@ -37,6 +40,16 @@ import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/widgets/app_initializer.dart';
+import 'package:grid_frontend/widgets/icon_selection_wheel.dart';
+import 'package:grid_frontend/widgets/icon_action_wheel.dart';
+import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
+import 'package:grid_frontend/providers/selected_user_provider.dart';
+import 'package:grid_frontend/models/map_icon.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/widgets/map_icon_info_bubble.dart';
+import 'package:uuid/uuid.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -64,6 +77,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   late final SyncManager _syncManager;
   late final UserRepository userRepository;
   late final SharingPreferencesRepository sharingPreferencesRepository;
+  late final MapIconRepository _mapIconRepository;
+  late final MapIconSyncService _mapIconSyncService;
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
@@ -99,6 +114,24 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _showMapSelector = false;
   String _currentMapStyle = 'base'; // 'base' or 'satellite'
   
+  // Icon selection wheel
+  bool _showIconWheel = false;
+  Offset? _iconWheelPosition;
+  LatLng? _longPressLocation;
+  String? _selectedGroupId;
+  
+  // Selected map icon for info bubble
+  MapIcon? _selectedMapIcon;
+  LatLng? _selectedIconPosition;
+  
+  // Icon action wheel
+  bool _showIconActionWheel = false;
+  Offset? _iconActionWheelPosition;
+  
+  // Move mode for dragging icons
+  bool _isMovingIcon = false;
+  MapIcon? _movingIcon;
+  
   // Avatar check timer - removed to prevent refresh loops
   final SubscriptionService _subscriptionService = SubscriptionService();
   String? _satelliteMapToken;
@@ -130,6 +163,25 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager = context.read<SyncManager>();
     userRepository = context.read<UserRepository>();
     sharingPreferencesRepository = context.read<SharingPreferencesRepository>();
+    
+    // Initialize map icon repository and sync service
+    final databaseService = context.read<DatabaseService>();
+    final client = context.read<Client>();
+    _mapIconRepository = MapIconRepository(databaseService);
+    _mapIconSyncService = MapIconSyncService(
+      client: client,
+      mapIconRepository: _mapIconRepository,
+      mapIconsBloc: context.read<MapIconsBloc>(),
+    );
+    
+    // Load existing icons for current selection
+    _loadMapIcons();
+    
+    // Listen for subscreen changes to reload icons
+    context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
+
+    // Listen for authentication failures
+    _syncManager.addListener(_checkAuthenticationStatus);
 
     _syncManager.initialize();
     
@@ -218,12 +270,39 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
   }
 
+  void _checkAuthenticationStatus() {
+    if (_syncManager.authenticationFailed) {
+      // Authentication failed, navigate to login screen
+      print('[MapTab] Authentication failure detected, navigating to login');
+      
+      // Clear the flag so we don't repeatedly navigate
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
+        }
+      });
+    }
+  }
+  
+  void _onSubscreenChanged() {
+    // Reload icons when the selected subscreen changes
+    _loadMapIcons();
+    
+    // Clear selected icon if subscreen changes
+    setState(() {
+      _selectedMapIcon = null;
+      _selectedIconPosition = null;
+    });
+  }
+
   @override
   void dispose() {
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _locationManager.removeListener(_onLocationUpdate);
+    _syncManager.removeListener(_checkAuthenticationStatus);
+    context.read<SelectedSubscreenProvider>().removeListener(_onSubscreenChanged);
     _mapController.dispose();
     _syncManager.stopSync();
     _locationManager.stopTracking();
@@ -315,6 +394,105 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
   }
 
+  void _handleIconSelection(IconType iconType) async {
+    if (_longPressLocation == null || _selectedGroupId == null) return;
+    
+    // Immediately close the wheel for instant feedback
+    setState(() {
+      _showIconWheel = false;
+      _iconWheelPosition = null;
+    });
+    
+    // Get the current user ID
+    final client = context.read<Client>();
+    final creatorId = client.userID ?? 'unknown';
+    
+    // Create a new map icon
+    final newIcon = MapIcon(
+      id: const Uuid().v4(),
+      roomId: _selectedGroupId!,
+      creatorId: creatorId,
+      latitude: _longPressLocation!.latitude,
+      longitude: _longPressLocation!.longitude,
+      iconType: 'icon',
+      iconData: iconType.name,
+      name: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)}',
+      description: null,
+      createdAt: DateTime.now(),
+      expiresAt: null,
+      metadata: null,
+    );
+    
+    // Immediately add to BLoC for instant visual feedback
+    context.read<MapIconsBloc>().add(MapIconCreated(newIcon));
+    
+    // Clear location references
+    _longPressLocation = null;
+    _selectedGroupId = null;
+    
+    // Show confirmation immediately with shorter duration
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(milliseconds: 1500),
+      ),
+    );
+    
+    // Save to database and sync in background
+    try {
+      await _mapIconRepository.insertMapIcon(newIcon);
+      await _mapIconSyncService.sendIconCreate(newIcon.roomId, newIcon);
+      print('[MapIconSync] Icon created and synced: ${newIcon.id}');
+    } catch (e) {
+      print('Error saving/syncing icon: $e');
+      // If save fails, remove from BLoC
+      context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to save icon'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+  
+  Future<void> _loadMapIcons() async {
+    try {
+      // Get the currently selected subscreen
+      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+      final mapIconsBloc = context.read<MapIconsBloc>();
+      
+      // Only load icons if a group is selected
+      if (selectedSubscreen.startsWith('group:')) {
+        final groupId = selectedSubscreen.substring(6);
+        mapIconsBloc.add(LoadMapIcons(groupId));
+        print('Loading map icons for group: $groupId');
+      }
+      // You can add support for individual DM rooms here if needed
+      // else if (selectedSubscreen.startsWith('user:')) {
+      //   final userId = selectedSubscreen.substring(5);
+      //   // Get DM room ID and load icons
+      // }
+      else {
+        // Clear icons if no group selected
+        mapIconsBloc.add(ClearAllMapIcons());
+      }
+    } catch (e) {
+      print('Error loading map icons: $e');
+    }
+  }
+  
   void _sendPing() {
     _locationManager.grabLocationAndPing();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -684,19 +862,149 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               children: [
                 SizedBox(
                     height: MediaQuery.of(context).size.height * 3/4,
-                child:
-                FlutterMap(
+                child: GestureDetector(
+                  onLongPressStart: (details) {
+                    print('[DEBUG] GestureDetector long press at: ${details.globalPosition}');
+                    
+                    // Convert screen position to lat/lng
+                    final renderBox = context.findRenderObject() as RenderBox?;
+                    if (renderBox != null && _mapController.camera.center != null) {
+                      final localPosition = renderBox.globalToLocal(details.globalPosition);
+                      
+                      // Check if we're in groups subscreen and have a selected group
+                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+                      
+                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
+                      
+                      // Check if the subscreen starts with "group:" which means a group is selected
+                      if (selectedSubscreen.startsWith('group:')) {
+                        // Extract the group ID (remove "group:" prefix)
+                        final groupId = selectedSubscreen.substring(6);
+                        print('[DEBUG] Showing icon wheel for group: $groupId');
+                        
+                        // Show icon selection wheel
+                        setState(() {
+                          _showIconWheel = true;
+                          _iconWheelPosition = details.globalPosition;
+                          // For now, use map center as location (we'll improve this later)
+                          _longPressLocation = _mapController.camera.center;
+                          _selectedGroupId = groupId;
+                        });
+                      } else {
+                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
+                      }
+                    }
+                  },
+                  child: FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    onTap: (tapPosition, latLng) {
-                      // Clear selection when tapping on map
-                      context.read<MapBloc>().add(MapClearSelection());
-                      // Also clear bubble if shown
-                      setState(() {
-                        _bubblePosition = null;
-                        _selectedUserId = null;
-                        _selectedUserName = null;
-                      });
+                    onTap: (tapPosition, latLng) async {
+                      // Check if we're in move mode
+                      if (_isMovingIcon && _movingIcon != null) {
+                        // Only allow moving if user created it
+                        if (_movingIcon!.creatorId != context.read<Client>().userID) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('You can only move icons you created'),
+                              backgroundColor: Theme.of(context).colorScheme.error,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                          setState(() {
+                            _isMovingIcon = false;
+                            _movingIcon = null;
+                            _selectedMapIcon = null;
+                            _selectedIconPosition = null;
+                          });
+                          return;
+                        }
+                        
+                        // Update the icon position
+                        final updatedIcon = MapIcon(
+                          id: _movingIcon!.id,
+                          roomId: _movingIcon!.roomId,
+                          creatorId: _movingIcon!.creatorId,
+                          latitude: latLng.latitude,
+                          longitude: latLng.longitude,
+                          iconType: _movingIcon!.iconType,
+                          iconData: _movingIcon!.iconData,
+                          name: _movingIcon!.name,
+                          description: _movingIcon!.description,
+                          createdAt: _movingIcon!.createdAt,
+                          expiresAt: _movingIcon!.expiresAt,
+                          metadata: _movingIcon!.metadata,
+                        );
+                        
+                        await _mapIconRepository.updateMapIcon(updatedIcon);
+                        
+                        // Send update to other users
+                        await _mapIconSyncService.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
+                        
+                        // Notify the BLoC about the update
+                        context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
+                        
+                        setState(() {
+                          // Exit move mode
+                          _isMovingIcon = false;
+                          _movingIcon = null;
+                          _selectedMapIcon = null;
+                          _selectedIconPosition = null;
+                        });
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Icon moved'),
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      } else {
+                        // Clear selection when tapping on map
+                        context.read<MapBloc>().add(MapClearSelection());
+                        // Also clear bubbles if shown
+                        setState(() {
+                          _bubblePosition = null;
+                          _selectedUserId = null;
+                          _selectedUserName = null;
+                          _selectedMapIcon = null;
+                          _selectedIconPosition = null;
+                          _showIconActionWheel = false;
+                          _iconActionWheelPosition = null;
+                        });
+                      }
+                    },
+                    onLongPress: (tapPosition, latLng) {
+                      print('[DEBUG] Long press detected at: $latLng');
+                      
+                      // Check if we're in groups subscreen and have a selected group
+                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+                      
+                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
+                      
+                      // Check if the subscreen starts with "group:" which means a group is selected
+                      if (selectedSubscreen.startsWith('group:')) {
+                        // Extract the group ID (remove "group:" prefix)
+                        final groupId = selectedSubscreen.substring(6);
+                        print('[DEBUG] Showing icon wheel for group: $groupId');
+                        
+                        // Show icon selection wheel
+                        setState(() {
+                          _showIconWheel = true;
+                          _iconWheelPosition = Offset(tapPosition.global.dx, tapPosition.global.dy);
+                          _longPressLocation = latLng;
+                          _selectedGroupId = groupId;
+                        });
+                      } else {
+                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
+                      }
                     },
                     onPositionChanged: (position, hasGesture) {
                       if (hasGesture && _followUser) {
@@ -716,7 +1024,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     initialRotation: 0.0,
                     minZoom: 1,
                     maxZoom: 18,
-                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all,
+                      enableMultiFingerGestureRace: true,
+                    ),
                     onMapReady: () {
                       print('[SMART ZOOM] Map is ready!');
                       setState(() => _isMapReady = true);
@@ -840,9 +1151,70 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     );
                   },
                 ),
+                // Map icons layer
+                BlocBuilder<MapIconsBloc, MapIconsState>(
+                  builder: (context, mapIconsState) {
+                    return MarkerLayer(
+                      markers: mapIconsState.filteredIcons.map((icon) =>
+                        Marker(
+                          width: 50.0,
+                          height: 50.0,
+                          point: icon.position,
+                          child: GestureDetector(
+                            onTap: () {
+                              // Show icon action wheel
+                              setState(() {
+                                _selectedMapIcon = icon;
+                                _selectedIconPosition = icon.position;
+                                _showIconActionWheel = true;
+                                // Calculate screen position for the wheel
+                                final renderBox = context.findRenderObject() as RenderBox;
+                                final screenPoint = _mapController.camera.latLngToScreenPoint(icon.position);
+                                _iconActionWheelPosition = Offset(screenPoint.x, screenPoint.y);
+                                // Clear user selection when selecting an icon
+                                _bubblePosition = null;
+                                _selectedUserId = null;
+                                _selectedUserName = null;
+                              });
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  shape: BoxShape.circle,
+                                ),
+                                padding: const EdgeInsets.all(8),
+                                child: Icon(
+                                  _getIconDataForType(icon.iconData),
+                                  size: 24,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      ).toList(),
+                    );
+                  },
+                ),
               ],
             ),
-            ),
+            )),  // Close GestureDetector and SizedBox
 
             if (_bubblePosition != null && _selectedUserId != null)
               UserInfoBubble(
@@ -856,6 +1228,332 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     _selectedUserName = null;
                   });
                 },
+              ),
+            
+            // Icon action wheel
+            if (_showIconActionWheel && _iconActionWheelPosition != null && _selectedMapIcon != null)
+              IconActionWheel(
+                position: _iconActionWheelPosition!,
+                onDetails: () {
+                  // Close the action wheel and show info bubble
+                  setState(() {
+                    _showIconActionWheel = false;
+                    _iconActionWheelPosition = null;
+                  });
+                  // Show the info bubble after a brief delay
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) {
+                      setState(() {
+                        // The selected icon is already set, just trigger rebuild
+                      });
+                    }
+                  });
+                },
+                onDelete: () async {
+                  // Only allow delete if user created it
+                  if (_selectedMapIcon!.creatorId != context.read<Client>().userID) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('You can only delete icons you created'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                    setState(() {
+                      _showIconActionWheel = false;
+                      _iconActionWheelPosition = null;
+                      _selectedMapIcon = null;
+                      _selectedIconPosition = null;
+                    });
+                    return;
+                  }
+                  
+                  // Show delete confirmation
+                  final shouldDelete = await showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      final colorScheme = Theme.of(context).colorScheme;
+                      
+                      return Dialog(
+                        backgroundColor: Colors.transparent,
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 300),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colorScheme.shadow.withOpacity(0.1),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.error.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.delete_outline,
+                                    color: colorScheme.error,
+                                    size: 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Delete Icon?',
+                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'This icon will be permanently removed from the map.',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface.withOpacity(0.8),
+                                    height: 1.5,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 24),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () => Navigator.of(context).pop(false),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: colorScheme.onSurface,
+                                          side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () => Navigator.of(context).pop(true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: colorScheme.error,
+                                          foregroundColor: colorScheme.onError,
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                  
+                  if (shouldDelete == true) {
+                    final iconIdToDelete = _selectedMapIcon!.id;
+                    final iconRoomId = _selectedMapIcon!.roomId;
+                    final iconCreatorId = _selectedMapIcon!.creatorId;
+                    
+                    // Delete locally
+                    await _mapIconRepository.deleteMapIcon(iconIdToDelete);
+                    
+                    // Send delete event to other users
+                    await _mapIconSyncService.sendIconDelete(iconRoomId, iconIdToDelete, iconCreatorId);
+                    
+                    // Notify the BLoC about the deletion
+                    context.read<MapIconsBloc>().add(MapIconDeleted(iconId: iconIdToDelete, roomId: iconRoomId));
+                    
+                    setState(() {
+                      _showIconActionWheel = false;
+                      _iconActionWheelPosition = null;
+                      _selectedMapIcon = null;
+                      _selectedIconPosition = null;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Icon deleted'),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  } else {
+                    setState(() {
+                      _showIconActionWheel = false;
+                      _iconActionWheelPosition = null;
+                      _selectedMapIcon = null;
+                      _selectedIconPosition = null;
+                    });
+                  }
+                },
+                onZoom: () {
+                  // Zoom to the icon
+                  if (_selectedMapIcon != null) {
+                    _mapController.moveAndRotate(_selectedMapIcon!.position, 16, 0);
+                  }
+                  setState(() {
+                    _showIconActionWheel = false;
+                    _iconActionWheelPosition = null;
+                    _selectedMapIcon = null;
+                    _selectedIconPosition = null;
+                  });
+                },
+                onMove: () {
+                  // Enter move mode
+                  setState(() {
+                    _isMovingIcon = true;
+                    _movingIcon = _selectedMapIcon;
+                    _showIconActionWheel = false;
+                    _iconActionWheelPosition = null;
+                    // Clear selected icon to prevent info bubble from showing
+                    _selectedMapIcon = null;
+                    _selectedIconPosition = null;
+                  });
+                },
+                onCancel: () {
+                  setState(() {
+                    _showIconActionWheel = false;
+                    _iconActionWheelPosition = null;
+                    _selectedMapIcon = null;
+                    _selectedIconPosition = null;
+                  });
+                },
+              ),
+            
+            // Map icon info bubble (shown when details is pressed)
+            if (_selectedMapIcon != null && _selectedIconPosition != null && !_showIconActionWheel)
+              MapIconInfoBubble(
+                icon: _selectedMapIcon!,
+                position: _selectedIconPosition!,
+                creatorName: _selectedMapIcon!.creatorId == context.read<Client>().userID 
+                  ? 'You' 
+                  : null, // We can fetch the actual name later
+                onClose: () {
+                  setState(() {
+                    _selectedMapIcon = null;
+                    _selectedIconPosition = null;
+                  });
+                },
+                onUpdate: _selectedMapIcon!.creatorId == context.read<Client>().userID
+                  ? (name, description) async {
+                      // Update the icon if it's created by the current user
+                      final updatedIcon = MapIcon(
+                        id: _selectedMapIcon!.id,
+                        roomId: _selectedMapIcon!.roomId,
+                        creatorId: _selectedMapIcon!.creatorId,
+                        latitude: _selectedMapIcon!.latitude,
+                        longitude: _selectedMapIcon!.longitude,
+                        iconType: _selectedMapIcon!.iconType,
+                        iconData: _selectedMapIcon!.iconData,
+                        name: name,
+                        description: description,
+                        createdAt: _selectedMapIcon!.createdAt,
+                        expiresAt: _selectedMapIcon!.expiresAt,
+                        metadata: _selectedMapIcon!.metadata,
+                      );
+                      
+                      await _mapIconRepository.updateMapIcon(updatedIcon);
+                      
+                      // Send update to other users
+                      await _mapIconSyncService.sendIconUpdate(updatedIcon.roomId, updatedIcon);
+                      
+                      // Notify the BLoC about the update
+                      context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
+                      
+                      setState(() {
+                        // Update the selected icon
+                        _selectedMapIcon = updatedIcon;
+                      });
+                    }
+                  : null,
+                onDelete: null, // Delete is handled by the action wheel now
+              ),
+            
+            // Move mode banner
+            if (_isMovingIcon)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 10,
+                left: 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context).colorScheme.shadow.withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.touch_app,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tap anywhere to move the icon',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isMovingIcon = false;
+                            _movingIcon = null;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.close,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
             Positioned(
@@ -984,12 +1682,53 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               alignment: Alignment.bottomCenter,
               child: MapScrollWindow(),
             ),
+            
+            // Icon selection wheel overlay
+            if (_showIconWheel && _iconWheelPosition != null)
+              IconSelectionWheel(
+                position: _iconWheelPosition!,
+                onIconSelected: (iconType) {
+                  // Handle icon selection
+                  _handleIconSelection(iconType);
+                },
+                onCancel: () {
+                  setState(() {
+                    _showIconWheel = false;
+                    _iconWheelPosition = null;
+                    _longPressLocation = null;
+                    _selectedGroupId = null;
+                  });
+                },
+              ),
           ],
         ),
       ),
     );
   }
 
+  IconData _getIconDataForType(String iconType) {
+    switch (iconType) {
+      case 'pin':
+        return Icons.location_on;
+      case 'warning':
+        return Icons.warning;
+      case 'food':
+        return Icons.restaurant;
+      case 'car':
+        return Icons.directions_car;
+      case 'home':
+        return Icons.home;
+      case 'star':
+        return Icons.star;
+      case 'heart':
+        return Icons.favorite;
+      case 'flag':
+        return Icons.flag;
+      default:
+        return Icons.place;
+    }
+  }
+  
   Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
     return GestureDetector(
       onTap: () {

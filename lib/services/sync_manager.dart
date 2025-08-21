@@ -12,6 +12,7 @@ import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
@@ -43,6 +44,7 @@ class SyncManager with ChangeNotifier {
   final ContactsBloc contactsBloc;
   final GroupsBloc groupsBloc;
   final List<PendingMessage> _pendingMessages = [];
+  final MapIconSyncService? mapIconSyncService;
   bool _isActive = true;
 
   bool _isSyncing = false;
@@ -50,6 +52,7 @@ class SyncManager with ChangeNotifier {
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
   String? _sinceToken;
+  bool _authenticationFailed = false;
 
 
   SyncManager(
@@ -64,6 +67,7 @@ class SyncManager with ChangeNotifier {
       this.groupsBloc,
       this.userLocationProvider,
       this.sharingPreferencesRepository,
+      {this.mapIconSyncService}
       );
 
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
@@ -111,6 +115,12 @@ class SyncManager with ChangeNotifier {
       _isInitialized = true; // Only set after successful completion
     } catch (e) {
       print("Error during initialization: $e");
+      // Check if this is an authentication error
+      if (_isAuthenticationError(e)) {
+        print("Authentication error detected, forcing logout");
+        await _handleAuthenticationFailure();
+        return;
+      }
       // Maybe add some retry logic here
     }
   }
@@ -149,6 +159,13 @@ class SyncManager with ChangeNotifier {
       syncUpdate.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
         _processRoomLeaveOrKick(roomId, leftRoomUpdate);
       });
+    }, onError: (error) {
+      print("Sync stream error: $error");
+      // Check if this is an authentication error
+      if (_isAuthenticationError(error)) {
+        print("Authentication error in sync stream, forcing logout");
+        _handleAuthenticationFailure();
+      }
     });
   }
 
@@ -163,6 +180,10 @@ class SyncManager with ChangeNotifier {
         mapBloc.add(MapLoadUserLocations()); // Refresh locations
       }).catchError((e) {
         print('Error during resume sync: $e');
+        if (_isAuthenticationError(e)) {
+          print("Authentication error in resume sync, forcing logout");
+          _handleAuthenticationFailure();
+        }
       });
     }
   }
@@ -620,6 +641,15 @@ class SyncManager with ChangeNotifier {
                     await avatarService.announceGroupAvatarToRoom(roomId);
                   }
                 }
+                
+                // Send map icon state to new group member
+                if (mapIconSyncService != null) {
+                  // Delay slightly to ensure the new member is fully joined
+                  Future.delayed(const Duration(seconds: 2), () async {
+                    print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
+                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
+                  });
+                }
               }
             } catch (e) {
               print('Error sending avatar announcements to new member: $e');
@@ -830,6 +860,9 @@ class SyncManager with ChangeNotifier {
             isDirect,
             membershipStatus: !isDirect ? membershipStatus : null
         );
+        
+        // Also insert into RoomParticipants table for proper tracking
+        await roomRepository.insertRoomParticipant(room.id, participantId);
 
         if (isDirect) {
           final existingPrefs =
@@ -1182,6 +1215,9 @@ class SyncManager with ChangeNotifier {
   
   Future<void> _cleanupOrphanedUsers() async {
     try {
+      // Add a small delay to ensure room participants are fully synced
+      await Future.delayed(const Duration(seconds: 2));
+      
       // Get all users from database
       final allUsers = await userRepository.getAllUsers();
       
@@ -1243,4 +1279,44 @@ class SyncManager with ChangeNotifier {
       print("[SyncManager] Error during manual location cleanup: $e");
     }
   }
+
+  bool _isAuthenticationError(dynamic error) {
+    if (error is MatrixException) {
+      // Only M_UNKNOWN_TOKEN definitively means the token is invalid
+      if (error.errcode == 'M_UNKNOWN_TOKEN') {
+        print("M_UNKNOWN_TOKEN detected - invalid access token");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _handleAuthenticationFailure() async {
+    try {
+      // Clear all local state
+      await clearAllState();
+      
+      // Clear stored credentials
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      // Force logout from matrix client
+      if (client.isLogged()) {
+        try {
+          await client.logout();
+        } catch (e) {
+          // Ignore logout errors since token is already invalid
+          print("Logout error (ignored): $e");
+        }
+      }
+      
+      // Set authentication failed flag
+      _authenticationFailed = true;
+      notifyListeners();
+    } catch (e) {
+      print("Error handling authentication failure: $e");
+    }
+  }
+
+  bool get authenticationFailed => _authenticationFailed;
 }

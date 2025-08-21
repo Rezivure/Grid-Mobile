@@ -13,6 +13,8 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
@@ -182,6 +184,16 @@ class RoomService {
         } catch (e) {
           print('Error leaving Matrix room (continuing with local cleanup): $e');
         }
+      }
+
+      // Delete all map icons associated with this room
+      try {
+        final databaseService = DatabaseService();
+        final mapIconRepository = MapIconRepository(databaseService);
+        await mapIconRepository.deleteIconsForRoom(roomId);
+        print('Deleted map icons for room: $roomId');
+      } catch (e) {
+        print('Error deleting map icons for room $roomId: $e');
       }
 
       await roomRepository.leaveRoom(roomId, userId);
@@ -410,6 +422,16 @@ class RoomService {
   Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
     try {
       print("Starting local cleanup for room: $roomId");
+
+      // Delete all map icons associated with this room
+      try {
+        final databaseService = DatabaseService();
+        final mapIconRepository = MapIconRepository(databaseService);
+        await mapIconRepository.deleteIconsForRoom(roomId);
+        print('Deleted map icons for room: $roomId');
+      } catch (e) {
+        print('Error deleting map icons for room $roomId: $e');
+      }
 
       // Get all user IDs in the room before deletion
       final userIds = matrixUsers.map((p) => p.id).toList();

@@ -14,6 +14,8 @@ import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/services/message_processor.dart';
@@ -38,6 +40,7 @@ import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
@@ -174,14 +177,28 @@ void main() async {
               userLocationProvider: context.read<UserLocationProvider>(),
             ),
           ),
+          BlocProvider<MapIconsBloc>(
+            create: (context) => MapIconsBloc(
+              mapIconRepository: MapIconRepository(databaseService),
+            ),
+          ),
           ChangeNotifierProxyProvider4<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
             create: (context) {
+              // Create MapIconSyncService
+              final mapIconRepository = MapIconRepository(databaseService);
+              final mapIconSyncService = MapIconSyncService(
+                client: client,
+                mapIconRepository: mapIconRepository,
+                mapIconsBloc: context.read<MapIconsBloc>(),
+              );
+              
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: context.read<AvatarBloc>(),
+                mapIconSyncService: mapIconSyncService,
               );
               return SyncManager(
                 client,
@@ -195,16 +212,27 @@ void main() async {
                 context.read<GroupsBloc>(),
                 context.read<UserLocationProvider>(),
                 context.read<SharingPreferencesRepository>(),
+                mapIconSyncService: mapIconSyncService,
               )..startSync();
             },
             update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, previous) {
               if (previous != null) return previous;
+              
+              // Create MapIconSyncService
+              final mapIconRepository = MapIconRepository(databaseService);
+              final mapIconSyncService = MapIconSyncService(
+                client: client,
+                mapIconRepository: mapIconRepository,
+                mapIconsBloc: context.read<MapIconsBloc>(),
+              );
+              
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: avatarBloc,
+                mapIconSyncService: mapIconSyncService,
               );
               return SyncManager(
                 client,
@@ -218,6 +246,7 @@ void main() async {
                 groupsBloc,
                 context.read<UserLocationProvider>(),
                 sharingPreferencesRepository,
+                mapIconSyncService: mapIconSyncService,
               )..startSync();
             },
           ),
