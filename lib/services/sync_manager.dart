@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
@@ -93,80 +94,80 @@ class SyncManager with ChangeNotifier {
     try {
       await _loadSinceToken();
       await roomService.cleanRooms();
-
-      // Perform reconciliation check on app load
       await _reconcileLocalStateWithServer();
 
-      final response = await client.sync(
-        since: _sinceToken,
-        fullState: _sinceToken == null,
-        timeout: 15000,
-      );
-
-      if (response.nextBatch != null) {
-        await _saveSinceToken(response.nextBatch!);
-        _sinceToken = response.nextBatch;
+      if (_sinceToken == null) {
+        final response = await client.sync(
+          fullState: true,
+          timeout: 30000,
+        );
+        
+        if (response.nextBatch != null) {
+          _sinceToken = response.nextBatch;
+          await _saveSinceToken(_sinceToken!);
+        }
+        
+        _processInitialSync(response);
       }
-
 
       roomService.getAndUpdateDisplayName();
-      _processInitialSync(response);
-      await startSync();
-      _isInitialized = true; // Only set after successful completion
+      await _startSyncStream();
+      _isInitialized = true;
     } catch (e) {
       print("Error during initialization: $e");
-      // Check if this is an authentication error
       if (_isAuthenticationError(e)) {
-        print("Authentication error detected, forcing logout");
         await _handleAuthenticationFailure();
-        return;
       }
-      // Maybe add some retry logic here
     }
   }
 
 
 
-  Future<void> startSync() async {
-    if (_isSyncing) return;
-    _isSyncing = true;
-    client.sync(
-      fullState: false,
-      timeout: 10000,
-    );
-
-
-
-    client.onSync.stream.listen((SyncUpdate syncUpdate) {
-      // Process invites
-      syncUpdate.rooms?.invite?.forEach((roomId, inviteUpdate) {
-        _processInvite(roomId, inviteUpdate);
-      });
-
-      // Process room messages and joins
-      syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-        print("Got join update for room: $roomId");
-        _processRoomMessages(roomId, joinedRoomUpdate);
-
-        // Check if there are any state events before processing
-        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-          print("Found state events, processing join");
-          _processRoomJoin(roomId, joinedRoomUpdate);
+  StreamSubscription<SyncUpdate>? _syncSubscription;
+  
+  Future<void> _startSyncStream() async {
+    if (_syncSubscription != null) return;
+    
+    _syncSubscription = client.onSync.stream.listen(
+      _processSyncUpdate,
+      onError: (error) {
+        print("Sync stream error: $error");
+        if (_isAuthenticationError(error)) {
+          _handleAuthenticationFailure();
         }
-      });
-
-      // Process room departures and kicks
-      syncUpdate.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
-        _processRoomLeaveOrKick(roomId, leftRoomUpdate);
-      });
-    }, onError: (error) {
-      print("Sync stream error: $error");
-      // Check if this is an authentication error
-      if (_isAuthenticationError(error)) {
-        print("Authentication error in sync stream, forcing logout");
-        _handleAuthenticationFailure();
+      },
+    );
+    
+    if (!_isSyncing) {
+      client.sync(
+        since: _sinceToken,
+        timeout: 30000,
+        setPresence: PresenceType.unavailable,
+      );
+    }
+    _isSyncing = true;
+  }
+  
+  void _processSyncUpdate(SyncUpdate syncUpdate) {
+    if (syncUpdate.nextBatch != null) {
+      _sinceToken = syncUpdate.nextBatch;
+      _saveSinceToken(_sinceToken!);
+    }
+    
+    syncUpdate.rooms?.invite?.forEach(_processInvite);
+    
+    syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
+      _processRoomMessages(roomId, joinedRoomUpdate);
+      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+        _processRoomJoin(roomId, joinedRoomUpdate);
       }
     });
+    
+    syncUpdate.rooms?.leave?.forEach(_processRoomLeaveOrKick);
+  }
+  
+  Future<void> startSync() async {
+    await _startSyncStream();
   }
 
   void handleAppLifecycleState(bool isActive) {
@@ -175,23 +176,20 @@ class SyncManager with ChangeNotifier {
       if (_pendingMessages.isNotEmpty) {
         _processPendingMessages();
       }
-      // full refresh as well
-      client.sync(fullState: true, timeout: 10000).then((_) {
-        mapBloc.add(MapLoadUserLocations()); // Refresh locations
-      }).catchError((e) {
-        print('Error during resume sync: $e');
-        if (_isAuthenticationError(e)) {
-          print("Authentication error in resume sync, forcing logout");
-          _handleAuthenticationFailure();
-        }
-      });
+      mapBloc.add(MapLoadUserLocations());
+      
+      if (!_isSyncing) {
+        _startSyncStream();
+      }
     }
   }
 
   Future<void> stopSync() async {
     if (!_isSyncing) return;
-
+    
     _isSyncing = false;
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
     client.abortSync();
   }
 
@@ -433,35 +431,12 @@ class SyncManager with ChangeNotifier {
     try {
       final matrixRoom = client.getRoomById(roomId);
       if (matrixRoom != null) {
-        // First sync to ensure we have latest state
-        await client.sync(timeout: 10000);
-
-        // Process the room and wait for completion
         await initialProcessRoom(matrixRoom);
-
-        // Verify room was processed
+        
         final processedRoom = await roomRepository.getRoomById(roomId);
-        print("Room processed status: ${processedRoom != null}");
-
-        // Force immediate refresh
-        groupsBloc.add(RefreshGroups());
-
-        // Staggered refreshes with verification
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          final room = await roomRepository.getRoomById(roomId);
-          if (room != null) {
-            groupsBloc.add(LoadGroups());
-            groupsBloc.add(RefreshGroups());
-          }
-        });
-
-        Future.delayed(const Duration(seconds: 1), () async {
-          final room = await roomRepository.getRoomById(roomId);
-          if (room != null) {
-            groupsBloc.add(LoadGroups());
-            groupsBloc.add(RefreshGroups());
-          }
-        });
+        if (processedRoom != null) {
+          groupsBloc.add(RefreshGroups());
+        }
       }
     } catch (e) {
       print("Error in handleNewGroupCreation: $e");
@@ -764,33 +739,24 @@ class SyncManager with ChangeNotifier {
   }
 
   void _processInitialSync(SyncUpdate response) {
-    // Update Invites
-    response.rooms?.invite?.forEach((roomId, inviteUpdate) {
-      _processInvite(roomId, inviteUpdate);
-    });
-
-    // If needed, process the joined/left rooms in the response
+    response.rooms?.invite?.forEach(_processInvite);
+    
     response.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
       _processRoomMessages(roomId, joinedRoomUpdate);
       if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
         _processRoomJoin(roomId, joinedRoomUpdate);
       }
     });
-    response.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
-      _processRoomLeaveOrKick(roomId, leftRoomUpdate);
-    });
+    
+    response.rooms?.leave?.forEach(_processRoomLeaveOrKick);
 
-    // Finally, process the full client.rooms if you like
     for (var room in client.rooms) {
-      // Only process rooms that the user has joined
       if (room.membership == Membership.join) {
         initialProcessRoom(room);
       }
     }
 
-    // Refresh contacts
     contactsBloc.add(LoadContacts());
-
     notifyListeners();
   }
 
@@ -923,40 +889,19 @@ class SyncManager with ChangeNotifier {
         // Remove the invite immediately after accepting
         removeInvite(roomId);
 
-        // Trigger a sync first to update room membership status
-        await client.sync(timeout: 10000);
-        print('Sync completed for room $roomId');
-
-        // Now process the room after sync has updated membership
         final room = client.getRoomById(roomId);
         if (room != null) {
-          // Force process the room even if membership hasn't updated yet
           await processJoinedRoom(room);
           
-          // Send our avatar announcement to existing members
           try {
-            print("Sending avatar announcement after joining room");
             final avatarService = AvatarAnnouncementService(client);
             await avatarService.announceProfPicToRoom(roomId);
           } catch (e) {
             print('Error sending avatar announcement after joining: $e');
           }
+          
+          groupsBloc.add(RefreshGroups());
         }
-        
-        // Refresh groups to show the new room
-        groupsBloc.add(RefreshGroups());
-        groupsBloc.add(LoadGroups());
-        
-        // Additional delayed refreshes to ensure UI updates
-        Future.delayed(const Duration(milliseconds: 200), () {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-        });
-        
-        Future.delayed(const Duration(milliseconds: 500), () {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-        });
       } else {
         throw Exception('Failed to join room');
       }
