@@ -430,7 +430,15 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Group invitation accepted.")),
+          SnackBar(
+            content: Text("Group invitation accepted."),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
 
@@ -493,7 +501,15 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         } else {
           // For other errors, just show a snackbar
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error accepting invitation: ${e.toString()}")),
+            SnackBar(
+              content: Text("Error accepting invitation: ${e.toString()}"),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
           );
         }
       }
@@ -525,13 +541,29 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         await widget.refreshCallback(); // Trigger the callback to refresh
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Group invitation declined.")),
+          SnackBar(
+            content: Text("Group invitation declined."),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to decline group invitation: $e")),
+          SnackBar(
+            content: Text("Failed to decline group invitation: $e"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } finally {
