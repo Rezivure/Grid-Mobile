@@ -1,5 +1,6 @@
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:matrix/encryption/encryption.dart';
@@ -22,6 +23,7 @@ class MessageProcessor {
   final Encryption encryption;
   final LocationRepository locationRepository;
   final LocationHistoryRepository locationHistoryRepository;
+  final RoomLocationHistoryRepository? roomLocationHistoryRepository;
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
@@ -34,7 +36,8 @@ class MessageProcessor {
       this.messageParser,
       this.client,
       {this.avatarBloc,
-      this.mapIconSyncService}
+      this.mapIconSyncService,
+      this.roomLocationHistoryRepository}
       ) : encryption = Encryption(client: client);
 
   /// Process a single event from a room. Decrypt if necessary,
@@ -75,7 +78,7 @@ class MessageProcessor {
         await _handleMapIconEvent(roomId, messageData);
       } else {
         // Attempt to parse location message
-        await _handleLocationMessageIfAny(messageData);
+        await _handleLocationMessageIfAny(messageData, roomId);
       }
       return messageData;
     }
@@ -85,7 +88,7 @@ class MessageProcessor {
 
 
   /// Handle location message if it's detected
-  Future<void> _handleLocationMessageIfAny(Map<String, dynamic> messageData) async {
+  Future<void> _handleLocationMessageIfAny(Map<String, dynamic> messageData, String roomId) async {
     final sender = messageData['sender'] as String?;
     final rawTimestamp = messageData['timestamp'];
     final timestamp = rawTimestamp is DateTime
@@ -111,7 +114,18 @@ class MessageProcessor {
       print('Location saved for user: $sender');
       var confirm = await locationRepository.getLatestLocation(sender);
       
-      // Also save to location history
+      // Save to room-specific location history
+      if (roomLocationHistoryRepository != null) {
+        await roomLocationHistoryRepository!.addLocationPoint(
+          roomId: roomId,
+          userId: sender,
+          latitude: locationData['latitude']!,
+          longitude: locationData['longitude']!,
+        );
+        print('Room location history saved for user: $sender in room: $roomId');
+      }
+      
+      // Also save to legacy global history (can be deprecated later)
       await locationHistoryRepository.addLocationPoint(sender, locationData['latitude']!, locationData['longitude']!);
     } else {
       // It's a message, but not a location message

@@ -12,6 +12,7 @@ import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
@@ -27,6 +28,7 @@ class RoomService {
   final RoomRepository roomRepository;
   final LocationRepository locationRepository;
   final LocationHistoryRepository locationHistoryRepository;
+  final RoomLocationHistoryRepository? roomLocationHistoryRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
 
   // Tracks recent messages/location updates sent to prevent redundant messages
@@ -49,6 +51,7 @@ class RoomService {
       this.locationHistoryRepository,
       this.sharingPreferencesRepository,
       LocationManager locationManager, // Inject LocationManager
+      {this.roomLocationHistoryRepository}
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
@@ -613,9 +616,20 @@ class RoomService {
             _recentlySentMessages[roomId]!.remove(_recentlySentMessages[roomId]!.first);
           }
           
-          // Save to location history for current user
+          // Save to room-specific location history
           final myUserId = client.userID;
           if (myUserId != null) {
+            // Save to room-specific history
+            if (roomLocationHistoryRepository != null) {
+              await roomLocationHistoryRepository!.addLocationPoint(
+                roomId: roomId,
+                userId: myUserId,
+                latitude: latitude,
+                longitude: longitude,
+              );
+            }
+            
+            // Also save to legacy global history (can be deprecated later)
             await locationHistoryRepository.addLocationPoint(myUserId, latitude, longitude);
           }
         } catch (e) {
