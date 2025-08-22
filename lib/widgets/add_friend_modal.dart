@@ -477,11 +477,12 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
                 Expanded(child: Text(errorMsg)),
               ],
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
+            duration: const Duration(seconds: 2),
           ),
         );
       }

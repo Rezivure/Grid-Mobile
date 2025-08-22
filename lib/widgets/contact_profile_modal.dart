@@ -146,7 +146,12 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('$keyType key copied to clipboard'),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                       behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 },
