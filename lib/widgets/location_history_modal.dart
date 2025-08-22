@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -10,14 +11,18 @@ import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_render
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/models/location_history.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
+import 'package:matrix/matrix.dart';
 
 class LocationHistoryModal extends StatefulWidget {
-  final String userId;
+  final String userId;  // For individual history, this is userId. For groups, this is roomId
   final String userName;
   final String? avatarUrl;
   final List<String>? memberIds;  // For group history
+  final bool useRoomHistory;  // Whether to use room-based history
   
   const LocationHistoryModal({
     Key? key,
@@ -25,6 +30,7 @@ class LocationHistoryModal extends StatefulWidget {
     required this.userName,
     this.avatarUrl,
     this.memberIds,
+    this.useRoomHistory = true,  // Default to new room-based system
   }) : super(key: key);
 
   @override
@@ -39,6 +45,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   DateTime? _currentTime;
   Map<String, LatLng> _currentPositions = {};
   bool _isLoading = true;
+  bool _isMapLoading = true; // Separate loading state for map
   VectorTileProvider? _tileProvider;
   late vector_renderer.Theme _mapTheme;
   DateTime? _earliestTime;
@@ -50,6 +57,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   String _currentMapStyle = 'base';
   String? _satelliteMapToken;
   final SubscriptionService _subscriptionService = SubscriptionService();
+  Map<String, String> _userDisplayNames = {}; // Cache for display names
   
   @override
   void initState() {
@@ -88,10 +96,17 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       }
       
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _isMapLoading = false;
+        });
       }
     } catch (e) {
       print('Error loading map provider: $e');
+      if (mounted) {
+        setState(() {
+          _isMapLoading = false;
+        });
+      }
     }
   }
 
@@ -101,17 +116,41 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   }
 
   Future<void> _loadLocationHistory() async {
-    final historyRepo = context.read<LocationHistoryRepository>();
-    
     try {
-      if (widget.memberIds != null) {
-        // Load group histories
-        final histories = await historyRepo.getLocationHistoriesForUsers(widget.memberIds!);
-        print('Loaded histories for ${histories.length} members out of ${widget.memberIds!.length}');
+      if (widget.useRoomHistory && widget.memberIds != null) {
+        // Use room-based history for groups
+        final roomHistoryRepo = RoomLocationHistoryRepository(DatabaseService());
+        final roomId = widget.userId; // For groups, userId is actually the roomId
+        
+        // Load all member histories for this room
+        final histories = await roomHistoryRepo.getAllRoomHistories(roomId, userIds: widget.memberIds);
+        print('Loaded room histories for ${histories.length} members out of ${widget.memberIds!.length}');
+        
+        // Fetch display names for members
+        await _fetchUserDisplayNames(widget.memberIds!);
+        
         setState(() {
           _groupHistories = histories;
           _isLoading = false;
-          // Don't select a single member if we're showing all members
+          if (histories.isNotEmpty && !_showAllMembers && _selectedMemberId == null) {
+            _selectedMemberId = histories.keys.first;
+          } else if (histories.isEmpty) {
+            print('No location history found for any group members in this room');
+          }
+          _updateSliderRange();
+        });
+      } else if (widget.memberIds != null) {
+        // Fall back to legacy global history for groups
+        final historyRepo = context.read<LocationHistoryRepository>();
+        final histories = await historyRepo.getLocationHistoriesForUsers(widget.memberIds!);
+        print('Loaded histories for ${histories.length} members out of ${widget.memberIds!.length}');
+        
+        // Fetch display names for members
+        await _fetchUserDisplayNames(widget.memberIds!);
+        
+        setState(() {
+          _groupHistories = histories;
+          _isLoading = false;
           if (histories.isNotEmpty && !_showAllMembers && _selectedMemberId == null) {
             _selectedMemberId = histories.keys.first;
           } else if (histories.isEmpty) {
@@ -120,7 +159,8 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           _updateSliderRange();
         });
       } else {
-        // Load single user history
+        // Load single user history (for individual contacts - future feature)
+        final historyRepo = context.read<LocationHistoryRepository>();
         final history = await historyRepo.getLocationHistory(widget.userId);
         setState(() {
           _locationHistory = history;
@@ -136,6 +176,28 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     }
   }
 
+  Future<void> _fetchUserDisplayNames(List<String> userIds) async {
+    try {
+      final client = context.read<Client>();
+      for (final userId in userIds) {
+        try {
+          final displayName = await client.getDisplayName(userId);
+          if (displayName != null && displayName.isNotEmpty) {
+            _userDisplayNames[userId] = displayName;
+          } else {
+            // Fallback to user ID without domain
+            _userDisplayNames[userId] = userId.split(':')[0].substring(1);
+          }
+        } catch (e) {
+          // Fallback to user ID without domain
+          _userDisplayNames[userId] = userId.split(':')[0].substring(1);
+        }
+      }
+    } catch (e) {
+      print('Error fetching display names: $e');
+    }
+  }
+
   void _updateSliderRange() {
     if (_locationHistory != null && _locationHistory!.points.isNotEmpty) {
       _earliestTime = _locationHistory!.points.first.timestamp;
@@ -144,33 +206,27 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       _updateCurrentPositions();
       _setupInitialMapView();
     } else if (_groupHistories != null && _groupHistories!.isNotEmpty) {
-      if (!_showAllMembers && _selectedMemberId != null && _groupHistories!.containsKey(_selectedMemberId!)) {
-        // Single member view - use their specific time range
-        final memberHistory = _groupHistories![_selectedMemberId!]!;
-        if (memberHistory.points.isNotEmpty) {
-          _earliestTime = memberHistory.points.first.timestamp;
-          _latestTime = memberHistory.points.last.timestamp;
-        }
-      } else {
-        // All members view - find time range across all users
-        _earliestTime = null;
-        _latestTime = null;
-        _groupHistories!.forEach((userId, history) {
-          if (history.points.isNotEmpty) {
-            final firstTime = history.points.first.timestamp;
-            final lastTime = history.points.last.timestamp;
-            
-            if (_earliestTime == null || firstTime.isBefore(_earliestTime!)) {
-              _earliestTime = firstTime;
-            }
-            if (_latestTime == null || lastTime.isAfter(_latestTime!)) {
-              _latestTime = lastTime;
-            }
+      // For groups, always use the full time range across all members
+      // This ensures the slider covers the complete history
+      _earliestTime = null;
+      _latestTime = null;
+      
+      _groupHistories!.forEach((userId, history) {
+        if (history.points.isNotEmpty) {
+          final firstTime = history.points.first.timestamp;
+          final lastTime = history.points.last.timestamp;
+          
+          if (_earliestTime == null || firstTime.isBefore(_earliestTime!)) {
+            _earliestTime = firstTime;
           }
-        });
-      }
+          if (_latestTime == null || lastTime.isAfter(_latestTime!)) {
+            _latestTime = lastTime;
+          }
+        }
+      });
       
       _currentTime = _latestTime;
+      _sliderValue = 1.0; // Start at the latest time
       _updateCurrentPositions();
       _setupInitialMapView();
     }
@@ -231,7 +287,17 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         });
       } else if (_selectedMemberId != null && _groupHistories!.containsKey(_selectedMemberId!)) {
         // Show only selected member
-        final position = _getPositionAtTime(_groupHistories![_selectedMemberId!]!, _currentTime!);
+        final selectedHistory = _groupHistories![_selectedMemberId!]!;
+        
+        // If current time is beyond this user's history, use their last point
+        final userLatestTime = selectedHistory.points.isNotEmpty 
+            ? selectedHistory.points.last.timestamp 
+            : _currentTime!;
+        final effectiveTime = _currentTime!.isAfter(userLatestTime) 
+            ? userLatestTime 
+            : _currentTime!;
+            
+        final position = _getPositionAtTime(selectedHistory, effectiveTime);
         if (position != null) {
           newPositions[_selectedMemberId!] = position;
           // Pan map to follow the selected member
@@ -261,10 +327,59 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   }
 
   List<LatLng> _getPathForUser(LocationHistory history, DateTime endTime) {
-    return history.points
+    final validPoints = history.points
         .where((p) => p.timestamp.isBefore(endTime) || p.timestamp.isAtSameMomentAs(endTime))
-        .map((p) => LatLng(p.latitude, p.longitude))
         .toList();
+    
+    // Smart sampling - reduce points if there are too many for performance
+    // But keep more detail than before
+    if (validPoints.length > 500) {
+      // Sample every Nth point based on total count, but keep key points
+      final sampleRate = (validPoints.length / 300).ceil(); // Target ~300 points
+      final sampled = <LocationPoint>[];
+      
+      for (int i = 0; i < validPoints.length; i++) {
+        if (i == 0 || i == validPoints.length - 1) {
+          // Always keep first and last points
+          sampled.add(validPoints[i]);
+        } else if (i % sampleRate == 0) {
+          // Sample at regular intervals
+          sampled.add(validPoints[i]);
+        } else if (i > 0 && i < validPoints.length - 1) {
+          // Keep points that show significant direction changes
+          final prev = validPoints[i - 1];
+          final curr = validPoints[i];
+          final next = validPoints[i + 1];
+          
+          final angle1 = _calculateBearing(
+            LatLng(prev.latitude, prev.longitude),
+            LatLng(curr.latitude, curr.longitude),
+          );
+          final angle2 = _calculateBearing(
+            LatLng(curr.latitude, curr.longitude),
+            LatLng(next.latitude, next.longitude),
+          );
+          
+          final angleDiff = (angle2 - angle1).abs();
+          if (angleDiff > 30) { // Keep points with >30 degree direction change
+            sampled.add(curr);
+          }
+        }
+      }
+      
+      return sampled.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    } else {
+      // If less than 500 points, show all of them for detail
+      return validPoints.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    }
+  }
+  
+  double _calculateBearing(LatLng start, LatLng end) {
+    final dLon = end.longitude - start.longitude;
+    final y = sin(dLon * pi / 180) * cos(end.latitude * pi / 180);
+    final x = cos(start.latitude * pi / 180) * sin(end.latitude * pi / 180) -
+        sin(start.latitude * pi / 180) * cos(end.latitude * pi / 180) * cos(dLon * pi / 180);
+    return atan2(y, x) * 180 / pi;
   }
   
   List<Polyline> _getPolylinesForGroup() {
@@ -286,9 +401,19 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                _groupHistories!.containsKey(_selectedMemberId!) &&
                _currentTime != null) {
       // Show single selected member
+      final selectedHistory = _groupHistories![_selectedMemberId!]!;
+      
+      // If current time is beyond this user's history, use their last point
+      final userLatestTime = selectedHistory.points.isNotEmpty 
+          ? selectedHistory.points.last.timestamp 
+          : _currentTime!;
+      final effectiveTime = _currentTime!.isAfter(userLatestTime) 
+          ? userLatestTime 
+          : _currentTime!;
+      
       return [
         Polyline(
-          points: _getPathForUser(_groupHistories![_selectedMemberId!]!, _currentTime!),
+          points: _getPathForUser(selectedHistory, effectiveTime),
           strokeWidth: 3.0,
           color: colorScheme.primary,
         ),
@@ -412,9 +537,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           ),
           
           // Avatar selector for groups
-          if (_groupHistories != null && _groupHistories!.isNotEmpty)
+          if (!_isLoading && !_isMapLoading && _groupHistories != null && _groupHistories!.isNotEmpty)
             Container(
-              height: 80,
+              height: 100,
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 border: Border(
@@ -438,93 +563,145 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         
                         return Padding(
                           padding: const EdgeInsets.only(right: 12),
-                          child: GestureDetector(
-                            onTap: hasHistory ? () {
-                              setState(() {
-                                _showAllMembers = false;
-                                _selectedMemberId = memberId;
-                                _updateSliderRange();
-                              });
-                            } : null,
-                            child: Stack(
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: isSelected 
-                                          ? colorScheme.primary 
-                                          : Colors.transparent,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(2),
-                                  child: Opacity(
-                                    opacity: hasHistory ? 1.0 : 0.5,
-                                    child: Container(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: hasHistory ? () {
+                                  setState(() {
+                                    _showAllMembers = false;
+                                    _selectedMemberId = memberId;
+                                    _updateSliderRange();
+                                  });
+                                } : null,
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: colorScheme.primary.withOpacity(0.1),
+                                        border: Border.all(
+                                          color: isSelected 
+                                              ? colorScheme.primary 
+                                              : Colors.transparent,
+                                          width: 2,
+                                        ),
                                       ),
-                                      child: ClipOval(
-                                        child: UserAvatarBloc(
-                                          userId: memberId,
-                                          size: 48,
+                                      padding: const EdgeInsets.all(2),
+                                      child: Opacity(
+                                        opacity: hasHistory ? 1.0 : 0.5,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: colorScheme.primary.withOpacity(0.1),
+                                          ),
+                                          child: ClipOval(
+                                            child: UserAvatarBloc(
+                                              userId: memberId,
+                                              size: 48,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                    if (!hasHistory)
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.surface,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.location_off,
+                                            size: 12,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                                if (!hasHistory)
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.surface,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.location_off,
-                                        size: 12,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              SizedBox(
+                                width: 70,
+                                child: Text(
+                                  _userDisplayNames[memberId] ?? memberId.split(':')[0].substring(1),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: isSelected 
+                                        ? colorScheme.primary 
+                                        : colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
                                   ),
-                              ],
-                            ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
                     ),
                   ),
-                  // Group view button
+                  // Group view button with tooltip
                   Padding(
                     padding: const EdgeInsets.only(right: 16),
-                    child: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _showAllMembers = !_showAllMembers;
-                          _updateSliderRange();
-                          if (_showAllMembers) {
-                            _fitAllMembersInView();
-                          }
-                        });
-                      },
-                      icon: Icon(
-                        _showAllMembers ? Icons.person : Icons.groups,
-                        color: _showAllMembers 
-                            ? colorScheme.primary 
-                            : colorScheme.onSurfaceVariant,
-                      ),
-                      style: IconButton.styleFrom(
-                        backgroundColor: _showAllMembers 
-                            ? colorScheme.primary.withOpacity(0.1)
-                            : colorScheme.surfaceVariant.withOpacity(0.5),
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Tooltip(
+                          message: _showAllMembers 
+                              ? 'Tap to view individual member\nCurrently showing: All members' 
+                              : 'Tap to view all members together\nCurrently showing: Individual',
+                          preferBelow: false,  // Show tooltip above the button
+                          verticalOffset: -10,  // Adjust position
+                          textStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          triggerMode: TooltipTriggerMode.longPress,  // Show on long press
+                          waitDuration: const Duration(milliseconds: 100),  // Faster show
+                          showDuration: const Duration(seconds: 3),  // Show longer
+                          child: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _showAllMembers = !_showAllMembers;
+                                _updateSliderRange();
+                                if (_showAllMembers) {
+                                  _fitAllMembersInView();
+                                }
+                              });
+                            },
+                            icon: Icon(
+                              _showAllMembers ? Icons.person : Icons.groups,
+                              color: _showAllMembers 
+                                  ? colorScheme.primary 
+                                  : colorScheme.onSurfaceVariant,
+                              size: 24,
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: _showAllMembers 
+                                  ? colorScheme.primary.withOpacity(0.1)
+                                  : colorScheme.surfaceVariant.withOpacity(0.5),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _showAllMembers ? 'Group' : 'Individual',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -535,10 +712,22 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           Expanded(
             child: Stack(
               children: [
-                if (_isLoading)
+                if (_isLoading || _isMapLoading)
                   Center(
-                    child: CircularProgressIndicator(
-                      color: colorScheme.primary,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _isLoading ? 'Loading history...' : 'Preparing map...',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   )
                 else if ((_locationHistory == null && _groupHistories == null) || 
@@ -680,7 +869,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           ),
           
           // Timeline slider
-          if (!_isLoading && 
+          if (!_isLoading && !_isMapLoading &&
               ((_locationHistory != null && _locationHistory!.points.isNotEmpty) ||
                (_groupHistories != null && _groupHistories!.isNotEmpty)))
             Container(
@@ -801,41 +990,32 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         final endTime = points.last.timestamp;
         final duration = endTime.difference(startTime);
         
-        if (duration.inMilliseconds > 0) {
+        // Check if slider is at maximum (accounting for floating point precision)
+        if (_sliderValue >= 0.999) {
+          _currentTime = endTime;
+          _updateCurrentPositions();
+        } else if (duration.inMilliseconds > 0) {
           _currentTime = startTime.add(Duration(
             milliseconds: (duration.inMilliseconds * _sliderValue).toInt(),
           ));
           _updateCurrentPositions();
         }
-      } else if (_groupHistories != null) {
-        // Find time range across all users
-        DateTime? earliestTime;
-        DateTime? latestTime;
-        
-        _groupHistories!.forEach((userId, history) {
-          if (history.points.isNotEmpty) {
-            final first = history.points.first.timestamp;
-            final last = history.points.last.timestamp;
-            
-            if (earliestTime == null || first.isBefore(earliestTime!)) {
-              earliestTime = first;
-            }
-            if (latestTime == null || last.isAfter(latestTime!)) {
-              latestTime = last;
-            }
-          }
-        });
-        
-        if (earliestTime != null && latestTime != null) {
-          final duration = latestTime!.difference(earliestTime!);
+      } else if (_groupHistories != null && _earliestTime != null && _latestTime != null) {
+        // Check if slider is at maximum (accounting for floating point precision)
+        if (_sliderValue >= 0.999) {
+          _currentTime = _latestTime;
+          _updateCurrentPositions();
+        } else {
+          // Use the cached earliest and latest times for consistency
+          final duration = _latestTime!.difference(_earliestTime!);
           
           if (duration.inMilliseconds > 0) {
-            _currentTime = earliestTime!.add(Duration(
+            _currentTime = _earliestTime!.add(Duration(
               milliseconds: (duration.inMilliseconds * _sliderValue).toInt(),
             ));
             _updateCurrentPositions();
           } else {
-            _currentTime = earliestTime;
+            _currentTime = _earliestTime;
             _updateCurrentPositions();
           }
         }

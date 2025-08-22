@@ -10,6 +10,7 @@ import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
@@ -92,11 +93,23 @@ void main() async {
   final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
   final locationRepository = LocationRepository(databaseService);
   final locationHistoryRepository = LocationHistoryRepository(databaseService);
+  final roomLocationHistoryRepository = RoomLocationHistoryRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
-  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, locationHistoryRepository, sharingPreferencesRepository, locationManager);
+  final roomService = RoomService(
+    client, 
+    userService, 
+    userRepository, 
+    userKeysRepository, 
+    roomRepository, 
+    locationRepository, 
+    locationHistoryRepository, 
+    sharingPreferencesRepository, 
+    locationManager,
+    roomLocationHistoryRepository: roomLocationHistoryRepository,
+  );
 
   final messageParser = MessageParser();
 
@@ -141,6 +154,7 @@ void main() async {
               locationHistoryRepository,
               sharingPreferencesRepository,
               locationManager,
+              roomLocationHistoryRepository: roomLocationHistoryRepository,
             );
           },
         ),
@@ -199,6 +213,7 @@ void main() async {
                 client,
                 avatarBloc: context.read<AvatarBloc>(),
                 mapIconSyncService: mapIconSyncService,
+                roomLocationHistoryRepository: roomLocationHistoryRepository,
               );
               return SyncManager(
                 client,
@@ -233,6 +248,7 @@ void main() async {
                 client,
                 avatarBloc: avatarBloc,
                 mapIconSyncService: mapIconSyncService,
+                roomLocationHistoryRepository: roomLocationHistoryRepository,
               );
               return SyncManager(
                 client,

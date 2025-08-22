@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -29,13 +30,14 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,  // Increment version for new MapIcons table
+      version: 4,  // Increment version for new RoomLocationHistory table
       onCreate: (db, version) async {
         await _initializeEncryptionKey();
         await UserRepository.createTables(db);
         await RoomRepository.createTables(db);
         await LocationRepository.createTable(db);
         await LocationHistoryRepository.createTable(db);
+        await RoomLocationHistoryRepository.createTable(db);
         await SharingPreferencesRepository.createTable(db);
         await UserKeysRepository.createTable(db);
         await MapIconRepository.createTable(db);
@@ -46,6 +48,9 @@ class DatabaseService {
         }
         if (oldVersion < 3) {
           await MapIconRepository.createTable(db);
+        }
+        if (oldVersion < 4) {
+          await RoomLocationHistoryRepository.createTable(db);
         }
       },
     );
