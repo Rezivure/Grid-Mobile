@@ -138,14 +138,17 @@ class SyncManager with ChangeNotifier {
       },
     );
     
-    if (!_isSyncing) {
-      client.sync(
+    // Check if the client is already syncing before starting a new sync
+    if (!client.syncPending) {
+      _isSyncing = true;
+      await client.sync(
         since: _sinceToken,
         timeout: 30000,
         setPresence: PresenceType.unavailable,
       );
+    } else {
+      _isSyncing = true;
     }
-    _isSyncing = true;
   }
   
   void _processSyncUpdate(SyncUpdate syncUpdate) {
@@ -178,19 +181,22 @@ class SyncManager with ChangeNotifier {
       }
       mapBloc.add(MapLoadUserLocations());
       
-      if (!_isSyncing) {
+      if (!_isSyncing || !client.syncPending) {
         _startSyncStream();
       }
     }
   }
 
   Future<void> stopSync() async {
-    if (!_isSyncing) return;
+    if (!_isSyncing && !client.syncPending) return;
     
     _isSyncing = false;
     _syncSubscription?.cancel();
     _syncSubscription = null;
-    client.abortSync();
+    
+    if (client.syncPending) {
+      client.abortSync();
+    }
   }
 
   void _processInvite(String roomId, InvitedRoomUpdate inviteUpdate) {

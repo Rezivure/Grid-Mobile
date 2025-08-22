@@ -811,7 +811,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return BlocListener<MapBloc, MapState>(
       listenWhen: (previous, current) =>
       (previous.moveCount != current.moveCount && current.center != null) ||
-      (previous.userLocations.length != current.userLocations.length),
+      (previous.userLocations.length != current.userLocations.length) ||
+      (previous.center != current.center || previous.zoom != current.zoom),
       listener: (context, state) {
         // Handle map movement
         if (state.center != null && _isMapReady) {
@@ -820,10 +821,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             _targetUserId = state.selectedUserId;
           });
           
-          // Go straight to street level zoom when clicking on a user
-          const double targetZoom = 14.0;
+          // Use provided zoom or default to street level
+          final double targetZoom = state.zoom ?? 14.0;
           
-          print('[SMART ZOOM] User clicked - jumping to street level zoom: $targetZoom');
+          print('[SMART ZOOM] Moving to location with zoom: $targetZoom');
           _mapController.moveAndRotate(state.center!, targetZoom, 0);
           
           // Set timer to trigger bounce animation after map move completes
