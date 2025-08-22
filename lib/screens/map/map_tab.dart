@@ -48,6 +48,7 @@ import 'package:grid_frontend/models/map_icon.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/widgets/map_icon_info_bubble.dart';
+import 'package:grid_frontend/widgets/app_review_prompt.dart';
 import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
@@ -149,10 +150,32 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _loadMapProvider();
     _loadMapStylePreference();
     
+    // Start review manager session
+    AppReviewManager.startSession();
+    
     // Show onboarding modal if user hasn't seen it yet
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OnboardingModal.showOnboardingIfNeeded(context);
       print('[SMART ZOOM] Post frame callback - locationManager.currentLatLng: ${_locationManager.currentLatLng}');
+      
+      // Schedule review prompt check for later (after user has used the app for a bit)
+      _scheduleReviewPromptCheck();
+    });
+  }
+
+  void _scheduleReviewPromptCheck() {
+    // Check for review prompt every 5 minutes to see if user has met usage criteria
+    Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (mounted) {
+        AppReviewManager.showReviewPromptIfNeeded(context).then((shown) {
+          // If prompt was shown, cancel the timer
+          if (shown == true) {
+            timer.cancel();
+          }
+        });
+      } else {
+        timer.cancel();
+      }
     });
   }
 
@@ -306,6 +329,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _mapController.dispose();
     _syncManager.stopSync();
     _locationManager.stopTracking();
+    AppReviewManager.stopSession(); // Stop tracking usage
     super.dispose();
   }
 
@@ -313,6 +337,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _pausedTime = DateTime.now();
+      AppReviewManager.stopSession(); // Pause usage tracking when app goes to background
+    } else if (state == AppLifecycleState.resumed) {
+      AppReviewManager.startSession(); // Resume usage tracking when app comes back
     }
     
     if (state == AppLifecycleState.resumed && _pausedTime != null) {
