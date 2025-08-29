@@ -23,6 +23,7 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_event.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_state.dart';
@@ -71,15 +72,19 @@ class MapTab extends StatefulWidget {
 }
 
 class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsBindingObserver {
-  late final MapController _mapController;
-  late final LocationManager _locationManager;
-  late final RoomService _roomService;
-  late final UserService _userService;
-  late final SyncManager _syncManager;
-  late final UserRepository userRepository;
-  late final SharingPreferencesRepository sharingPreferencesRepository;
-  late final MapIconRepository _mapIconRepository;
-  late final MapIconSyncService _mapIconSyncService;
+  static bool _hasInitialized = false;
+  static DateTime? _lastInitTime;
+  bool _servicesInitialized = false;
+  AppLifecycleState? _currentLifecycleState;
+  late MapController _mapController;
+  late LocationManager _locationManager;
+  late RoomService _roomService;
+  late UserService _userService;
+  late SyncManager _syncManager;
+  late UserRepository userRepository;
+  late SharingPreferencesRepository sharingPreferencesRepository;
+  late MapIconRepository _mapIconRepository;
+  late MapIconSyncService _mapIconSyncService;
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
@@ -143,12 +148,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   void initState() {
     super.initState();
-    print('[SMART ZOOM] initState - initial zoom: $_zoom');
+    print('[MapTab] Initializing - hasInitialized: $_hasInitialized');
     WidgetsBinding.instance.addObserver(this);
     _mapController = MapController();
-    _initializeServices();
-    _loadMapProvider();
-    _loadMapStylePreference();
+    
+    // Check if app was properly initialized
+    _checkAndInitialize().then((_) {
+      // Only access _locationManager after initialization is complete
+      if (mounted) {
+      }
+    });
     
     // Start review manager session
     AppReviewManager.startSession();
@@ -156,11 +165,56 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Show onboarding modal if user hasn't seen it yet
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OnboardingModal.showOnboardingIfNeeded(context);
-      print('[SMART ZOOM] Post frame callback - locationManager.currentLatLng: ${_locationManager.currentLatLng}');
       
       // Schedule review prompt check for later (after user has used the app for a bit)
       _scheduleReviewPromptCheck();
     });
+  }
+  
+  Future<void> _checkAndInitialize() async {
+    // Always just do normal initialization now that avatar issue is fixed
+    await _initializeServices();
+    _loadMapProvider();
+    _loadMapStylePreference();
+  }
+  
+  // Keeping this function for potential future use, but no longer needed after avatar fix
+  Future<void> _forceFullInitialization() async {
+    print('[MapTab] Starting forced reinitialization');
+    
+    // CRITICAL: Force Flutter to recreate its rendering context
+    // This fixes the GPU access loss issue
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // Give the engine a moment to reset
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Reinitialize avatar cache
+    final avatarCacheService = AvatarCacheService();
+    await avatarCacheService.reloadFromPersistent();
+    
+    // Reinitialize services
+    await _initializeServices();
+    _loadMapProvider();
+    _loadMapStylePreference();
+    
+    // Clear and reload avatars
+    if (mounted && context.mounted) {
+      // Clear the avatar cache first to force fresh load
+      context.read<AvatarBloc>().add(ClearAvatarCache());
+      await Future.delayed(const Duration(milliseconds: 100));
+      context.read<AvatarBloc>().add(RefreshAllAvatars());
+      
+      // Force reload map data
+      context.read<MapBloc>().add(MapLoadUserLocations());
+    }
+    
+    // Force a complete widget rebuild
+    if (mounted) {
+      setState(() {});
+    }
+    
+    print('[MapTab] Reinitialization complete');
   }
 
   void _scheduleReviewPromptCheck() {
@@ -180,12 +234,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   Future<void> _initializeServices() async {
+    // Skip if already initialized
+    if (_servicesInitialized) {
+      // Still need to re-add listeners that might have been removed
+      _locationManager.addListener(_onLocationUpdate);
+      _syncManager.addListener(_checkAuthenticationStatus);
+      context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
+      return;
+    }
+    
     _roomService = context.read<RoomService>();
     _userService = context.read<UserService>();
     _locationManager = context.read<LocationManager>();
     _syncManager = context.read<SyncManager>();
     userRepository = context.read<UserRepository>();
     sharingPreferencesRepository = context.read<SharingPreferencesRepository>();
+    
+    _servicesInitialized = true;
     
     // Initialize map icon repository and sync service
     final databaseService = context.read<DatabaseService>();
@@ -213,7 +278,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       try {
         await _syncManager.cleanupOrphanedLocationData();
       } catch (e) {
-        print('[MapTab] Error cleaning up orphaned locations: $e');
       }
     });
 
@@ -228,7 +292,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _locationManager.addListener(_onLocationUpdate);
     
     // Load avatars ONCE on init without any refresh loops
-    print('[MapTab] Initializing - loading avatars once...');
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         _loadAvatarsOnce();
@@ -246,7 +309,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     
     final avatarBloc = context.read<AvatarBloc>();
     
-    print('[MapTab] Loading avatars...');
     
     // Initialize the avatar cache service if needed
     await avatarBloc.cacheService.initialize();
@@ -269,18 +331,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
     
     // That's it - no restarts, no loops, just load avatars once
-    print('[MapTab] Avatar loading initiated - no refresh loops');
   }
   
   void _onLocationUpdate() {
-    print('[SMART ZOOM] Location update received, currentLatLng: ${_locationManager.currentLatLng}');
     // Check if we can calculate zoom now
     if (!_initialZoomCalculated && _isMapReady && _locationManager.currentLatLng != null) {
-      print('[SMART ZOOM] Location available, checking for user locations...');
       final mapBloc = context.read<MapBloc>();
       final userLocations = mapBloc.state.userLocations;
       // Always calculate zoom, even with no contacts
-      print('[SMART ZOOM] All conditions met, calculating zoom...');
       final result = _calculateOptimalZoomAndCenter(
         _locationManager.currentLatLng!, 
         userLocations
@@ -296,7 +354,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void _checkAuthenticationStatus() {
     if (_syncManager.authenticationFailed) {
       // Authentication failed, navigate to login screen
-      print('[MapTab] Authentication failure detected, navigating to login');
       
       // Clear the flag so we don't repeatedly navigate
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -330,16 +387,28 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager.stopSync();
     _locationManager.stopTracking();
     AppReviewManager.stopSession(); // Stop tracking usage
+    
+    // No longer need to reset initialization flag
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    print('[MapTab] Lifecycle: $state');
+    
+    // Store current lifecycle state
+    _currentLifecycleState = state;
+    
     if (state == AppLifecycleState.paused) {
       _pausedTime = DateTime.now();
       AppReviewManager.stopSession(); // Pause usage tracking when app goes to background
+      
+      // No longer need to reset initialization flag when going to background
+      
     } else if (state == AppLifecycleState.resumed) {
       AppReviewManager.startSession(); // Resume usage tracking when app comes back
+      
+      // No longer need special handling for background launch
     }
     
     if (state == AppLifecycleState.resumed && _pausedTime != null) {
@@ -347,7 +416,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       
       // If app was paused for more than 30 seconds, restart from splash
       if (pauseDuration.inSeconds > 30) {
-        print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - restarting from splash');
+        print('[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
         
         // Navigate to splash screen to ensure full initialization
         if (mounted) {
@@ -414,10 +483,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         setState(() {
           _satelliteMapToken = token;
         });
-        print('Refreshed satellite map token');
       }
     } catch (e) {
-      print('Error refreshing satellite token: $e');
     }
   }
 
@@ -474,9 +541,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     try {
       await _mapIconRepository.insertMapIcon(newIcon);
       await _mapIconSyncService.sendIconCreate(newIcon.roomId, newIcon);
-      print('[MapIconSync] Icon created and synced: ${newIcon.id}');
     } catch (e) {
-      print('Error saving/syncing icon: $e');
       // If save fails, remove from BLoC
       context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
       
@@ -504,7 +569,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       if (selectedSubscreen.startsWith('group:')) {
         final groupId = selectedSubscreen.substring(6);
         mapIconsBloc.add(LoadMapIcons(groupId));
-        print('Loading map icons for group: $groupId');
       }
       // You can add support for individual DM rooms here if needed
       // else if (selectedSubscreen.startsWith('user:')) {
@@ -516,7 +580,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         mapIconsBloc.add(ClearAllMapIcons());
       }
     } catch (e) {
-      print('Error loading map icons: $e');
     }
   }
   
@@ -557,11 +620,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     try {
       // Ensure dotenv is loaded before proceeding
       if (dotenv.env.isEmpty) {
-        print('Dotenv not loaded, attempting to reload...');
         try {
           await dotenv.load(fileName: ".env");
         } catch (e) {
-          print('Failed to reload dotenv: $e');
         }
       }
       
@@ -574,7 +635,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       context.read<MapBloc>().add(MapInitialize());
       setState(() {});
     } catch (e) {
-      print('Error loading map provider: $e');
       _showMapErrorDialog();
     }
   }
@@ -595,14 +655,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               _currentMapStyle = 'satellite';
               _satelliteMapToken = token;
             });
-            print('Loaded satellite map style with token');
           } else {
             // Failed to get token, revert to base maps
             setState(() {
               _currentMapStyle = 'base';
             });
             await prefs.setString(_mapStyleKey, 'base');
-            print('Failed to get satellite token, reverting to base maps');
           }
         } else {
           // No subscription, revert to base maps
@@ -610,7 +668,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             _currentMapStyle = 'base';
           });
           await prefs.setString(_mapStyleKey, 'base');
-          print('No active subscription, reverting to base maps');
         }
       } else {
         setState(() {
@@ -618,7 +675,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         });
       }
     } catch (e) {
-      print('Error loading map style preference: $e');
       // Default to base maps on error
       setState(() {
         _currentMapStyle = 'base';
@@ -733,12 +789,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   // Returns both optimal zoom and center point
   MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
-    print('[SMART ZOOM] Calculating optimal zoom and center...');
-    print('[SMART ZOOM] User position: ${userPosition.latitude}, ${userPosition.longitude}');
-    print('[SMART ZOOM] Number of user locations: ${userLocations.length}');
+    print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
     
     if (userLocations.isEmpty) {
-      print('[SMART ZOOM] No contacts found, returning default zoom 10');
       return MapZoomResult(zoom: 10.0, center: userPosition);
     }
 
@@ -757,14 +810,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       return MapZoomResult(zoom: 10.0, center: userPosition);
     }
     
-    print('[SMART ZOOM] Closest contact: ${closestLocation.userId} at ${minDistance.toStringAsFixed(0)} meters');
     
     // Calculate the center point between user and closest contact
     final centerLat = (userPosition.latitude + closestLocation.position.latitude) / 2;
     final centerLng = (userPosition.longitude + closestLocation.position.longitude) / 2;
     final centerPoint = LatLng(centerLat, centerLng);
     
-    print('[SMART ZOOM] Center point: ${centerLat}, ${centerLng}');
 
     // Calculate zoom based on distance
     // Balance between showing both points and not zooming out too far
@@ -797,7 +848,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       zoomLevel = 2.0; // Maximum zoom out for intercontinental
     }
     
-    print('[SMART ZOOM] Calculated zoom level: $zoomLevel');
+    print('[SmartZoom] Calculated zoom: $zoomLevel');
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
@@ -813,7 +864,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         displayName = user.displayName!;
       }
     } catch (e) {
-      print('Error fetching user display name: $e');
     }
     
     setState(() {
@@ -851,7 +901,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           // Use provided zoom or default to street level
           final double targetZoom = state.zoom ?? 14.0;
           
-          print('[SMART ZOOM] Moving to location with zoom: $targetZoom');
           _mapController.moveAndRotate(state.center!, targetZoom, 0);
           
           // Set timer to trigger bounce animation after map move completes
@@ -866,23 +915,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         
         // Handle initial zoom calculation when user locations arrive or change
         if (!_initialZoomCalculated && _isMapReady && _locationManager.currentLatLng != null) {
-          print('[SMART ZOOM] BlocListener triggered - conditions met for zoom calculation');
           final result = _calculateOptimalZoomAndCenter(
             _locationManager.currentLatLng!, 
             state.userLocations
           );
           _zoom = result.zoom;
-          print('[SMART ZOOM] Moving map to center point with zoom: $_zoom');
           _mapController.moveAndRotate(result.center, _zoom, 0);
           setState(() {
             _initialZoomCalculated = true;
           });
         } else if (!_initialZoomCalculated) {
-          print('[SMART ZOOM] BlocListener - conditions not met:');
-          print('  - _initialZoomCalculated: $_initialZoomCalculated');
-          print('  - _isMapReady: $_isMapReady');
-          print('  - currentLatLng: ${_locationManager.currentLatLng}');
-          print('  - userLocations.length: ${state.userLocations.length}');
         }
       },
       child: Scaffold(

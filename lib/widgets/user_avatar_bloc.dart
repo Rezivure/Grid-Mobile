@@ -20,12 +20,33 @@ class UserAvatarBloc extends StatefulWidget {
   _UserAvatarBlocState createState() => _UserAvatarBlocState();
 }
 
-class _UserAvatarBlocState extends State<UserAvatarBloc> {
+class _UserAvatarBlocState extends State<UserAvatarBloc> with WidgetsBindingObserver {
+  AppLifecycleState? _lifecycleState;
+  
   @override
   void initState() {
     super.initState();
-    // Request avatar load when widget is created
-    context.read<AvatarBloc>().add(LoadAvatar(widget.userId));
+    WidgetsBinding.instance.addObserver(this);
+    _lifecycleState = WidgetsBinding.instance.lifecycleState;
+    
+    // Only load avatar if app is in foreground
+    if (_lifecycleState != AppLifecycleState.paused && 
+        _lifecycleState != AppLifecycleState.detached) {
+      context.read<AvatarBloc>().add(LoadAvatar(widget.userId));
+    }
+  }
+  
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    setState(() {
+      _lifecycleState = state;
+    });
   }
 
   @override
@@ -39,6 +60,16 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> {
 
   @override
   Widget build(BuildContext context) {
+    // Don't try to render images if app is in background
+    if (_lifecycleState == AppLifecycleState.paused || 
+        _lifecycleState == AppLifecycleState.detached) {
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Container(), // Empty container while in background
+      );
+    }
+    
     return BlocBuilder<AvatarBloc, AvatarState>(
       buildWhen: (previous, current) {
         // Rebuild when this specific user's avatar changes or update counter changes
@@ -51,14 +82,44 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> {
         final isLoading = state.isLoading(widget.userId);
         
         // If we have avatar data, show it
-        if (avatarData != null) {
+        if (avatarData != null && avatarData.isNotEmpty) {
+          // Use a key to force recreation of the Image widget when needed
+          final imageKey = ValueKey('avatar_${widget.userId}_${state.updateCounter}');
+          
           return ClipOval(
             child: Image.memory(
               avatarData,
+              key: imageKey,
               fit: BoxFit.cover,
               width: widget.size,
               height: widget.size,
               gaplessPlayback: true, // Prevent flicker when updating
+              cacheWidth: (widget.size * 2).toInt(), // Limit texture size
+              cacheHeight: (widget.size * 2).toInt(), // Limit texture size
+              errorBuilder: (context, error, stackTrace) {
+                // Check if it's a GPU error
+                if (error.toString().contains('GPU') || error.toString().contains('loss of GPU')) {
+                  print('[Avatar] GPU error detected, reinitializing for ${widget.userId}');
+                  // Schedule a reinit on the next frame
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      // Force a refresh of this avatar
+                      context.read<AvatarBloc>().add(ClearAvatarCache(widget.userId));
+                      context.read<AvatarBloc>().add(LoadAvatar(widget.userId));
+                    }
+                  });
+                }
+                // Fall back to RandomAvatar on error
+                return SizedBox(
+                  width: widget.size,
+                  height: widget.size,
+                  child: RandomAvatar(
+                    localpart(widget.userId),
+                    height: widget.size,
+                    width: widget.size,
+                  ),
+                );
+              },
             ),
           );
         }

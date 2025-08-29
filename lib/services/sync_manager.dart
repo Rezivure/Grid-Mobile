@@ -93,10 +93,10 @@ class SyncManager with ChangeNotifier {
     print("Initializing Sync Manager...");
     try {
       await _loadSinceToken();
-      await roomService.cleanRooms();
-      await _reconcileLocalStateWithServer();
-
+      
+      // IMPORTANT: Do initial sync BEFORE cleaning rooms
       if (_sinceToken == null) {
+        print("[SyncManager] Performing initial full sync...");
         final response = await client.sync(
           fullState: true,
           timeout: 30000,
@@ -108,7 +108,21 @@ class SyncManager with ChangeNotifier {
         }
         
         _processInitialSync(response);
+        
+        // Wait a moment for client to fully process the sync
+        await Future.delayed(const Duration(seconds: 1));
+      } else {
+        // Even with a saved token, do a quick sync to ensure we're up to date
+        print("[SyncManager] Performing catch-up sync...");
+        await client.sync(
+          since: _sinceToken,
+          timeout: 10000,
+        );
       }
+      
+      // NOW it's safe to clean rooms and reconcile
+      await roomService.cleanRooms();
+      await _reconcileLocalStateWithServer();
 
       roomService.getAndUpdateDisplayName();
       await _startSyncStream();
@@ -324,6 +338,14 @@ class SyncManager with ChangeNotifier {
 
   Future<void> _processRoomLeaveOrKick(String roomId, LeftRoomUpdate leftRoomUpdate) async {
     try {
+      // SAFETY: Verify this is a real leave event, not an error or incomplete sync
+      // Check if we can still access the room on the client
+      final clientRoom = client.getRoomById(roomId);
+      if (clientRoom != null && clientRoom.membership == Membership.join) {
+        print("[SyncManager] Received leave event for $roomId but still joined - ignoring (likely sync error)");
+        return;
+      }
+      
       // First check if this was a kick by examining state events
       bool wasKicked = false;
       String? kickedBy;
@@ -1029,6 +1051,14 @@ class SyncManager with ChangeNotifier {
       if (serverRooms.isEmpty && localRooms.isNotEmpty) {
         print("[SyncManager] WARNING: Server returned 0 rooms but local has ${localRooms.length} rooms");
         print("[SyncManager] This might indicate a sync issue, skipping reconciliation");
+        return;
+      }
+      
+      // Additional safety: Don't reconcile if we have very few server rooms compared to local
+      // This might indicate incomplete sync
+      if (serverRooms.length < localRooms.length / 2 && localRooms.length > 2) {
+        print("[SyncManager] WARNING: Server has significantly fewer rooms (${serverRooms.length}) than local (${localRooms.length})");
+        print("[SyncManager] This might indicate incomplete sync, skipping reconciliation");
         return;
       }
       
