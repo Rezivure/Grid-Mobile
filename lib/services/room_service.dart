@@ -286,29 +286,43 @@ class RoomService {
       await client.joinRoom(roomId);
       print("Successfully joined room: $roomId");
 
+      // Wait a bit for sync to catch up
+      await Future.delayed(const Duration(seconds: 1));
+      
       // Check if the room exists
       final room = client.getRoomById(roomId);
       if (room == null) {
-        print("Room not found after joining.");
+        print("Room not found after joining - might be sync delay.");
+        // Don't auto-leave - might just need more time to sync
         return false; // Invalid invite
       }
 
-      // Optionally, you can check participants
+      // Check participants - but be more lenient
       final participants = await room.getParticipants();
-      final hasValidParticipant = participants.any(
-            (user) => user.membership == Membership.join && user.id != client.userID,
-      );
-
-      if (!hasValidParticipant) {
+      final joinedParticipants = participants.where(
+        (user) => user.membership == Membership.join
+      ).toList();
+      
+      // Check for invited participants too (they might not have joined yet)
+      final invitedParticipants = participants.where(
+        (user) => user.membership == Membership.invite && user.id != client.userID
+      ).toList();
+      
+      if (joinedParticipants.length == 1 && 
+          joinedParticipants.first.id == client.userID &&
+          invitedParticipants.isEmpty) {
+        // We're alone and no one is invited - this is actually invalid
         print("No valid participants found, leaving the room.");
         await leaveRoom(roomId);
         return false; // Invalid invite
       }
+      
       return true; // Successfully joined
     } catch (e) {
       print("Error during acceptInvitation: $e");
-      await leaveRoom(roomId);
-      return false; // Failed to join
+      // Don't auto-leave on error - could be network issue
+      // Let the cleanup process handle it later if needed
+      return false; // Failed to join but don't leave
     }
   }
 
@@ -336,11 +350,22 @@ class RoomService {
 
   Future<void> cleanRooms() async {
     try {
+      // SAFETY: Ensure client is fully synced before cleaning
+      if (!client.isLogged() || client.syncPending == null) {
+        print("[CleanRooms] Client not fully synced yet, skipping cleanup");
+        return;
+      }
+      
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final myUserId = client.userID;
       print("Checking for rooms to clean at timestamp: $now");
 
       for (var room in client.rooms) {
+        // Skip rooms we're not actually joined to
+        if (room.membership != Membership.join) {
+          continue;
+        }
+        
         print("Trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
@@ -363,12 +388,25 @@ class RoomService {
             }
           } else if (room.name.contains("Grid:Direct:")) {
             print("Checking direct room: ${room.id} with ${participants.length} participants");
-
-            if (participants.length <= 1) {
-              shouldLeave = true;
-              leaveReason = 'solo direct room';
-            } else if (participants.length == 2 &&
-                participants.every((p) => p.membership != Membership.join)) {
+            
+            // Get joined members only
+            final joinedMembers = participants.where((p) => p.membership == Membership.join).toList();
+            
+            if (joinedMembers.length == 1 && joinedMembers.first.id == myUserId) {
+              // Check if the other person actually left (not just invite pending or network issue)
+              final otherMember = participants.firstWhere(
+                (p) => p.id != myUserId,
+                orElse: () => participants.first, // fallback to avoid crash
+              );
+              
+              // Only leave if the other person's membership is 'leave' (they actually left)
+              // Don't leave if they're 'invite' (pending) or if we can't determine
+              if (otherMember.id != myUserId && otherMember.membership == Membership.leave) {
+                shouldLeave = true;
+                leaveReason = 'other participant left direct room';
+              }
+            } else if (joinedMembers.isEmpty) {
+              // No one has join status - but check if this is just a sync issue
               shouldLeave = true;
               leaveReason = 'no active participants in direct room';
             }
@@ -380,11 +418,18 @@ class RoomService {
         }
 
         // Extra checks for any room type
+        // Only leave if we're truly alone AND it's not a temporary sync issue
         if (!shouldLeave && participants.length == 1 &&
             participants.first.id == myUserId &&
             participants.first.membership == Membership.join) {
-          shouldLeave = true;
-          leaveReason = 'solo member room';
+          // For direct rooms, this might be temporary - other user might be rejoining
+          if (room.name.contains("Grid:Direct:")) {
+            // Don't auto-leave, this could be a sync issue
+            print("Skipping auto-leave for solo direct room - might be temporary");
+          } else {
+            shouldLeave = true;
+            leaveReason = 'solo member room';
+          }
         }
 
         if (shouldLeave) {
@@ -922,16 +967,25 @@ class RoomService {
                   (user) => user.id != client.userID,
             );
 
-            // Add this user to the direct users list and map them to the room.
-            directUsers.add(otherMember);
-            userRoomMap[otherMember] = room.id;
+            // Only add if the other member has a valid membership status
+            // Don't auto-leave here - this might just be a sync issue
+            if (otherMember.membership == Membership.join || 
+                otherMember.membership == Membership.invite) {
+              directUsers.add(otherMember);
+              userRoomMap[otherMember] = room.id;
+            } else if (otherMember.membership == Membership.leave) {
+              // Other person left - we can safely leave too
+              print('Other member left room: ${room.id}, leaving as well');
+              await leaveRoom(room.id);
+            } else {
+              // Unknown state - don't add but also don't leave yet
+              print('Other member in unknown state in room: ${room.id}, skipping');
+            }
           } catch (e) {
-            // Log if no other member is found.
-            print('No other member found in room: ${room.id}');
-            // TODO: may be causing issue with contacts screen
-            await leaveRoom(room.id);
-            print('Left room: ${room.id}');
-
+            // No other member found - but don't auto-leave!
+            // This could be a temporary sync issue
+            print('Warning: No other member found in room: ${room.id} (might be sync issue)');
+            // Don't leave the room - just skip it for now
           }
         }
       }
