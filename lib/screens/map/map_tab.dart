@@ -77,20 +77,21 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _servicesInitialized = false;
   AppLifecycleState? _currentLifecycleState;
   late MapController _mapController;
-  late LocationManager _locationManager;
-  late RoomService _roomService;
-  late UserService _userService;
-  late SyncManager _syncManager;
-  late UserRepository userRepository;
-  late SharingPreferencesRepository sharingPreferencesRepository;
-  late MapIconRepository _mapIconRepository;
-  late MapIconSyncService _mapIconSyncService;
+  LocationManager? _locationManager;
+  RoomService? _roomService;
+  UserService? _userService;
+  SyncManager? _syncManager;
+  UserRepository? userRepository;
+  SharingPreferencesRepository? sharingPreferencesRepository;
+  MapIconRepository? _mapIconRepository;
+  MapIconSyncService? _mapIconSyncService;
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
   double _zoom = 10;  // Changed default from 12 to 10
   bool _initialZoomCalculated = false;
   LatLng? _initialCenter;  // Store the calculated center point
+  int _lastKnownUserLocationsCount = 0;  // Track when contacts first load from sync
 
   bool _isPingOnCooldown = false;
   int _pingCooldownSeconds = 5;
@@ -173,6 +174,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   Future<void> _checkAndInitialize() async {
     // Always just do normal initialization now that avatar issue is fixed
+    // Defer to next frame to avoid build phase conflicts
+    await Future.delayed(Duration.zero);
+    if (!mounted) return;
+    
     await _initializeServices();
     _loadMapProvider();
     _loadMapStylePreference();
@@ -237,8 +242,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Skip if already initialized
     if (_servicesInitialized) {
       // Still need to re-add listeners that might have been removed
-      _locationManager.addListener(_onLocationUpdate);
-      _syncManager.addListener(_checkAuthenticationStatus);
+      _locationManager?.addListener(_onLocationUpdate);
+      _syncManager?.addListener(_checkAuthenticationStatus);
       context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
       return;
     }
@@ -269,15 +274,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
 
     // Listen for authentication failures
-    _syncManager.addListener(_checkAuthenticationStatus);
+    _syncManager?.addListener(_checkAuthenticationStatus);
 
-    _syncManager.initialize();
+    // Initialize sync manager and listen for state changes
+    _syncManager?.addListener(_onSyncStateChanged);
+    _syncManager?.initialize();
     
-    // Clean up orphaned location data on startup
-    Future.delayed(const Duration(seconds: 2), () async {
+    // Queue orphaned data cleanup to run after sync completes
+    _syncManager?.queuePostSyncOperation(() async {
       try {
-        await _syncManager.cleanupOrphanedLocationData();
+        await _syncManager?.cleanupOrphanedLocationData();
       } catch (e) {
+        print('[MapTab] Error cleaning orphaned data: $e');
       }
     });
 
@@ -285,11 +293,22 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final isIncognitoMode = prefs.getBool('incognito_mode') ?? false;
 
     if (!isIncognitoMode) {
-      _locationManager.startTracking();
+      _locationManager?.startTracking();
+      // Immediately try to get current location to avoid showing default location
+      _locationManager?.grabLocationAndPing().then((_) {
+        if (mounted && _locationManager?.currentLatLng != null && _isMapReady && !_initialZoomCalculated) {
+          // If map is ready and we haven't zoomed yet, do it now
+          _zoom = 14.0;
+          _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+          setState(() {
+            _initialZoomCalculated = true;
+          });
+        }
+      });
     }
     
     // Listen for location updates to trigger zoom calculation
-    _locationManager.addListener(_onLocationUpdate);
+    _locationManager?.addListener(_onLocationUpdate);
     
     // Load avatars ONCE on init without any refresh loops
     Future.delayed(const Duration(seconds: 1), () {
@@ -335,16 +354,24 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   void _onLocationUpdate() {
     // Check if we can calculate zoom now
-    if (!_initialZoomCalculated && _isMapReady && _locationManager.currentLatLng != null) {
+    if (!_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null) {
+      // First center on user immediately
+      if (!_initialZoomCalculated) {
+        _zoom = 14.0;
+        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+      }
+      
+      // Then adjust if we have user locations
       final mapBloc = context.read<MapBloc>();
       final userLocations = mapBloc.state.userLocations;
-      // Always calculate zoom, even with no contacts
-      final result = _calculateOptimalZoomAndCenter(
-        _locationManager.currentLatLng!, 
-        userLocations
-      );
-      _zoom = result.zoom;
-      _mapController.moveAndRotate(result.center, _zoom, 0);
+      if (userLocations.isNotEmpty) {
+        final result = _calculateOptimalZoomAndCenter(
+          _locationManager!.currentLatLng!, 
+          userLocations
+        );
+        _zoom = result.zoom;
+        _mapController.moveAndRotate(result.center, _zoom, 0);
+      }
       setState(() {
         _initialZoomCalculated = true;
       });
@@ -352,7 +379,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _checkAuthenticationStatus() {
-    if (_syncManager.authenticationFailed) {
+    if (_syncManager?.authenticationFailed == true) {
       // Authentication failed, navigate to login screen
       
       // Clear the flag so we don't repeatedly navigate
@@ -375,17 +402,29 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     });
   }
 
+  void _onSyncStateChanged() {
+    // React to sync state changes if needed
+    if (_syncManager?.isReady == true && !_hasStartedLocationTracking) {
+      _hasStartedLocationTracking = true;
+      print('[MapTab] Sync ready, location tracking can proceed');
+    }
+  }
+  
+  bool _hasStartedLocationTracking = false;
+  
   @override
   void dispose() {
+    _syncManager?.removeListener(_onSyncStateChanged);
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _locationManager.removeListener(_onLocationUpdate);
-    _syncManager.removeListener(_checkAuthenticationStatus);
+    _locationManager?.removeListener(_onLocationUpdate);
+    _syncManager?.removeListener(_checkAuthenticationStatus);
+    _syncManager?.removeListener(_onSyncStateChanged);
     context.read<SelectedSubscreenProvider>().removeListener(_onSubscreenChanged);
     _mapController.dispose();
-    _syncManager.stopSync();
-    _locationManager.stopTracking();
+    _syncManager?.stopSync();
+    _locationManager?.stopTracking();
     AppReviewManager.stopSession(); // Stop tracking usage
     
     // No longer need to reset initialization flag
@@ -432,7 +471,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
     
     // Normal resume handling for short pauses
-    _syncManager.handleAppLifecycleState(state == AppLifecycleState.resumed);
+    _syncManager?.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
     // Refresh satellite token when app resumes if using satellite maps
     if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
@@ -441,9 +480,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _backwardsCompatibilityUpdate() async {
+    if (userRepository == null || sharingPreferencesRepository == null) {
+      return; // Services not yet initialized
+    }
+    
     final backwardsService = BackwardsCompatibilityService(
-      userRepository,
-      sharingPreferencesRepository,
+      userRepository!,
+      sharingPreferencesRepository!,
     );
 
     await backwardsService.runBackfillIfNeeded();
@@ -539,8 +582,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     
     // Save to database and sync in background
     try {
-      await _mapIconRepository.insertMapIcon(newIcon);
-      await _mapIconSyncService.sendIconCreate(newIcon.roomId, newIcon);
+      await _mapIconRepository?.insertMapIcon(newIcon);
+      await _mapIconSyncService?.sendIconCreate(newIcon.roomId, newIcon);
     } catch (e) {
       // If save fails, remove from BLoC
       context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
@@ -584,7 +627,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   void _sendPing() {
-    _locationManager.grabLocationAndPing();
+    _locationManager?.grabLocationAndPing();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Location pinged to all active contacts and groups.'),
@@ -859,7 +902,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Fetch user display name
     String displayName = userId.split(':')[0].replaceFirst('@', ''); // Default fallback
     try {
-      final user = await userRepository.getUserById(userId);
+      final user = await userRepository?.getUserById(userId);
       if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
         displayName = user.displayName!;
       }
@@ -875,10 +918,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   @override
   Widget build(BuildContext context) {
-    if (_tileProvider == null) {
-      return _buildMapLoadingState(context);
-    }
-
+    // Always show the map UI immediately - no loading screen
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDarkMode = theme.brightness == Brightness.dark;
@@ -913,17 +953,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           });
         }
         
-        // Handle initial zoom calculation when user locations arrive or change
-        if (!_initialZoomCalculated && _isMapReady && _locationManager.currentLatLng != null) {
-          final result = _calculateOptimalZoomAndCenter(
-            _locationManager.currentLatLng!, 
-            state.userLocations
-          );
-          _zoom = result.zoom;
-          _mapController.moveAndRotate(result.center, _zoom, 0);
-          setState(() {
-            _initialZoomCalculated = true;
-          });
+        // Handle zoom adjustment when user locations arrive from sync (after initial zoom)
+        // Only adjust if we've already done initial zoom and now have contacts
+        if (_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null && state.userLocations.isNotEmpty) {
+          // Check if this is the first time we're getting user locations
+          final previousEmpty = _lastKnownUserLocationsCount == 0;
+          _lastKnownUserLocationsCount = state.userLocations.length;
+          
+          if (previousEmpty) {
+            // Smoothly adjust to include contacts
+            final result = _calculateOptimalZoomAndCenter(
+              _locationManager!.currentLatLng!, 
+              state.userLocations
+            );
+            _zoom = result.zoom;
+            print('[SMART ZOOM] Contacts loaded from sync, smoothly adjusting view');
+            _mapController.moveAndRotate(result.center, _zoom, 0);
+          }
         } else if (!_initialZoomCalculated) {
         }
       },
@@ -1009,10 +1055,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           metadata: _movingIcon!.metadata,
                         );
                         
-                        await _mapIconRepository.updateMapIcon(updatedIcon);
+                        await _mapIconRepository?.updateMapIcon(updatedIcon);
                         
                         // Send update to other users
-                        await _mapIconSyncService.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
+                        await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
                         
                         // Notify the BLoC about the update
                         context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
@@ -1089,7 +1135,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         });
                       }
                     },
-                    initialCenter: _locationManager.currentLatLng ?? LatLng(51.5, -0.09),
+                    initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
                     initialZoom: _zoom,
                     initialRotation: 0.0,
                     minZoom: 1,
@@ -1122,38 +1168,52 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       // Calculate optimal zoom when map is ready
                       if (!_initialZoomCalculated) {
                         // Try to get current position if we don't have it yet
-                        if (_locationManager.currentLatLng == null) {
+                        if (_locationManager?.currentLatLng == null) {
                           print('[SMART ZOOM] No location yet, requesting current position...');
-                          _locationManager.grabLocationAndPing().then((_) {
-                            print('[SMART ZOOM] Got location: ${_locationManager.currentLatLng}');
-                            if (_locationManager.currentLatLng != null && mounted) {
+                          _locationManager?.grabLocationAndPing().then((_) {
+                            print('[SMART ZOOM] Got location: ${_locationManager?.currentLatLng}');
+                            if (_locationManager?.currentLatLng != null && mounted) {
+                              // Immediately center on user's location first
+                              _zoom = 14.0; // Good zoom level for single user
+                              _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+                              
+                              // Then check if we have user locations from sync
                               final mapBloc = context.read<MapBloc>();
                               final userLocations = mapBloc.state.userLocations;
-                              // Always calculate zoom, even with no contacts
-                              final result = _calculateOptimalZoomAndCenter(
-                                _locationManager.currentLatLng!, 
-                                userLocations
-                              );
-                              _zoom = result.zoom;
-                              print('[SMART ZOOM] Moving to center point with zoom: $_zoom');
-                              _mapController.moveAndRotate(result.center, _zoom, 0);
+                              if (userLocations.isNotEmpty) {
+                                // Recalculate with user locations
+                                final result = _calculateOptimalZoomAndCenter(
+                                  _locationManager!.currentLatLng!, 
+                                  userLocations
+                                );
+                                _zoom = result.zoom;
+                                print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
+                                _mapController.moveAndRotate(result.center, _zoom, 0);
+                              }
                               setState(() {
                                 _initialZoomCalculated = true;
                               });
                             }
                           });
                         } else {
-                          // We already have location
+                          // We already have location - immediately center on user
+                          print('[SMART ZOOM] Have location: ${_locationManager?.currentLatLng}');
+                          _zoom = 14.0; // Good zoom level for single user
+                          _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+                          
+                          // Then check if we have user locations from sync
                           final mapBloc = context.read<MapBloc>();
                           final userLocations = mapBloc.state.userLocations;
-                          // Always calculate zoom, even with no contacts
-                          final result = _calculateOptimalZoomAndCenter(
-                            _locationManager.currentLatLng!, 
-                            userLocations
-                          );
-                          _zoom = result.zoom;
-                          print('[SMART ZOOM] Moving map to center with zoom: $_zoom');
-                          _mapController.moveAndRotate(result.center, _zoom, 0);
+                          if (userLocations.isNotEmpty) {
+                            // Recalculate with user locations
+                            final result = _calculateOptimalZoomAndCenter(
+                              _locationManager!.currentLatLng!, 
+                              userLocations
+                            );
+                            _zoom = result.zoom;
+                            print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
+                            _mapController.moveAndRotate(result.center, _zoom, 0);
+                          }
                           setState(() {
                             _initialZoomCalculated = true;
                           });
@@ -1162,6 +1222,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     },
                   ),
               children: [
+                // Show a subtle gray placeholder while tiles are loading
+                // This gives instant visual feedback like Google Maps
+                if (_tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
+                  Container(
+                    color: isDarkMode 
+                      ? const Color(0xFF2C2C2C)  // Slightly lighter dark gray for visibility
+                      : const Color(0xFFE8E8E8), // Light gray for light mode
+                  ),
+                // Regular map tiles
                 if (_currentMapStyle == 'base' && _tileProvider != null)
                   VectorTileLayer(
                     theme: _mapTheme,
@@ -1447,10 +1516,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     final iconCreatorId = _selectedMapIcon!.creatorId;
                     
                     // Delete locally
-                    await _mapIconRepository.deleteMapIcon(iconIdToDelete);
+                    await _mapIconRepository?.deleteMapIcon(iconIdToDelete);
                     
                     // Send delete event to other users
-                    await _mapIconSyncService.sendIconDelete(iconRoomId, iconIdToDelete, iconCreatorId);
+                    await _mapIconSyncService?.sendIconDelete(iconRoomId, iconIdToDelete, iconCreatorId);
                     
                     // Notify the BLoC about the deletion
                     context.read<MapIconsBloc>().add(MapIconDeleted(iconId: iconIdToDelete, roomId: iconRoomId));
@@ -1547,10 +1616,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         metadata: _selectedMapIcon!.metadata,
                       );
                       
-                      await _mapIconRepository.updateMapIcon(updatedIcon);
+                      await _mapIconRepository?.updateMapIcon(updatedIcon);
                       
                       // Send update to other users
-                      await _mapIconSyncService.sendIconUpdate(updatedIcon.roomId, updatedIcon);
+                      await _mapIconSyncService?.sendIconUpdate(updatedIcon.roomId, updatedIcon);
                       
                       // Notify the BLoC about the update
                       context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
@@ -1661,7 +1730,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
                     onPressed: () {
                       // can add any pre center logic here
-                      _mapController.move(_locationManager.currentLatLng ?? _mapController.camera.center, _mapController.camera.zoom);
+                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, _mapController.camera.zoom);
                       setState(() {
                         _followUser = true;
                       });
@@ -1720,7 +1789,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (!utils.isCustomHomeserver(_roomService.getMyHomeserver()))
+                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
                     FloatingActionButton(
                       heroTag: "mapSelectorBtn",
                       backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
@@ -1741,7 +1810,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             ),
 
             // Map Selector Overlay (only for default homeserver)
-            if (_showMapSelector && !utils.isCustomHomeserver(_roomService.getMyHomeserver()))
+            if (_showMapSelector && !utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
               Positioned(
                 top: 300,
                 right: 16,

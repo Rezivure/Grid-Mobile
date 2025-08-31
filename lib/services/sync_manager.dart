@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:matrix/matrix.dart';
@@ -30,7 +31,16 @@ import '../blocs/map/map_event.dart';
 import '../models/pending_message.dart';
 import '../models/sharing_preferences.dart';
 
-
+/// Represents the current state of sync initialization
+enum SyncState {
+  uninitialized,
+  loadingToken,
+  performingCatchUp,
+  processingRooms,
+  reconciling,
+  ready,
+  error,
+}
 
 class SyncManager with ChangeNotifier {
   final Client client;
@@ -54,6 +64,12 @@ class SyncManager with ChangeNotifier {
   bool _isInitialized = false;
   String? _sinceToken;
   bool _authenticationFailed = false;
+  
+  // Elegant sync state management
+  SyncState _syncState = SyncState.uninitialized;
+  final List<Function> _postSyncOperations = [];
+  DateTime? _lastRoomUpdateTime;
+  static const Duration _minRoomUpdateInterval = Duration(seconds: 5);
 
 
   SyncManager(
@@ -74,6 +90,8 @@ class SyncManager with ChangeNotifier {
   List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
   int get totalInvites => _invites.length;
+  SyncState get syncState => _syncState;
+  bool get isReady => _syncState == SyncState.ready;
 
   Future<void> _loadSinceToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -82,19 +100,28 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> _saveSinceToken(String token) async {
+    // Never save empty tokens
+    if (token.isEmpty) {
+      print('[SyncManager] Warning: Attempted to save empty sync token, ignoring');
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('syncSinceToken', token);
-    print('[SyncManager] Saved since token: $token');
+    print('[SyncManager] Saved since token: ${token.substring(0, 20)}...');
   }
 
   Future<void> initialize() async {
-    if (_isInitialized) return;
-
-    print("Initializing Sync Manager...");
+    if (_isInitialized || _syncState != SyncState.uninitialized) return;
+    
+    // Defer state change to avoid build phase conflicts
+    await Future.microtask(() => _setSyncState(SyncState.loadingToken));
+    print("[SyncManager] Starting initialization sequence");
     try {
       await _loadSinceToken();
       
       // IMPORTANT: Do initial sync BEFORE cleaning rooms
+      _setSyncState(SyncState.performingCatchUp);
+      
       if (_sinceToken == null) {
         print("[SyncManager] Performing initial full sync...");
         final response = await client.sync(
@@ -102,35 +129,90 @@ class SyncManager with ChangeNotifier {
           timeout: 30000,
         );
         
-        if (response.nextBatch != null) {
+        if (response.nextBatch != null && response.nextBatch!.isNotEmpty) {
           _sinceToken = response.nextBatch;
           await _saveSinceToken(_sinceToken!);
         }
         
-        _processInitialSync(response);
+        await _processInitialSync(response);
         
         // Wait a moment for client to fully process the sync
         await Future.delayed(const Duration(seconds: 1));
       } else {
         // Even with a saved token, do a quick sync to ensure we're up to date
-        print("[SyncManager] Performing catch-up sync...");
-        await client.sync(
+        print("[SyncManager] Performing catch-up sync from saved token...");
+        final response = await client.sync(
           since: _sinceToken,
           timeout: 10000,
         );
+        
+        // Process any messages that came in while we were offline
+        if (response.nextBatch != null && response.nextBatch!.isNotEmpty) {
+          _sinceToken = response.nextBatch;
+          await _saveSinceToken(_sinceToken!);
+        }
+        
+        // Process the catch-up sync response to get missed messages
+        await _processInitialSync(response);
       }
       
-      // NOW it's safe to clean rooms and reconcile
+      // Process rooms after sync completes
+      _setSyncState(SyncState.processingRooms);
       await roomService.cleanRooms();
+      
+      // Reconcile state
+      _setSyncState(SyncState.reconciling);
       await _reconcileLocalStateWithServer();
 
+      // Start ongoing sync stream
       roomService.getAndUpdateDisplayName();
       await _startSyncStream();
+      
+      // Mark as ready and process queued operations
       _isInitialized = true;
+      _setSyncState(SyncState.ready);
+      await _processQueuedOperations();
     } catch (e) {
-      print("Error during initialization: $e");
+      print("[SyncManager] Error during initialization: $e");
+      _setSyncState(SyncState.error);
       if (_isAuthenticationError(e)) {
         await _handleAuthenticationFailure();
+      }
+    }
+  }
+  
+  void _setSyncState(SyncState newState) {
+    if (_syncState != newState) {
+      print('[SyncManager] State transition: $_syncState -> $newState');
+      _syncState = newState;
+      // Defer notification to avoid setState during build
+      // Using scheduleMicrotask ensures it runs after current build
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
+    }
+  }
+  
+  /// Queue an operation to run after sync completes
+  void queuePostSyncOperation(Function operation) {
+    if (_syncState == SyncState.ready) {
+      // Already ready, execute immediately
+      operation();
+    } else {
+      _postSyncOperations.add(operation);
+    }
+  }
+  
+  Future<void> _processQueuedOperations() async {
+    print('[SyncManager] Processing ${_postSyncOperations.length} queued operations');
+    final operations = List<Function>.from(_postSyncOperations);
+    _postSyncOperations.clear();
+    
+    for (final operation in operations) {
+      try {
+        await operation();
+      } catch (e) {
+        print('[SyncManager] Error processing queued operation: $e');
       }
     }
   }
@@ -143,7 +225,9 @@ class SyncManager with ChangeNotifier {
     if (_syncSubscription != null) return;
     
     _syncSubscription = client.onSync.stream.listen(
-      _processSyncUpdate,
+      (syncUpdate) async {
+        await _processSyncUpdate(syncUpdate);
+      },
       onError: (error) {
         print("Sync stream error: $error");
         if (_isAuthenticationError(error)) {
@@ -165,20 +249,25 @@ class SyncManager with ChangeNotifier {
     }
   }
   
-  void _processSyncUpdate(SyncUpdate syncUpdate) {
-    if (syncUpdate.nextBatch != null) {
+  Future<void> _processSyncUpdate(SyncUpdate syncUpdate) async {
+    if (syncUpdate.nextBatch != null && syncUpdate.nextBatch!.isNotEmpty) {
       _sinceToken = syncUpdate.nextBatch;
-      _saveSinceToken(_sinceToken!);
+      await _saveSinceToken(_sinceToken!);
     }
     
     syncUpdate.rooms?.invite?.forEach(_processInvite);
     
-    syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-      _processRoomMessages(roomId, joinedRoomUpdate);
-      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-        _processRoomJoin(roomId, joinedRoomUpdate);
+    // Process joined rooms with async/await
+    if (syncUpdate.rooms?.join != null) {
+      for (var entry in syncUpdate.rooms!.join!.entries) {
+        final roomId = entry.key;
+        final joinedRoomUpdate = entry.value;
+        await _processRoomMessages(roomId, joinedRoomUpdate);
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+          await _processRoomJoin(roomId, joinedRoomUpdate);
+        }
       }
-    });
+    }
     
     syncUpdate.rooms?.leave?.forEach(_processRoomLeaveOrKick);
   }
@@ -396,11 +485,17 @@ class SyncManager with ChangeNotifier {
     }
   }
 
-  void _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) {
+  Future<void> _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
     final timelineEvents = joinedRoomUpdate.timeline?.events ?? [];
     for (var event in timelineEvents) {
+      // Debug log event type and sender
+      if (event.type == 'm.room.message') {
+        print('[Sync Debug] Processing ${event.type} from ${event.senderId} in room $roomId');
+      }
+      
       if (!_isActive) {
         // Queue message if app is in background
+        print('[Sync Debug] App inactive, queuing event ${event.eventId}');
         _pendingMessages.add(PendingMessage(
           roomId: roomId,
           eventId: event.eventId ?? '',
@@ -409,12 +504,13 @@ class SyncManager with ChangeNotifier {
         continue;
       }
 
-      messageProcessor.processEvent(roomId, event).then((message) {
+      try {
+        final message = await messageProcessor.processEvent(roomId, event);
         if (message != null) {
           _roomMessages.putIfAbsent(roomId, () => []).add(message);
           notifyListeners();
         }
-      }).catchError((e) {
+      } catch (e) {
         if (e is PlatformException && e.code == '-25308') {
           // Queue message if we get keychain access error
           _pendingMessages.add(PendingMessage(
@@ -425,7 +521,7 @@ class SyncManager with ChangeNotifier {
         } else {
           print("Error processing event ${event.eventId}: $e");
         }
-      });
+      }
     }
   }
 
@@ -766,15 +862,27 @@ class SyncManager with ChangeNotifier {
     }
   }
 
-  void _processInitialSync(SyncUpdate response) {
+  Future<void> _processInitialSync(SyncUpdate response) async {
+    print('[Sync Debug] Processing initial sync response');
+    print('[Sync Debug] Rooms in response - Joined: ${response.rooms?.join?.length ?? 0}, Invited: ${response.rooms?.invite?.length ?? 0}');
+    
     response.rooms?.invite?.forEach(_processInvite);
     
-    response.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-      _processRoomMessages(roomId, joinedRoomUpdate);
-      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-        _processRoomJoin(roomId, joinedRoomUpdate);
+    // Process all joined rooms and wait for message processing
+    if (response.rooms?.join != null) {
+      for (var entry in response.rooms!.join!.entries) {
+        final roomId = entry.key;
+        final joinedRoomUpdate = entry.value;
+        final timelineEventCount = joinedRoomUpdate.timeline?.events?.length ?? 0;
+        if (timelineEventCount > 0) {
+          print('[Sync Debug] Room $roomId has $timelineEventCount timeline events to process');
+        }
+        await _processRoomMessages(roomId, joinedRoomUpdate);
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+          await _processRoomJoin(roomId, joinedRoomUpdate);
+        }
       }
-    });
+    }
     
     response.rooms?.leave?.forEach(_processRoomLeaveOrKick);
 

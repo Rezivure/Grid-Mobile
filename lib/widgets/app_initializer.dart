@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import '../screens/onboarding/welcome_screen.dart';
+import '../screens/onboarding/splash_screen.dart';
 import '../screens/map/map_tab.dart';
 
 class AppInitializer extends StatefulWidget {
@@ -57,7 +58,7 @@ class _AppInitializerState extends State<AppInitializer>
     
     // Check authentication state
     if (widget.client.isLogged()) {
-      // User is logged in, go to main app
+      // User is logged in, go directly to main app (no splash screen)
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -69,7 +70,7 @@ class _AppInitializerState extends State<AppInitializer>
         ),
       );
     } else {
-      // User not logged in, go directly to welcome screen
+      // User not logged in, go directly to welcome screen (no custom splash)
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -88,15 +89,10 @@ class _AppInitializerState extends State<AppInitializer>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(
-            colorScheme.primary,
-          ),
-        ),
-      ),
+    // Show nothing - just an empty container while we check auth
+    // The native splash will still be showing
+    return Container(
+      color: colorScheme.surface,
     );
   }
 }

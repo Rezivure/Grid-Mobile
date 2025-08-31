@@ -26,6 +26,7 @@ import 'location_history_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
@@ -45,16 +46,31 @@ class ContactsSubscreen extends StatefulWidget {
   ContactsSubscreenState createState() => ContactsSubscreenState();
 }
 
-class ContactsSubscreenState extends State<ContactsSubscreen> {
+class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProviderStateMixin {
   TextEditingController _searchController = TextEditingController();
   Timer? _timer;
   bool _isRefreshing = false;
+  late AnimationController _dotsAnimationController;
+  late Animation<int> _dotsAnimation;
 
 
   @override
   void initState() {
     super.initState();
     context.read<ContactsBloc>().add(LoadContacts());
+    
+    // Initialize animation for syncing dots
+    _dotsAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat();
+    
+    _dotsAnimation = IntTween(begin: 0, end: 3).animate(
+      CurvedAnimation(
+        parent: _dotsAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_isRefreshing) {
@@ -73,6 +89,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _dotsAnimationController.dispose();
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
@@ -213,15 +230,27 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
 
                     return contactsWithLocation.isEmpty
                         ? _buildEmptyState(colorScheme)
-                        : ListView.builder(
-                            controller: widget.scrollController,
-                            itemCount: contactsWithLocation.length,
-                            padding: const EdgeInsets.all(16.0),
-                            itemBuilder: (context, index) {
-                              final contact = contactsWithLocation[index];
+                        : Consumer<SyncManager>(
+                            builder: (context, syncManager, child) {
+                              final isSyncing = syncManager.syncState != SyncState.ready;
+                              
+                              return ListView.builder(
+                                controller: widget.scrollController,
+                                itemCount: contactsWithLocation.length + (isSyncing ? 1 : 0),
+                                padding: const EdgeInsets.all(16.0),
+                                itemBuilder: (context, index) {
+                                  // Show sync indicator as first item
+                                  if (isSyncing && index == 0) {
+                                    return _buildSyncingIndicator(colorScheme);
+                                  }
+                                  
+                                  // Adjust index for contacts when syncing indicator is shown
+                                  final contactIndex = isSyncing ? index - 1 : index;
+                                  final contact = contactsWithLocation[contactIndex];
 
-                              return _buildModernContactCard(contact, colorScheme, theme);
-
+                                  return _buildModernContactCard(contact, colorScheme, theme);
+                                },
+                              );
                             },
                           );
                   },
@@ -237,6 +266,41 @@ class ContactsSubscreenState extends State<ContactsSubscreen> {
     );
   }
 
+  Widget _buildSyncingIndicator(ColorScheme colorScheme) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Syncing',
+              style: TextStyle(
+                color: colorScheme.onSurface.withOpacity(0.5),
+                fontSize: 13,
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _dotsAnimation,
+              builder: (context, child) {
+                final dots = '.' * (_dotsAnimation.value + 1);
+                return Text(
+                  dots.padRight(3),
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                    fontSize: 13,
+                    fontFamily: 'monospace', // Ensures consistent width
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
   Widget _buildLoadingState() {
     return ListView.builder(
       controller: widget.scrollController,
