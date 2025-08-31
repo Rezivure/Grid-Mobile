@@ -17,8 +17,8 @@ class AvatarWithUpdates extends StatelessWidget {
   Widget build(BuildContext context) {
     // UserAvatarBloc already handles updates through the BLoC pattern
     return UserAvatarBloc(
-      userId: widget.userId,
-      size: widget.size,
+      userId: userId,
+      size: size,
     );
   }
 }

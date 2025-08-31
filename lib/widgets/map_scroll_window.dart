@@ -8,6 +8,8 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
@@ -113,24 +115,27 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
+      builder: (modalContext) => BlocProvider.value(
+        value: context.read<InvitationsBloc>(),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(modalContext).size.height * 0.8,
           ),
-          child: InvitesModal(
-            roomService: _roomService,
-            onInviteHandled: _navigateToContacts,
+          decoration: BoxDecoration(
+            color: Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: InvitesModal(
+              roomService: _roomService,
+              onInviteHandled: _navigateToContacts,
+            ),
           ),
         ),
       ),
@@ -383,9 +388,13 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Positioned(
             right: 6,
             top: 6,
-            child: Consumer<SyncManager>(
-              builder: (context, syncManager, child) {
-                int inviteCount = syncManager.totalInvites;
+            child: BlocBuilder<InvitationsBloc, InvitationsState>(
+              builder: (context, state) {
+                int inviteCount = 0;
+                if (state is InvitationsLoaded) {
+                  inviteCount = state.totalInvites;
+                }
+                
                 if (inviteCount > 0) {
                   return Container(
                     padding: const EdgeInsets.all(4),

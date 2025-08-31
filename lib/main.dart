@@ -42,6 +42,9 @@ import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
+import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
@@ -196,7 +199,12 @@ void main() async {
               mapIconRepository: MapIconRepository(databaseService),
             ),
           ),
-          ChangeNotifierProxyProvider4<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
+          BlocProvider<InvitationsBloc>(
+            create: (context) => InvitationsBloc(
+              repository: InvitationsRepository(),
+            )..add(LoadInvitations()),
+          ),
+          ChangeNotifierProxyProvider5<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, InvitationsBloc, SyncManager>(
             create: (context) {
               // Create MapIconSyncService
               final mapIconRepository = MapIconRepository(databaseService);
@@ -227,10 +235,11 @@ void main() async {
                 context.read<GroupsBloc>(),
                 context.read<UserLocationProvider>(),
                 context.read<SharingPreferencesRepository>(),
+                context.read<InvitationsBloc>(),
                 mapIconSyncService: mapIconSyncService,
               )..startSync();
             },
-            update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, previous) {
+            update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, invitationsBloc, previous) {
               if (previous != null) return previous;
               
               // Create MapIconSyncService
@@ -262,6 +271,7 @@ void main() async {
                 groupsBloc,
                 context.read<UserLocationProvider>(),
                 sharingPreferencesRepository,
+                invitationsBloc,
                 mapIconSyncService: mapIconSyncService,
               )..startSync();
             },
