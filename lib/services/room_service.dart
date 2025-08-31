@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:math';
 
@@ -36,7 +37,8 @@ class RoomService {
   final int _maxMessageHistory = 50;
 
   bg.Location? _currentLocation;
-
+  DateTime? _lastUpdateTime;
+  
   bg.Location? get currentLocation => _currentLocation;
 
 
@@ -57,14 +59,32 @@ class RoomService {
     locationManager.locationStream.listen((location) {
       // Update current location in room service
       _currentLocation = location;
-      // Check if this is a targeted update
-      // if (location.extras?.containsKey('targetRoomId') == true) {
-       // String roomId = location.extras!['targetRoomId'];
-       // updateSingleRoom(roomId);
-     // } else {
-        // Regular periodic update to all rooms
-      updateRooms(location);
-    //  }
+      // Defer updates until appropriate time
+      _handleLocationUpdate(location);
+    });
+  }
+  
+  void _handleLocationUpdate(bg.Location location) {
+    // Queue location updates intelligently
+    // They will be processed when appropriate
+    _queueLocationUpdate(location);
+  }
+  
+  Timer? _locationUpdateTimer;
+  bg.Location? _pendingLocation;
+  
+  void _queueLocationUpdate(bg.Location location) {
+    _pendingLocation = location;
+    
+    // Cancel any existing timer
+    _locationUpdateTimer?.cancel();
+    
+    // Debounce location updates by 1 second to prevent spam
+    _locationUpdateTimer = Timer(const Duration(seconds: 1), () {
+      if (_pendingLocation != null) {
+        updateRooms(_pendingLocation!);
+        _pendingLocation = null;
+      }
     });
   }
 
@@ -701,6 +721,15 @@ class RoomService {
   }
 
   Future<void> updateRooms(bg.Location location) async {
+    // Prevent rapid duplicate updates
+    final now = DateTime.now();
+    if (_lastUpdateTime != null && 
+        now.difference(_lastUpdateTime!).inSeconds < 3) {
+      print("[RoomService] Skipping duplicate room update (too soon after last update)");
+      return;
+    }
+    _lastUpdateTime = now;
+    
     List<Room> rooms = client.rooms;
     print("Grid: Found ${rooms.length} total rooms to process");
 

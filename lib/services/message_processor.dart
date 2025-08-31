@@ -69,6 +69,8 @@ class MessageProcessor {
 
       // Check message type and handle accordingly
       final msgType = decryptedEvent.content['msgtype'] as String?;
+      print('[Message Processing] Processing message type: $msgType from ${decryptedEvent.senderId}');
+      
       if (msgType == 'm.avatar.announcement') {
         await _handleAvatarAnnouncement(messageData);
       } else if (msgType == 'm.group.avatar.announcement') {
@@ -76,9 +78,12 @@ class MessageProcessor {
       } else if (_isMapIconEvent(msgType)) {
         // Handle map icon events
         await _handleMapIconEvent(roomId, messageData);
-      } else {
+      } else if (msgType == 'm.location') {
+        print('[Message Processing] Processing location message from ${decryptedEvent.senderId}');
         // Attempt to parse location message
         await _handleLocationMessageIfAny(messageData, roomId);
+      } else {
+        // Not a special message type we handle
       }
       return messageData;
     }
@@ -102,6 +107,7 @@ class MessageProcessor {
 
     final locationData = messageParser.parseLocationMessage(messageData);
     if (locationData != null) {
+      print('[Location Processing] Found location message from $sender at ${locationData['latitude']}, ${locationData['longitude']}');
       final userLocation = UserLocation(
         userId: sender,
         latitude: locationData['latitude']!,
@@ -111,7 +117,7 @@ class MessageProcessor {
       );
 
       await locationRepository.insertLocation(userLocation);
-      print('Location saved for user: $sender');
+      print('[Location Processing] Location saved for user: $sender');
       var confirm = await locationRepository.getLatestLocation(sender);
       
       // Save to room-specific location history
