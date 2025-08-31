@@ -71,9 +71,9 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     final colorScheme = theme.colorScheme;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.65,
-      minChildSize: 0.4,
-      maxChildSize: 0.85,
+      initialChildSize: 0.75,  // Start taller
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
           color: colorScheme.surface,
@@ -133,14 +133,14 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             Expanded(
               child: SingleChildScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),  // Reduced top padding
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Group info section
                     _buildGroupInfoCard(theme, colorScheme),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),  // Reduced from 24
                     
                     // Action buttons
                     if (_isProcessing)
@@ -160,7 +160,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   Widget _buildGroupInfoCard(ThemeData theme, ColorScheme colorScheme) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),  // Reduced from 24
       decoration: BoxDecoration(
         color: colorScheme.surfaceVariant.withOpacity(0.3),
         borderRadius: BorderRadius.circular(20),
@@ -177,8 +177,8 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             children: [
               // Background circle
               Container(
-                width: 80,
-                height: 80,
+                width: 70,  // Reduced from 80
+                height: 70,  // Reduced from 80
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withOpacity(0.1),
                   shape: BoxShape.circle,
@@ -186,7 +186,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                 child: Icon(
                   Icons.group,
                   color: colorScheme.primary,
-                  size: 40,
+                  size: 35,  // Reduced from 40
                 ),
               ),
               // Inviter avatar in corner
@@ -218,7 +218,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             ],
           ),
           
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),  // Reduced from 20
           
           // Group name
           Text(
@@ -230,11 +230,11 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             textAlign: TextAlign.center,
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),  // Reduced from 16
           
           // Invitation message
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),  // Reduced from 16
             decoration: BoxDecoration(
               color: colorScheme.primary.withOpacity(0.08),
               borderRadius: BorderRadius.circular(12),
@@ -246,13 +246,13 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                     Icon(
                       Icons.person,
                       color: colorScheme.primary,
-                      size: 20,
+                      size: 18,  // Reduced from 20
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Invited by @${widget.inviter.split(":").first.replaceFirst('@', '')}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
                           color: colorScheme.onSurface,
                           fontWeight: FontWeight.w500,
                         ),
@@ -260,19 +260,19 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),  // Reduced from 8
                 Row(
                   children: [
                     Icon(
                       Icons.schedule,
                       color: colorScheme.primary,
-                      size: 20,
+                      size: 18,  // Reduced from 20
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Duration: $expiry',
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
                           color: colorScheme.onSurface,
                         ),
                       ),
@@ -283,7 +283,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),  // Reduced from 16
           
           // Join message
           Container(
@@ -533,10 +533,13 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       // Decline the invitation using RoomService
       await widget.roomService.declineInvitation(widget.roomId);
 
-      // Remove the invitation from SyncManager
-      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-
+      // Remove the invitation from SyncManager BEFORE closing modal
       if (mounted) {
+        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+        
+        // Give time for the bloc state to update and UI to reflect changes
+        await Future.delayed(const Duration(milliseconds: 300));
+        
         Navigator.of(context).pop(); // Close the modal
         await widget.refreshCallback(); // Trigger the callback to refresh
 

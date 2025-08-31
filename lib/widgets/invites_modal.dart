@@ -1,27 +1,109 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/friend_request_modal.dart';
 import 'package:grid_frontend/widgets/group_invitation_modal.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
-class InvitesModal extends StatelessWidget {
+class InvitesModal extends StatefulWidget {
   final RoomService roomService;
   final Future<void> Function() onInviteHandled;
 
   InvitesModal({required this.onInviteHandled, required this.roomService});
+  
+  @override
+  _InvitesModalState createState() => _InvitesModalState();
+}
+
+class _InvitesModalState extends State<InvitesModal> {
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Access the SyncManager
-    final syncManager = Provider.of<SyncManager>(context);
+    return BlocBuilder<InvitationsBloc, InvitationsState>(
+      buildWhen: (previous, current) {
+        // Force rebuild on any state change
+        print('[InvitesModal] State changed - rebuilding. Current invites: ${current is InvitationsLoaded ? current.invitations.length : 0}');
+        return true;
+      },
+      builder: (context, state) {
+        final invites = state is InvitationsLoaded ? state.invitations : [];
+        
+        void handleInviteTap(
+          BuildContext context,
+          String roomId,
+          String roomName,
+          String inviterId,
+          bool isDirectInvite,
+        ) {
+          if (isDirectInvite) {
+            // Extract the display name from the inviterId
+            final displayName = inviterId.split(":").first.replaceFirst("@", "");
 
-    return Material(
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (BuildContext context) {
+                return FriendRequestModal(
+                  userId: inviterId,
+                  displayName: displayName,
+                  roomId: roomId,
+                  roomService: widget.roomService,
+                  onResponse: () async {
+                    // Force state update by triggering setState
+                    if (mounted) {
+                      setState(() {});
+                    }
+                    // Callback to refresh invites list after action
+                    await widget.onInviteHandled();
+                  },
+                );
+              },
+            );
+          } else {
+            // Extract group name and expiration
+            int expiration = -1;
+            String groupName = 'Unnamed Group';
+            final parts = roomName.split(':');
+            if (parts.length > 3) {
+              expiration = int.tryParse(parts[2]) ?? -1;
+              groupName = parts[3]; // groupName
+            }
+            
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (BuildContext context) {
+                return GroupInvitationModal(
+                  groupName: groupName,
+                  inviter: inviterId,
+                  roomId: roomId,
+                  expiration: expiration,
+                  roomService: widget.roomService,
+                  refreshCallback: () async {
+                    // Force state update by triggering setState
+                    if (mounted) {
+                      setState(() {});
+                    }
+                    // Callback to refresh invites list after action
+                    await widget.onInviteHandled();
+                  },
+                );
+              },
+            );
+          }
+        }
+        
+        return Material(
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
@@ -74,9 +156,9 @@ class InvitesModal extends StatelessWidget {
                             color: colorScheme.onBackground,
                           ),
                         ),
-                        if (syncManager.invites.isNotEmpty)
+                        if (invites.isNotEmpty)
                           Text(
-                            '${syncManager.invites.length} pending request${syncManager.invites.length == 1 ? '' : 's'}',
+                            '${invites.length} pending request${invites.length == 1 ? '' : 's'}',
                             style: TextStyle(
                               fontSize: 14,
                               color: colorScheme.onBackground.withOpacity(0.6),
@@ -91,7 +173,7 @@ class InvitesModal extends StatelessWidget {
 
             // Content Section
             Expanded(
-              child: syncManager.invites.isEmpty
+              child: invites.isEmpty
                   ? Center(
                       child: Container(
                         padding: EdgeInsets.all(40),
@@ -135,9 +217,9 @@ class InvitesModal extends StatelessWidget {
                   : ListView.builder(
                       shrinkWrap: true,
                       padding: EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: syncManager.invites.length,
+                      itemCount: invites.length,
                       itemBuilder: (context, index) {
-                        final invite = syncManager.invites[index];
+                        final invite = invites[index];
                         final inviterId = invite['inviter'] ?? 'Unknown';
                         final roomId = invite['roomId'] ?? 'Unknown';
                         final roomName = invite['roomName'] ?? 'Unnamed Room';
@@ -246,7 +328,7 @@ class InvitesModal extends StatelessWidget {
                               size: 16,
                             ),
                             onTap: () {
-                              _handleInviteTap(
+                              handleInviteTap(
                                 context,
                                 roomId,
                                 roomName,
@@ -319,57 +401,6 @@ class InvitesModal extends StatelessWidget {
         ),
       ),
     );
+  });
   }
-
-  void _handleInviteTap(
-      BuildContext context,
-      String roomId,
-      String roomName,
-      String inviterId,
-      bool isDirectInvite,
-      ) {
-    if (isDirectInvite) {
-      // Extract the display name from the inviterId
-      final displayName = inviterId.split(":").first.replaceFirst("@", "");
-
-      showDialog(
-        context: context,
-        builder: (context) => FriendRequestModal(
-          roomService: roomService,
-          userId: inviterId,
-          displayName: displayName,
-          roomId: roomId,
-          onResponse: () async {
-            // Callback to refresh invites list after action
-            await onInviteHandled();
-          },
-        ),
-      );
-    } else {
-      // Extract group name and expiration
-      int expiration = -1;
-      String groupName = 'Unnamed Group';
-      final parts = roomName.split(':');
-      if (parts.length > 3) {
-        expiration = int.tryParse(parts[2]) ?? -1;
-        groupName = parts[3]; // groupName
-      }
-
-      showDialog(
-        context: context,
-        builder: (context) => GroupInvitationModal(
-          roomService: roomService,
-          groupName: groupName,
-          roomId: roomId,
-          inviter: inviterId,
-          expiration: expiration,
-          refreshCallback: () async {
-            // Callback to refresh invites list after action
-            await onInviteHandled();
-          },
-        ),
-      );
-    }
-  }
-
 }

@@ -28,6 +28,10 @@ import '../blocs/contacts/contacts_event.dart';
 import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
 
+import '../blocs/invitations/invitations_bloc.dart';
+import '../blocs/invitations/invitations_event.dart';
+import '../blocs/invitations/invitations_state.dart';
+
 import '../models/pending_message.dart';
 import '../models/sharing_preferences.dart';
 
@@ -54,12 +58,12 @@ class SyncManager with ChangeNotifier {
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
   final GroupsBloc groupsBloc;
+  final InvitationsBloc invitationsBloc;
   final List<PendingMessage> _pendingMessages = [];
   final MapIconSyncService? mapIconSyncService;
   bool _isActive = true;
 
   bool _isSyncing = false;
-  final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
   String? _sinceToken;
@@ -84,12 +88,25 @@ class SyncManager with ChangeNotifier {
       this.groupsBloc,
       this.userLocationProvider,
       this.sharingPreferencesRepository,
+      this.invitationsBloc,
       {this.mapIconSyncService}
       );
 
-  List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
+  List<Map<String, dynamic>> get invites {
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return List.unmodifiable(state.invitations);
+    }
+    return [];
+  }
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
-  int get totalInvites => _invites.length;
+  int get totalInvites {
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return state.totalInvites;
+    }
+    return 0;
+  }
   SyncState get syncState => _syncState;
   bool get isReady => _syncState == SyncState.ready;
 
@@ -116,6 +133,10 @@ class SyncManager with ChangeNotifier {
     // Defer state change to avoid build phase conflicts
     await Future.microtask(() => _setSyncState(SyncState.loadingToken));
     print("[SyncManager] Starting initialization sequence");
+    
+    // Ensure InvitationsBloc is ready before processing sync
+    await Future.delayed(const Duration(milliseconds: 200));
+    
     try {
       await _loadSinceToken();
       
@@ -307,20 +328,19 @@ class SyncManager with ChangeNotifier {
       final inviter = _extractInviter(inviteUpdate);
       final roomName = _extractRoomName(inviteUpdate) ?? 'Unnamed Room';
 
-      final inviteData = {
-        'roomId': roomId,
-        'inviter': inviter,
-        'roomName': roomName,
-        'inviteState': inviteUpdate.inviteState,
-      };
-
-      _invites.add(inviteData);
+      invitationsBloc.add(ProcessSyncInvitation(
+        roomId: roomId,
+        inviter: inviter,
+        roomName: roomName,
+        inviteState: inviteUpdate.inviteState,
+      ));
+      
       notifyListeners();
     }
   }
 
   Future<void> clearAllState() async {
-    _invites.clear();
+    invitationsBloc.add(ClearInvitations());
     _roomMessages.clear();
     _pendingMessages.clear();
     _isInitialized = false;
@@ -1024,6 +1044,9 @@ class SyncManager with ChangeNotifier {
         
         // Remove the invite immediately after accepting
         removeInvite(roomId);
+        
+        // Small delay to ensure UI updates
+        await Future.delayed(const Duration(milliseconds: 100));
 
         final room = client.getRoomById(roomId);
         if (room != null) {
@@ -1076,11 +1099,15 @@ class SyncManager with ChangeNotifier {
   }
 
   bool _inviteExists(String roomId) {
-    return _invites.any((invite) => invite['roomId'] == roomId);
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return state.invitations.any((invite) => invite['roomId'] == roomId);
+    }
+    return false;
   }
 
   void clearInvites() {
-    _invites.clear();
+    invitationsBloc.add(ClearInvitations());
     notifyListeners();
   }
 
@@ -1090,7 +1117,7 @@ class SyncManager with ChangeNotifier {
   }
 
   void removeInvite(String roomId) {
-    _invites.removeWhere((invite) => invite['roomId'] == roomId);
+    invitationsBloc.add(RemoveInvitation(roomId));
     notifyListeners();
   }
 
