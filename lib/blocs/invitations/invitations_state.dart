@@ -13,13 +13,14 @@ class InvitationsLoading extends InvitationsState {}
 
 class InvitationsLoaded extends InvitationsState {
   final List<Map<String, dynamic>> invitations;
+  final DateTime timestamp;
 
-  const InvitationsLoaded(this.invitations);
+  InvitationsLoaded(this.invitations) : timestamp = DateTime.now();
 
   int get totalInvites => invitations.length;
 
   @override
-  List<Object?> get props => [invitations];
+  List<Object?> get props => [invitations, timestamp];
 }
 
 class InvitationsError extends InvitationsState {

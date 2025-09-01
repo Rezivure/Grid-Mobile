@@ -91,6 +91,11 @@ class InvitationsBloc extends Bloc<InvitationsEvent, InvitationsState> {
     Emitter<InvitationsState> emit,
   ) async {
     try {
+      // If we haven't loaded invitations yet, load them first
+      if (state is InvitationsInitial || state is InvitationsLoading) {
+        _invitations = await _repository.loadInvitations();
+      }
+      
       // Check if invitation already exists
       final exists = _invitations.any(
         (invite) => invite['roomId'] == event.roomId,
@@ -106,10 +111,13 @@ class InvitationsBloc extends Bloc<InvitationsEvent, InvitationsState> {
         
         _invitations.add(invitation);
         await _repository.saveInvitations(_invitations);
-        emit(InvitationsLoaded(List.from(_invitations)));
         
         print('[InvitationsBloc] Added new invitation from ${event.inviter} for room ${event.roomName}. Total: ${_invitations.length}');
       }
+      
+      // Always emit loaded state with current invitations
+      emit(InvitationsLoaded(List.from(_invitations)));
+      
     } catch (e) {
       emit(InvitationsError('Failed to process sync invitation: $e'));
     }

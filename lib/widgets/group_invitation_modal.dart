@@ -9,6 +9,9 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/models/sharing_preferences.dart';
 
 class GroupInvitationModal extends StatefulWidget {
   final RoomService roomService;
@@ -57,6 +60,7 @@ String calculateExpiryTime(int expiration) {
 
 class _GroupInvitationModalState extends State<GroupInvitationModal> {
   bool _isProcessing = false;
+  bool _startSharingOnJoin = true; // Default to checked
   late String expiry;
 
   @override
@@ -340,6 +344,63 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   Widget _buildActionButtons(ThemeData theme, ColorScheme colorScheme) {
     return Column(
       children: [
+        // Location sharing checkbox
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceVariant.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.1),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: _startSharingOnJoin,
+                  onChanged: (value) {
+                    setState(() {
+                      _startSharingOnJoin = value ?? true;
+                    });
+                  },
+                  activeColor: colorScheme.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Start sharing on join',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _startSharingOnJoin 
+                        ? 'Share your location immediately with group members'
+                        : 'Location sharing will be disabled for this group',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        
         // Join button
         SizedBox(
           width: double.infinity,
@@ -421,6 +482,26 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
       // Accept the invitation through SyncManager to ensure proper syncing
       await syncManager.acceptInviteAndSync(widget.roomId);
+
+      // Handle location sharing based on checkbox
+      if (_startSharingOnJoin) {
+        // Send immediate location update
+        final locationManager = context.read<LocationManager>();
+        await locationManager.grabLocationAndPing();
+        
+        // Send location specifically to this room
+        await widget.roomService.updateSingleRoom(widget.roomId);
+      } else {
+        // Disable location sharing for this group
+        final sharingPrefs = context.read<SharingPreferencesRepository>();
+        final preferences = SharingPreferences(
+          targetId: widget.roomId,
+          targetType: 'group',
+          activeSharing: false,
+          shareWindows: null,
+        );
+        await sharingPrefs.setSharingPreferences(preferences);
+      }
 
       // Close the modal immediately after successful join
       if (mounted) {
