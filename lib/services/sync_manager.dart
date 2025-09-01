@@ -992,22 +992,42 @@ class SyncManager with ChangeNotifier {
           // Update the room with new member list
           await roomRepository.updateRoom(updatedRoom);
 
-          // Remove all relationships for this user in this room
+          // Check if we're still connected to this user in any way BEFORE removing them from DB
+          final hasDirectRoom = await userRepository.getDirectRoomForContact(userId);
+          
+          // Check if we share any OTHER groups with this user
+          // IMPORTANT: Must check this BEFORE removing them from the room participants
+          final myRooms = await roomRepository.getUserRooms(client.userID!);
+          final theirRooms = await roomRepository.getUserRooms(userId);  // This still includes current room
+          
+          bool inOtherSharedGroups = false;
+          for (final myRoom in myRooms) {
+            // Skip the current room they're being removed from
+            if (myRoom != roomId && theirRooms.contains(myRoom)) {
+              // This is a room we BOTH are in - check if it's a group
+              final roomData = await roomRepository.getRoomById(myRoom);
+              if (roomData != null && roomData.isGroup) {
+                print("[_handleMemberLeave] User $userId is in shared group: $myRoom");
+                inOtherSharedGroups = true;
+                break;
+              }
+            }
+          }
+          
+          print("[_handleMemberLeave] User $userId - hasDirectRoom: ${hasDirectRoom != null}, inOtherSharedGroups: $inOtherSharedGroups");
+
+          // NOW we can remove them from this room's participants
           await userRepository.removeUserRelationship(userId, roomId);
           await roomRepository.removeRoomParticipant(roomId, userId);
-
-          // Update membership status to 'leave'
           await userRepository.updateMembershipStatus(userId, roomId, 'leave');
 
-          // Check if user should be completely cleaned up
-          final userRooms = await roomRepository.getUserRooms(userId);
-          final hasDirectRoom = await userRepository.getDirectRoomForContact(userId);
-
-          if (userRooms.isEmpty && hasDirectRoom == null) {
-            print("User not in any other rooms/contacts, cleaning up completely");
+          if (!inOtherSharedGroups && hasDirectRoom == null) {
+            print("User not in any other shared rooms/contacts, removing from map");
             await locationRepository.deleteUserLocations(userId);
             await userRepository.deleteUser(userId);
             mapBloc.add(RemoveUserLocation(userId));
+          } else {
+            print("User still connected via other rooms, keeping on map");
           }
 
           // Update UI with staggered refreshes

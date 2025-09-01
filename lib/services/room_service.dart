@@ -380,7 +380,10 @@ class RoomService {
       final myUserId = client.userID;
       print("Checking for rooms to clean at timestamp: $now");
 
-      for (var room in client.rooms) {
+      // Create a copy of the rooms list to avoid concurrent modification
+      final roomsList = List.from(client.rooms);
+      
+      for (var room in roomsList) {
         // Skip rooms we're not actually joined to
         if (room.membership != Membership.join) {
           continue;
@@ -720,8 +723,8 @@ class RoomService {
     }
     _lastUpdateTime = now;
     
-    List<Room> rooms = client.rooms;
-    print("Grid: Found ${rooms.length} total rooms to process");
+    List<Room> rooms = client.rooms.where((r) => r.membership == Membership.join).toList();
+    print("Grid: Found ${rooms.length} total rooms to process (filtered for joined only)");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
