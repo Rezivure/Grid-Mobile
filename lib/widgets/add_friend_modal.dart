@@ -454,9 +454,30 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           }
         });
 
-        // Show success message
+        // Show success message with modern floating style
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Group created successfully')),
+          SnackBar(
+            content: const Text(
+              'Group created successfully',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 15,
+              ),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(
+              bottom: 20,
+              left: 20,
+              right: 20,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 3),
+            elevation: 6,
+          ),
         );
       }
     } catch (e) {
