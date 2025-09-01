@@ -412,21 +412,12 @@ class RoomService {
             // Get joined members only
             final joinedMembers = participants.where((p) => p.membership == Membership.join).toList();
             
+            // For direct rooms, if you're alone, leave
             if (joinedMembers.length == 1 && joinedMembers.first.id == myUserId) {
-              // Check if the other person actually left (not just invite pending or network issue)
-              final otherMember = participants.firstWhere(
-                (p) => p.id != myUserId,
-                orElse: () => participants.first, // fallback to avoid crash
-              );
-              
-              // Only leave if the other person's membership is 'leave' (they actually left)
-              // Don't leave if they're 'invite' (pending) or if we can't determine
-              if (otherMember.id != myUserId && otherMember.membership == Membership.leave) {
-                shouldLeave = true;
-                leaveReason = 'other participant left direct room';
-              }
+              shouldLeave = true;
+              leaveReason = 'alone in direct room - other user left';
             } else if (joinedMembers.isEmpty) {
-              // No one has join status - but check if this is just a sync issue
+              // No one has join status
               shouldLeave = true;
               leaveReason = 'no active participants in direct room';
             }
@@ -437,20 +428,7 @@ class RoomService {
           leaveReason = 'non-Grid room';
         }
 
-        // Extra checks for any room type
-        // Only leave if we're truly alone AND it's not a temporary sync issue
-        if (!shouldLeave && participants.length == 1 &&
-            participants.first.id == myUserId &&
-            participants.first.membership == Membership.join) {
-          // For direct rooms, this might be temporary - other user might be rejoining
-          if (room.name.contains("Grid:Direct:")) {
-            // Don't auto-leave, this could be a sync issue
-            print("Skipping auto-leave for solo direct room - might be temporary");
-          } else {
-            shouldLeave = true;
-            leaveReason = 'solo member room';
-          }
-        }
+        // No extra checks needed - the logic above handles all cases
 
         if (shouldLeave) {
           try {
@@ -467,8 +445,12 @@ class RoomService {
               print('Confirmed room ${room.id} left successfully.');
 
               // Only clean up locally if the leave was successful
-              await _cleanupLocalData(room.id, participants);
-              print('Successfully cleaned up local data for room: ${room.id}');
+              final removedUserIds = await _cleanupLocalData(room.id, participants);
+              
+              // Note: Map cleanup needs to be handled by SyncManager or other components
+              // that have access to MapBloc. They can listen for room leave events
+              // or user deletion events to update the map accordingly.
+              print('Successfully cleaned up local data for room: ${room.id}, removed users: $removedUserIds');
             } else {
               print('Room ${room.id} still appears in joined rooms after leave attempt.');
             }
@@ -487,7 +469,9 @@ class RoomService {
 
 
   /// Handles cleanup of local data when leaving a room
-  Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+  /// Returns list of user IDs that were removed from the system
+  Future<List<String>> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+    final removedUserIds = <String>[];
     try {
       print("Starting local cleanup for room: $roomId");
 
@@ -513,35 +497,41 @@ class RoomService {
 
       // For each user in the room
       for (final userId in userIds) {
-        // Skip if user is a direct contact
-        if (directContactIds.contains(userId)) {
-          print("User $userId is a direct contact, preserving user data");
-          // Just remove the relationship for this room
-          await userRepository.removeUserRelationship(userId, roomId);
+        // Skip ourselves
+        if (userId == client.userID) {
           continue;
         }
-
+        
+        // Remove the relationship for this room
+        await userRepository.removeUserRelationship(userId, roomId);
+        
         // Check if user has any other rooms
         final otherRooms = await userRepository.getUserRooms(userId);
         otherRooms.remove(roomId); // Remove current room from list
 
         if (otherRooms.isEmpty) {
-          print("User $userId has no other rooms and is not a contact, cleaning up user data");
+          print("User $userId has no other rooms, cleaning up user data and location");
           // Remove user's location data
           await locationRepository.deleteUserLocations(userId);
+          
+          // Track that we removed this user
+          removedUserIds.add(userId);
+          
           // Remove user and their relationships (this handles both GridUser and relationships)
           await userRepository.deleteUser(userId);
+          
+          // Note: The map will be updated by SyncManager's _cleanupOrphanedUsers
+          // which is called after room cleanup during reconciliation
         } else {
-          print("User $userId exists in other rooms, keeping user data");
-          // Just remove the relationship for this room
-          await userRepository.removeUserRelationship(userId, roomId);
+          print("User $userId exists in other rooms (${otherRooms.length}), keeping user data");
         }
       }
 
       // Finally delete the room itself
       await roomRepository.deleteRoom(roomId);
 
-      print("Completed local cleanup for room: $roomId");
+      print("Completed local cleanup for room: $roomId, removed ${removedUserIds.length} users");
+      return removedUserIds;
     } catch (e) {
       print("Error during local cleanup for room $roomId: $e");
       // Re-throw the error to be handled by the calling function

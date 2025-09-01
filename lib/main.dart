@@ -237,6 +237,7 @@ void main() async {
                 context.read<SharingPreferencesRepository>(),
                 context.read<InvitationsBloc>(),
                 mapIconSyncService: mapIconSyncService,
+                locationManager: context.read<LocationManager>(),
               )..startSync();
             },
             update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, invitationsBloc, previous) {
@@ -273,6 +274,7 @@ void main() async {
                 sharingPreferencesRepository,
                 invitationsBloc,
                 mapIconSyncService: mapIconSyncService,
+                locationManager: context.read<LocationManager>(),
               )..startSync();
             },
           ),

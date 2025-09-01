@@ -17,6 +17,7 @@ import 'package:grid_frontend/services/avatar_announcement_service.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/services/location_manager.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -61,6 +62,7 @@ class SyncManager with ChangeNotifier {
   final InvitationsBloc invitationsBloc;
   final List<PendingMessage> _pendingMessages = [];
   final MapIconSyncService? mapIconSyncService;
+  final LocationManager? locationManager;
   bool _isActive = true;
 
   bool _isSyncing = false;
@@ -89,7 +91,8 @@ class SyncManager with ChangeNotifier {
       this.userLocationProvider,
       this.sharingPreferencesRepository,
       this.invitationsBloc,
-      {this.mapIconSyncService}
+      {this.mapIconSyncService,
+      this.locationManager}
       );
 
   List<Map<String, dynamic>> get invites {
@@ -180,6 +183,9 @@ class SyncManager with ChangeNotifier {
       // Process rooms after sync completes
       _setSyncState(SyncState.processingRooms);
       await roomService.cleanRooms();
+      
+      // Clean up orphaned users immediately after room cleanup
+      await _cleanupOrphanedUsers();
       
       // Reconcile state
       _setSyncState(SyncState.reconciling);
@@ -354,9 +360,79 @@ class SyncManager with ChangeNotifier {
 
   Future<void> _processRoomLeave(String roomId, LeftRoomUpdate leftRoomUpdate) async {
     try {
+      print("[LEAVE] Starting _processRoomLeave for room: $roomId");
       final room = await roomRepository.getRoomById(roomId);
+      if (room == null) {
+        print("[LEAVE] Room $roomId not found in database");
+        return;
+      }
 
-      if (room != null && !room.isGroup) {
+      if (room.isGroup) {
+        // Handle leaving a group
+        print("[LEAVE GROUP] Processing group leave for room: ${room.name}");
+        print("[LEAVE GROUP] Getting participants...");
+        final participants = await roomRepository.getRoomParticipants(roomId);
+        print("[LEAVE GROUP] Found ${participants.length} participants: $participants");
+        
+        // For each participant in the group we just left
+        for (final participantId in participants) {
+          if (participantId == client.userID) {
+            print("[LEAVE GROUP] Skipping self: $participantId");
+            continue;
+          }
+          
+          print("[LEAVE GROUP] Processing participant: $participantId");
+          
+          // Remove relationship for this room
+          await userRepository.removeUserRelationship(participantId, roomId);
+          
+          // Check if we're still connected to this user (direct contact or other shared groups)
+          final isDirectContact = await userRepository.getDirectRoomForContact(participantId) != null;
+          print("[LEAVE GROUP] Is direct contact: $isDirectContact");
+          
+          // Check if we share any other groups with this user
+          final myRooms = await roomRepository.getUserRooms(client.userID!);
+          final theirRooms = await roomRepository.getUserRooms(participantId);
+          
+          print("[LEAVE GROUP] My rooms: $myRooms");
+          print("[LEAVE GROUP] Their rooms: $theirRooms");
+          
+          // Find shared groups (excluding the one we just left)
+          bool hasSharedGroups = false;
+          for (final myRoom in myRooms) {
+            if (myRoom != roomId && theirRooms.contains(myRoom)) {
+              final roomData = await roomRepository.getRoomById(myRoom);
+              if (roomData != null && roomData.isGroup) {
+                hasSharedGroups = true;
+                print("[LEAVE GROUP] Found shared group: $myRoom");
+                break;
+              }
+            }
+          }
+          
+          print("[LEAVE GROUP] Has shared groups: $hasSharedGroups");
+          
+          if (!isDirectContact && !hasSharedGroups) {
+            // Not a direct contact and not in any other shared groups - remove from map
+            print("[LEAVE GROUP] REMOVING $participantId from map - no longer connected");
+            await locationRepository.deleteUserLocations(participantId);
+            await userRepository.deleteUser(participantId);
+            mapBloc.add(RemoveUserLocation(participantId));
+          } else {
+            print("[LEAVE GROUP] KEEPING $participantId - direct contact: $isDirectContact, shared groups: $hasSharedGroups");
+          }
+        }
+        
+        // Now delete the room from our database
+        await roomRepository.deleteRoom(roomId);
+        await roomRepository.removeAllParticipants(roomId);
+        
+        // Update UI
+        groupsBloc.add(RefreshGroups());
+        mapBloc.add(MapLoadUserLocations());
+        
+      } else {
+        // Handle direct room leave
         final participants = await roomRepository.getRoomParticipants(roomId);
         final otherUserId = participants.firstWhere(
               (id) => id != client.userID,
@@ -513,6 +589,61 @@ class SyncManager with ChangeNotifier {
         print('[Sync Debug] Processing ${event.type} from ${event.senderId} in room $roomId');
       }
       
+      // Check for member events in timeline (when someone accepts an invite or leaves)
+      if (event.type == 'm.room.member' && event.stateKey != null) {
+        final membershipStatus = event.content['membership'] as String?;
+        final prevMembership = event.prevContent?['membership'] as String?;
+        
+        print("[SyncManager] Timeline member event: ${event.stateKey} from $prevMembership to $membershipStatus");
+        
+        // Handle member leave events
+        if (membershipStatus == 'leave' && event.stateKey != client.userID) {
+          print("[SyncManager] Detected ${event.stateKey} left room $roomId");
+          await _handleMemberLeave(roomId, event.stateKey);
+        }
+        // If someone just joined (accepted invite), send them our location
+        // prevMembership can be 'invite' or null (if we don't have previous state)
+        // BUT: Skip if this is us joining (we see our own join event)
+        else if (membershipStatus == 'join' && event.stateKey != client.userID) {
+          print("[SyncManager] Detected ${event.stateKey} joined room $roomId (prev: $prevMembership)");
+          
+          // Only send location if they weren't already in the room
+          if (prevMembership != 'join') {
+            print("[SyncManager] User ${event.stateKey} is newly joined, sending initial location");
+            
+            try {
+              final room = await roomRepository.getRoomById(roomId);
+              if (room != null) {
+                // Check sharing preferences for direct rooms
+                if (!room.isGroup) {
+                  final sharingPrefs = await sharingPreferencesRepository.getSharingPreferences(event.stateKey!, 'user');
+                  final isSharingEnabled = sharingPrefs?.activeSharing ?? true;
+                  
+                  if (isSharingEnabled) {
+                    print("[SyncManager] Sharing enabled for ${event.stateKey}, sending location to room $roomId");
+                    await locationManager?.grabLocationAndPing();
+                    await roomService.updateSingleRoom(roomId);
+                    print("[SyncManager] Successfully sent initial location to ${event.stateKey}");
+                  } else {
+                    print("[SyncManager] Sharing disabled for ${event.stateKey}, not sending location");
+                  }
+                } else {
+                  // For groups, always send
+                  print("[SyncManager] Group room, sending location to new member ${event.stateKey}");
+                  await locationManager?.grabLocationAndPing();
+                  await roomService.updateSingleRoom(roomId);
+                  print("[SyncManager] Successfully sent initial location to group member ${event.stateKey}");
+                }
+              } else {
+                print("[SyncManager] Warning: Room $roomId not found in local database");
+              }
+            } catch (e) {
+              print("[SyncManager] Error sending location on invite accept: $e");
+            }
+          }
+        }
+      }
+      
       if (!_isActive) {
         // Queue message if app is in background
         print('[Sync Debug] App inactive, queuing event ${event.eventId}');
@@ -644,13 +775,8 @@ class SyncManager with ChangeNotifier {
       for (var event in stateEvents) {
         print("Processing event type: ${event.type}");
         if (event.type == 'm.room.member') {
-          // Don't process member events for kicked users
-          final membershipStatus = event.content['membership'] as String?;
-          final prevMembership = event.prevContent?['membership'] as String?;
-
-          if (!(prevMembership == 'join' && membershipStatus == 'leave')) {
-            await _processMemberStateEvent(roomId, event);
-          }
+          // Always process member state events, including leaves
+          await _processMemberStateEvent(roomId, event);
         } else {
           // Process other state events through message processor
           await messageProcessor.processEvent(roomId, event).then((message) {
@@ -742,13 +868,46 @@ class SyncManager with ChangeNotifier {
         try {
           // Check if this is a new member joining (not us)
           final prevMembership = event.prevContent?['membership'] as String?;
+          print("[SyncManager] Member state change: ${event.stateKey} from $prevMembership to $membershipStatus");
+          
           if (event.stateKey != client.userID && prevMembership != 'join') {
-            print("New member joined: ${event.stateKey}, sending avatar announcements");
+            print("New member joined: ${event.stateKey} (was: $prevMembership), sending avatar announcements and location");
             
             // Send our profile picture to the new member
             try {
               final avatarService = AvatarAnnouncementService(client);
               await avatarService.announceProfPicToRoom(roomId);
+              
+              // Send our location once when they join (if sharing is enabled)
+              if (!room.isGroup) {
+                // For direct rooms, check sharing preferences
+                final sharingPrefs = await sharingPreferencesRepository.getSharingPreferences(event.stateKey!, 'user');
+                final isSharingEnabled = sharingPrefs?.activeSharing ?? true; // Default to true if no prefs
+                
+                if (isSharingEnabled) {
+                  print("New member joined direct room, sending initial location");
+                  // Grab fresh location and send it
+                  try {
+                    await locationManager?.grabLocationAndPing();
+                    await roomService.updateSingleRoom(roomId);
+                    print("Sent initial location to ${event.stateKey} in room $roomId");
+                  } catch (e) {
+                    print("Error sending initial location: $e");
+                  }
+                } else {
+                  print("Location sharing disabled for ${event.stateKey}, not sending initial location");
+                }
+              } else {
+                // For group rooms, always send location when someone joins
+                print("New member joined group room, sending initial location");
+                try {
+                  await locationManager?.grabLocationAndPing();
+                  await roomService.updateSingleRoom(roomId);
+                  print("Sent initial location to new group member ${event.stateKey} in room $roomId");
+                } catch (e) {
+                  print("Error sending initial location to group: $e");
+                }
+              }
               
               // If it's a group and we're admin, also send group avatar
               if (room.isGroup) {
@@ -870,11 +1029,34 @@ class SyncManager with ChangeNotifier {
         await userRepository.removeContact(userId);
         await roomRepository.deleteRoom(roomId);
 
+        // Check if user is in any shared groups with us
         final userRooms = await roomRepository.getUserRooms(userId);
-        if (userRooms.isEmpty) {
+        final myRooms = await roomRepository.getUserRooms(client.userID!);
+        
+        // Find shared group rooms
+        final sharedGroups = <String>[];
+        for (final userRoom in userRooms) {
+          if (myRooms.contains(userRoom)) {
+            final room = await roomRepository.getRoomById(userRoom);
+            if (room != null && room.isGroup) {
+              sharedGroups.add(userRoom);
+            }
+          }
+        }
+        
+        if (sharedGroups.isEmpty) {
+          // Not in any shared groups, remove from map and delete location
           await locationRepository.deleteUserLocations(userId);
-          await userRepository.deleteUser(userId);
           mapBloc.add(RemoveUserLocation(userId));
+          
+          // Clean up user record if they have no rooms at all
+          if (userRooms.isEmpty) {
+            await userRepository.deleteUser(userId);
+          }
+        } else {
+          // Still in shared groups, keep them on map but refresh to ensure proper state
+          print("[SyncManager] User $userId still in ${sharedGroups.length} shared groups, keeping on map");
+          mapBloc.add(MapLoadUserLocations());
         }
 
         contactsBloc.add(RefreshContacts());
@@ -927,6 +1109,12 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> processJoinedRoom(Room room) async {
+    // Skip non-Grid rooms entirely - they should be left/deleted
+    if (!room.name.startsWith('Grid:')) {
+      print('Skipping non-Grid room during processing: ${room.name ?? 'Unnamed'} (${room.id})');
+      return;
+    }
+    
     // Check if the room already exists
     final existingRoom = await roomRepository.getRoomById(room.id);
 
@@ -1206,7 +1394,13 @@ class SyncManager with ChangeNotifier {
       
       print("[SyncManager] Reconciliation summary:");
       print("  - Server rooms: ${serverRoomIds.length}");
+      for (final room in serverRooms) {
+        print("    * ${room.name ?? 'Unnamed'} (${room.id})");
+      }
       print("  - Local rooms: ${localRoomIds.length}");
+      for (final room in localRooms) {
+        print("    * ${room.name} (${room.roomId})");
+      }
       print("  - Missing locally: ${roomsOnServerButNotLocal.length}");
       print("  - Extra locally: ${roomsInLocalButNotServer.length}");
       
