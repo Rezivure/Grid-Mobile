@@ -3,6 +3,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2079,6 +2080,23 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               SizedBox(height: 24),
             ],
+
+            // Community Section
+            _buildSectionCard(
+              theme: theme,
+              colorScheme: colorScheme,
+              title: 'Community',
+              children: [
+                _buildMenuOption(
+                  icon: FontAwesomeIcons.discord,
+                  title: 'Join our Discord',
+                  subtitle: 'Connect with the Grid community',
+                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
 
             // Support & Information Section
             _buildSectionCard(

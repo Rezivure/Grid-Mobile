@@ -127,6 +127,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   LatLng? _longPressLocation;
   String? _selectedGroupId;
   
+  // Track if editing map icon description
+  bool _isEditingIconDescription = false;
+  
   // Selected map icon for info bubble
   MapIcon? _selectedMapIcon;
   LatLng? _selectedIconPosition;
@@ -476,6 +479,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Refresh satellite token when app resumes if using satellite maps
     if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
       _refreshSatelliteTokenIfNeeded();
+    }
+    
+    // Always reinitialize tile provider on resume to fix background launch rendering issues
+    if (state == AppLifecycleState.resumed && _tileProvider != null) {
+      print('[MapTab] App resumed - refreshing tile provider');
+      
+      // Small delay to ensure we're fully in foreground
+      Future.delayed(const Duration(milliseconds: 200), () async {
+        if (mounted) {
+          await _loadMapProvider();
+          setState(() {});
+        }
+      });
     }
   }
 
@@ -1138,7 +1154,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
                     initialZoom: _zoom,
                     initialRotation: 0.0,
-                    minZoom: 1,
+                    minZoom: 2,
                     maxZoom: 18,
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.all,
@@ -1596,6 +1612,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   setState(() {
                     _selectedMapIcon = null;
                     _selectedIconPosition = null;
+                    _isEditingIconDescription = false;
+                  });
+                },
+                onEditingChanged: (isEditing) {
+                  setState(() {
+                    _isEditingIconDescription = isEditing;
                   });
                 },
                 onUpdate: _selectedMapIcon!.creatorId == context.read<Client>().userID
@@ -1729,8 +1751,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         ? colorScheme.primary
                         : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
                     onPressed: () {
-                      // can add any pre center logic here
-                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, _mapController.camera.zoom);
+                      // Center on user with same zoom level as other users
+                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
                       setState(() {
                         _followUser = true;
                       });
@@ -1819,7 +1841,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               
             Align(
               alignment: Alignment.bottomCenter,
-              child: MapScrollWindow(),
+              child: MapScrollWindow(
+                isEditingMapIcon: _isEditingIconDescription,
+              ),
             ),
             
             // Icon selection wheel overlay
