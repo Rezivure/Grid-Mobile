@@ -140,7 +140,7 @@ bool isCustomHomeserver(String currentHomeserver) {
     print('Warning: HOMESERVER env var not found, using fallback');
   }
   
-  print('isCustomHomeserver check: cleaned=$cleanedHomeserver, default=$defaultHomeserver');
+  //print('isCustomHomeserver check: cleaned=$cleanedHomeserver, default=$defaultHomeserver');
   
   return cleanedHomeserver != defaultHomeserver && cleanedHomeserver != FALLBACK_DEFAULT_HOMESERVER;
 }

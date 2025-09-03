@@ -110,7 +110,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
     // Navigate to the marker on the map
     context.read<MapBloc>().add(MapCenterOnLocation(
       LatLng(marker.latitude, marker.longitude),
-      zoom: 18.0,
+      zoom: 16.0,
     ));
     
     // Close the modal - keep the current group selection

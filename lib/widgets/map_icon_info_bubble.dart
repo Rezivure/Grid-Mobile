@@ -13,6 +13,7 @@ class MapIconInfoBubble extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback? onDelete;
   final Function(String name, String? description)? onUpdate;
+  final Function(bool)? onEditingChanged;
 
   const MapIconInfoBubble({
     Key? key,
@@ -22,6 +23,7 @@ class MapIconInfoBubble extends StatefulWidget {
     this.creatorName,
     this.onDelete,
     this.onUpdate,
+    this.onEditingChanged,
   }) : super(key: key);
 
   @override
@@ -63,6 +65,7 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
     }
     setState(() {
       _isEditingDescription = false;
+      widget.onEditingChanged?.call(false);
     });
   }
   
@@ -334,19 +337,20 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
                 ),
               ),
               
-              // Body content
+              // Body content - hide meta info when editing description for more space
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Meta info
-                    if (widget.creatorName != null) ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.person_outline,
-                            size: 14,
+                    // Meta info - only show when not editing description
+                    if (!_isEditingDescription) ...[
+                      if (widget.creatorName != null) ...[
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person_outline,
+                              size: 14,
                             color: colorScheme.onSurface.withOpacity(0.5),
                           ),
                           const SizedBox(width: 6),
@@ -357,74 +361,81 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: colorScheme.onSurface.withOpacity(0.5),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          dateFormat.format(widget.icon.createdAt),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
+                        const SizedBox(height: 6),
                       ],
-                    ),
-                    
-                    const SizedBox(height: 6),
-                    
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on_outlined,
-                          size: 14,
-                          color: colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${widget.position.latitude.toStringAsFixed(6)}, ${widget.position.longitude.toStringAsFixed(6)}',
+                      
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 14,
+                            color: colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            dateFormat.format(widget.icon.createdAt),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurface.withOpacity(0.7),
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        // Copy button
-                        InkWell(
-                          onTap: () => _copyCoordinates(context, widget.position),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.copy,
-                              size: 14,
-                              color: colorScheme.primary,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 6),
+                      
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 14,
+                            color: colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${widget.position.latitude.toStringAsFixed(6)}, ${widget.position.longitude.toStringAsFixed(6)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Copy button
+                          InkWell(
+                            onTap: () => _copyCoordinates(context, widget.position),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 12),
+                    ],
                     
-                    const SizedBox(height: 12),
-                    
-                    // Description field
-                    Container(
-                      padding: const EdgeInsets.all(12),
+                    // Description field - animated to expand when editing
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      padding: EdgeInsets.all(_isEditingDescription ? 8 : 12),
                       decoration: BoxDecoration(
-                        color: colorScheme.surfaceVariant.withOpacity(0.3),
+                        color: _isEditingDescription 
+                          ? colorScheme.surface 
+                          : colorScheme.surfaceVariant.withOpacity(0.3),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.2),
+                          color: _isEditingDescription 
+                            ? colorScheme.primary.withOpacity(0.3)
+                            : colorScheme.outline.withOpacity(0.2),
                         ),
                       ),
                       child: Column(
@@ -451,6 +462,7 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
                                   onTap: () {
                                     setState(() {
                                       _isEditingDescription = true;
+                                      widget.onEditingChanged?.call(true);
                                     });
                                   },
                                   borderRadius: BorderRadius.circular(6),
@@ -483,23 +495,30 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
                             ? TextField(
                                 controller: _descriptionController,
                                 autofocus: true,
-                                maxLines: 3,
-                                style: theme.textTheme.bodySmall?.copyWith(
+                                maxLines: _isEditingDescription ? 8 : 3,  // Expand when editing
+                                minLines: _isEditingDescription ? 6 : 1,  // Minimum lines when editing
+                                style: theme.textTheme.bodyMedium?.copyWith(
                                   color: colorScheme.onSurface,
+                                  height: 1.5,
                                 ),
+                                textInputAction: TextInputAction.newline,  // Allow multi-line
+                                keyboardType: TextInputType.multiline,
                                 decoration: InputDecoration(
-                                  isDense: true,
+                                  isDense: false,
                                   border: OutlineInputBorder(
                                     borderSide: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  contentPadding: const EdgeInsets.all(8),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  contentPadding: const EdgeInsets.all(12),
                                   hintText: 'Add a description...',
                                   hintStyle: TextStyle(
                                     color: colorScheme.onSurface.withOpacity(0.3),
                                   ),
                                 ),
-                                onSubmitted: (_) => _saveDescription(),
                               )
                             : Text(
                                 _descriptionController.text.isEmpty 

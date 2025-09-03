@@ -29,7 +29,12 @@ import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
 
 class MapScrollWindow extends StatefulWidget {
-  const MapScrollWindow({Key? key}) : super(key: key);
+  final bool isEditingMapIcon;
+  
+  const MapScrollWindow({
+    Key? key,
+    this.isEditingMapIcon = false,
+  }) : super(key: key);
 
   @override
   _MapScrollWindowState createState() => _MapScrollWindowState();
@@ -162,16 +167,19 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             }
             return true;
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.15),
+          child: AnimatedOpacity(
+            opacity: widget.isEditingMapIcon ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.15),
                   blurRadius: 20.0,
                   spreadRadius: 0,
                   offset: const Offset(0, -5),
@@ -240,7 +248,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               ],
             ),
           ),
-        );
+          ),  // End of AnimatedOpacity
+        );  // End of NotificationListener
       },
     );
   }
@@ -757,17 +766,17 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
         ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: AddFriendModal(
-          roomService: _roomService,
-          userService: _userService,
-          groupsBloc: _groupsBloc,
-          onGroupCreated: () {
+              roomService: _roomService,
+              userService: _userService,
+              groupsBloc: _groupsBloc,
+              onGroupCreated: () {
             // Force refresh right away
             _groupsBloc.add(RefreshGroups());
 
