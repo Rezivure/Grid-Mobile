@@ -31,6 +31,7 @@ import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'dart:io' show Platform;
+import 'package:package_info_plus/package_info_plus.dart';
 
 
 
@@ -48,6 +49,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? identityKey;
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
+  String _appVersion = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
   String? _userID;
@@ -70,6 +72,14 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadIncognitoState();
     _loadBatterySaverState();
     _loadCachedAvatar();
+    _loadAppVersion();
+  }
+  
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    setState(() {
+      _appVersion = 'v${packageInfo.version}';
+    });
   }
 
   bool isCustomHomeserver() {
@@ -2166,6 +2176,19 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             SizedBox(height: 40),
+            
+            // Version info at the bottom
+            Center(
+              child: Text(
+                _appVersion,
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.4),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
           ],
         ),
       ),
