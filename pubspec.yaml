@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 1.0.8+127
+version: 1.0.9+129
 environment:
   sdk: '>=3.3.3 <4.0.0'
 

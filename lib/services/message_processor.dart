@@ -17,6 +17,7 @@ import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 class MessageProcessor {
   final Client client;
@@ -75,6 +76,10 @@ class MessageProcessor {
         await _handleAvatarAnnouncement(messageData);
       } else if (msgType == 'm.group.avatar.announcement') {
         await _handleGroupAvatarAnnouncement(messageData, roomId);
+      } else if (msgType == 'm.avatar.state') {
+        await _handleAvatarState(messageData);
+      } else if (msgType == 'm.avatar.request') {
+        await _handleAvatarRequest(messageData, roomId);
       } else if (_isMapIconEvent(msgType)) {
         // Handle map icon events
         await _handleMapIconEvent(roomId, messageData);
@@ -287,6 +292,118 @@ class MessageProcessor {
       
     } catch (e) {
       print('[Group Avatar Processing] Error handling group avatar announcement: $e');
+    }
+  }
+
+  /// Handle avatar state bundle messages
+  Future<void> _handleAvatarState(Map<String, dynamic> messageData) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      final content = messageData['content'] as Map<String, dynamic>?;
+      
+      if (sender == null || content == null) {
+        print('[Avatar State] Invalid avatar state - missing sender or content');
+        return;
+      }
+
+      // Check if this state update is targeted to us
+      final targetUser = content['target_user'] as String?;
+      if (targetUser != null && targetUser != client.userID) {
+        print('[Avatar State] State not targeted to this user, ignoring');
+        return;
+      }
+
+      final avatarsList = content['avatars'] as List<dynamic>?;
+      if (avatarsList == null || avatarsList.isEmpty) {
+        print('[Avatar State] No avatars in state bundle');
+        return;
+      }
+
+      print('[Avatar State] Processing avatar state bundle with ${avatarsList.length} avatars from $sender');
+
+      // Process each avatar in the state
+      for (final avatarData in avatarsList) {
+        try {
+          final userId = avatarData['user_id'] as String?;
+          final avatarUrl = avatarData['avatar_url'] as String?;
+          final encryption = avatarData['encryption'] as Map<String, dynamic>?;
+          
+          if (userId == null || avatarUrl == null || encryption == null) {
+            continue; // Skip invalid entries
+          }
+
+          final key = encryption['key'] as String?;
+          final iv = encryption['iv'] as String?;
+          
+          if (key == null || iv == null) {
+            continue; // Skip entries without encryption data
+          }
+
+          print('[Avatar State] Processing avatar for user $userId');
+
+          // Use AvatarBloc if available
+          if (avatarBloc != null) {
+            avatarBloc!.add(AvatarUpdateReceived(
+              userId: userId,
+              avatarUrl: avatarUrl,
+              encryptionKey: key,
+              encryptionIv: iv,
+              isMatrixUrl: avatarUrl.startsWith('mxc://'),
+            ));
+          } else {
+            // Fallback: Store avatar data directly
+            final avatarDataToStore = {
+              'uri': avatarUrl,
+              'key': key,
+              'iv': iv,
+            };
+            
+            await secureStorage.write(
+              key: 'avatar_$userId',
+              value: json.encode(avatarDataToStore),
+            );
+            
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('avatar_is_matrix_$userId', avatarUrl.startsWith('mxc://'));
+          }
+        } catch (e) {
+          print('[Avatar State] Error processing avatar in state: $e');
+          continue; // Continue with other avatars
+        }
+      }
+      
+      print('[Avatar State] Finished processing ${avatarsList.length} avatars from state bundle');
+    } catch (e) {
+      print('[Avatar State] Error handling avatar state: $e');
+    }
+  }
+
+  /// Handle avatar request messages
+  Future<void> _handleAvatarRequest(Map<String, dynamic> messageData, String roomId) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      final content = messageData['content'] as Map<String, dynamic>?;
+      
+      if (sender == null || content == null) {
+        print('[Avatar Request] Invalid request - missing sender or content');
+        return;
+      }
+
+      // Don't respond to our own requests
+      if (sender == client.userID) {
+        return;
+      }
+
+      final requestedUsers = content['requested_users'] as List<dynamic>?;
+      
+      print('[Avatar Request] Received avatar request from $sender for users: ${requestedUsers?.join(", ") ?? "all"}');
+      
+      // Use the avatar service to handle the request
+      final avatarService = AvatarAnnouncementService(client);
+      await avatarService.handleAvatarRequest(roomId, sender, requestedUsers?.cast<String>());
+      
+    } catch (e) {
+      print('[Avatar Request] Error handling avatar request: $e');
     }
   }
 
