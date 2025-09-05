@@ -624,7 +624,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   ),
                 ),
                 title: Text(
-                  'Group Details',
+                  'Group Settings',
                   style: TextStyle(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
@@ -651,6 +651,33 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       ),
                     ),
                   );
+                },
+              ),
+              
+              // Add Member
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person_add_outlined,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Add Member',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddGroupMemberModal();
                 },
               ),
               
