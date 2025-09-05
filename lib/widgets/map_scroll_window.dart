@@ -57,6 +57,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
   bool _isScrollingContent = false;
+  String? _cachedUserId; // Cache user ID to avoid repeated fetches
 
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
@@ -102,6 +103,18 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
     });
+    
+    // Load and cache user ID once
+    _loadUserId();
+  }
+  
+  Future<void> _loadUserId() async {
+    final userId = await _userService.getMyUserId();
+    if (mounted) {
+      setState(() {
+        _cachedUserId = userId;
+      });
+    }
   }
 
   @override
@@ -269,7 +282,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   if (_isDropdownExpanded) {
                     _expandController.forward();
                     _fadeController.forward();
-                    _groupsBloc.add(RefreshGroups());
+                    // Don't refresh groups every time dropdown opens
+                    // _groupsBloc.add(RefreshGroups());
                   } else {
                     _expandController.reverse();
                     _fadeController.reverse();
@@ -436,63 +450,50 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
   Widget _buildModernHorizontalScroller(ColorScheme colorScheme) {
+    // Use cached user ID to avoid rebuilds
+    if (_cachedUserId == null) {
+      return Container(
+        height: 100,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: colorScheme.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+    
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
-        return FutureBuilder<String?>(
-          future: _userService.getMyUserId(),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return Container(
-                height: 100,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: colorScheme.primary,
-                    strokeWidth: 2,
-                  ),
-                ),
-              );
-            }
+        // Get and sort groups alphabetically by name
+        final groups = (groupsState is GroupsLoaded)
+            ? List<GridRoom.Room>.from(groupsState.groups)
+            : <GridRoom.Room>[];
+        
+        // Sort groups alphabetically by their display name
+        groups.sort((a, b) {
+          final aName = a.name.split(':').length >= 5 ? a.name.split(':')[3] : a.name;
+          final bName = b.name.split(':').length >= 5 ? b.name.split(':')[3] : b.name;
+          return aName.toLowerCase().compareTo(bName.toLowerCase());
+        });
 
-            final userId = userSnapshot.data;
-            if (userId == null) {
-              return Container(
-                height: 100,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Center(
-                  child: Text(
-                    'User ID not found',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              );
-            }
+        final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
 
-            final groups = (groupsState is GroupsLoaded)
-                ? groupsState.groups
-                : <GridRoom.Room>[];
-
-            // Debug info for testing scrolling
-            final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
-            print('DEBUG: Total items in horizontal scroller: $totalItems (${groups.length} groups + 1 contact + ${groupsState is GroupsLoading ? 1 : 0} loading)');
-
-            return SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
-                itemCount: totalItems,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _buildModernContactOption(colorScheme, userId),
-                    );
-                  }
+        return SizedBox(
+          height: 100,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+            itemCount: totalItems,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _buildModernContactOption(colorScheme, _cachedUserId!),
+                );
+              }
                   
                   final groupIndex = index - 1;
                   if (groupIndex < groups.length) {
@@ -514,12 +515,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     );
                   }
                   
-                  return const SizedBox.shrink();
-                },
-              ),
-            );
-          },
-        );
+                return const SizedBox.shrink();
+              },
+            ),
+          );
       },
     );
   }

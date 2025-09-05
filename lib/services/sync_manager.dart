@@ -1267,9 +1267,6 @@ class SyncManager with ChangeNotifier {
             await sharingPreferencesRepository.setSharingPreferences(
                 defaultGroupPrefs);
           }
-
-          print('Updating group in bloc: ${room.id}');
-          groupsBloc.add(UpdateGroup(room.id));
         }
         print('Processed user ${participantId} in room ${room.id}');
       } catch (e) {
@@ -1283,6 +1280,12 @@ class SyncManager with ChangeNotifier {
         await roomRepository.removeRoomParticipant(room.id, participant);
         print('Removed participant $participant from room ${room.id}');
       }
+    }
+    
+    // Update group UI ONCE after all participants are processed
+    if (customRoom.isGroup) {
+      print('Updating group in bloc: ${room.id}');
+      groupsBloc.add(UpdateGroup(room.id));
     }
   }
 
