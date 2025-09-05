@@ -607,9 +607,38 @@ class SyncManager with ChangeNotifier {
         else if (membershipStatus == 'join' && event.stateKey != client.userID) {
           print("[SyncManager] Detected ${event.stateKey} joined room $roomId (prev: $prevMembership)");
           
-          // Only send location if they weren't already in the room
+          // Only send if they weren't already in the room
           if (prevMembership != 'join') {
-            print("[SyncManager] User ${event.stateKey} is newly joined, sending initial location");
+            print("[SyncManager] User ${event.stateKey} is newly joined, sending avatar and initial location");
+            
+            // IMPORTANT: Send our avatar when they accept our invite (bidirectional exchange)
+            try {
+              final avatarService = AvatarAnnouncementService(client);
+              print("[Avatar Exchange] Timeline: Sending our avatar to ${event.stateKey} who just joined");
+              await avatarService.announceProfPicToRoom(roomId);
+              
+              // For groups, also send avatar state, group avatar, and map icons
+              final room = await roomRepository.getRoomById(roomId);
+              if (room != null && room.isGroup) {
+                // Send all member avatars
+                await avatarService.sendAvatarState(roomId, targetUserId: event.stateKey);
+                
+                // Send group avatar
+                print("[Avatar Exchange] Sending group avatar to new member");
+                await avatarService.announceGroupAvatarToRoom(roomId);
+                
+                // Send all map icons to new member
+                if (mapIconSyncService != null) {
+                  // Small delay to ensure the new member's session is ready
+                  Future.delayed(const Duration(seconds: 1), () async {
+                    print('[MapIconSync] Timeline: Sending icon state to new member ${event.stateKey}');
+                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
+                  });
+                }
+              }
+            } catch (e) {
+              print("[Avatar Exchange] Error sending avatar in timeline event: $e");
+            }
             
             try {
               final room = await roomRepository.getRoomById(roomId);
@@ -870,13 +899,38 @@ class SyncManager with ChangeNotifier {
           final prevMembership = event.prevContent?['membership'] as String?;
           print("[SyncManager] Member state change: ${event.stateKey} from $prevMembership to $membershipStatus");
           
-          if (event.stateKey != client.userID && prevMembership != 'join') {
-            print("New member joined: ${event.stateKey} (was: $prevMembership), sending avatar announcements and location");
+          // Check if someone else (not us) just joined the room
+          // prevMembership could be: null (first time), 'invite' (accepted), 'leave' (rejoined), etc.
+          if (event.stateKey != client.userID && membershipStatus == 'join' && prevMembership != 'join') {
+            print("New member joined: ${event.stateKey} (was: ${prevMembership ?? 'never joined before'}), initiating bidirectional avatar exchange");
             
-            // Send our profile picture to the new member
+            // Initialize avatar service
+            final avatarService = AvatarAnnouncementService(client);
+            
             try {
-              final avatarService = AvatarAnnouncementService(client);
+              // BIDIRECTIONAL AVATAR EXCHANGE
+              // 1. Send our profile picture to the new member
               await avatarService.announceProfPicToRoom(roomId);
+              
+              // 2. For groups, send avatar state bundle with all member avatars
+              if (room.isGroup) {
+                // Send avatar state bundle to help new member get all avatars
+                print("[Avatar Exchange] Sending avatar state bundle to new group member ${event.stateKey}");
+                await avatarService.sendAvatarState(roomId, targetUserId: event.stateKey);
+                
+                // Any group member sends the group avatar
+                print("[Avatar Exchange] Sending group avatar to new member");
+                await avatarService.announceGroupAvatarToRoom(roomId);
+                
+                // Send map icon state to new group member
+                if (mapIconSyncService != null) {
+                  // Small delay to ensure the new member is fully joined
+                  Future.delayed(const Duration(seconds: 1), () async {
+                    print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
+                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
+                  });
+                }
+              }
               
               // Send our location once when they join (if sharing is enabled)
               if (!room.isGroup) {
@@ -908,29 +962,19 @@ class SyncManager with ChangeNotifier {
                   print("Error sending initial location to group: $e");
                 }
               }
-              
-              // If it's a group and we're admin, also send group avatar
-              if (room.isGroup) {
-                final matrixRoom = client.getRoomById(roomId);
-                if (matrixRoom != null) {
-                  final myPowerLevel = matrixRoom.getPowerLevelByUserId(client.userID!);
-                  if (myPowerLevel >= 100) {
-                    print("Sending group avatar to new member as admin");
-                    await avatarService.announceGroupAvatarToRoom(roomId);
-                  }
-                }
-                
-                // Send map icon state to new group member
-                if (mapIconSyncService != null) {
-                  // Delay slightly to ensure the new member is fully joined
-                  Future.delayed(const Duration(seconds: 2), () async {
-                    print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
-                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
-                  });
-                }
-              }
             } catch (e) {
-              print('Error sending avatar announcements to new member: $e');
+              print('Error during bidirectional avatar exchange: $e');
+            }
+          } else if (event.stateKey == client.userID && membershipStatus == 'join' && prevMembership == 'invite') {
+            // We just accepted an invite - request avatars from others
+            print("[Avatar Exchange] We accepted invite to room $roomId, requesting avatars");
+            try {
+              final avatarService = AvatarAnnouncementService(client);
+              
+              // Request avatars from all room members
+              await avatarService.requestAvatars(roomId);
+            } catch (e) {
+              print('Error requesting avatars after accepting invite: $e');
             }
           }
           
@@ -1260,11 +1304,22 @@ class SyncManager with ChangeNotifier {
         if (room != null) {
           await processJoinedRoom(room);
           
+          // Enhanced avatar exchange after accepting invite
           try {
             final avatarService = AvatarAnnouncementService(client);
+            
+            // 1. Announce our avatar to the room
             await avatarService.announceProfPicToRoom(roomId);
+            
+            // 2. Request avatars from all room members
+            print('[Avatar Exchange] Requesting avatars from room members after accepting invite');
+            await avatarService.requestAvatars(roomId);
+            
+            // 4. For groups, existing members should send avatar state
+            // This is handled by the member join event in _processMemberStateEvent
+            
           } catch (e) {
-            print('Error sending avatar announcement after joining: $e');
+            print('Error during avatar exchange after accepting invite: $e');
           }
           
           groupsBloc.add(RefreshGroups());
