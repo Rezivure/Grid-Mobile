@@ -9,6 +9,9 @@
   <a href="https://www.mygrid.app">mygrid.app</a>
 </div>
 
+<div align="center">  
+  v1.0.9
+</div> 
 
 <br/>
 
