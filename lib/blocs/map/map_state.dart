@@ -15,7 +15,7 @@ class MapState extends Equatable {
   const MapState({
     this.isLoading = true,
     this.center,
-    this.zoom = 18.0,
+    this.zoom = 16.0,
     this.userLocations = const [],
     this.error,
     this.moveCount = 0,

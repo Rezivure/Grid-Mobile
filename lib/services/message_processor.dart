@@ -1,5 +1,6 @@
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:matrix/encryption/encryption.dart';
@@ -15,15 +16,19 @@ import 'package:grid_frontend/widgets/group_avatar.dart';
 import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
 class MessageProcessor {
   final Client client;
   final Encryption encryption;
   final LocationRepository locationRepository;
   final LocationHistoryRepository locationHistoryRepository;
+  final RoomLocationHistoryRepository? roomLocationHistoryRepository;
   final MessageParser messageParser;
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
+  final MapIconSyncService? mapIconSyncService;
   
 
   MessageProcessor(
@@ -31,7 +36,9 @@ class MessageProcessor {
       this.locationHistoryRepository,
       this.messageParser,
       this.client,
-      {this.avatarBloc}
+      {this.avatarBloc,
+      this.mapIconSyncService,
+      this.roomLocationHistoryRepository}
       ) : encryption = Encryption(client: client);
 
   /// Process a single event from a room. Decrypt if necessary,
@@ -62,14 +69,26 @@ class MessageProcessor {
       };
 
       // Check message type and handle accordingly
-      final msgType = decryptedEvent.content['msgtype'];
+      final msgType = decryptedEvent.content['msgtype'] as String?;
+      print('[Message Processing] Processing message type: $msgType from ${decryptedEvent.senderId}');
+      
       if (msgType == 'm.avatar.announcement') {
         await _handleAvatarAnnouncement(messageData);
       } else if (msgType == 'm.group.avatar.announcement') {
         await _handleGroupAvatarAnnouncement(messageData, roomId);
-      } else {
+      } else if (msgType == 'm.avatar.state') {
+        await _handleAvatarState(messageData);
+      } else if (msgType == 'm.avatar.request') {
+        await _handleAvatarRequest(messageData, roomId);
+      } else if (_isMapIconEvent(msgType)) {
+        // Handle map icon events
+        await _handleMapIconEvent(roomId, messageData);
+      } else if (msgType == 'm.location') {
+        print('[Message Processing] Processing location message from ${decryptedEvent.senderId}');
         // Attempt to parse location message
-        await _handleLocationMessageIfAny(messageData);
+        await _handleLocationMessageIfAny(messageData, roomId);
+      } else {
+        // Not a special message type we handle
       }
       return messageData;
     }
@@ -79,7 +98,7 @@ class MessageProcessor {
 
 
   /// Handle location message if it's detected
-  Future<void> _handleLocationMessageIfAny(Map<String, dynamic> messageData) async {
+  Future<void> _handleLocationMessageIfAny(Map<String, dynamic> messageData, String roomId) async {
     final sender = messageData['sender'] as String?;
     final rawTimestamp = messageData['timestamp'];
     final timestamp = rawTimestamp is DateTime
@@ -93,6 +112,7 @@ class MessageProcessor {
 
     final locationData = messageParser.parseLocationMessage(messageData);
     if (locationData != null) {
+      print('[Location Processing] Found location message from $sender at ${locationData['latitude']}, ${locationData['longitude']}');
       final userLocation = UserLocation(
         userId: sender,
         latitude: locationData['latitude']!,
@@ -102,10 +122,21 @@ class MessageProcessor {
       );
 
       await locationRepository.insertLocation(userLocation);
-      print('Location saved for user: $sender');
+      print('[Location Processing] Location saved for user: $sender');
       var confirm = await locationRepository.getLatestLocation(sender);
       
-      // Also save to location history
+      // Save to room-specific location history
+      if (roomLocationHistoryRepository != null) {
+        await roomLocationHistoryRepository!.addLocationPoint(
+          roomId: roomId,
+          userId: sender,
+          latitude: locationData['latitude']!,
+          longitude: locationData['longitude']!,
+        );
+        print('Room location history saved for user: $sender in room: $roomId');
+      }
+      
+      // Also save to legacy global history (can be deprecated later)
       await locationHistoryRepository.addLocationPoint(sender, locationData['latitude']!, locationData['longitude']!);
     } else {
       // It's a message, but not a location message
@@ -264,6 +295,118 @@ class MessageProcessor {
     }
   }
 
+  /// Handle avatar state bundle messages
+  Future<void> _handleAvatarState(Map<String, dynamic> messageData) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      final content = messageData['content'] as Map<String, dynamic>?;
+      
+      if (sender == null || content == null) {
+        print('[Avatar State] Invalid avatar state - missing sender or content');
+        return;
+      }
+
+      // Check if this state update is targeted to us
+      final targetUser = content['target_user'] as String?;
+      if (targetUser != null && targetUser != client.userID) {
+        print('[Avatar State] State not targeted to this user, ignoring');
+        return;
+      }
+
+      final avatarsList = content['avatars'] as List<dynamic>?;
+      if (avatarsList == null || avatarsList.isEmpty) {
+        print('[Avatar State] No avatars in state bundle');
+        return;
+      }
+
+      print('[Avatar State] Processing avatar state bundle with ${avatarsList.length} avatars from $sender');
+
+      // Process each avatar in the state
+      for (final avatarData in avatarsList) {
+        try {
+          final userId = avatarData['user_id'] as String?;
+          final avatarUrl = avatarData['avatar_url'] as String?;
+          final encryption = avatarData['encryption'] as Map<String, dynamic>?;
+          
+          if (userId == null || avatarUrl == null || encryption == null) {
+            continue; // Skip invalid entries
+          }
+
+          final key = encryption['key'] as String?;
+          final iv = encryption['iv'] as String?;
+          
+          if (key == null || iv == null) {
+            continue; // Skip entries without encryption data
+          }
+
+          print('[Avatar State] Processing avatar for user $userId');
+
+          // Use AvatarBloc if available
+          if (avatarBloc != null) {
+            avatarBloc!.add(AvatarUpdateReceived(
+              userId: userId,
+              avatarUrl: avatarUrl,
+              encryptionKey: key,
+              encryptionIv: iv,
+              isMatrixUrl: avatarUrl.startsWith('mxc://'),
+            ));
+          } else {
+            // Fallback: Store avatar data directly
+            final avatarDataToStore = {
+              'uri': avatarUrl,
+              'key': key,
+              'iv': iv,
+            };
+            
+            await secureStorage.write(
+              key: 'avatar_$userId',
+              value: json.encode(avatarDataToStore),
+            );
+            
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('avatar_is_matrix_$userId', avatarUrl.startsWith('mxc://'));
+          }
+        } catch (e) {
+          print('[Avatar State] Error processing avatar in state: $e');
+          continue; // Continue with other avatars
+        }
+      }
+      
+      print('[Avatar State] Finished processing ${avatarsList.length} avatars from state bundle');
+    } catch (e) {
+      print('[Avatar State] Error handling avatar state: $e');
+    }
+  }
+
+  /// Handle avatar request messages
+  Future<void> _handleAvatarRequest(Map<String, dynamic> messageData, String roomId) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      final content = messageData['content'] as Map<String, dynamic>?;
+      
+      if (sender == null || content == null) {
+        print('[Avatar Request] Invalid request - missing sender or content');
+        return;
+      }
+
+      // Don't respond to our own requests
+      if (sender == client.userID) {
+        return;
+      }
+
+      final requestedUsers = content['requested_users'] as List<dynamic>?;
+      
+      print('[Avatar Request] Received avatar request from $sender for users: ${requestedUsers?.join(", ") ?? "all"}');
+      
+      // Use the avatar service to handle the request
+      final avatarService = AvatarAnnouncementService(client);
+      await avatarService.handleAvatarRequest(roomId, sender, requestedUsers?.cast<String>());
+      
+    } catch (e) {
+      print('[Avatar Request] Error handling avatar request: $e');
+    }
+  }
+
   /// Download and cache group avatar for immediate display
   Future<void> _downloadAndCacheGroupAvatar(String roomId, String avatarUrl, String keyBase64, String ivBase64, bool isMatrix) async {
     try {
@@ -355,6 +498,47 @@ class MessageProcessor {
       
     } catch (e) {
       print('[Avatar Processing] Error pre-downloading avatar: $e');
+    }
+  }
+  
+  /// Checks if a message type is a map icon event
+  bool _isMapIconEvent(String? msgType) {
+    if (msgType == null) return false;
+    return msgType == MapIconSyncService.eventTypeCreate ||
+           msgType == MapIconSyncService.eventTypeUpdate ||
+           msgType == MapIconSyncService.eventTypeDelete ||
+           msgType == MapIconSyncService.eventTypeState;
+  }
+  
+  /// Handles map icon events
+  Future<void> _handleMapIconEvent(String roomId, Map<String, dynamic> messageData) async {
+    try {
+      // Skip if we don't have the sync service
+      if (mapIconSyncService == null) {
+        print('[MapIcon] MapIconSyncService not available, skipping event');
+        return;
+      }
+      
+      final content = messageData['content'] as Map<String, dynamic>?;
+      if (content == null) {
+        print('[MapIcon] Invalid map icon event - missing content');
+        return;
+      }
+      
+      final senderId = messageData['sender'] as String?;
+      
+      // Don't process our own events (we already have them locally)
+      if (senderId == client.userID) {
+        print('[MapIcon] Skipping own map icon event');
+        return;
+      }
+      
+      // Process the icon event
+      await mapIconSyncService!.processIconEvent(roomId, content);
+      
+      print('[MapIcon] Processed map icon event of type: ${content['msgtype']}');
+    } catch (e) {
+      print('[MapIcon] Error handling map icon event: $e');
     }
   }
 }

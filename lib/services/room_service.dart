@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:math';
 
@@ -12,7 +13,10 @@ import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
@@ -25,6 +29,7 @@ class RoomService {
   final RoomRepository roomRepository;
   final LocationRepository locationRepository;
   final LocationHistoryRepository locationHistoryRepository;
+  final RoomLocationHistoryRepository? roomLocationHistoryRepository;
   final SharingPreferencesRepository sharingPreferencesRepository;
 
   // Tracks recent messages/location updates sent to prevent redundant messages
@@ -32,7 +37,8 @@ class RoomService {
   final int _maxMessageHistory = 50;
 
   bg.Location? _currentLocation;
-
+  DateTime? _lastUpdateTime;
+  
   bg.Location? get currentLocation => _currentLocation;
 
 
@@ -47,19 +53,38 @@ class RoomService {
       this.locationHistoryRepository,
       this.sharingPreferencesRepository,
       LocationManager locationManager, // Inject LocationManager
+      {this.roomLocationHistoryRepository}
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
       // Update current location in room service
       _currentLocation = location;
-      // Check if this is a targeted update
-      // if (location.extras?.containsKey('targetRoomId') == true) {
-       // String roomId = location.extras!['targetRoomId'];
-       // updateSingleRoom(roomId);
-     // } else {
-        // Regular periodic update to all rooms
-      updateRooms(location);
-    //  }
+      // Defer updates until appropriate time
+      _handleLocationUpdate(location);
+    });
+  }
+  
+  void _handleLocationUpdate(bg.Location location) {
+    // Queue location updates intelligently
+    // They will be processed when appropriate
+    _queueLocationUpdate(location);
+  }
+  
+  Timer? _locationUpdateTimer;
+  bg.Location? _pendingLocation;
+  
+  void _queueLocationUpdate(bg.Location location) {
+    _pendingLocation = location;
+    
+    // Cancel any existing timer
+    _locationUpdateTimer?.cancel();
+    
+    // Debounce location updates by 1 second to prevent spam
+    _locationUpdateTimer = Timer(const Duration(seconds: 1), () {
+      if (_pendingLocation != null) {
+        updateRooms(_pendingLocation!);
+        _pendingLocation = null;
+      }
     });
   }
 
@@ -184,6 +209,16 @@ class RoomService {
         }
       }
 
+      // Delete all map icons associated with this room
+      try {
+        final databaseService = DatabaseService();
+        final mapIconRepository = MapIconRepository(databaseService);
+        await mapIconRepository.deleteIconsForRoom(roomId);
+        print('Deleted map icons for room: $roomId');
+      } catch (e) {
+        print('Error deleting map icons for room $roomId: $e');
+      }
+
       await roomRepository.leaveRoom(roomId, userId);
       return true;
     } catch (e) {
@@ -271,29 +306,43 @@ class RoomService {
       await client.joinRoom(roomId);
       print("Successfully joined room: $roomId");
 
+      // Wait a bit for sync to catch up
+      await Future.delayed(const Duration(seconds: 1));
+      
       // Check if the room exists
       final room = client.getRoomById(roomId);
       if (room == null) {
-        print("Room not found after joining.");
+        print("Room not found after joining - might be sync delay.");
+        // Don't auto-leave - might just need more time to sync
         return false; // Invalid invite
       }
 
-      // Optionally, you can check participants
+      // Check participants - but be more lenient
       final participants = await room.getParticipants();
-      final hasValidParticipant = participants.any(
-            (user) => user.membership == Membership.join && user.id != client.userID,
-      );
-
-      if (!hasValidParticipant) {
+      final joinedParticipants = participants.where(
+        (user) => user.membership == Membership.join
+      ).toList();
+      
+      // Check for invited participants too (they might not have joined yet)
+      final invitedParticipants = participants.where(
+        (user) => user.membership == Membership.invite && user.id != client.userID
+      ).toList();
+      
+      if (joinedParticipants.length == 1 && 
+          joinedParticipants.first.id == client.userID &&
+          invitedParticipants.isEmpty) {
+        // We're alone and no one is invited - this is actually invalid
         print("No valid participants found, leaving the room.");
         await leaveRoom(roomId);
         return false; // Invalid invite
       }
+      
       return true; // Successfully joined
     } catch (e) {
       print("Error during acceptInvitation: $e");
-      await leaveRoom(roomId);
-      return false; // Failed to join
+      // Don't auto-leave on error - could be network issue
+      // Let the cleanup process handle it later if needed
+      return false; // Failed to join but don't leave
     }
   }
 
@@ -321,11 +370,25 @@ class RoomService {
 
   Future<void> cleanRooms() async {
     try {
+      // SAFETY: Ensure client is fully synced before cleaning
+      if (!client.isLogged() || client.syncPending == null) {
+        print("[CleanRooms] Client not fully synced yet, skipping cleanup");
+        return;
+      }
+      
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final myUserId = client.userID;
       print("Checking for rooms to clean at timestamp: $now");
 
-      for (var room in client.rooms) {
+      // Create a copy of the rooms list to avoid concurrent modification
+      final roomsList = List.from(client.rooms);
+      
+      for (var room in roomsList) {
+        // Skip rooms we're not actually joined to
+        if (room.membership != Membership.join) {
+          continue;
+        }
+        
         print("Trying to get rooms");
         final participants = await room.getParticipants();
         bool shouldLeave = false;
@@ -348,12 +411,16 @@ class RoomService {
             }
           } else if (room.name.contains("Grid:Direct:")) {
             print("Checking direct room: ${room.id} with ${participants.length} participants");
-
-            if (participants.length <= 1) {
+            
+            // Get joined members only
+            final joinedMembers = participants.where((p) => p.membership == Membership.join).toList();
+            
+            // For direct rooms, if you're alone, leave
+            if (joinedMembers.length == 1 && joinedMembers.first.id == myUserId) {
               shouldLeave = true;
-              leaveReason = 'solo direct room';
-            } else if (participants.length == 2 &&
-                participants.every((p) => p.membership != Membership.join)) {
+              leaveReason = 'alone in direct room - other user left';
+            } else if (joinedMembers.isEmpty) {
+              // No one has join status
               shouldLeave = true;
               leaveReason = 'no active participants in direct room';
             }
@@ -364,13 +431,7 @@ class RoomService {
           leaveReason = 'non-Grid room';
         }
 
-        // Extra checks for any room type
-        if (!shouldLeave && participants.length == 1 &&
-            participants.first.id == myUserId &&
-            participants.first.membership == Membership.join) {
-          shouldLeave = true;
-          leaveReason = 'solo member room';
-        }
+        // No extra checks needed - the logic above handles all cases
 
         if (shouldLeave) {
           try {
@@ -387,8 +448,12 @@ class RoomService {
               print('Confirmed room ${room.id} left successfully.');
 
               // Only clean up locally if the leave was successful
-              await _cleanupLocalData(room.id, participants);
-              print('Successfully cleaned up local data for room: ${room.id}');
+              final removedUserIds = await _cleanupLocalData(room.id, participants);
+              
+              // Note: Map cleanup needs to be handled by SyncManager or other components
+              // that have access to MapBloc. They can listen for room leave events
+              // or user deletion events to update the map accordingly.
+              print('Successfully cleaned up local data for room: ${room.id}, removed users: $removedUserIds');
             } else {
               print('Room ${room.id} still appears in joined rooms after leave attempt.');
             }
@@ -407,9 +472,21 @@ class RoomService {
 
 
   /// Handles cleanup of local data when leaving a room
-  Future<void> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+  /// Returns list of user IDs that were removed from the system
+  Future<List<String>> _cleanupLocalData(String roomId, List<User> matrixUsers) async {
+    final removedUserIds = <String>[];
     try {
       print("Starting local cleanup for room: $roomId");
+
+      // Delete all map icons associated with this room
+      try {
+        final databaseService = DatabaseService();
+        final mapIconRepository = MapIconRepository(databaseService);
+        await mapIconRepository.deleteIconsForRoom(roomId);
+        print('Deleted map icons for room: $roomId');
+      } catch (e) {
+        print('Error deleting map icons for room $roomId: $e');
+      }
 
       // Get all user IDs in the room before deletion
       final userIds = matrixUsers.map((p) => p.id).toList();
@@ -423,35 +500,41 @@ class RoomService {
 
       // For each user in the room
       for (final userId in userIds) {
-        // Skip if user is a direct contact
-        if (directContactIds.contains(userId)) {
-          print("User $userId is a direct contact, preserving user data");
-          // Just remove the relationship for this room
-          await userRepository.removeUserRelationship(userId, roomId);
+        // Skip ourselves
+        if (userId == client.userID) {
           continue;
         }
-
+        
+        // Remove the relationship for this room
+        await userRepository.removeUserRelationship(userId, roomId);
+        
         // Check if user has any other rooms
         final otherRooms = await userRepository.getUserRooms(userId);
         otherRooms.remove(roomId); // Remove current room from list
 
         if (otherRooms.isEmpty) {
-          print("User $userId has no other rooms and is not a contact, cleaning up user data");
+          print("User $userId has no other rooms, cleaning up user data and location");
           // Remove user's location data
           await locationRepository.deleteUserLocations(userId);
+          
+          // Track that we removed this user
+          removedUserIds.add(userId);
+          
           // Remove user and their relationships (this handles both GridUser and relationships)
           await userRepository.deleteUser(userId);
+          
+          // Note: The map will be updated by SyncManager's _cleanupOrphanedUsers
+          // which is called after room cleanup during reconciliation
         } else {
-          print("User $userId exists in other rooms, keeping user data");
-          // Just remove the relationship for this room
-          await userRepository.removeUserRelationship(userId, roomId);
+          print("User $userId exists in other rooms (${otherRooms.length}), keeping user data");
         }
       }
 
       // Finally delete the room itself
       await roomRepository.deleteRoom(roomId);
 
-      print("Completed local cleanup for room: $roomId");
+      print("Completed local cleanup for room: $roomId, removed ${removedUserIds.length} users");
+      return removedUserIds;
     } catch (e) {
       print("Error during local cleanup for room $roomId: $e");
       // Re-throw the error to be handled by the calling function
@@ -591,9 +674,20 @@ class RoomService {
             _recentlySentMessages[roomId]!.remove(_recentlySentMessages[roomId]!.first);
           }
           
-          // Save to location history for current user
+          // Save to room-specific location history
           final myUserId = client.userID;
           if (myUserId != null) {
+            // Save to room-specific history
+            if (roomLocationHistoryRepository != null) {
+              await roomLocationHistoryRepository!.addLocationPoint(
+                roomId: roomId,
+                userId: myUserId,
+                latitude: latitude,
+                longitude: longitude,
+              );
+            }
+            
+            // Also save to legacy global history (can be deprecated later)
             await locationHistoryRepository.addLocationPoint(myUserId, latitude, longitude);
           }
         } catch (e) {
@@ -620,8 +714,17 @@ class RoomService {
   }
 
   Future<void> updateRooms(bg.Location location) async {
-    List<Room> rooms = client.rooms;
-    print("Grid: Found ${rooms.length} total rooms to process");
+    // Prevent rapid duplicate updates
+    final now = DateTime.now();
+    if (_lastUpdateTime != null && 
+        now.difference(_lastUpdateTime!).inSeconds < 3) {
+      print("[RoomService] Skipping duplicate room update (too soon after last update)");
+      return;
+    }
+    _lastUpdateTime = now;
+    
+    List<Room> rooms = client.rooms.where((r) => r.membership == Membership.join).toList();
+    print("Grid: Found ${rooms.length} total rooms to process (filtered for joined only)");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
@@ -886,16 +989,25 @@ class RoomService {
                   (user) => user.id != client.userID,
             );
 
-            // Add this user to the direct users list and map them to the room.
-            directUsers.add(otherMember);
-            userRoomMap[otherMember] = room.id;
+            // Only add if the other member has a valid membership status
+            // Don't auto-leave here - this might just be a sync issue
+            if (otherMember.membership == Membership.join || 
+                otherMember.membership == Membership.invite) {
+              directUsers.add(otherMember);
+              userRoomMap[otherMember] = room.id;
+            } else if (otherMember.membership == Membership.leave) {
+              // Other person left - we can safely leave too
+              print('Other member left room: ${room.id}, leaving as well');
+              await leaveRoom(room.id);
+            } else {
+              // Unknown state - don't add but also don't leave yet
+              print('Other member in unknown state in room: ${room.id}, skipping');
+            }
           } catch (e) {
-            // Log if no other member is found.
-            print('No other member found in room: ${room.id}');
-            // TODO: may be causing issue with contacts screen
-            await leaveRoom(room.id);
-            print('Left room: ${room.id}');
-
+            // No other member found - but don't auto-leave!
+            // This could be a temporary sync issue
+            print('Warning: No other member found in room: ${room.id} (might be sync issue)');
+            // Don't leave the room - just skip it for now
           }
         }
       }

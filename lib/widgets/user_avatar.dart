@@ -161,7 +161,7 @@ class _UserAvatarState extends State<UserAvatar> {
     }
 
     try {
-      final secureStorage = FlutterSecureStorage();
+      const secureStorage = FlutterSecureStorage();
       final prefs = await SharedPreferences.getInstance();
       
       // Check if it's a Matrix avatar or encrypted avatar
@@ -173,7 +173,18 @@ class _UserAvatarState extends State<UserAvatar> {
           : (prefs.getBool('avatar_is_matrix_${widget.userId}') ?? false);
       
       // Check secure storage for avatar data
-      final avatarDataStr = await secureStorage.read(key: 'avatar_${widget.userId}');
+      String? avatarDataStr;
+      try {
+        avatarDataStr = await secureStorage.read(key: 'avatar_${widget.userId}');
+      } catch (e) {
+        print('[UserAvatar] Secure storage failed for ${widget.userId}, using fallback');
+        // Try SharedPreferences fallback
+        final fallbackStr = prefs.getString('avatar_fallback_${widget.userId}');
+        if (fallbackStr != null) {
+          avatarDataStr = fallbackStr;
+        }
+      }
+      
       if (avatarDataStr != null) {
         final avatarData = json.decode(avatarDataStr);
         final uri = avatarData['uri'];
@@ -220,6 +231,7 @@ class _UserAvatarState extends State<UserAvatar> {
               
               final avatarBytes = Uint8List.fromList(decrypted);
               await _cacheService.put(widget.userId, avatarBytes);
+              print('[UserAvatar] Loaded avatar for ${widget.userId} (${avatarBytes.length} bytes)');
               
               if (mounted) {
                 setState(() {
@@ -250,7 +262,6 @@ class _UserAvatarState extends State<UserAvatar> {
         }
       }
     } catch (e) {
-      print('[User Avatar] Error loading avatar for ${widget.userId}: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
