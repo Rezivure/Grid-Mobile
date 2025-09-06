@@ -9,6 +9,9 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/models/sharing_preferences.dart';
 
 class FriendRequestModal extends StatefulWidget {
   final RoomService roomService;
@@ -31,6 +34,7 @@ class FriendRequestModal extends StatefulWidget {
 
 class _FriendRequestModalState extends State<FriendRequestModal> {
   bool _isProcessing = false;
+  bool _startSharingOnJoin = true; // Default to checked
 
   bool isCustomHomeserver() {
     final homeserver = widget.roomService.getMyHomeserver();
@@ -44,9 +48,9 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     final bool isCustomServer = isCustomHomeserver();
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.85,
+      initialChildSize: 0.75,  // Start taller
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
           color: colorScheme.surface,
@@ -106,14 +110,14 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             Expanded(
               child: SingleChildScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),  // Reduced top padding
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Profile section
                     _buildProfileCard(theme, colorScheme, isCustomServer),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),  // Reduced from 24
                     
                     // Action buttons
                     if (_isProcessing)
@@ -133,7 +137,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   Widget _buildProfileCard(ThemeData theme, ColorScheme colorScheme, bool isCustomServer) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),  // Reduced from 24
       decoration: BoxDecoration(
         color: colorScheme.surfaceVariant.withOpacity(0.3),
         borderRadius: BorderRadius.circular(20),
@@ -158,12 +162,12 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             ),
             child: RandomAvatar(
               widget.userId.split(":").first.replaceFirst('@', ''),
-              height: 80.0,
-              width: 80.0,
+              height: 70.0,  // Reduced from 80
+              width: 70.0,   // Reduced from 80
             ),
           ),
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),  // Reduced from 16
           
           // Display name
           Text(
@@ -186,11 +190,11 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             ),
           ],
           
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),  // Reduced from 16
           
           // Description
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),  // Reduced from 16
             decoration: BoxDecoration(
               color: colorScheme.primary.withOpacity(0.08),
               borderRadius: BorderRadius.circular(12),
@@ -200,15 +204,15 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                 Icon(
                   Icons.location_on,
                   color: colorScheme.primary,
-                  size: 20,
+                  size: 18,  // Reduced from 20
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Wants to connect with you. You will begin sharing locations once you accept.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
                       color: colorScheme.onSurface,
-                      height: 1.4,
+                      height: 1.3,  // Reduced from 1.4
                     ),
                   ),
                 ),
@@ -243,6 +247,63 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   Widget _buildActionButtons(ThemeData theme, ColorScheme colorScheme) {
     return Column(
       children: [
+        // Location sharing checkbox
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceVariant.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colorScheme.outline.withOpacity(0.1),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: _startSharingOnJoin,
+                  onChanged: (value) {
+                    setState(() {
+                      _startSharingOnJoin = value ?? true;
+                    });
+                  },
+                  activeColor: colorScheme.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Start sharing on join',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _startSharingOnJoin 
+                        ? 'Share your location immediately when connecting'
+                        : 'Location sharing will be disabled for this contact',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        
         // Accept button
         SizedBox(
           width: double.infinity,
@@ -328,6 +389,26 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         context.read<ContactsBloc>().add(RefreshContacts());
       }
 
+      // Handle location sharing based on checkbox
+      if (_startSharingOnJoin) {
+        // Send immediate location update
+        final locationManager = context.read<LocationManager>();
+        await locationManager.grabLocationAndPing();
+        
+        // Send location specifically to this room
+        await widget.roomService.updateSingleRoom(widget.roomId);
+      } else {
+        // Disable location sharing for this contact
+        final sharingPrefs = context.read<SharingPreferencesRepository>();
+        final preferences = SharingPreferences(
+          targetId: widget.userId,  // Use the user ID, not room ID
+          targetType: 'user',
+          activeSharing: false,
+          shareWindows: null,
+        );
+        await sharingPrefs.setSharingPreferences(preferences);
+      }
+
       if (mounted) {
         Navigator.of(context).pop(); // Close the modal
         await widget.onResponse(); // Execute callback to refresh any parent components
@@ -388,19 +469,43 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
 
     try {
       await widget.roomService.declineInvitation(widget.roomId);
-      Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-      Navigator.of(context).pop();
-      await widget.onResponse();
+      
+      // Remove invite from the list BEFORE closing modal
+      if (mounted) {
+        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
+        
+        // Give time for the bloc state to update and UI to reflect changes
+        await Future.delayed(const Duration(milliseconds: 300));
+        
+        Navigator.of(context).pop();
+        await widget.onResponse();
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Friend request declined.")),
+          SnackBar(
+            content: Text("Friend request declined."),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error declining the request: $e")),
+          SnackBar(
+            content: Text("Error declining the request: $e"),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } finally {

@@ -9,12 +9,15 @@
   <a href="https://www.mygrid.app">mygrid.app</a>
 </div>
 
+<div align="center">  
+  v1.0.9
+</div> 
 
 <br/>
 
 <div align="center">
   <a href="https://github.com/rezivure/grid-frontend/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/rezivure/grid-frontend"></a>
-  <a href="https://x.com/rezivure"><img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/rezivure"></a>
+  <a href="https://discord.gg/cJrQXMn6Hk"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white"></a>
   <a href="https://github.com/rezivure/grid-frontend/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPLv3-purple"></a>
 </div>
 <br/>
@@ -37,9 +40,12 @@
 - **Self-Hosted Capability** Grid is designed to enable users to easily self host their own backend server and map tile provider for complete control over how they share.
 
 
-## Roadmap 
+## Community
 
-Check back soon for an updated roadmap!
+Join our [Discord](https://discord.gg/cJrQXMn6Hk) to submit feature requests, vote on new features, report bugs, get help, and connect with the community & developers!
+
+## Self Hosting
+This repository is for the Grid: Private Location Sharing mobile application (iOS/Android). If you are looking to self host a server for the app, check out our [docs](https://docs.mygrid.app/) or join our Discord!
 
 ## Getting Started With the App
 If you wish to develop/contribute PRs to application, follow the steps below:

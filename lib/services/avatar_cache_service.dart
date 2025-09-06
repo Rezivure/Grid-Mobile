@@ -28,23 +28,24 @@ class AvatarCacheService {
         final base64Data = prefs.getString('$_cacheKeyPrefix$userId');
         if (base64Data != null) {
           try {
-            _memoryCache[userId] = base64Decode(base64Data);
+            final bytes = base64Decode(base64Data);
+            _memoryCache[userId] = bytes;
           } catch (e) {
-            print('[AvatarCache] Error decoding cached avatar for $userId: $e');
           }
         }
       }
       
       _isInitialized = true;
-      print('[AvatarCache] Loaded ${_memoryCache.length} avatars from persistent cache');
+      print('[AvatarCache] Initialized with ${_memoryCache.length} cached avatars');
     } catch (e) {
-      print('[AvatarCache] Error initializing cache: $e');
+      print('[AvatarCache] Initialization error: $e');
       _isInitialized = true; // Mark as initialized even on error
     }
   }
   
   /// Reload memory cache from persistent storage (useful after app resume)
   Future<void> reloadFromPersistent() async {
+    print('[AvatarCache] Reloading from persistent storage');
     _memoryCache.clear();
     _isInitialized = false;
     await initialize();
@@ -65,9 +66,9 @@ class AvatarCacheService {
         try {
           final bytes = base64Decode(base64Data);
           _memoryCache[userId] = bytes;
-          print('[AvatarCache] Reloaded avatar for $userId from persistent storage');
+          print('[AvatarCache] Reloaded avatar for $userId');
         } catch (e) {
-          print('[AvatarCache] Error reloading avatar for $userId: $e');
+          print('[AvatarCache] Error reloading $userId: $e');
         }
       }
     });
@@ -100,7 +101,6 @@ class AvatarCacheService {
       // Store avatar data
       await prefs.setString('$_cacheKeyPrefix$userId', base64Encode(avatarBytes));
     } catch (e) {
-      print('[AvatarCache] Error persisting avatar for $userId: $e');
     }
   }
   
@@ -116,7 +116,6 @@ class AvatarCacheService {
       cacheIndex.remove(userId);
       await prefs.setStringList(_cacheIndexKey, cacheIndex);
     } catch (e) {
-      print('[AvatarCache] Error removing avatar for $userId: $e');
     }
   }
   
@@ -135,7 +134,6 @@ class AvatarCacheService {
       
       await prefs.remove(_cacheIndexKey);
     } catch (e) {
-      print('[AvatarCache] Error clearing cache: $e');
     }
   }
   

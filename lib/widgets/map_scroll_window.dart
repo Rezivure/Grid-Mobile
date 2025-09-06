@@ -8,6 +8,8 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
@@ -27,7 +29,12 @@ import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
 
 class MapScrollWindow extends StatefulWidget {
-  const MapScrollWindow({Key? key}) : super(key: key);
+  final bool isEditingMapIcon;
+  
+  const MapScrollWindow({
+    Key? key,
+    this.isEditingMapIcon = false,
+  }) : super(key: key);
 
   @override
   _MapScrollWindowState createState() => _MapScrollWindowState();
@@ -50,6 +57,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   String _selectedLabel = 'My Contacts';
   GridRoom.Room? _selectedRoom;
   bool _isScrollingContent = false;
+  String? _cachedUserId; // Cache user ID to avoid repeated fetches
 
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
@@ -95,6 +103,18 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
     });
+    
+    // Load and cache user ID once
+    _loadUserId();
+  }
+  
+  Future<void> _loadUserId() async {
+    final userId = await _userService.getMyUserId();
+    if (mounted) {
+      setState(() {
+        _cachedUserId = userId;
+      });
+    }
   }
 
   @override
@@ -113,24 +133,27 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
+      builder: (modalContext) => BlocProvider.value(
+        value: context.read<InvitationsBloc>(),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(modalContext).size.height * 0.8,
           ),
-          child: InvitesModal(
-            roomService: _roomService,
-            onInviteHandled: _navigateToContacts,
+          decoration: BoxDecoration(
+            color: Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: InvitesModal(
+              roomService: _roomService,
+              onInviteHandled: _navigateToContacts,
+            ),
           ),
         ),
       ),
@@ -157,16 +180,19 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             }
             return true;
           },
-          child: Container(
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.15),
+          child: AnimatedOpacity(
+            opacity: widget.isEditingMapIcon ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.15),
                   blurRadius: 20.0,
                   spreadRadius: 0,
                   offset: const Offset(0, -5),
@@ -235,7 +261,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               ],
             ),
           ),
-        );
+          ),  // End of AnimatedOpacity
+        );  // End of NotificationListener
       },
     );
   }
@@ -255,7 +282,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   if (_isDropdownExpanded) {
                     _expandController.forward();
                     _fadeController.forward();
-                    _groupsBloc.add(RefreshGroups());
+                    // Don't refresh groups every time dropdown opens
+                    // _groupsBloc.add(RefreshGroups());
                   } else {
                     _expandController.reverse();
                     _fadeController.reverse();
@@ -383,9 +411,13 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Positioned(
             right: 6,
             top: 6,
-            child: Consumer<SyncManager>(
-              builder: (context, syncManager, child) {
-                int inviteCount = syncManager.totalInvites;
+            child: BlocBuilder<InvitationsBloc, InvitationsState>(
+              builder: (context, state) {
+                int inviteCount = 0;
+                if (state is InvitationsLoaded) {
+                  inviteCount = state.totalInvites;
+                }
+                
                 if (inviteCount > 0) {
                   return Container(
                     padding: const EdgeInsets.all(4),
@@ -418,63 +450,50 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
   Widget _buildModernHorizontalScroller(ColorScheme colorScheme) {
+    // Use cached user ID to avoid rebuilds
+    if (_cachedUserId == null) {
+      return Container(
+        height: 100,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: colorScheme.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+    
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, groupsState) {
-        return FutureBuilder<String?>(
-          future: _userService.getMyUserId(),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return Container(
-                height: 100,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: colorScheme.primary,
-                    strokeWidth: 2,
-                  ),
-                ),
-              );
-            }
+        // Get and sort groups alphabetically by name
+        final groups = (groupsState is GroupsLoaded)
+            ? List<GridRoom.Room>.from(groupsState.groups)
+            : <GridRoom.Room>[];
+        
+        // Sort groups alphabetically by their display name
+        groups.sort((a, b) {
+          final aName = a.name.split(':').length >= 5 ? a.name.split(':')[3] : a.name;
+          final bName = b.name.split(':').length >= 5 ? b.name.split(':')[3] : b.name;
+          return aName.toLowerCase().compareTo(bName.toLowerCase());
+        });
 
-            final userId = userSnapshot.data;
-            if (userId == null) {
-              return Container(
-                height: 100,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Center(
-                  child: Text(
-                    'User ID not found',
-                    style: TextStyle(
-                      color: colorScheme.onSurface.withOpacity(0.7),
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              );
-            }
+        final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
 
-            final groups = (groupsState is GroupsLoaded)
-                ? groupsState.groups
-                : <GridRoom.Room>[];
-
-            // Debug info for testing scrolling
-            final totalItems = groups.length + 1 + (groupsState is GroupsLoading ? 1 : 0);
-            print('DEBUG: Total items in horizontal scroller: $totalItems (${groups.length} groups + 1 contact + ${groupsState is GroupsLoading ? 1 : 0} loading)');
-
-            return SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
-                itemCount: totalItems,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: _buildModernContactOption(colorScheme, userId),
-                    );
-                  }
+        return SizedBox(
+          height: 100,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+            itemCount: totalItems,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _buildModernContactOption(colorScheme, _cachedUserId!),
+                );
+              }
                   
                   final groupIndex = index - 1;
                   if (groupIndex < groups.length) {
@@ -496,12 +515,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     );
                   }
                   
-                  return const SizedBox.shrink();
-                },
-              ),
-            );
-          },
-        );
+                return const SizedBox.shrink();
+              },
+            ),
+          );
       },
     );
   }
@@ -748,17 +765,17 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
         ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: AddFriendModal(
-          roomService: _roomService,
-          userService: _userService,
-          groupsBloc: _groupsBloc,
-          onGroupCreated: () {
+              roomService: _roomService,
+              userService: _userService,
+              groupsBloc: _groupsBloc,
+              onGroupCreated: () {
             // Force refresh right away
             _groupsBloc.add(RefreshGroups());
 

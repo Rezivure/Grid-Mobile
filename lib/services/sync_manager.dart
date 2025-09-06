@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:matrix/matrix.dart';
@@ -12,8 +14,10 @@ import 'package:grid_frontend/models/grid_user.dart' as GridUser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/services/location_manager.dart';
 
 
 import '../blocs/groups/groups_bloc.dart';
@@ -25,10 +29,23 @@ import '../blocs/contacts/contacts_event.dart';
 import '../blocs/map/map_bloc.dart';
 import '../blocs/map/map_event.dart';
 
+import '../blocs/invitations/invitations_bloc.dart';
+import '../blocs/invitations/invitations_event.dart';
+import '../blocs/invitations/invitations_state.dart';
+
 import '../models/pending_message.dart';
 import '../models/sharing_preferences.dart';
 
-
+/// Represents the current state of sync initialization
+enum SyncState {
+  uninitialized,
+  loadingToken,
+  performingCatchUp,
+  processingRooms,
+  reconciling,
+  ready,
+  error,
+}
 
 class SyncManager with ChangeNotifier {
   final Client client;
@@ -42,14 +59,23 @@ class SyncManager with ChangeNotifier {
   final MapBloc mapBloc;
   final ContactsBloc contactsBloc;
   final GroupsBloc groupsBloc;
+  final InvitationsBloc invitationsBloc;
   final List<PendingMessage> _pendingMessages = [];
+  final MapIconSyncService? mapIconSyncService;
+  final LocationManager? locationManager;
   bool _isActive = true;
 
   bool _isSyncing = false;
-  final List<Map<String, dynamic>> _invites = [];
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
   bool _isInitialized = false;
   String? _sinceToken;
+  bool _authenticationFailed = false;
+  
+  // Elegant sync state management
+  SyncState _syncState = SyncState.uninitialized;
+  final List<Function> _postSyncOperations = [];
+  DateTime? _lastRoomUpdateTime;
+  static const Duration _minRoomUpdateInterval = Duration(seconds: 5);
 
 
   SyncManager(
@@ -64,11 +90,28 @@ class SyncManager with ChangeNotifier {
       this.groupsBloc,
       this.userLocationProvider,
       this.sharingPreferencesRepository,
+      this.invitationsBloc,
+      {this.mapIconSyncService,
+      this.locationManager}
       );
 
-  List<Map<String, dynamic>> get invites => List.unmodifiable(_invites);
+  List<Map<String, dynamic>> get invites {
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return List.unmodifiable(state.invitations);
+    }
+    return [];
+  }
   Map<String, List<Map<String, dynamic>>> get roomMessages => Map.unmodifiable(_roomMessages);
-  int get totalInvites => _invites.length;
+  int get totalInvites {
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return state.totalInvites;
+    }
+    return 0;
+  }
+  SyncState get syncState => _syncState;
+  bool get isReady => _syncState == SyncState.ready;
 
   Future<void> _loadSinceToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -77,79 +120,187 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> _saveSinceToken(String token) async {
+    // Never save empty tokens
+    if (token.isEmpty) {
+      print('[SyncManager] Warning: Attempted to save empty sync token, ignoring');
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('syncSinceToken', token);
-    print('[SyncManager] Saved since token: $token');
+    print('[SyncManager] Saved since token: ${token.substring(0, 20)}...');
   }
 
   Future<void> initialize() async {
-    if (_isInitialized) return;
-
-    print("Initializing Sync Manager...");
+    if (_isInitialized || _syncState != SyncState.uninitialized) return;
+    
+    // Defer state change to avoid build phase conflicts
+    await Future.microtask(() => _setSyncState(SyncState.loadingToken));
+    print("[SyncManager] Starting initialization sequence");
+    
+    // Ensure InvitationsBloc is ready before processing sync
+    await Future.delayed(const Duration(milliseconds: 200));
+    
     try {
       await _loadSinceToken();
+      
+      // IMPORTANT: Do initial sync BEFORE cleaning rooms
+      _setSyncState(SyncState.performingCatchUp);
+      
+      if (_sinceToken == null) {
+        print("[SyncManager] Performing initial full sync...");
+        final response = await client.sync(
+          fullState: true,
+          timeout: 30000,
+        );
+        
+        if (response.nextBatch != null && response.nextBatch!.isNotEmpty) {
+          _sinceToken = response.nextBatch;
+          await _saveSinceToken(_sinceToken!);
+        }
+        
+        await _processInitialSync(response);
+        
+        // Wait a moment for client to fully process the sync
+        await Future.delayed(const Duration(seconds: 1));
+      } else {
+        // Even with a saved token, do a quick sync to ensure we're up to date
+        print("[SyncManager] Performing catch-up sync from saved token...");
+        final response = await client.sync(
+          since: _sinceToken,
+          timeout: 10000,
+        );
+        
+        // Process any messages that came in while we were offline
+        if (response.nextBatch != null && response.nextBatch!.isNotEmpty) {
+          _sinceToken = response.nextBatch;
+          await _saveSinceToken(_sinceToken!);
+        }
+        
+        // Process the catch-up sync response to get missed messages
+        await _processInitialSync(response);
+      }
+      
+      // Process rooms after sync completes
+      _setSyncState(SyncState.processingRooms);
       await roomService.cleanRooms();
-
-      // Perform reconciliation check on app load
+      
+      // Clean up orphaned users immediately after room cleanup
+      await _cleanupOrphanedUsers();
+      
+      // Reconcile state
+      _setSyncState(SyncState.reconciling);
       await _reconcileLocalStateWithServer();
 
-      final response = await client.sync(
-        since: _sinceToken,
-        fullState: _sinceToken == null,
-        timeout: 15000,
-      );
-
-      if (response.nextBatch != null) {
-        await _saveSinceToken(response.nextBatch!);
-        _sinceToken = response.nextBatch;
-      }
-
-
+      // Start ongoing sync stream
       roomService.getAndUpdateDisplayName();
-      _processInitialSync(response);
-      await startSync();
-      _isInitialized = true; // Only set after successful completion
+      await _startSyncStream();
+      
+      // Mark as ready and process queued operations
+      _isInitialized = true;
+      _setSyncState(SyncState.ready);
+      await _processQueuedOperations();
     } catch (e) {
-      print("Error during initialization: $e");
-      // Maybe add some retry logic here
+      print("[SyncManager] Error during initialization: $e");
+      _setSyncState(SyncState.error);
+      if (_isAuthenticationError(e)) {
+        await _handleAuthenticationFailure();
+      }
+    }
+  }
+  
+  void _setSyncState(SyncState newState) {
+    if (_syncState != newState) {
+      print('[SyncManager] State transition: $_syncState -> $newState');
+      _syncState = newState;
+      // Defer notification to avoid setState during build
+      // Using scheduleMicrotask ensures it runs after current build
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+      });
+    }
+  }
+  
+  /// Queue an operation to run after sync completes
+  void queuePostSyncOperation(Function operation) {
+    if (_syncState == SyncState.ready) {
+      // Already ready, execute immediately
+      operation();
+    } else {
+      _postSyncOperations.add(operation);
+    }
+  }
+  
+  Future<void> _processQueuedOperations() async {
+    print('[SyncManager] Processing ${_postSyncOperations.length} queued operations');
+    final operations = List<Function>.from(_postSyncOperations);
+    _postSyncOperations.clear();
+    
+    for (final operation in operations) {
+      try {
+        await operation();
+      } catch (e) {
+        print('[SyncManager] Error processing queued operation: $e');
+      }
     }
   }
 
 
 
-  Future<void> startSync() async {
-    if (_isSyncing) return;
-    _isSyncing = true;
-    client.sync(
-      fullState: false,
-      timeout: 10000,
-    );
-
-
-
-    client.onSync.stream.listen((SyncUpdate syncUpdate) {
-      // Process invites
-      syncUpdate.rooms?.invite?.forEach((roomId, inviteUpdate) {
-        _processInvite(roomId, inviteUpdate);
-      });
-
-      // Process room messages and joins
-      syncUpdate.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-        print("Got join update for room: $roomId");
-        _processRoomMessages(roomId, joinedRoomUpdate);
-
-        // Check if there are any state events before processing
-        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-          print("Found state events, processing join");
-          _processRoomJoin(roomId, joinedRoomUpdate);
+  StreamSubscription<SyncUpdate>? _syncSubscription;
+  
+  Future<void> _startSyncStream() async {
+    if (_syncSubscription != null) return;
+    
+    _syncSubscription = client.onSync.stream.listen(
+      (syncUpdate) async {
+        await _processSyncUpdate(syncUpdate);
+      },
+      onError: (error) {
+        print("Sync stream error: $error");
+        if (_isAuthenticationError(error)) {
+          _handleAuthenticationFailure();
         }
-      });
-
-      // Process room departures and kicks
-      syncUpdate.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
-        _processRoomLeaveOrKick(roomId, leftRoomUpdate);
-      });
-    });
+      },
+    );
+    
+    // Check if the client is already syncing before starting a new sync
+    if (!client.syncPending) {
+      _isSyncing = true;
+      await client.sync(
+        since: _sinceToken,
+        timeout: 30000,
+        setPresence: PresenceType.unavailable,
+      );
+    } else {
+      _isSyncing = true;
+    }
+  }
+  
+  Future<void> _processSyncUpdate(SyncUpdate syncUpdate) async {
+    if (syncUpdate.nextBatch != null && syncUpdate.nextBatch!.isNotEmpty) {
+      _sinceToken = syncUpdate.nextBatch;
+      await _saveSinceToken(_sinceToken!);
+    }
+    
+    syncUpdate.rooms?.invite?.forEach(_processInvite);
+    
+    // Process joined rooms with async/await
+    if (syncUpdate.rooms?.join != null) {
+      for (var entry in syncUpdate.rooms!.join!.entries) {
+        final roomId = entry.key;
+        final joinedRoomUpdate = entry.value;
+        await _processRoomMessages(roomId, joinedRoomUpdate);
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+          await _processRoomJoin(roomId, joinedRoomUpdate);
+        }
+      }
+    }
+    
+    syncUpdate.rooms?.leave?.forEach(_processRoomLeaveOrKick);
+  }
+  
+  Future<void> startSync() async {
+    await _startSyncStream();
   }
 
   void handleAppLifecycleState(bool isActive) {
@@ -158,20 +309,24 @@ class SyncManager with ChangeNotifier {
       if (_pendingMessages.isNotEmpty) {
         _processPendingMessages();
       }
-      // full refresh as well
-      client.sync(fullState: true, timeout: 10000).then((_) {
-        mapBloc.add(MapLoadUserLocations()); // Refresh locations
-      }).catchError((e) {
-        print('Error during resume sync: $e');
-      });
+      mapBloc.add(MapLoadUserLocations());
+      
+      if (!_isSyncing || !client.syncPending) {
+        _startSyncStream();
+      }
     }
   }
 
   Future<void> stopSync() async {
-    if (!_isSyncing) return;
-
+    if (!_isSyncing && !client.syncPending) return;
+    
     _isSyncing = false;
-    client.abortSync();
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
+    
+    if (client.syncPending) {
+      client.abortSync();
+    }
   }
 
   void _processInvite(String roomId, InvitedRoomUpdate inviteUpdate) {
@@ -179,20 +334,19 @@ class SyncManager with ChangeNotifier {
       final inviter = _extractInviter(inviteUpdate);
       final roomName = _extractRoomName(inviteUpdate) ?? 'Unnamed Room';
 
-      final inviteData = {
-        'roomId': roomId,
-        'inviter': inviter,
-        'roomName': roomName,
-        'inviteState': inviteUpdate.inviteState,
-      };
-
-      _invites.add(inviteData);
+      invitationsBloc.add(ProcessSyncInvitation(
+        roomId: roomId,
+        inviter: inviter,
+        roomName: roomName,
+        inviteState: inviteUpdate.inviteState,
+      ));
+      
       notifyListeners();
     }
   }
 
   Future<void> clearAllState() async {
-    _invites.clear();
+    invitationsBloc.add(ClearInvitations());
     _roomMessages.clear();
     _pendingMessages.clear();
     _isInitialized = false;
@@ -206,9 +360,79 @@ class SyncManager with ChangeNotifier {
 
   Future<void> _processRoomLeave(String roomId, LeftRoomUpdate leftRoomUpdate) async {
     try {
+      print("[LEAVE] Starting _processRoomLeave for room: $roomId");
       final room = await roomRepository.getRoomById(roomId);
+      if (room == null) {
+        print("[LEAVE] Room $roomId not found in database");
+        return;
+      }
 
-      if (room != null && !room.isGroup) {
+      if (room.isGroup) {
+        // Handle leaving a group
+        print("[LEAVE GROUP] Processing group leave for room: ${room.name}");
+        print("[LEAVE GROUP] Getting participants...");
+        final participants = await roomRepository.getRoomParticipants(roomId);
+        print("[LEAVE GROUP] Found ${participants.length} participants: $participants");
+        
+        // For each participant in the group we just left
+        for (final participantId in participants) {
+          if (participantId == client.userID) {
+            print("[LEAVE GROUP] Skipping self: $participantId");
+            continue;
+          }
+          
+          print("[LEAVE GROUP] Processing participant: $participantId");
+          
+          // Remove relationship for this room
+          await userRepository.removeUserRelationship(participantId, roomId);
+          
+          // Check if we're still connected to this user (direct contact or other shared groups)
+          final isDirectContact = await userRepository.getDirectRoomForContact(participantId) != null;
+          print("[LEAVE GROUP] Is direct contact: $isDirectContact");
+          
+          // Check if we share any other groups with this user
+          final myRooms = await roomRepository.getUserRooms(client.userID!);
+          final theirRooms = await roomRepository.getUserRooms(participantId);
+          
+          print("[LEAVE GROUP] My rooms: $myRooms");
+          print("[LEAVE GROUP] Their rooms: $theirRooms");
+          
+          // Find shared groups (excluding the one we just left)
+          bool hasSharedGroups = false;
+          for (final myRoom in myRooms) {
+            if (myRoom != roomId && theirRooms.contains(myRoom)) {
+              final roomData = await roomRepository.getRoomById(myRoom);
+              if (roomData != null && roomData.isGroup) {
+                hasSharedGroups = true;
+                print("[LEAVE GROUP] Found shared group: $myRoom");
+                break;
+              }
+            }
+          }
+          
+          print("[LEAVE GROUP] Has shared groups: $hasSharedGroups");
+          
+          if (!isDirectContact && !hasSharedGroups) {
+            // Not a direct contact and not in any other shared groups - remove from map
+            print("[LEAVE GROUP] REMOVING $participantId from map - no longer connected");
+            await locationRepository.deleteUserLocations(participantId);
+            await userRepository.deleteUser(participantId);
+            mapBloc.add(RemoveUserLocation(participantId));
+          } else {
+            print("[LEAVE GROUP] KEEPING $participantId - direct contact: $isDirectContact, shared groups: $hasSharedGroups");
+          }
+        }
+        
+        // Now delete the room from our database
+        await roomRepository.deleteRoom(roomId);
+        await roomRepository.removeAllParticipants(roomId);
+        
+        // Update UI
+        groupsBloc.add(RefreshGroups());
+        mapBloc.add(MapLoadUserLocations());
+        
+      } else {
+        // Handle direct room leave
         final participants = await roomRepository.getRoomParticipants(roomId);
         final otherUserId = participants.firstWhere(
               (id) => id != client.userID,
@@ -299,6 +523,14 @@ class SyncManager with ChangeNotifier {
 
   Future<void> _processRoomLeaveOrKick(String roomId, LeftRoomUpdate leftRoomUpdate) async {
     try {
+      // SAFETY: Verify this is a real leave event, not an error or incomplete sync
+      // Check if we can still access the room on the client
+      final clientRoom = client.getRoomById(roomId);
+      if (clientRoom != null && clientRoom.membership == Membership.join) {
+        print("[SyncManager] Received leave event for $roomId but still joined - ignoring (likely sync error)");
+        return;
+      }
+      
       // First check if this was a kick by examining state events
       bool wasKicked = false;
       String? kickedBy;
@@ -349,11 +581,101 @@ class SyncManager with ChangeNotifier {
     }
   }
 
-  void _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) {
+  Future<void> _processRoomMessages(String roomId, JoinedRoomUpdate joinedRoomUpdate) async {
     final timelineEvents = joinedRoomUpdate.timeline?.events ?? [];
     for (var event in timelineEvents) {
+      // Debug log event type and sender
+      if (event.type == 'm.room.message') {
+        print('[Sync Debug] Processing ${event.type} from ${event.senderId} in room $roomId');
+      }
+      
+      // Check for member events in timeline (when someone accepts an invite or leaves)
+      if (event.type == 'm.room.member' && event.stateKey != null) {
+        final membershipStatus = event.content['membership'] as String?;
+        final prevMembership = event.prevContent?['membership'] as String?;
+        
+        print("[SyncManager] Timeline member event: ${event.stateKey} from $prevMembership to $membershipStatus");
+        
+        // Handle member leave events
+        if (membershipStatus == 'leave' && event.stateKey != client.userID) {
+          print("[SyncManager] Detected ${event.stateKey} left room $roomId");
+          await _handleMemberLeave(roomId, event.stateKey);
+        }
+        // If someone just joined (accepted invite), send them our location
+        // prevMembership can be 'invite' or null (if we don't have previous state)
+        // BUT: Skip if this is us joining (we see our own join event)
+        else if (membershipStatus == 'join' && event.stateKey != client.userID) {
+          print("[SyncManager] Detected ${event.stateKey} joined room $roomId (prev: $prevMembership)");
+          
+          // Only send if they weren't already in the room
+          if (prevMembership != 'join') {
+            print("[SyncManager] User ${event.stateKey} is newly joined, sending avatar and initial location");
+            
+            // IMPORTANT: Send our avatar when they accept our invite (bidirectional exchange)
+            try {
+              final avatarService = AvatarAnnouncementService(client);
+              print("[Avatar Exchange] Timeline: Sending our avatar to ${event.stateKey} who just joined");
+              await avatarService.announceProfPicToRoom(roomId);
+              
+              // For groups, also send avatar state, group avatar, and map icons
+              final room = await roomRepository.getRoomById(roomId);
+              if (room != null && room.isGroup) {
+                // Send all member avatars
+                await avatarService.sendAvatarState(roomId, targetUserId: event.stateKey);
+                
+                // Send group avatar
+                print("[Avatar Exchange] Sending group avatar to new member");
+                await avatarService.announceGroupAvatarToRoom(roomId);
+                
+                // Send all map icons to new member
+                if (mapIconSyncService != null) {
+                  // Small delay to ensure the new member's session is ready
+                  Future.delayed(const Duration(seconds: 1), () async {
+                    print('[MapIconSync] Timeline: Sending icon state to new member ${event.stateKey}');
+                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
+                  });
+                }
+              }
+            } catch (e) {
+              print("[Avatar Exchange] Error sending avatar in timeline event: $e");
+            }
+            
+            try {
+              final room = await roomRepository.getRoomById(roomId);
+              if (room != null) {
+                // Check sharing preferences for direct rooms
+                if (!room.isGroup) {
+                  final sharingPrefs = await sharingPreferencesRepository.getSharingPreferences(event.stateKey!, 'user');
+                  final isSharingEnabled = sharingPrefs?.activeSharing ?? true;
+                  
+                  if (isSharingEnabled) {
+                    print("[SyncManager] Sharing enabled for ${event.stateKey}, sending location to room $roomId");
+                    await locationManager?.grabLocationAndPing();
+                    await roomService.updateSingleRoom(roomId);
+                    print("[SyncManager] Successfully sent initial location to ${event.stateKey}");
+                  } else {
+                    print("[SyncManager] Sharing disabled for ${event.stateKey}, not sending location");
+                  }
+                } else {
+                  // For groups, always send
+                  print("[SyncManager] Group room, sending location to new member ${event.stateKey}");
+                  await locationManager?.grabLocationAndPing();
+                  await roomService.updateSingleRoom(roomId);
+                  print("[SyncManager] Successfully sent initial location to group member ${event.stateKey}");
+                }
+              } else {
+                print("[SyncManager] Warning: Room $roomId not found in local database");
+              }
+            } catch (e) {
+              print("[SyncManager] Error sending location on invite accept: $e");
+            }
+          }
+        }
+      }
+      
       if (!_isActive) {
         // Queue message if app is in background
+        print('[Sync Debug] App inactive, queuing event ${event.eventId}');
         _pendingMessages.add(PendingMessage(
           roomId: roomId,
           eventId: event.eventId ?? '',
@@ -362,12 +684,13 @@ class SyncManager with ChangeNotifier {
         continue;
       }
 
-      messageProcessor.processEvent(roomId, event).then((message) {
+      try {
+        final message = await messageProcessor.processEvent(roomId, event);
         if (message != null) {
           _roomMessages.putIfAbsent(roomId, () => []).add(message);
           notifyListeners();
         }
-      }).catchError((e) {
+      } catch (e) {
         if (e is PlatformException && e.code == '-25308') {
           // Queue message if we get keychain access error
           _pendingMessages.add(PendingMessage(
@@ -378,7 +701,7 @@ class SyncManager with ChangeNotifier {
         } else {
           print("Error processing event ${event.eventId}: $e");
         }
-      });
+      }
     }
   }
 
@@ -412,35 +735,12 @@ class SyncManager with ChangeNotifier {
     try {
       final matrixRoom = client.getRoomById(roomId);
       if (matrixRoom != null) {
-        // First sync to ensure we have latest state
-        await client.sync(timeout: 10000);
-
-        // Process the room and wait for completion
         await initialProcessRoom(matrixRoom);
-
-        // Verify room was processed
+        
         final processedRoom = await roomRepository.getRoomById(roomId);
-        print("Room processed status: ${processedRoom != null}");
-
-        // Force immediate refresh
-        groupsBloc.add(RefreshGroups());
-
-        // Staggered refreshes with verification
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          final room = await roomRepository.getRoomById(roomId);
-          if (room != null) {
-            groupsBloc.add(LoadGroups());
-            groupsBloc.add(RefreshGroups());
-          }
-        });
-
-        Future.delayed(const Duration(seconds: 1), () async {
-          final room = await roomRepository.getRoomById(roomId);
-          if (room != null) {
-            groupsBloc.add(LoadGroups());
-            groupsBloc.add(RefreshGroups());
-          }
-        });
+        if (processedRoom != null) {
+          groupsBloc.add(RefreshGroups());
+        }
       }
     } catch (e) {
       print("Error in handleNewGroupCreation: $e");
@@ -504,13 +804,8 @@ class SyncManager with ChangeNotifier {
       for (var event in stateEvents) {
         print("Processing event type: ${event.type}");
         if (event.type == 'm.room.member') {
-          // Don't process member events for kicked users
-          final membershipStatus = event.content['membership'] as String?;
-          final prevMembership = event.prevContent?['membership'] as String?;
-
-          if (!(prevMembership == 'join' && membershipStatus == 'leave')) {
-            await _processMemberStateEvent(roomId, event);
-          }
+          // Always process member state events, including leaves
+          await _processMemberStateEvent(roomId, event);
         } else {
           // Process other state events through message processor
           await messageProcessor.processEvent(roomId, event).then((message) {
@@ -602,27 +897,84 @@ class SyncManager with ChangeNotifier {
         try {
           // Check if this is a new member joining (not us)
           final prevMembership = event.prevContent?['membership'] as String?;
-          if (event.stateKey != client.userID && prevMembership != 'join') {
-            print("New member joined: ${event.stateKey}, sending avatar announcements");
+          print("[SyncManager] Member state change: ${event.stateKey} from $prevMembership to $membershipStatus");
+          
+          // Check if someone else (not us) just joined the room
+          // prevMembership could be: null (first time), 'invite' (accepted), 'leave' (rejoined), etc.
+          if (event.stateKey != client.userID && membershipStatus == 'join' && prevMembership != 'join') {
+            print("New member joined: ${event.stateKey} (was: ${prevMembership ?? 'never joined before'}), initiating bidirectional avatar exchange");
             
-            // Send our profile picture to the new member
+            // Initialize avatar service
+            final avatarService = AvatarAnnouncementService(client);
+            
             try {
-              final avatarService = AvatarAnnouncementService(client);
+              // BIDIRECTIONAL AVATAR EXCHANGE
+              // 1. Send our profile picture to the new member
               await avatarService.announceProfPicToRoom(roomId);
               
-              // If it's a group and we're admin, also send group avatar
+              // 2. For groups, send avatar state bundle with all member avatars
               if (room.isGroup) {
-                final matrixRoom = client.getRoomById(roomId);
-                if (matrixRoom != null) {
-                  final myPowerLevel = matrixRoom.getPowerLevelByUserId(client.userID!);
-                  if (myPowerLevel >= 100) {
-                    print("Sending group avatar to new member as admin");
-                    await avatarService.announceGroupAvatarToRoom(roomId);
+                // Send avatar state bundle to help new member get all avatars
+                print("[Avatar Exchange] Sending avatar state bundle to new group member ${event.stateKey}");
+                await avatarService.sendAvatarState(roomId, targetUserId: event.stateKey);
+                
+                // Any group member sends the group avatar
+                print("[Avatar Exchange] Sending group avatar to new member");
+                await avatarService.announceGroupAvatarToRoom(roomId);
+                
+                // Send map icon state to new group member
+                if (mapIconSyncService != null) {
+                  // Small delay to ensure the new member is fully joined
+                  Future.delayed(const Duration(seconds: 1), () async {
+                    print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
+                    await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
+                  });
+                }
+              }
+              
+              // Send our location once when they join (if sharing is enabled)
+              if (!room.isGroup) {
+                // For direct rooms, check sharing preferences
+                final sharingPrefs = await sharingPreferencesRepository.getSharingPreferences(event.stateKey!, 'user');
+                final isSharingEnabled = sharingPrefs?.activeSharing ?? true; // Default to true if no prefs
+                
+                if (isSharingEnabled) {
+                  print("New member joined direct room, sending initial location");
+                  // Grab fresh location and send it
+                  try {
+                    await locationManager?.grabLocationAndPing();
+                    await roomService.updateSingleRoom(roomId);
+                    print("Sent initial location to ${event.stateKey} in room $roomId");
+                  } catch (e) {
+                    print("Error sending initial location: $e");
                   }
+                } else {
+                  print("Location sharing disabled for ${event.stateKey}, not sending initial location");
+                }
+              } else {
+                // For group rooms, always send location when someone joins
+                print("New member joined group room, sending initial location");
+                try {
+                  await locationManager?.grabLocationAndPing();
+                  await roomService.updateSingleRoom(roomId);
+                  print("Sent initial location to new group member ${event.stateKey} in room $roomId");
+                } catch (e) {
+                  print("Error sending initial location to group: $e");
                 }
               }
             } catch (e) {
-              print('Error sending avatar announcements to new member: $e');
+              print('Error during bidirectional avatar exchange: $e');
+            }
+          } else if (event.stateKey == client.userID && membershipStatus == 'join' && prevMembership == 'invite') {
+            // We just accepted an invite - request avatars from others
+            print("[Avatar Exchange] We accepted invite to room $roomId, requesting avatars");
+            try {
+              final avatarService = AvatarAnnouncementService(client);
+              
+              // Request avatars from all room members
+              await avatarService.requestAvatars(roomId);
+            } catch (e) {
+              print('Error requesting avatars after accepting invite: $e');
             }
           }
           
@@ -684,22 +1036,42 @@ class SyncManager with ChangeNotifier {
           // Update the room with new member list
           await roomRepository.updateRoom(updatedRoom);
 
-          // Remove all relationships for this user in this room
+          // Check if we're still connected to this user in any way BEFORE removing them from DB
+          final hasDirectRoom = await userRepository.getDirectRoomForContact(userId);
+          
+          // Check if we share any OTHER groups with this user
+          // IMPORTANT: Must check this BEFORE removing them from the room participants
+          final myRooms = await roomRepository.getUserRooms(client.userID!);
+          final theirRooms = await roomRepository.getUserRooms(userId);  // This still includes current room
+          
+          bool inOtherSharedGroups = false;
+          for (final myRoom in myRooms) {
+            // Skip the current room they're being removed from
+            if (myRoom != roomId && theirRooms.contains(myRoom)) {
+              // This is a room we BOTH are in - check if it's a group
+              final roomData = await roomRepository.getRoomById(myRoom);
+              if (roomData != null && roomData.isGroup) {
+                print("[_handleMemberLeave] User $userId is in shared group: $myRoom");
+                inOtherSharedGroups = true;
+                break;
+              }
+            }
+          }
+          
+          print("[_handleMemberLeave] User $userId - hasDirectRoom: ${hasDirectRoom != null}, inOtherSharedGroups: $inOtherSharedGroups");
+
+          // NOW we can remove them from this room's participants
           await userRepository.removeUserRelationship(userId, roomId);
           await roomRepository.removeRoomParticipant(roomId, userId);
-
-          // Update membership status to 'leave'
           await userRepository.updateMembershipStatus(userId, roomId, 'leave');
 
-          // Check if user should be completely cleaned up
-          final userRooms = await roomRepository.getUserRooms(userId);
-          final hasDirectRoom = await userRepository.getDirectRoomForContact(userId);
-
-          if (userRooms.isEmpty && hasDirectRoom == null) {
-            print("User not in any other rooms/contacts, cleaning up completely");
+          if (!inOtherSharedGroups && hasDirectRoom == null) {
+            print("User not in any other shared rooms/contacts, removing from map");
             await locationRepository.deleteUserLocations(userId);
             await userRepository.deleteUser(userId);
             mapBloc.add(RemoveUserLocation(userId));
+          } else {
+            print("User still connected via other rooms, keeping on map");
           }
 
           // Update UI with staggered refreshes
@@ -721,11 +1093,34 @@ class SyncManager with ChangeNotifier {
         await userRepository.removeContact(userId);
         await roomRepository.deleteRoom(roomId);
 
+        // Check if user is in any shared groups with us
         final userRooms = await roomRepository.getUserRooms(userId);
-        if (userRooms.isEmpty) {
+        final myRooms = await roomRepository.getUserRooms(client.userID!);
+        
+        // Find shared group rooms
+        final sharedGroups = <String>[];
+        for (final userRoom in userRooms) {
+          if (myRooms.contains(userRoom)) {
+            final room = await roomRepository.getRoomById(userRoom);
+            if (room != null && room.isGroup) {
+              sharedGroups.add(userRoom);
+            }
+          }
+        }
+        
+        if (sharedGroups.isEmpty) {
+          // Not in any shared groups, remove from map and delete location
           await locationRepository.deleteUserLocations(userId);
-          await userRepository.deleteUser(userId);
           mapBloc.add(RemoveUserLocation(userId));
+          
+          // Clean up user record if they have no rooms at all
+          if (userRooms.isEmpty) {
+            await userRepository.deleteUser(userId);
+          }
+        } else {
+          // Still in shared groups, keep them on map but refresh to ensure proper state
+          print("[SyncManager] User $userId still in ${sharedGroups.length} shared groups, keeping on map");
+          mapBloc.add(MapLoadUserLocations());
         }
 
         contactsBloc.add(RefreshContacts());
@@ -733,34 +1128,37 @@ class SyncManager with ChangeNotifier {
     }
   }
 
-  void _processInitialSync(SyncUpdate response) {
-    // Update Invites
-    response.rooms?.invite?.forEach((roomId, inviteUpdate) {
-      _processInvite(roomId, inviteUpdate);
-    });
-
-    // If needed, process the joined/left rooms in the response
-    response.rooms?.join?.forEach((roomId, joinedRoomUpdate) {
-      _processRoomMessages(roomId, joinedRoomUpdate);
-      if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
-        _processRoomJoin(roomId, joinedRoomUpdate);
+  Future<void> _processInitialSync(SyncUpdate response) async {
+    print('[Sync Debug] Processing initial sync response');
+    print('[Sync Debug] Rooms in response - Joined: ${response.rooms?.join?.length ?? 0}, Invited: ${response.rooms?.invite?.length ?? 0}');
+    
+    response.rooms?.invite?.forEach(_processInvite);
+    
+    // Process all joined rooms and wait for message processing
+    if (response.rooms?.join != null) {
+      for (var entry in response.rooms!.join!.entries) {
+        final roomId = entry.key;
+        final joinedRoomUpdate = entry.value;
+        final timelineEventCount = joinedRoomUpdate.timeline?.events?.length ?? 0;
+        if (timelineEventCount > 0) {
+          print('[Sync Debug] Room $roomId has $timelineEventCount timeline events to process');
+        }
+        await _processRoomMessages(roomId, joinedRoomUpdate);
+        if ((joinedRoomUpdate.state ?? []).isNotEmpty) {
+          await _processRoomJoin(roomId, joinedRoomUpdate);
+        }
       }
-    });
-    response.rooms?.leave?.forEach((roomId, leftRoomUpdate) {
-      _processRoomLeaveOrKick(roomId, leftRoomUpdate);
-    });
+    }
+    
+    response.rooms?.leave?.forEach(_processRoomLeaveOrKick);
 
-    // Finally, process the full client.rooms if you like
     for (var room in client.rooms) {
-      // Only process rooms that the user has joined
       if (room.membership == Membership.join) {
         initialProcessRoom(room);
       }
     }
 
-    // Refresh contacts
     contactsBloc.add(LoadContacts());
-
     notifyListeners();
   }
 
@@ -775,6 +1173,12 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> processJoinedRoom(Room room) async {
+    // Skip non-Grid rooms entirely - they should be left/deleted
+    if (!room.name.startsWith('Grid:')) {
+      print('Skipping non-Grid room during processing: ${room.name ?? 'Unnamed'} (${room.id})');
+      return;
+    }
+    
     // Check if the room already exists
     final existingRoom = await roomRepository.getRoomById(room.id);
 
@@ -830,6 +1234,9 @@ class SyncManager with ChangeNotifier {
             isDirect,
             membershipStatus: !isDirect ? membershipStatus : null
         );
+        
+        // Also insert into RoomParticipants table for proper tracking
+        await roomRepository.insertRoomParticipant(room.id, participantId);
 
         if (isDirect) {
           final existingPrefs =
@@ -860,9 +1267,6 @@ class SyncManager with ChangeNotifier {
             await sharingPreferencesRepository.setSharingPreferences(
                 defaultGroupPrefs);
           }
-
-          print('Updating group in bloc: ${room.id}');
-          groupsBloc.add(UpdateGroup(room.id));
         }
         print('Processed user ${participantId} in room ${room.id}');
       } catch (e) {
@@ -877,6 +1281,12 @@ class SyncManager with ChangeNotifier {
         print('Removed participant $participant from room ${room.id}');
       }
     }
+    
+    // Update group UI ONCE after all participants are processed
+    if (customRoom.isGroup) {
+      print('Updating group in bloc: ${room.id}');
+      groupsBloc.add(UpdateGroup(room.id));
+    }
   }
 
   Future<void> acceptInviteAndSync(String roomId) async {
@@ -889,41 +1299,34 @@ class SyncManager with ChangeNotifier {
         
         // Remove the invite immediately after accepting
         removeInvite(roomId);
+        
+        // Small delay to ensure UI updates
+        await Future.delayed(const Duration(milliseconds: 100));
 
-        // Trigger a sync first to update room membership status
-        await client.sync(timeout: 10000);
-        print('Sync completed for room $roomId');
-
-        // Now process the room after sync has updated membership
         final room = client.getRoomById(roomId);
         if (room != null) {
-          // Force process the room even if membership hasn't updated yet
           await processJoinedRoom(room);
           
-          // Send our avatar announcement to existing members
+          // Enhanced avatar exchange after accepting invite
           try {
-            print("Sending avatar announcement after joining room");
             final avatarService = AvatarAnnouncementService(client);
+            
+            // 1. Announce our avatar to the room
             await avatarService.announceProfPicToRoom(roomId);
+            
+            // 2. Request avatars from all room members
+            print('[Avatar Exchange] Requesting avatars from room members after accepting invite');
+            await avatarService.requestAvatars(roomId);
+            
+            // 4. For groups, existing members should send avatar state
+            // This is handled by the member join event in _processMemberStateEvent
+            
           } catch (e) {
-            print('Error sending avatar announcement after joining: $e');
+            print('Error during avatar exchange after accepting invite: $e');
           }
+          
+          groupsBloc.add(RefreshGroups());
         }
-        
-        // Refresh groups to show the new room
-        groupsBloc.add(RefreshGroups());
-        groupsBloc.add(LoadGroups());
-        
-        // Additional delayed refreshes to ensure UI updates
-        Future.delayed(const Duration(milliseconds: 200), () {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-        });
-        
-        Future.delayed(const Duration(milliseconds: 500), () {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-        });
       } else {
         throw Exception('Failed to join room');
       }
@@ -962,11 +1365,15 @@ class SyncManager with ChangeNotifier {
   }
 
   bool _inviteExists(String roomId) {
-    return _invites.any((invite) => invite['roomId'] == roomId);
+    final state = invitationsBloc.state;
+    if (state is InvitationsLoaded) {
+      return state.invitations.any((invite) => invite['roomId'] == roomId);
+    }
+    return false;
   }
 
   void clearInvites() {
-    _invites.clear();
+    invitationsBloc.add(ClearInvitations());
     notifyListeners();
   }
 
@@ -976,7 +1383,7 @@ class SyncManager with ChangeNotifier {
   }
 
   void removeInvite(String roomId) {
-    _invites.removeWhere((invite) => invite['roomId'] == roomId);
+    invitationsBloc.add(RemoveInvitation(roomId));
     notifyListeners();
   }
 
@@ -1048,6 +1455,14 @@ class SyncManager with ChangeNotifier {
         return;
       }
       
+      // Additional safety: Don't reconcile if we have very few server rooms compared to local
+      // This might indicate incomplete sync
+      if (serverRooms.length < localRooms.length / 2 && localRooms.length > 2) {
+        print("[SyncManager] WARNING: Server has significantly fewer rooms (${serverRooms.length}) than local (${localRooms.length})");
+        print("[SyncManager] This might indicate incomplete sync, skipping reconciliation");
+        return;
+      }
+      
       final serverRoomIds = serverRooms.map((r) => r.id).toSet();
       final localRoomIds = localRooms.map((r) => r.roomId).toSet();
       
@@ -1057,7 +1472,13 @@ class SyncManager with ChangeNotifier {
       
       print("[SyncManager] Reconciliation summary:");
       print("  - Server rooms: ${serverRoomIds.length}");
+      for (final room in serverRooms) {
+        print("    * ${room.name ?? 'Unnamed'} (${room.id})");
+      }
       print("  - Local rooms: ${localRoomIds.length}");
+      for (final room in localRooms) {
+        print("    * ${room.name} (${room.roomId})");
+      }
       print("  - Missing locally: ${roomsOnServerButNotLocal.length}");
       print("  - Extra locally: ${roomsInLocalButNotServer.length}");
       
@@ -1182,6 +1603,9 @@ class SyncManager with ChangeNotifier {
   
   Future<void> _cleanupOrphanedUsers() async {
     try {
+      // Add a small delay to ensure room participants are fully synced
+      await Future.delayed(const Duration(seconds: 2));
+      
       // Get all users from database
       final allUsers = await userRepository.getAllUsers();
       
@@ -1243,4 +1667,44 @@ class SyncManager with ChangeNotifier {
       print("[SyncManager] Error during manual location cleanup: $e");
     }
   }
+
+  bool _isAuthenticationError(dynamic error) {
+    if (error is MatrixException) {
+      // Only M_UNKNOWN_TOKEN definitively means the token is invalid
+      if (error.errcode == 'M_UNKNOWN_TOKEN') {
+        print("M_UNKNOWN_TOKEN detected - invalid access token");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _handleAuthenticationFailure() async {
+    try {
+      // Clear all local state
+      await clearAllState();
+      
+      // Clear stored credentials
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      // Force logout from matrix client
+      if (client.isLogged()) {
+        try {
+          await client.logout();
+        } catch (e) {
+          // Ignore logout errors since token is already invalid
+          print("Logout error (ignored): $e");
+        }
+      }
+      
+      // Set authentication failed flag
+      _authenticationFailed = true;
+      notifyListeners();
+    } catch (e) {
+      print("Error handling authentication failure: $e");
+    }
+  }
+
+  bool get authenticationFailed => _authenticationFailed;
 }

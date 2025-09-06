@@ -22,13 +22,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void initState() {
     super.initState();
     
-    // Initialize animations
+    // Initialize animations (faster for snappier launch)
     _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
     _pulseController = AnimationController(
@@ -88,8 +88,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   Future<void> _navigateToNext() async {
-    // Wait for animations to complete (shorter delay)
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // Wait for animations to complete (much shorter delay for faster launch)
+    await Future.delayed(const Duration(milliseconds: 800));
     
     // Ensure environment variables are loaded
     try {
@@ -242,56 +242,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
-    return Column(
-      children: [
-        Text(
-          'Grid',
-          style: theme.textTheme.displaySmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: colorScheme.onSurface,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Encrypted',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.primary,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Real-time',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+    return Text(
+      'Grid',
+      style: theme.textTheme.displaySmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: colorScheme.onSurface,
+        letterSpacing: 1.2,
+      ),
     );
   }
 
