@@ -99,7 +99,7 @@ class _GroupAvatarState extends State<GroupAvatar> {
     });
 
     try {
-      final secureStorage = FlutterSecureStorage();
+      const secureStorage = FlutterSecureStorage();
       final prefs = await SharedPreferences.getInstance();
       
       // Check if it's a Matrix avatar or encrypted avatar

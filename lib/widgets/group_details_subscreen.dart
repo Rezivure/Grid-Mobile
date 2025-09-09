@@ -26,6 +26,9 @@ import 'group_profile_modal.dart';
 import 'location_history_modal.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
+import 'package:grid_frontend/widgets/group_markers_modal.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
@@ -523,6 +526,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
   
+  void _showGroupMarkersModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GroupMarkersModal(
+        roomId: widget.room.roomId,
+        roomName: widget.room.name.split(':').length >= 5 
+            ? widget.room.name.split(':')[3]
+            : widget.room.name,
+        mapIconRepository: MapIconRepository(DatabaseService()),
+      ),
+    );
+  }
+  
   void _showGroupDetailsMenu() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -606,7 +624,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   ),
                 ),
                 title: Text(
-                  'Group Details',
+                  'Group Settings',
                   style: TextStyle(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w500,
@@ -636,45 +654,98 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 },
               ),
               
-              // Group History - commented out for this release
-              // ListTile(
-              //   leading: Container(
-              //     padding: const EdgeInsets.all(8),
-              //     decoration: BoxDecoration(
-              //       color: colorScheme.primary.withOpacity(0.1),
-              //       borderRadius: BorderRadius.circular(8),
-              //     ),
-              //     child: Icon(
-              //       Icons.history,
-              //       color: colorScheme.primary,
-              //       size: 20,
-              //     ),
-              //   ),
-              //   title: Text(
-              //     'Group History',
-              //     style: TextStyle(
-              //       color: colorScheme.onSurface,
-              //       fontWeight: FontWeight.w500,
-              //     ),
-              //   ),
-              //   onTap: () {
-              //     Navigator.pop(context);
-              //     showModalBottomSheet(
-              //       context: context,
-              //       isScrollControlled: true,
-              //       backgroundColor: Colors.transparent,
-              //       builder: (BuildContext context) {
-              //         return LocationHistoryModal(
-              //           userId: widget.room.roomId,
-              //           userName: widget.room.name.split(':').length >= 5 
-              //               ? widget.room.name.split(':')[3]
-              //               : widget.room.name,
-              //           memberIds: _filteredMembers.map((m) => m.userId).toList(),
-              //         );
-              //       },
-              //     );
-              //   },
-              // ),
+              // Add Member
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person_add_outlined,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Add Member',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddGroupMemberModal();
+                },
+              ),
+              
+              // Group History
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.history,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View History',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (BuildContext context) {
+                      return LocationHistoryModal(
+                        userId: widget.room.roomId,
+                        userName: widget.room.name.split(':').length >= 5 
+                            ? widget.room.name.split(':')[3]
+                            : widget.room.name,
+                        memberIds: _filteredMembers.map((m) => m.userId).toList(),
+                      );
+                    },
+                  );
+                },
+              ),
+              
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.location_on,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View Markers',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showGroupMarkersModal();
+                },
+              ),
               
               ListTile(
                 leading: Container(

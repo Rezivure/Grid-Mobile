@@ -35,7 +35,7 @@ class GroupAvatarBloc extends StatefulWidget {
 class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
   static final GroupAvatarCacheService _cacheService = GroupAvatarCacheService();
   static bool _cacheInitialized = false;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   Uint8List? _avatarBytes;
   bool _isLoading = true;
   String? _loadedRoomId;

@@ -28,6 +28,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     on<MapLoadUserLocations>(_onMapLoadUserLocations);
     on<RemoveUserLocation>(_onRemoveUserLocation);
     on<MapClearSelection>(_onMapClearSelection);
+    on<MapCenterOnLocation>(_onMapCenterOnLocation);
 
   _locationSubscription = locationRepository.locationUpdates.listen(_onLocationUpdate);
 }
@@ -141,5 +142,12 @@ class MapBloc extends Bloc<MapEvent, MapState> {
   
   void _onMapClearSelection(MapClearSelection event, Emitter<MapState> emit) {
     emit(state.copyWith(clearSelectedUserId: true));
+  }
+  
+  void _onMapCenterOnLocation(MapCenterOnLocation event, Emitter<MapState> emit) {
+    emit(state.copyWith(
+      center: event.location,
+      zoom: event.zoom,
+    ));
   }
 }

@@ -10,10 +10,13 @@ import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
 
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/services/message_processor.dart';
@@ -38,6 +41,10 @@ import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
+import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
@@ -89,11 +96,23 @@ void main() async {
   final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
   final locationRepository = LocationRepository(databaseService);
   final locationHistoryRepository = LocationHistoryRepository(databaseService);
+  final roomLocationHistoryRepository = RoomLocationHistoryRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
-  final roomService = RoomService(client, userService, userRepository, userKeysRepository, roomRepository, locationRepository, locationHistoryRepository, sharingPreferencesRepository, locationManager);
+  final roomService = RoomService(
+    client, 
+    userService, 
+    userRepository, 
+    userKeysRepository, 
+    roomRepository, 
+    locationRepository, 
+    locationHistoryRepository, 
+    sharingPreferencesRepository, 
+    locationManager,
+    roomLocationHistoryRepository: roomLocationHistoryRepository,
+  );
 
   final messageParser = MessageParser();
 
@@ -138,6 +157,7 @@ void main() async {
               locationHistoryRepository,
               sharingPreferencesRepository,
               locationManager,
+              roomLocationHistoryRepository: roomLocationHistoryRepository,
             );
           },
         ),
@@ -174,14 +194,34 @@ void main() async {
               userLocationProvider: context.read<UserLocationProvider>(),
             ),
           ),
-          ChangeNotifierProxyProvider4<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, SyncManager>(
+          BlocProvider<MapIconsBloc>(
+            create: (context) => MapIconsBloc(
+              mapIconRepository: MapIconRepository(databaseService),
+            ),
+          ),
+          BlocProvider<InvitationsBloc>(
+            create: (context) => InvitationsBloc(
+              repository: InvitationsRepository(),
+            )..add(LoadInvitations()),
+          ),
+          ChangeNotifierProxyProvider5<AvatarBloc, MapBloc, ContactsBloc, GroupsBloc, InvitationsBloc, SyncManager>(
             create: (context) {
+              // Create MapIconSyncService
+              final mapIconRepository = MapIconRepository(databaseService);
+              final mapIconSyncService = MapIconSyncService(
+                client: client,
+                mapIconRepository: mapIconRepository,
+                mapIconsBloc: context.read<MapIconsBloc>(),
+              );
+              
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: context.read<AvatarBloc>(),
+                mapIconSyncService: mapIconSyncService,
+                roomLocationHistoryRepository: roomLocationHistoryRepository,
               );
               return SyncManager(
                 client,
@@ -195,16 +235,30 @@ void main() async {
                 context.read<GroupsBloc>(),
                 context.read<UserLocationProvider>(),
                 context.read<SharingPreferencesRepository>(),
+                context.read<InvitationsBloc>(),
+                mapIconSyncService: mapIconSyncService,
+                locationManager: context.read<LocationManager>(),
               )..startSync();
             },
-            update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, previous) {
+            update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, invitationsBloc, previous) {
               if (previous != null) return previous;
+              
+              // Create MapIconSyncService
+              final mapIconRepository = MapIconRepository(databaseService);
+              final mapIconSyncService = MapIconSyncService(
+                client: client,
+                mapIconRepository: mapIconRepository,
+                mapIconsBloc: context.read<MapIconsBloc>(),
+              );
+              
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
                 messageParser, 
                 client,
                 avatarBloc: avatarBloc,
+                mapIconSyncService: mapIconSyncService,
+                roomLocationHistoryRepository: roomLocationHistoryRepository,
               );
               return SyncManager(
                 client,
@@ -218,6 +272,9 @@ void main() async {
                 groupsBloc,
                 context.read<UserLocationProvider>(),
                 sharingPreferencesRepository,
+                invitationsBloc,
+                mapIconSyncService: mapIconSyncService,
+                locationManager: context.read<LocationManager>(),
               )..startSync();
             },
           ),

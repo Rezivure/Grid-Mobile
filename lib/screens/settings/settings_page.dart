@@ -3,6 +3,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:random_avatar/random_avatar.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,7 @@ import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'dart:io' show Platform;
+import 'package:package_info_plus/package_info_plus.dart';
 
 
 
@@ -47,6 +49,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? identityKey;
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
+  String _appVersion = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
   String? _userID;
@@ -69,6 +72,14 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadIncognitoState();
     _loadBatterySaverState();
     _loadCachedAvatar();
+    _loadAppVersion();
+  }
+  
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    setState(() {
+      _appVersion = 'v${packageInfo.version}';
+    });
   }
 
   bool isCustomHomeserver() {
@@ -2080,6 +2091,23 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(height: 24),
             ],
 
+            // Community Section
+            _buildSectionCard(
+              theme: theme,
+              colorScheme: colorScheme,
+              title: 'Community',
+              children: [
+                _buildMenuOption(
+                  icon: FontAwesomeIcons.discord,
+                  title: 'Join our Discord',
+                  subtitle: 'Connect with the Grid community',
+                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
+
             // Support & Information Section
             _buildSectionCard(
               theme: theme,
@@ -2148,6 +2176,19 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             SizedBox(height: 40),
+            
+            // Version info at the bottom
+            Center(
+              child: Text(
+                _appVersion,
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.4),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
           ],
         ),
       ),

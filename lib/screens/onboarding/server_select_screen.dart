@@ -775,7 +775,12 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Verification code resent'),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             } catch (e) {

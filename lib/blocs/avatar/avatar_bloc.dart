@@ -13,7 +13,8 @@ import '../../widgets/group_avatar.dart';
 
 class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
   final Client client;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  // Use iOS options that allow background access - will be accessible after first unlock
+  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
   final AvatarCacheService cacheService = AvatarCacheService();
   bool _cacheInitialized = false;
 
@@ -32,6 +33,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
     if (!_cacheInitialized) {
       _cacheInitialized = true;
       await cacheService.initialize();
+    } else {
     }
   }
 
@@ -56,7 +58,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
 
   Future<void> _onAvatarUpdateReceived(AvatarUpdateReceived event, Emitter<AvatarState> emit) async {
     try {
-      print('[AvatarBloc] Processing avatar update for ${event.userId}');
+      print('[Avatar] Processing update for ${event.userId}');
       
       // Update loading state
       final newLoadingStates = Map<String, bool>.from(state.loadingStates);
@@ -116,6 +118,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
       
       final avatarBytes = Uint8List.fromList(decrypted);
+      print('[Avatar] Decrypted ${avatarBytes.length} bytes for ${event.userId}');
       
       // Update state and cache
       final newCache = Map<String, Uint8List>.from(state.avatarCache);
@@ -138,10 +141,8 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
         updateCounter: state.updateCounter + 1,
       ));
       
-      print('[AvatarBloc] Successfully processed avatar for ${event.userId}');
-      
     } catch (e) {
-      print('[AvatarBloc] Error processing avatar update: $e');
+      print('[Avatar] Error processing update: $e');
       
       // Update loading state to false on error and track failed attempt
       final newLoadingStates = Map<String, bool>.from(state.loadingStates);
@@ -158,7 +159,6 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
 
   Future<void> _onGroupAvatarUpdateReceived(GroupAvatarUpdateReceived event, Emitter<AvatarState> emit) async {
     try {
-      print('[AvatarBloc] Processing group avatar update for room ${event.roomId}');
       
       // Store the new avatar data in secure storage
       final avatarData = {
@@ -182,10 +182,7 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       // Force a state update to trigger UI refresh
       emit(state.copyWith(updateCounter: state.updateCounter + 1));
       
-      print('[AvatarBloc] Successfully stored group avatar data for room ${event.roomId}');
-      
     } catch (e) {
-      print('[AvatarBloc] Error processing group avatar update: $e');
     }
   }
 
@@ -241,14 +238,12 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
         break; // Success, exit loop
       } catch (e) {
         retryCount++;
-        print('[AvatarBloc] Error loading avatar for ${event.userId} (attempt $retryCount/$maxRetries): $e');
         
         if (retryCount < maxRetries) {
           // Wait before retrying
           await Future.delayed(Duration(milliseconds: 500 * retryCount));
         } else {
           // All retries failed, try SharedPreferences fallback
-          print('[AvatarBloc] Secure storage failed, trying SharedPreferences fallback...');
           try {
             final prefs = await SharedPreferences.getInstance();
             final fallbackData = prefs.getString('avatar_fallback_${event.userId}');
@@ -263,7 +258,6 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
               ));
             }
           } catch (fallbackError) {
-            print('[AvatarBloc] Fallback also failed: $fallbackError');
           }
         }
       }

@@ -83,7 +83,15 @@ class AppleSubscriptionService {
       if (_products.isEmpty) {
         print('[IAP] Still no products after loading attempt');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Subscription not available')),
+          SnackBar(
+            content: Text('Subscription not available'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
         return;
       }
@@ -121,7 +129,15 @@ class AppleSubscriptionService {
     } catch (e) {
       print('[IAP] Error getting UUID: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to initialize purchase')),
+        SnackBar(
+            content: Text('Failed to initialize purchase'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
       );
       return;
     }
@@ -238,13 +254,12 @@ class AppleSubscriptionService {
             fontWeight: FontWeight.w500,
           ),
         ),
-        backgroundColor: Colors.red.shade400,
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.all(20),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
         ),
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

@@ -89,6 +89,12 @@ class _OnboardingModalState extends State<OnboardingModal>
       description: 'Use the ping button (top right) to manually send your exact location to all contacts. Location is already shared, but this sends an immediate update if you\'ve been stationary.',
       color: const Color(0xFFE74C3C),
     ),
+    OnboardingPage(
+      icon: Icons.discord,
+      title: 'Join Our Community',
+      description: 'Join our Discord server to give feedback, report bugs, request features, and connect with other Grid users. We\'d love to hear from you!',
+      color: const Color(0xFF5865F2),  // Discord brand color
+    ),
   ];
 
   @override
