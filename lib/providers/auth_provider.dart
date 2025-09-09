@@ -49,11 +49,10 @@ class AuthProvider with ChangeNotifier {
 
 
       await client.login(
-        LoginType.mLoginJWT, // Use JWT login type
+        LoginType.mLoginJWT,
         token: jwt,
       );
 
-      await client.sync(fullState: true, timeout: 5000); // prime the state, fast
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
     } catch (e) {

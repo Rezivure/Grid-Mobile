@@ -21,13 +21,36 @@ class Room {
 
   // Factory constructor to create an instance from a database map
   factory Room.fromMap(Map<String, dynamic> map) {
+    // Handle members field - it might be corrupted as a plain string
+    List<String> membersList;
+    try {
+      final membersData = map['members'];
+      if (membersData is String) {
+        // Try to parse as JSON
+        if (membersData.startsWith('[')) {
+          membersList = (jsonDecode(membersData) as List<dynamic>).cast<String>();
+        } else {
+          // Corrupted data - single user ID as string
+          // Convert to list with single member
+          print("Warning: Corrupted members field in room ${map['roomId']}: $membersData");
+          membersList = [membersData];
+        }
+      } else {
+        // Already a list somehow
+        membersList = (membersData as List<dynamic>).cast<String>();
+      }
+    } catch (e) {
+      print("Error parsing members field for room ${map['roomId']}: ${map['members']} - $e");
+      membersList = [];
+    }
+    
     return Room(
       roomId: map['roomId'] as String,
       name: map['name'] as String,
       isGroup: map['isGroup'] == 1, // SQLite stores boolean as 0 or 1
       lastActivity: map['lastActivity'] as String,
       avatarUrl: map['avatarUrl'] as String?,
-      members: (jsonDecode(map['members']) as List<dynamic>).cast<String>(),
+      members: membersList,
       expirationTimestamp: map['expirationTimestamp'] as int,
     );
   }

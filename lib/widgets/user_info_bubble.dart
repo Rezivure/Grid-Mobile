@@ -337,6 +337,11 @@ class UserInfoBubble extends StatelessWidget {
           SnackBar(
             content: const Text('Could not open maps application'),
             backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
           ),
         );
       }

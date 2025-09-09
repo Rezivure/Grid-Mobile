@@ -212,8 +212,12 @@ class _ProfileModalState extends State<ProfileModal> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text('Username copied to clipboard'),
+                                    backgroundColor: Theme.of(context).colorScheme.primary,
                                     behavior: SnackBarBehavior.floating,
-                                    duration: Duration(seconds: 2),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    duration: const Duration(seconds: 2),
                                   ),
                                 );
                                 Future.delayed(Duration(seconds: 2), () {
