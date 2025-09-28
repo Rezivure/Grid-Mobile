@@ -36,7 +36,7 @@ import '../services/database_service.dart';
 
 class MapScrollWindow extends StatefulWidget {
   final bool isEditingMapIcon;
-  
+
   const MapScrollWindow({
     Key? key,
     this.isEditingMapIcon = false,
@@ -178,6 +178,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     return Stack(
       children: [
@@ -202,14 +203,16 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             return const SizedBox.shrink();
           },
         ),
-        // Main draggable sheet
-        DraggableScrollableSheet(
-          controller: _scrollableController,
-          initialChildSize: 0.45,
-          minChildSize: 0.3,
-          maxChildSize: 0.7,
-          builder: (BuildContext context, ScrollController scrollController) {
-        return NotificationListener<ScrollNotification>(
+        // Main draggable sheet with FAB
+        Stack(
+          children: [
+            DraggableScrollableSheet(
+              controller: _scrollableController,
+              initialChildSize: 0.45,
+              minChildSize: 0.3,
+              maxChildSize: 0.7,
+              builder: (BuildContext context, ScrollController scrollController) {
+                return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollStartNotification) {
               _isScrollingContent = true;
@@ -303,8 +306,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         );  // End of NotificationListener
       },
     ),  // End of DraggableScrollableSheet
-      ],  // End of Stack children
-    );  // End of Stack
+    ],  // End of Stack children
+    ),  // End of Stack
+    ],
+  );
   }
 
   Widget _buildModernHeader(ColorScheme colorScheme) {
@@ -602,9 +607,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               },
             ),
           );
-      },
-    );
-  }
+        },
+      );
+    }
 
   Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
