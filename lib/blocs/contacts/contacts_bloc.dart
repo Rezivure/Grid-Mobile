@@ -37,7 +37,13 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
   }
 
   Future<void> _onLoadContacts(LoadContacts event, Emitter<ContactsState> emit) async {
-    emit(ContactsLoading());
+    // Only show loading state if we don't have any contacts yet (initial load)
+    final isInitialLoad = _allContacts.isEmpty && state is! ContactsLoaded;
+
+    if (isInitialLoad) {
+      emit(ContactsLoading());
+    }
+
     try {
       _allContacts = await _loadContacts();
       emit(ContactsLoaded(_allContacts));
