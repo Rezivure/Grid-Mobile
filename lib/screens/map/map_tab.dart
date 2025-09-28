@@ -89,7 +89,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
-  double _zoom = 10;  // Changed default from 12 to 10
+  double _zoom = 3.5;  // Default to full country view for faster tile loading
   bool _initialZoomCalculated = false;
   LatLng? _initialCenter;  // Store the calculated center point
   int _lastKnownUserLocationsCount = 0;  // Track when contacts first load from sync
@@ -303,7 +303,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _locationManager?.grabLocationAndPing().then((_) {
         if (mounted && _locationManager?.currentLatLng != null && _isMapReady && !_initialZoomCalculated) {
           // If map is ready and we haven't zoomed yet, do it now
-          _zoom = 14.0;
+          _zoom = 3.5; // Full country view for faster loading
           _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
           setState(() {
             _initialZoomCalculated = true;
@@ -362,7 +362,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     if (!_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null) {
       // First center on user immediately
       if (!_initialZoomCalculated) {
-        _zoom = 14.0;
+        _zoom = 3.5; // Full country view for faster loading
         _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
       }
       
@@ -857,65 +857,66 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Returns both optimal zoom and center point
   MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
     print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
-    
+
     if (userLocations.isEmpty) {
-      return MapZoomResult(zoom: 10.0, center: userPosition);
+      return MapZoomResult(zoom: 4.5, center: userPosition);
     }
 
-    // Find the closest contact
-    double minDistance = double.infinity;
-    UserLocation? closestLocation;
+    // Calculate bounds that include ALL contacts plus the user
+    double minLat = userPosition.latitude;
+    double maxLat = userPosition.latitude;
+    double minLng = userPosition.longitude;
+    double maxLng = userPosition.longitude;
+
+    // Find the bounding box of all users
     for (final location in userLocations) {
-      final distance = const Distance().as(LengthUnit.Meter, userPosition, location.position);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestLocation = location;
-      }
+      minLat = minLat < location.position.latitude ? minLat : location.position.latitude;
+      maxLat = maxLat > location.position.latitude ? maxLat : location.position.latitude;
+      minLng = minLng < location.position.longitude ? minLng : location.position.longitude;
+      maxLng = maxLng > location.position.longitude ? maxLng : location.position.longitude;
     }
-    
-    if (closestLocation == null) {
-      return MapZoomResult(zoom: 10.0, center: userPosition);
-    }
-    
-    
-    // Calculate the center point between user and closest contact
-    final centerLat = (userPosition.latitude + closestLocation.position.latitude) / 2;
-    final centerLng = (userPosition.longitude + closestLocation.position.longitude) / 2;
-    final centerPoint = LatLng(centerLat, centerLng);
-    
 
-    // Calculate zoom based on distance
-    // Balance between showing both points and not zooming out too far
+    // Calculate center of all positions
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    final centerPoint = LatLng(centerLat, centerLng);
+
+    // Calculate the maximum distance from center to any corner of the bounding box
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+
+    // Use the larger dimension to determine zoom
+    // This ensures all users fit in view
+    final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
+
+    // Calculate zoom based on the span of all users
     double zoomLevel;
-    if (minDistance < 100) {
-      zoomLevel = 14.0; // Very close - street level (reduced from 16 to prevent tile loading issues)
-    } else if (minDistance < 500) {
-      zoomLevel = 13.5; // Walking distance
-    } else if (minDistance < 1000) {
-      zoomLevel = 13.0; // Close neighborhood
-    } else if (minDistance < 5000) {
-      zoomLevel = 11.5; // Same area
-    } else if (minDistance < 20000) {
-      zoomLevel = 9.5; // Same city
-    } else if (minDistance < 50000) {
-      zoomLevel = 8.5; // Metro area
-    } else if (minDistance < 100000) {
-      zoomLevel = 7.5; // Multiple cities
-    } else if (minDistance < 250000) {
-      zoomLevel = 6.5; // State view
-    } else if (minDistance < 500000) {
-      zoomLevel = 5.5; // Multi-state view
-    } else if (minDistance < 1000000) {
-      zoomLevel = 4.5; // Large region
-    } else if (minDistance < 2500000) {
-      zoomLevel = 3.5; // Cross-country (e.g. East to West coast)
-    } else if (minDistance < 5000000) {
-      zoomLevel = 2.5; // Continental view
+    if (maxDiff < 0.01) {
+      zoomLevel = 14.0; // Very close together - neighborhood
+    } else if (maxDiff < 0.05) {
+      zoomLevel = 12.0; // City area
+    } else if (maxDiff < 0.1) {
+      zoomLevel = 10.0; // Metro area
+    } else if (maxDiff < 0.5) {
+      zoomLevel = 8.0; // Multi-city region
+    } else if (maxDiff < 2.0) {
+      zoomLevel = 6.0; // State-sized area
+    } else if (maxDiff < 10.0) {
+      zoomLevel = 4.5; // Multi-state / small country
+    } else if (maxDiff < 30.0) {
+      zoomLevel = 3.5; // Country-sized (like USA coast to coast)
+    } else if (maxDiff < 60.0) {
+      zoomLevel = 2.5; // Continental
     } else {
-      zoomLevel = 2.0; // Maximum zoom out for intercontinental
+      zoomLevel = 2.0; // Intercontinental
     }
-    
-    print('[SmartZoom] Calculated zoom: $zoomLevel');
+
+    // Cap zoom at country level for faster loading (3.5 for full USA view)
+    if (zoomLevel > 3.5) {
+      zoomLevel = 3.5; // Show full country even if users are closer
+    }
+
+    print('[SmartZoom] Calculated zoom: $zoomLevel for span: $maxDiff degrees');
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
@@ -963,7 +964,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           });
           
           // Use provided zoom or default to street level
-          final double targetZoom = state.zoom ?? 14.0;
+          final double targetZoom = state.zoom ?? 3.5; // Default to full country view
           
           _mapController.moveAndRotate(state.center!, targetZoom, 0);
           
@@ -1198,7 +1199,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             print('[SMART ZOOM] Got location: ${_locationManager?.currentLatLng}');
                             if (_locationManager?.currentLatLng != null && mounted) {
                               // Immediately center on user's location first
-                              _zoom = 14.0; // Good zoom level for single user
+                              _zoom = 3.5; // Full country view for faster tile loading
                               _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
                               
                               // Then check if we have user locations from sync
@@ -1222,7 +1223,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         } else {
                           // We already have location - immediately center on user
                           print('[SMART ZOOM] Have location: ${_locationManager?.currentLatLng}');
-                          _zoom = 14.0; // Good zoom level for single user
+                          _zoom = 3.5; // Full country view for faster tile loading
                           _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
                           
                           // Then check if we have user locations from sync
