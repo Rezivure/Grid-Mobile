@@ -175,7 +175,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             final key = encrypt.Key.fromBase64(keyBase64);
             final iv = encrypt.IV.fromBase64(ivBase64);
             final encrypter = encrypt.Encrypter(encrypt.AES(key));
-            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final encrypted = encrypt.Encrypted(file.data);
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);

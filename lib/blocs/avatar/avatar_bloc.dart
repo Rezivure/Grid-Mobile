@@ -98,9 +98,21 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
         final mxcUri = Uri.parse(event.avatarUrl);
         final serverName = mxcUri.host;
         final mediaId = mxcUri.path.substring(1);
-        
-        final file = await client.getContent(serverName, mediaId);
-        encryptedData = Uint8List.fromList(file.data);
+
+        print('[Avatar] Downloading from Matrix: server=$serverName, mediaId=$mediaId');
+        print('[Avatar] Client logged in: ${client.isLogged()}');
+        print('[Avatar] Access token present: ${client.accessToken != null}');
+
+        try {
+          final file = await client.getContent(serverName, mediaId);
+          encryptedData = file.data;
+          print('[Avatar] Successfully downloaded ${encryptedData.length} bytes');
+        } catch (e) {
+          print('[Avatar] Failed to download media: $e');
+          print('[Avatar] Server homeserver: ${client.homeserver}');
+          print('[Avatar] Media server: $serverName');
+          throw Exception('Failed to download avatar from Matrix: $e');
+        }
       } else {
         // Download from R2
         final response = await http.get(Uri.parse(event.avatarUrl));

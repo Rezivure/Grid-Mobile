@@ -1709,16 +1709,29 @@ class _SettingsPageState extends State<SettingsPage> {
             final mediaId = mxcUri.path.substring(1); // Remove leading /
             
             print('[Matrix Avatar Load] Downloading encrypted file from Matrix: server=$serverName, mediaId=$mediaId');
-            final file = await client.getContent(serverName, mediaId);
-            print('[Matrix Avatar Load] Downloaded ${file.data.length} encrypted bytes');
-            
+            print('[Matrix Avatar Load] Client logged in: ${client.isLogged()}');
+            print('[Matrix Avatar Load] Access token present: ${client.accessToken != null}');
+            print('[Matrix Avatar Load] Homeserver: ${client.homeserver}');
+
+            Uint8List fileData;
+            try {
+              final file = await client.getContent(serverName, mediaId);
+              fileData = file.data;
+              print('[Matrix Avatar Load] Downloaded ${fileData.length} encrypted bytes');
+            } catch (e) {
+              print('[Matrix Avatar Load] Failed to download: $e');
+              print('[Matrix Avatar Load] Error details: ${e.toString()}');
+              // Re-throw to preserve original error handling
+              rethrow;
+            }
+
             // Decrypt
             final key = encrypt.Key.fromBase64(keyBase64);
             final iv = encrypt.IV.fromBase64(ivBase64);
             final encrypter = encrypt.Encrypter(encrypt.AES(key));
-            
+
             // Convert to Encrypted object and decrypt
-            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final encrypted = encrypt.Encrypted(fileData);
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
