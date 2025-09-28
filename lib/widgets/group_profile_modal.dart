@@ -120,6 +120,83 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
     });
   }
 
+  void _showExpandedAvatar(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'group_avatar_${widget.room.roomId}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: GroupAvatarBloc(
+                        roomId: widget.room.roomId,
+                        memberIds: widget.room.members,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showExpandedMemberAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'member_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _loadGroupAvatar() async {
     final roomId = widget.room.roomId;
     
@@ -687,10 +764,18 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Stack(
               children: [
-                GroupAvatarBloc(
-                  roomId: widget.room.roomId,
-                  memberIds: widget.room.members,
-                  size: 72,
+                GestureDetector(
+                  onTap: () {
+                    _showExpandedAvatar(context);
+                  },
+                  child: Hero(
+                    tag: 'group_avatar_${widget.room.roomId}',
+                    child: GroupAvatarBloc(
+                      roomId: widget.room.roomId,
+                      memberIds: widget.room.members,
+                      size: 72,
+                    ),
+                  ),
                 ),
                 if (_isCurrentUserAdmin)
                   Positioned(
@@ -1020,22 +1105,30 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Row(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isAdmin 
-                          ? colorScheme.primary.withOpacity(0.3)
-                          : colorScheme.outline.withOpacity(0.2),
-                      width: 2,
+                GestureDetector(
+                  onTap: () {
+                    _showExpandedMemberAvatar(context, member.userId);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isAdmin
+                            ? colorScheme.primary.withOpacity(0.3)
+                            : colorScheme.outline.withOpacity(0.2),
+                        width: 2,
+                      ),
                     ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: UserAvatarBloc(
-                      userId: member.userId,
-                      size: 44,
+                    child: Hero(
+                      tag: 'member_avatar_${member.userId}',
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                        child: UserAvatarBloc(
+                          userId: member.userId,
+                          size: 44,
+                        ),
+                      ),
                     ),
                   ),
                 ),
