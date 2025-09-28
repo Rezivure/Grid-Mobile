@@ -122,6 +122,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _showMapSelector = false;
   String _currentMapStyle = 'base'; // 'base' or 'satellite'
   bool _isLoadingMapStyle = false;
+
+  // Force map rebuild when coming from background
+  Key _mapKey = UniqueKey();
   
   // Icon selection wheel
   bool _showIconWheel = false;
@@ -182,10 +185,46 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Defer to next frame to avoid build phase conflicts
     await Future.delayed(Duration.zero);
     if (!mounted) return;
-    
+
     await _initializeServices();
-    _loadMapProvider();
+
+    // Check if app was launched from background (terminated state)
+    // This happens when background location updates wake the app
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    final wasLaunchedFromBackground = lifecycleState == AppLifecycleState.resumed ||
+        lifecycleState == AppLifecycleState.inactive;
+
+    if (wasLaunchedFromBackground) {
+      print('[MapTab] App launched from background/terminated state - forcing tile provider reinitialization');
+      // Clear tile provider first to ensure complete reinitialization
+      _tileProvider = null;
+    }
+
+    await _loadMapProvider();
     _loadMapStylePreference();
+
+    if (wasLaunchedFromBackground) {
+      // Force complete map widget rebuild after services are ready
+      // Use multiple delays to ensure tiles have time to load
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _mapKey = UniqueKey();
+            print('[MapTab] First map rebuild triggered');
+          });
+
+          // Do another rebuild shortly after to ensure tiles are loaded
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) {
+              setState(() {
+                _mapKey = UniqueKey();
+                print('[MapTab] Second map rebuild triggered for tile loading');
+              });
+            }
+          });
+        }
+      });
+    }
   }
   
   // Keeping this function for potential future use, but no longer needed after avatar fix
@@ -490,13 +529,40 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     
     // Always reinitialize tile provider on resume to fix background launch rendering issues
     if (state == AppLifecycleState.resumed && _tileProvider != null) {
-      print('[MapTab] App resumed - refreshing tile provider');
-      
+      print('[MapTab] App resumed - forcing complete map rebuild');
+
       // Small delay to ensure we're fully in foreground
-      Future.delayed(const Duration(milliseconds: 200), () async {
-        if (mounted) {
-          await _loadMapProvider();
+      Future.delayed(const Duration(milliseconds: 400), () async {
+        if (mounted && _isMapReady) {
+          // Store current position
+          final currentCenter = _mapController.camera.center;
+          final currentZoom = _mapController.camera.zoom;
+
+          // Clear and reload the tile provider
+          _tileProvider = null;
           setState(() {});
+
+          await _loadMapProvider();
+
+          // Force complete map widget rebuild by changing its key
+          setState(() {
+            _mapKey = UniqueKey();
+            print('[MapTab] Map rebuilt with new key after resume');
+          });
+
+          // After rebuild, trigger a micro camera adjustment to force tile loading
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted && _isMapReady && currentCenter != null) {
+              // Do a tiny zoom adjustment to trigger tile refresh
+              _mapController.move(currentCenter, currentZoom - 0.001);
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted && _isMapReady) {
+                  _mapController.move(currentCenter, currentZoom);
+                  print('[MapTab] Triggered tile refresh with micro zoom adjustment');
+                }
+              });
+            }
+          });
         }
       });
     }
@@ -691,9 +757,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         } catch (e) {
         }
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
       final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
+
+      // Clear existing tile provider to force complete reinitialization
+      _tileProvider = null;
 
       _mapTheme = ProtomapsThemes.light();
       _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
@@ -1038,6 +1107,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     }
                   },
                   child: FlutterMap(
+                  key: _mapKey,
                   mapController: _mapController,
                   options: MapOptions(
                     onTap: (tapPosition, latLng) async {
