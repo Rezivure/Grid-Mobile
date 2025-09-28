@@ -841,6 +841,45 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     });
   }
 
+  void _showExpandedGroupAvatar(BuildContext context, GridRoom.Room room) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'group_drawer_avatar_${room.roomId}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: GroupAvatarBloc(
+                        roomId: room.roomId,
+                        memberIds: room.members,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -953,13 +992,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: GroupAvatarBloc(
-                        roomId: room.roomId,
-                        memberIds: room.members,
-                        size: 40,
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedGroupAvatar(context, room);
+                      },
+                      child: Hero(
+                        tag: 'group_drawer_avatar_${room.roomId}',
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: GroupAvatarBloc(
+                            roomId: room.roomId,
+                            memberIds: room.members,
+                            size: 40,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),

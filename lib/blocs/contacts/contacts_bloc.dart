@@ -71,7 +71,7 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
       print("ContactsBloc: Deleting contact ${event.userId}");
       final roomId = await userRepository.getDirectRoomForContact(event.userId);
       print("ContactsBloc: Found room $roomId for contact ${event.userId}");
-      
+
       if (roomId != null) {
         await roomService.leaveRoom(roomId);
         await userRepository.removeContact(event.userId);
