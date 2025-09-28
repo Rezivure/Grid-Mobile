@@ -58,11 +58,13 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   String? _satelliteMapToken;
   final SubscriptionService _subscriptionService = SubscriptionService();
   Map<String, String> _userDisplayNames = {}; // Cache for display names
+  late RoomLocationHistoryRepository _roomHistoryRepo;
   
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
+    _roomHistoryRepo = RoomLocationHistoryRepository(DatabaseService());
     // Default to showing all members for group history
     _showAllMembers = widget.memberIds != null;
     _initializeMap();
@@ -195,6 +197,117 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       }
     } catch (e) {
       print('Error fetching display names: $e');
+    }
+  }
+
+  Future<void> _showClearHistoryDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.delete_outline,
+                color: colorScheme.error,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Clear Location History',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to clear all location history for this group? This action cannot be undone.',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.onSurface.withOpacity(0.7),
+              ),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Clear History'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && widget.memberIds != null && widget.useRoomHistory) {
+      try {
+        // Show loading indicator
+        setState(() {
+          _isLoading = true;
+        });
+
+        // Clear the history for this room
+        final roomId = widget.userId; // For groups, userId is actually the roomId
+        await _roomHistoryRepo.deleteRoomHistory(roomId);
+
+        // Reload the history to show empty state
+        await _loadLocationHistory();
+
+        // Show success message
+        if (mounted) {
+          final colorScheme = Theme.of(context).colorScheme;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Location history cleared'),
+              backgroundColor: colorScheme.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(8),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error clearing location history: $e');
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          final colorScheme = Theme.of(context).colorScheme;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear history: $e'),
+              backgroundColor: colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(8),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -528,6 +641,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     ],
                   ),
                 ),
+                // Clear history button for groups
+                if (widget.memberIds != null)
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: colorScheme.error,
+                    ),
+                    onPressed: _showClearHistoryDialog,
+                    tooltip: 'Clear History',
+                  ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
