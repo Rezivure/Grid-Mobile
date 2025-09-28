@@ -137,6 +137,16 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
+  Future<bool> _isUserAContact(String userId) async {
+    try {
+      final directRoom = await widget.userRepository.getDirectRoomForContact(userId);
+      return directRoom != null;
+    } catch (e) {
+      print('Error checking if user is contact: $e');
+      return false;
+    }
+  }
+
   void _showExpandedAvatar(BuildContext context, String userId) {
     showDialog(
       context: context,
@@ -239,11 +249,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final canKick = await _canCurrentUserKick();
-    
+
     // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = isCustomHomeserver(currentHomeserver);
-    
+
+    // Check if user is already a contact
+    final isAlreadyContact = await _isUserAContact(user.userId);
+
     if (!mounted) return;
     
     showModalBottomSheet(
@@ -322,6 +335,40 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
+                    // Send Friend Request option
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isAlreadyContact
+                              ? colorScheme.surfaceVariant
+                              : colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.person_add_outlined,
+                          color: isAlreadyContact
+                              ? colorScheme.onSurface.withOpacity(0.3)
+                              : colorScheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        isAlreadyContact ? 'Already in Contacts' : 'Send Friend Request',
+                        style: TextStyle(
+                          color: isAlreadyContact
+                              ? colorScheme.onSurface.withOpacity(0.3)
+                              : colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      enabled: !isAlreadyContact,
+                      onTap: !isAlreadyContact ? () {
+                        Navigator.pop(context);
+                        _showFriendRequestConfirmation(user, showFullMatrixId);
+                      } : null,
+                    ),
+
                     // Remove from group option
                     ListTile(
                       leading: Container(
@@ -361,6 +408,166 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         );
       },
     );
+  }
+
+  void _showFriendRequestConfirmation(GridUser user, bool showFullMatrixId) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_add,
+                color: colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Send Friend Request',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Send a friend request to:',
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: UserAvatarBloc(
+                        userId: user.userId,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName ?? localpart(user.userId),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            showFullMatrixId
+                                ? user.userId
+                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
+              ),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _sendFriendRequest(user);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Send Request'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _sendFriendRequest(GridUser user) async {
+    try {
+      final success = await widget.roomService.createRoomAndInviteContact(user.userId);
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Friend request sent to ${user.displayName ?? localpart(user.userId)}'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to send friend request. User may not exist or is already a contact.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error sending friend request: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending friend request: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showKickConfirmation(GridUser user) {
