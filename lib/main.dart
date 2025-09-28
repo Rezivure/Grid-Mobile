@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart';
 
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
@@ -64,15 +65,10 @@ void main() async {
   final databaseService = DatabaseService();
   await databaseService.initDatabase();
 
-  // Initialize Matrix Client
+  // Initialize Matrix Client with backwards compatible database
   final client = Client(
     'Grid App',
-    databaseBuilder: (_) async {
-      final dir = await getApplicationSupportDirectory();
-      final db = HiveCollectionsDatabase('grid_app', dir.path);
-      await db.open();
-      return db;
-    },
+    databaseBuilder: (_) => BackwardsCompatibilityService.createMatrixDatabase(),
   );
   await client.init();
 
