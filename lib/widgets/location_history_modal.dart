@@ -887,12 +887,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     child: FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
-                        initialCenter: _currentPositions.isNotEmpty 
+                        initialCenter: _currentPositions.isNotEmpty
                             ? (_showAllMembers && _currentPositions.length > 1
-                                ? _calculateCenterPoint(_currentPositions.values.toList())
+                                ? _calculateSmartZoom(_currentPositions.values.toList()).center
                                 : _currentPositions.values.first)
                             : const LatLng(37.7749, -122.4194), // Default to SF
-                        initialZoom: _showAllMembers ? 9.0 : 11.0,
+                        initialZoom: _currentPositions.isNotEmpty && _showAllMembers
+                            ? _calculateSmartZoom(_currentPositions.values.toList()).zoom
+                            : 10.0,
+                        minZoom: 4.0,  // Prevent zooming out too far (country level)
+                        maxZoom: 16.0, // Prevent zooming in too close (street level)
                         onMapReady: () {
                           setState(() {
                             _mapReady = true;
@@ -1160,20 +1164,85 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       try {
         final points = _currentPositions.values.toList();
         if (points.length == 1) {
-          _mapController.move(points.first, 15.0);
+          // Single point - use reasonable zoom
+          _mapController.move(points.first, 10.0);
         } else if (points.length > 1) {
-          final bounds = LatLngBounds.fromPoints(points);
-          _mapController.fitCamera(
-            CameraFit.bounds(
-              bounds: bounds,
-              padding: const EdgeInsets.all(80),
-            ),
-          );
+          // Calculate smart zoom like main map
+          final result = _calculateSmartZoom(points);
+          _mapController.moveAndRotate(result.center, result.zoom, 0);
         }
       } catch (e) {
         print('Error fitting all members in view: $e');
       }
     }
+  }
+
+  // Smart zoom calculation matching main map logic
+  ({LatLng center, double zoom}) _calculateSmartZoom(List<LatLng> points) {
+    if (points.isEmpty) {
+      return (center: const LatLng(37.7749, -122.4194), zoom: 4.0);
+    }
+
+    if (points.length == 1) {
+      return (center: points.first, zoom: 10.0);
+    }
+
+    // Calculate bounds that include ALL positions
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    // Find the bounding box of all positions
+    for (final point in points) {
+      minLat = minLat < point.latitude ? minLat : point.latitude;
+      maxLat = maxLat > point.latitude ? maxLat : point.latitude;
+      minLng = minLng < point.longitude ? minLng : point.longitude;
+      maxLng = maxLng > point.longitude ? maxLng : point.longitude;
+    }
+
+    // Calculate center of all positions
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    final centerPoint = LatLng(centerLat, centerLng);
+
+    // Calculate the span
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+    final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
+
+    // Calculate zoom based on the span of all users
+    double zoomLevel;
+    if (maxDiff < 0.01) {
+      zoomLevel = 14.0; // Very close together
+    } else if (maxDiff < 0.05) {
+      zoomLevel = 12.0; // City area
+    } else if (maxDiff < 0.1) {
+      zoomLevel = 10.0; // Metro area
+    } else if (maxDiff < 0.5) {
+      zoomLevel = 8.0; // Multi-city region
+    } else if (maxDiff < 2.0) {
+      zoomLevel = 6.0; // State-sized area
+    } else if (maxDiff < 10.0) {
+      zoomLevel = 4.5; // Multi-state / small country
+    } else if (maxDiff < 30.0) {
+      zoomLevel = 3.5; // Country-sized (like USA coast to coast)
+    } else if (maxDiff < 60.0) {
+      zoomLevel = 2.5; // Continental
+    } else {
+      zoomLevel = 2.0; // Intercontinental
+    }
+
+    // Cap zoom for history view (don't zoom in too close for history playback)
+    if (zoomLevel > 10.0) {
+      zoomLevel = 10.0; // Cap at metro area view for history
+    }
+
+    // Respect the min/max zoom constraints
+    if (zoomLevel < 4.0) zoomLevel = 4.0;
+    if (zoomLevel > 16.0) zoomLevel = 16.0;
+
+    return (center: centerPoint, zoom: zoomLevel);
   }
   
   LatLng _calculateCenterPoint(List<LatLng> points) {
