@@ -1040,47 +1040,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             ],
           ),
         ),
-        _buildActionButtons(),
       ],
     );
   }
 
-  Widget _buildActionButtons() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing ? null : () {
-            _showGroupDetailsMenu();
-          },
-          icon: Icon(
-            Icons.more_horiz,
-            size: 20,
-            color: colorScheme.onPrimary,
-          ),
-          label: Text(
-            'Group Details',
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1147,18 +1110,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     : ListView.builder(
                         controller: widget.scrollController,
                         padding: const EdgeInsets.all(16.0),
-                        itemCount: _filteredMembers.length + 1,
+                        itemCount: _filteredMembers.length,
                         itemBuilder: (context, index) {
-                          if (index < _filteredMembers.length) {
-                            final user = _filteredMembers[index];
-                            return _buildMemberTile(
-                              user,
-                              state,
-                              userLocations,
-                            );
-                          } else {
-                            return _buildActionButtons();
-                          }
+                          final user = _filteredMembers[index];
+                          return _buildMemberTile(
+                            user,
+                            state,
+                            userLocations,
+                          );
                         },
                       ),
               ),

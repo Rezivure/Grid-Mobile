@@ -27,6 +27,12 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'group_avatar.dart';
 import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
+import 'group_profile_modal.dart';
+import 'location_history_modal.dart';
+import 'add_group_member_modal.dart';
+import 'group_markers_modal.dart';
+import '../repositories/map_icon_repository.dart';
+import '../services/database_service.dart';
 
 class MapScrollWindow extends StatefulWidget {
   final bool isEditingMapIcon;
@@ -369,16 +375,26 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildActionButton(
-                icon: Icons.person_add_outlined,
-                onPressed: () => _showAddFriendModal(context),
-                colorScheme: colorScheme,
-              ),
+              // Show group icon when viewing a group, otherwise show add contact
+              _selectedOption == SubscreenOption.groupDetails && _selectedRoom != null
+                ? _buildGroupActionButton(
+                    icon: Icons.group_outlined,
+                    onPressed: () => _showGroupDetailsMenu(context),
+                    colorScheme: colorScheme,
+                    tooltip: 'Group Settings',
+                  )
+                : _buildActionButton(
+                    icon: Icons.person_add_outlined,
+                    onPressed: () => _showAddFriendModal(context),
+                    colorScheme: colorScheme,
+                    tooltip: 'Add Contact',
+                  ),
               const SizedBox(width: 8),
               _buildActionButton(
                 icon: Icons.qr_code_scanner_outlined,
                 onPressed: () => _showProfileModal(context),
                 colorScheme: colorScheme,
+                tooltip: 'My QR Code',
               ),
               const SizedBox(width: 8),
               _buildNotificationButton(colorScheme),
@@ -393,6 +409,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     required IconData icon,
     required VoidCallback onPressed,
     required ColorScheme colorScheme,
+    String? tooltip,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -414,6 +431,38 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           minWidth: 40,
           minHeight: 40,
         ),
+        tooltip: tooltip,
+      ),
+    );
+  }
+
+  Widget _buildGroupActionButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required ColorScheme colorScheme,
+    String? tooltip,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.primary.withOpacity(0.3),
+        ),
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: colorScheme.primary,
+          size: 20,
+        ),
+        onPressed: onPressed,
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 40,
+        ),
+        tooltip: tooltip,
       ),
     );
   }
@@ -858,6 +907,344 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),
         ),
       ),
+    );
+  }
+
+
+  void _showGroupDetailsMenu(BuildContext context) {
+    if (_selectedRoom == null) return;
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final room = _selectedRoom!;
+
+    // Get current members from the groups bloc
+    final groupsState = context.read<GroupsBloc>().state;
+    final filteredMembers = groupsState is GroupsLoaded && groupsState.selectedRoomMembers != null
+        ? groupsState.selectedRoomMembers!.where((user) =>
+            user.userId != _cachedUserId).toList()
+        : [];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Group info header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: GroupAvatarBloc(
+                        roomId: room.roomId,
+                        memberIds: room.members,
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            room.name.split(':').length >= 5
+                                ? room.name.split(':')[3]
+                                : room.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '${filteredMembers.length} members',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Menu options - EXACT MATCH to GroupDetailsSubscreen menu
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Group Settings',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                      ),
+                      child: GroupProfileModal(
+                        room: room,
+                        roomService: _roomService,
+                        sharingPreferencesRepo: sharingPreferencesRepository,
+                        onMemberAdded: () {
+                          Navigator.pop(context);
+                          // Show add member modal
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => AddGroupMemberModal(
+                              roomId: room.roomId,
+                              roomService: _roomService,
+                              userService: _userService,
+                              userRepository: _userRepository,
+                              onInviteSent: null,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // Add Member
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person_add_outlined,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Add Member',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => AddGroupMemberModal(
+                      roomId: room.roomId,
+                      roomService: _roomService,
+                      userService: _userService,
+                      userRepository: _userRepository,
+                      onInviteSent: null,
+                    ),
+                  );
+                },
+              ),
+
+              // View History
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.history,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View History',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (BuildContext context) {
+                      return LocationHistoryModal(
+                        userId: room.roomId,
+                        userName: room.name.split(':').length >= 5
+                            ? room.name.split(':')[3]
+                            : room.name,
+                        memberIds: filteredMembers.map((m) => m.userId as String).toList(),
+                      );
+                    },
+                  );
+                },
+              ),
+
+              // View Markers
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.location_on,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View Markers',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => GroupMarkersModal(
+                      roomId: room.roomId,
+                      roomName: room.name.split(':').length >= 5
+                          ? room.name.split(':')[3]
+                          : room.name,
+                      mapIconRepository: MapIconRepository(DatabaseService()),
+                    ),
+                  );
+                },
+              ),
+
+              // Leave Group
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.exit_to_app_outlined,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Leave Group',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  // Show leave confirmation
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        backgroundColor: colorScheme.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text('Leave Group'),
+                        content: Text('Are you sure you want to leave "${room.name.split(':').length >= 5 ? room.name.split(':')[3] : room.name}"?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorScheme.error,
+                              foregroundColor: colorScheme.onError,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('Leave'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (confirmed == true) {
+                    try {
+                      await _roomService.leaveRoom(room.roomId);
+                      _navigateToContacts();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Left group successfully')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error leaving group: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 
