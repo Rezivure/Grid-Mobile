@@ -205,7 +205,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         // Main draggable sheet
         DraggableScrollableSheet(
           controller: _scrollableController,
-          initialChildSize: 0.3,
+          initialChildSize: 0.45,
           minChildSize: 0.3,
           maxChildSize: 0.7,
           builder: (BuildContext context, ScrollController scrollController) {
