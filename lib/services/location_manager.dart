@@ -68,46 +68,46 @@ class LocationManager with ChangeNotifier {
     if (!_isTracking) return;
 
     if (_batterySaverEnabled) {
-      // Battery saver config - more aggressive battery saving
+      // Battery saver config - balanced between battery and reliability
       bg.BackgroundGeolocation.setConfig(bg.Config(
-        desiredAccuracy: bg.Config.DESIRED_ACCURACY_LOW, // Lower accuracy saves more battery
-        distanceFilter: 500, // Only update after 500m movement
-        stopTimeout: 5, // Wait longer before entering stationary mode
+        desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM, // Medium accuracy for balance
+        distanceFilter: 200, // Reduced from 500 to 200m
+        stopTimeout: 10, // Increased from 5 to 10 minutes
         disableStopDetection: false,
         pausesLocationUpdatesAutomatically: true,
-        stationaryRadius: 100, // Larger radius to prevent false movement detection
-        heartbeatInterval: 1800, // 30 min heartbeat
+        stationaryRadius: 75, // Reduced from 100 to 75m
+        heartbeatInterval: 1200, // 20 minutes (works in background)
         activityRecognitionInterval: 20000, // Check activity less frequently (20s)
         minimumActivityRecognitionConfidence: 80, // Higher confidence required
         disableMotionActivityUpdates: false,
-        stopDetectionDelay: 5, // Wait 5 min before stopping
+        stopDetectionDelay: 10, // Increased from 5 to 10 minutes
       ));
     } else {
-      // Normal config
+      // Normal config - more aggressive to prevent stopping
       if (_isInForeground) {
         bg.BackgroundGeolocation.setConfig(bg.Config(
           desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
           distanceFilter: 10,
           disableStopDetection: false,
           pausesLocationUpdatesAutomatically: true,
-          stopTimeout: 2,
-          heartbeatInterval: 60, // 1 min
+          stopTimeout: 5, // Increased from 2 to 5 minutes
+          heartbeatInterval: 300, // 5 minutes in foreground
           activityRecognitionInterval: 10000, // 10s in foreground
           minimumActivityRecognitionConfidence: 70,
-          stopDetectionDelay: 1, // Quick stop detection in foreground
+          stopDetectionDelay: 2, // Increased from 1 to 2 minutes
         ));
       } else {
         bg.BackgroundGeolocation.setConfig(bg.Config(
-          desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM, // Medium accuracy in background
-          distanceFilter: 100,
-          stopTimeout: 3,
+          desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // HIGH accuracy even in background
+          distanceFilter: 50, // Reduced from 100 to 50m for more frequent updates
+          stopTimeout: 5, // Increased from 3 to 5 minutes
           disableStopDetection: false,
           pausesLocationUpdatesAutomatically: true,
-          stationaryRadius: 75,
-          heartbeatInterval: 600, // 10 min
+          stationaryRadius: 50, // Reduced from 75 to 50m
+          heartbeatInterval: 1200, // 20 minutes in background (works even when app suspended)
           activityRecognitionInterval: 15000, // 15s in background
           minimumActivityRecognitionConfidence: 75,
-          stopDetectionDelay: 3, // 3 min delay in background
+          stopDetectionDelay: 5, // Increased from 3 to 5 minutes
           disableMotionActivityUpdates: false,
         ));
       }
@@ -150,7 +150,7 @@ class LocationManager with ChangeNotifier {
       await bg.BackgroundGeolocation.requestPermission();
     }
 
-    // Configure plugin one time with optimized defaults
+    // Configure plugin one time with more aggressive defaults to prevent stopping
     await bg.BackgroundGeolocation.ready(bg.Config(
       desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
       stopOnTerminate: false,
@@ -158,13 +158,15 @@ class LocationManager with ChangeNotifier {
       enableHeadless: true,
       disableStopDetection: false,
       activityType: bg.Config.ACTIVITY_TYPE_OTHER,
-      stopTimeout: 2,
-      stopDetectionDelay: 1,
+      stopTimeout: 5, // Increased from 2 to 5 minutes
+      stopDetectionDelay: 2, // Increased from 1 to 2 minutes
       // Motion detection optimizations
       isMoving: false, // Start in stationary mode
       motionTriggerDelay: 0, // No delay for motion trigger
       disableMotionActivityUpdates: false,
       useSignificantChangesOnly: false,
+      // Heartbeat for stationary updates (this works in background on iOS/Android)
+      heartbeatInterval: 1200, // 20 minutes - guaranteed update even when stationary and backgrounded
       // Power optimizations
       preventSuspend: false, // Allow OS to suspend when possible
       disableLocationAuthorizationAlert: false,
@@ -197,12 +199,12 @@ class LocationManager with ChangeNotifier {
       // Smart throttling: Only skip SENDING updates if stationary and recent
       if (!_isMoving && _lastLocationUpdate != null) {
         final timeSinceLastUpdate = now.difference(_lastLocationUpdate!);
-        
-        // In battery saver mode, throttle stationary updates more aggressively
-        final throttleInterval = _batterySaverEnabled 
-            ? const Duration(minutes: 5) 
-            : const Duration(minutes: 1);
-            
+
+        // Reduced throttling intervals for more frequent updates
+        final throttleInterval = _batterySaverEnabled
+            ? const Duration(minutes: 3) // Reduced from 5 to 3 minutes
+            : const Duration(seconds: 30); // Reduced from 1 minute to 30 seconds
+
         if (timeSinceLastUpdate < throttleInterval) {
           print("Throttling location broadcast - stationary and recent update exists");
           return; // Skip broadcasting, but we've already updated _lastPosition
