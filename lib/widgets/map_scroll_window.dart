@@ -102,12 +102,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
+
+      // Preload group avatars after frame is built
+      _preloadGroupAvatars();
     });
-    
+
     // Load and cache user ID once
     _loadUserId();
   }
-  
+
   Future<void> _loadUserId() async {
     final userId = await _userService.getMyUserId();
     if (mounted) {
@@ -115,6 +118,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         _cachedUserId = userId;
       });
     }
+  }
+
+  // Preload all group avatars to avoid flicker
+  Future<void> _preloadGroupAvatars() async {
+    // No need for implementation here anymore - we'll use Offstage widgets
   }
 
   @override
@@ -165,12 +173,36 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return DraggableScrollableSheet(
-      controller: _scrollableController,
-      initialChildSize: 0.3,
-      minChildSize: 0.3,
-      maxChildSize: 0.7,
-      builder: (BuildContext context, ScrollController scrollController) {
+    return Stack(
+      children: [
+        // Preload group avatars offstage to prevent flicker
+        BlocBuilder<GroupsBloc, GroupsState>(
+          builder: (context, state) {
+            if (state is GroupsLoaded) {
+              return Offstage(
+                offstage: true,
+                child: Row(
+                  children: state.groups.map((group) {
+                    return GroupAvatarBloc(
+                      key: ValueKey('preload_${group.roomId}'),
+                      roomId: group.roomId,
+                      memberIds: group.members,
+                      size: 36,
+                    );
+                  }).toList(),
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        // Main draggable sheet
+        DraggableScrollableSheet(
+          controller: _scrollableController,
+          initialChildSize: 0.3,
+          minChildSize: 0.3,
+          maxChildSize: 0.7,
+          builder: (BuildContext context, ScrollController scrollController) {
         return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollStartNotification) {
@@ -264,7 +296,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),  // End of AnimatedOpacity
         );  // End of NotificationListener
       },
-    );
+    ),  // End of DraggableScrollableSheet
+      ],  // End of Stack children
+    );  // End of Stack
   }
 
   Widget _buildModernHeader(ColorScheme colorScheme) {

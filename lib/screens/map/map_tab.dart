@@ -1163,11 +1163,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
                     initialZoom: _zoom,
                     initialRotation: 0.0,
-                    minZoom: 2,
-                    maxZoom: 18,
+                    minZoom: 3.5, // Prevent zooming out too far (country level minimum)
+                    maxZoom: 17, // Prevent zooming in too close where tiles don't exist
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.all,
                       enableMultiFingerGestureRace: true,
+                    ),
+                    // Add camera constraints to prevent panning beyond world bounds
+                    cameraConstraint: CameraConstraint.contain(
+                      bounds: LatLngBounds(
+                        const LatLng(-85, -180), // Southwest corner of the world
+                        const LatLng(85, 180),   // Northeast corner of the world
+                      ),
                     ),
                     onMapReady: () {
                       print('[SMART ZOOM] Map is ready!');
