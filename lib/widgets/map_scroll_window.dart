@@ -623,15 +623,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       },
       child: Container(
         width: 80,
-        height: 84,
+        height: 100,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: isSelected 
-              ? colorScheme.primaryContainer 
+          color: isSelected
+              ? colorScheme.primaryContainer
               : colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? colorScheme.primary.withOpacity(0.3)
                 : colorScheme.outline.withOpacity(0.1),
             width: isSelected ? 2 : 1,
@@ -649,21 +649,22 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 36,
-              height: 36,
+              width: 48,
+              height: 48,
               child: UserAvatarBloc(
                 userId: userId,
-                size: 36,
+                size: 48,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             SizedBox(
               width: 68, // Increased width to fit "Contacts" text
               child: Text(
                 'Contacts',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: isSelected 
+                  fontSize: 11,
+                  height: 1.0,
+                  color: isSelected
                       ? colorScheme.onPrimaryContainer
                       : colorScheme.onSurface,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -706,7 +707,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         },
         child: Container(
           width: 80,
-          height: 84,
+          height: 100,
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: isSelected 
@@ -735,12 +736,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 clipBehavior: Clip.none,
                 children: [
                   SizedBox(
-                    width: 36,
-                    height: 36,
+                    width: 48,
+                    height: 48,
                     child: GroupAvatarBloc(
                       roomId: room.roomId,
                       memberIds: room.members,
-                      size: 36,
+                      size: 48,
                     ),
                   ),
                   if (room.expirationTimestamp > 0)
@@ -769,14 +770,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               SizedBox(
                 width: 68, // Increased width to match contacts
                 child: Text(
                   groupName,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: isSelected 
+                    fontSize: 11,
+                    height: 1.0,
+                    color: isSelected
                         ? colorScheme.onPrimaryContainer
                         : colorScheme.onSurface,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,

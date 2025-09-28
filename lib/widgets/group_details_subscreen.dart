@@ -294,11 +294,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       child: Hero(
                         tag: 'member_menu_avatar_${user.userId}',
                         child: CircleAvatar(
-                          radius: 20,
+                          radius: 28,
                           backgroundColor: colorScheme.primary.withOpacity(0.1),
                           child: UserAvatarBloc(
                             userId: user.userId,
-                            size: 40,
+                            size: 56,
                           ),
                         ),
                       ),
@@ -458,11 +458,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 16,
+                      radius: 28,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
                       child: UserAvatarBloc(
                         userId: user.userId,
-                        size: 32,
+                        size: 56,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -830,12 +830,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 20,
+                      radius: 28,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
                       child: GroupAvatarBloc(
                         roomId: widget.room.roomId,
                         memberIds: widget.room.members,
-                        size: 40,
+                        size: 56,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1100,11 +1100,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         ),
                       ),
                       child: CircleAvatar(
-                        radius: 22,
+                        radius: 28,
                         backgroundColor: colorScheme.primary.withOpacity(0.1),
                         child: UserAvatarBloc(
                           userId: user.userId,
-                          size: 44,
+                          size: 56,
                         ),
                       ),
                     ),
