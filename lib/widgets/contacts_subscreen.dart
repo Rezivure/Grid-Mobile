@@ -58,6 +58,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   bool _showCheckmark = false;
   bool _syncJustCompleted = false;
   SyncState? _previousSyncState;
+  bool _hasShownInitialLoading = false;
 
 
   @override
@@ -241,7 +242,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 }
               },
               builder: (context, state) {
-              if (state is ContactsLoading) {
+              if (state is ContactsLoading && !_hasShownInitialLoading) {
+                _hasShownInitialLoading = true;
                 return _buildLoadingState();
               }
 
@@ -796,6 +798,44 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     return false;
   }
 
+  void _showExpandedAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'contact_menu_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -858,12 +898,20 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatarBloc(
-                        userId: contact.userId,
-                        size: 40,
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedAvatar(context, contact.userId);
+                      },
+                      child: Hero(
+                        tag: 'contact_menu_avatar_${contact.userId}',
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: UserAvatarBloc(
+                            userId: contact.userId,
+                            size: 40,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
