@@ -85,6 +85,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   SharingPreferencesRepository? sharingPreferencesRepository;
   MapIconRepository? _mapIconRepository;
   MapIconSyncService? _mapIconSyncService;
+  SelectedSubscreenProvider? _subscreenProvider;
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
@@ -247,7 +248,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       // Still need to re-add listeners that might have been removed
       _locationManager?.addListener(_onLocationUpdate);
       _syncManager?.addListener(_checkAuthenticationStatus);
-      context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
+      _subscreenProvider = context.read<SelectedSubscreenProvider>();
+      _subscreenProvider?.addListener(_onSubscreenChanged);
       return;
     }
     
@@ -282,7 +284,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Initialize sync manager and listen for state changes
     _syncManager?.addListener(_onSyncStateChanged);
     _syncManager?.initialize();
-    
+
     // Queue orphaned data cleanup to run after sync completes
     _syncManager?.queuePostSyncOperation(() async {
       try {
@@ -395,14 +397,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   void _onSubscreenChanged() {
+    if (!mounted) return;
+
     // Reload icons when the selected subscreen changes
     _loadMapIcons();
-    
+
     // Clear selected icon if subscreen changes
-    setState(() {
-      _selectedMapIcon = null;
-      _selectedIconPosition = null;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedMapIcon = null;
+        _selectedIconPosition = null;
+      });
+    }
   }
 
   void _onSyncStateChanged() {
@@ -424,7 +430,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _locationManager?.removeListener(_onLocationUpdate);
     _syncManager?.removeListener(_checkAuthenticationStatus);
     _syncManager?.removeListener(_onSyncStateChanged);
-    context.read<SelectedSubscreenProvider>().removeListener(_onSubscreenChanged);
+    _subscreenProvider?.removeListener(_onSubscreenChanged);
     _mapController.dispose();
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
@@ -742,9 +748,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _showMapErrorDialog() {
+    if (!mounted) return;
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,

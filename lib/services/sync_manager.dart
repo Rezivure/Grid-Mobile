@@ -191,10 +191,14 @@ class SyncManager with ChangeNotifier {
       _setSyncState(SyncState.reconciling);
       await _reconcileLocalStateWithServer();
 
+      // Refresh contacts and groups after reconciliation
+      contactsBloc.add(RefreshContacts());
+      groupsBloc.add(RefreshGroups());
+
       // Start ongoing sync stream
       roomService.getAndUpdateDisplayName();
       await _startSyncStream();
-      
+
       // Mark as ready and process queued operations
       _isInitialized = true;
       _setSyncState(SyncState.ready);
@@ -351,6 +355,14 @@ class SyncManager with ChangeNotifier {
     _pendingMessages.clear();
     _isInitialized = false;
     _isSyncing = false;
+
+    // Clear the sync token so next login does a full sync
+    _sinceToken = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('sync_since_token');
+
+    // Reset sync state to uninitialized so it can start fresh
+    _syncState = SyncState.uninitialized;
 
     // Stop syncing
     await stopSync();
