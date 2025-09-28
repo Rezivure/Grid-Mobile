@@ -579,7 +579,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                     ),
                     child: UserAvatarBloc(
                       userId: contact.userId,
-                      size: 44,
+                      size: 56,
                     ),
                   ),
                   // Online status indicator
@@ -905,11 +905,11 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                       child: Hero(
                         tag: 'contact_menu_avatar_${contact.userId}',
                         child: CircleAvatar(
-                          radius: 20,
+                          radius: 28,
                           backgroundColor: colorScheme.primary.withOpacity(0.1),
                           child: UserAvatarBloc(
                             userId: contact.userId,
-                            size: 40,
+                            size: 56,
                           ),
                         ),
                       ),
