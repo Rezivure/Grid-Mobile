@@ -120,7 +120,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // Map style selector
   bool _showMapSelector = false;
-  String _currentMapStyle = 'base'; // 'base' or 'satellite'
+  String? _currentMapStyle; // null until loaded from preferences
   bool _isLoadingMapStyle = false;
 
   // Force map rebuild when coming from background
@@ -188,6 +188,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     await _initializeServices();
 
+    // Load map style preference FIRST before loading map provider
+    await _loadMapStylePreference();
+
     // Check if app was launched from background (terminated state)
     // This happens when background location updates wake the app
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
@@ -201,29 +204,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
 
     await _loadMapProvider();
-    _loadMapStylePreference();
 
-    if (wasLaunchedFromBackground) {
-      // Force complete map widget rebuild after services are ready
-      // Use multiple delays to ensure tiles have time to load
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          setState(() {
-            _mapKey = UniqueKey();
-            print('[MapTab] First map rebuild triggered');
-          });
-
-          // Do another rebuild shortly after to ensure tiles are loaded
-          Future.delayed(const Duration(milliseconds: 800), () {
-            if (mounted) {
-              setState(() {
-                _mapKey = UniqueKey();
-                print('[MapTab] Second map rebuild triggered for tile loading');
-              });
-            }
-          });
-        }
-      });
+    // Only force rebuild if actually launched from background AND tile provider exists
+    if (wasLaunchedFromBackground && _tileProvider != null) {
+      // Single setState to trigger UI update after everything is loaded
+      if (mounted) {
+        setState(() {
+          print('[MapTab] UI refreshed after background launch');
+        });
+      }
     }
   }
   
@@ -345,9 +334,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           // If map is ready and we haven't zoomed yet, do it now
           _zoom = 3.5; // Full country view for faster loading
           _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-          setState(() {
-            _initialZoomCalculated = true;
-          });
+          // Don't setState here - let _onLocationUpdate handle it to avoid double setState
+          _initialZoomCalculated = true;
         }
       });
     }
@@ -400,26 +388,31 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void _onLocationUpdate() {
     // Check if we can calculate zoom now
     if (!_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null) {
-      // First center on user immediately
-      if (!_initialZoomCalculated) {
-        _zoom = 3.5; // Full country view for faster loading
-        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-      }
-      
-      // Then adjust if we have user locations
+      // Mark as calculated immediately to prevent multiple calls
+      _initialZoomCalculated = true;
+
+      // Get user locations to determine optimal view
       final mapBloc = context.read<MapBloc>();
       final userLocations = mapBloc.state.userLocations;
+
       if (userLocations.isNotEmpty) {
+        // Calculate optimal view including contacts
         final result = _calculateOptimalZoomAndCenter(
-          _locationManager!.currentLatLng!, 
+          _locationManager!.currentLatLng!,
           userLocations
         );
         _zoom = result.zoom;
         _mapController.moveAndRotate(result.center, _zoom, 0);
+      } else {
+        // No contacts yet, just center on user
+        _zoom = 3.5; // Full country view for faster loading
+        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
       }
-      setState(() {
-        _initialZoomCalculated = true;
-      });
+
+      // Single setState at the end
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -527,44 +520,39 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _refreshSatelliteTokenIfNeeded();
     }
     
-    // Always reinitialize tile provider on resume to fix background launch rendering issues
-    if (state == AppLifecycleState.resumed && _tileProvider != null) {
-      print('[MapTab] App resumed - forcing complete map rebuild');
+    // Only reinitialize if app was paused for a significant time
+    if (state == AppLifecycleState.resumed && _pausedTime != null) {
+      final pauseDuration = DateTime.now().difference(_pausedTime!);
 
-      // Small delay to ensure we're fully in foreground
-      Future.delayed(const Duration(milliseconds: 400), () async {
-        if (mounted && _isMapReady) {
-          // Store current position
-          final currentCenter = _mapController.camera.center;
-          final currentZoom = _mapController.camera.zoom;
+      // Only rebuild if paused for more than 5 seconds (to handle background location wakes)
+      if (pauseDuration.inSeconds > 5 && _tileProvider != null) {
+        print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - rebuilding map');
 
-          // Clear and reload the tile provider
-          _tileProvider = null;
-          setState(() {});
+        // Single rebuild after short delay
+        Future.delayed(const Duration(milliseconds: 400), () async {
+          if (mounted && _isMapReady) {
+            // Store current position
+            final currentCenter = _mapController.camera.center;
+            final currentZoom = _mapController.camera.zoom;
 
-          await _loadMapProvider();
+            // Reload the tile provider
+            await _loadMapProvider();
 
-          // Force complete map widget rebuild by changing its key
-          setState(() {
-            _mapKey = UniqueKey();
-            print('[MapTab] Map rebuilt with new key after resume');
-          });
+            // Single map rebuild
+            setState(() {
+              _mapKey = UniqueKey();
+              print('[MapTab] Map rebuilt after resume');
+            });
 
-          // After rebuild, trigger a micro camera adjustment to force tile loading
-          Future.delayed(const Duration(milliseconds: 600), () {
-            if (mounted && _isMapReady && currentCenter != null) {
-              // Do a tiny zoom adjustment to trigger tile refresh
-              _mapController.move(currentCenter, currentZoom - 0.001);
-              Future.delayed(const Duration(milliseconds: 100), () {
-                if (mounted && _isMapReady) {
-                  _mapController.move(currentCenter, currentZoom);
-                  print('[MapTab] Triggered tile refresh with micro zoom adjustment');
-                }
-              });
-            }
-          });
-        }
-      });
+            // Restore position after rebuild
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted && _isMapReady && currentCenter != null) {
+                _mapController.move(currentCenter, currentZoom);
+              }
+            });
+          }
+        });
+      }
     }
   }
 
@@ -778,7 +766,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedStyle = prefs.getString(_mapStyleKey) ?? 'base';
-      
+
       // Check if user has an active subscription before loading satellite maps
       if (savedStyle == 'satellite') {
         final hasSubscription = await _subscriptionService.hasActiveSubscription();
@@ -786,35 +774,29 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           // Try to get a map token (will use cached if valid)
           final token = await _subscriptionService.getMapToken();
           if (token != null) {
-            setState(() {
-              _currentMapStyle = 'satellite';
-              _satelliteMapToken = token;
-            });
+            // Set satellite style without setState since we're in init
+            _currentMapStyle = 'satellite';
+            _satelliteMapToken = token;
           } else {
             // Failed to get token, revert to base maps
-            setState(() {
-              _currentMapStyle = 'base';
-            });
+            _currentMapStyle = 'base';
             await prefs.setString(_mapStyleKey, 'base');
           }
         } else {
           // No subscription, revert to base maps
-          setState(() {
-            _currentMapStyle = 'base';
-          });
+          _currentMapStyle = 'base';
           await prefs.setString(_mapStyleKey, 'base');
         }
       } else {
-        setState(() {
-          _currentMapStyle = savedStyle;
-        });
+        _currentMapStyle = savedStyle;
       }
     } catch (e) {
       // Default to base maps on error
-      setState(() {
-        _currentMapStyle = 'base';
-      });
+      _currentMapStyle = 'base';
     }
+
+    // If still null somehow, default to base
+    _currentMapStyle ??= 'base';
   }
 
   void _showMapErrorDialog() {
@@ -1325,11 +1307,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     },
                   ),
               children: [
-                // Show a subtle gray placeholder while tiles are loading
+                // Show a subtle gray placeholder while tiles are loading or style not yet determined
                 // This gives instant visual feedback like Google Maps
-                if (_tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
+                if (_currentMapStyle == null || _tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
                   Container(
-                    color: isDarkMode 
+                    color: isDarkMode
                       ? const Color(0xFF2C2C2C)  // Slightly lighter dark gray for visibility
                       : const Color(0xFFE8E8E8), // Light gray for light mode
                   ),
