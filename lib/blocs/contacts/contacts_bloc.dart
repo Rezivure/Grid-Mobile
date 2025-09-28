@@ -73,13 +73,27 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
       print("ContactsBloc: Found room $roomId for contact ${event.userId}");
 
       if (roomId != null) {
+        // Check if user is in any group rooms BEFORE doing any deletions
+        final allUserRooms = await userRepository.getUserRooms(event.userId);
+        final hasOtherRooms = allUserRooms.length > 1; // More than just the direct room
+        print("ContactsBloc: User ${event.userId} is in ${allUserRooms.length} total rooms");
+
+        // Now proceed with leaving and removing
         await roomService.leaveRoom(roomId);
         await userRepository.removeContact(event.userId);
-        final wasDeleted = await locationRepository.deleteUserLocationsIfNotInRooms(event.userId);
-        if (wasDeleted) {
-          userLocationProvider.removeUserLocation(event.userId);
-          mapBloc.add(RemoveUserLocation(event.userId));
+
+        // Only remove from map if they're not in any other rooms (groups)
+        if (!hasOtherRooms) {
+          print("ContactsBloc: User not in any groups, removing from map");
+          final wasDeleted = await locationRepository.deleteUserLocationsIfNotInRooms(event.userId);
+          if (wasDeleted) {
+            userLocationProvider.removeUserLocation(event.userId);
+            mapBloc.add(RemoveUserLocation(event.userId));
+          }
+        } else {
+          print("ContactsBloc: Keeping ${event.userId} on map - they're in ${allUserRooms.length - 1} group(s)");
         }
+
         await sharingPreferencesRepository.deleteSharingPreferences(event.userId, 'user');
         
         // Reload contacts and update cache
