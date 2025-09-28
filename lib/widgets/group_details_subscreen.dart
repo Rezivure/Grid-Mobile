@@ -768,6 +768,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         ),
         child: AddGroupMemberModal(
           roomId: widget.room.roomId,
+          groupName: widget.room.name.split(':').length >= 5
+              ? widget.room.name.split(':')[3]
+              : widget.room.name,
           userService: widget.userService,
           roomService: widget.roomService,
           userRepository: widget.userRepository,

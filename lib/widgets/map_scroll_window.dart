@@ -1088,6 +1088,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                               ),
                               child: AddGroupMemberModal(
                                 roomId: room.roomId,
+                                groupName: room.name.split(':').length >= 5
+                                    ? room.name.split(':')[3]
+                                    : room.name,
                                 roomService: _roomService,
                                 userService: _userService,
                                 userRepository: _userRepository,
@@ -1139,6 +1142,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                       ),
                       child: AddGroupMemberModal(
                         roomId: room.roomId,
+                        groupName: room.name.split(':').length >= 5
+                            ? room.name.split(':')[3]
+                            : room.name,
                         roomService: _roomService,
                         userService: _userService,
                         userRepository: _userRepository,
