@@ -69,20 +69,22 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     // Start animations with staggered delays
     _fadeController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
-      _scaleController.forward();
+      if (mounted) _scaleController.forward();
     });
     Future.delayed(const Duration(milliseconds: 600), () {
-      _slideController.forward();
+      if (mounted) _slideController.forward();
     });
     Future.delayed(const Duration(milliseconds: 1000), () {
-      _floatController.repeat(reverse: true);
+      if (mounted) _floatController.repeat(reverse: true);
     });
     
     // Avatar animation timer
     _avatarTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
-      setState(() {
-        _avatarUpdateIndex = DateTime.now().millisecondsSinceEpoch;
-      });
+      if (mounted) {
+        setState(() {
+          _avatarUpdateIndex = DateTime.now().millisecondsSinceEpoch;
+        });
+      }
     });
   }
 

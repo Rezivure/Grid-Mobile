@@ -20,6 +20,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
@@ -28,6 +30,12 @@ import 'package:grid_frontend/services/avatar_announcement_service.dart';
 import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_event.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'dart:io' show Platform;
@@ -478,6 +486,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final sharedPreferences = await SharedPreferences.getInstance();
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final syncManager = Provider.of<SyncManager>(context, listen: false);
+    final avatarBloc = context.read<AvatarBloc>();
+    final contactsBloc = context.read<ContactsBloc>();
+    final groupsBloc = context.read<GroupsBloc>();
+    final invitationsBloc = context.read<InvitationsBloc>();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -487,31 +499,92 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed ?? false) {
       try {
-        // Stop location tracking first
+        print("[Logout] Starting logout process...");
+
+        // 1. Stop all active services immediately
+        print("[Logout] Stopping location tracking...");
         locationManager.stopTracking();
 
-        // Clear sync manager state
-        await syncManager.clearAllState();
+        // 2. Stop sync manager and clear its state
+        print("[Logout] Stopping sync manager...");
         await syncManager.stopSync();
+        // Wait a moment to ensure sync has stopped
+        await Future.delayed(Duration(milliseconds: 100));
 
-        // Clear database
-        await databaseService.deleteAndReinitialize();
+        print("[Logout] Clearing sync state...");
+        await syncManager.clearAllState();
+        syncManager.clearAllRoomMessages();
 
-        // Clear shared preferences
-        await sharedPreferences.clear();
+        // 3. Clear all BLoC states before touching databases
+        print("[Logout] Clearing BLoC states...");
+        avatarBloc.add(ClearAvatarCache());
+        invitationsBloc.add(ClearInvitations());
 
+        // Clear static caches
+        _avatarCache.clear();
+        _avatarUriCache.clear();
+
+        // Wait for BLoC events to process
+        await Future.delayed(Duration(milliseconds: 100));
+
+        // 4. Logout from Matrix client (this handles its own database)
+        print("[Logout] Logging out from Matrix...");
         try {
           if (client.isLogged()) {
             await client.logout();
-            print("Logout successful");
+            print("[Logout] Matrix logout successful");
           } else {
-            print("Client already logged out");
+            print("[Logout] Client already logged out");
           }
         } catch (e) {
-          print("Error during logout: $e");
+          print("[Logout] Error during Matrix logout: $e");
         }
 
+        // 5. Clear local app database AFTER Matrix logout
+        print("[Logout] Clearing local database...");
+        await databaseService.deleteAndReinitialize();
+        print("[Logout] Database cleared");
 
+        // After logout, try to clean up the Matrix database file
+        try {
+          // Small delay to ensure database is closed
+          await Future.delayed(Duration(milliseconds: 100));
+
+          final dir = await getApplicationSupportDirectory();
+          final matrixDbPath = path.join(dir.path, 'grid_app_matrix.db');
+          final matrixDbFile = File(matrixDbPath);
+          if (await matrixDbFile.exists()) {
+            await matrixDbFile.delete();
+            print("Deleted Matrix database file");
+          }
+
+          // Also check for any related database files (journal, wal, etc)
+          final dbJournalFile = File('$matrixDbPath-journal');
+          if (await dbJournalFile.exists()) {
+            await dbJournalFile.delete();
+          }
+          final dbWalFile = File('$matrixDbPath-wal');
+          if (await dbWalFile.exists()) {
+            await dbWalFile.delete();
+          }
+          final dbShmFile = File('$matrixDbPath-shm');
+          if (await dbShmFile.exists()) {
+            await dbShmFile.delete();
+          }
+        } catch (e) {
+          print("Note: Could not delete Matrix database files: $e");
+          // This is not critical - the database will be recreated on next login
+        }
+
+        // 6. Clear shared preferences (but preserve some app settings if needed)
+        print("[Logout] Clearing preferences...");
+        final preserveKeys = ['app_theme', 'onboarding_complete']; // Add keys you want to preserve
+        final keysToRemove = sharedPreferences.getKeys().where((key) => !preserveKeys.contains(key)).toList();
+        for (final key in keysToRemove) {
+          await sharedPreferences.remove(key);
+        }
+
+        print("[Logout] Logout complete, navigating to welcome screen");
         // Navigate to welcome screen
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } catch (e) {
