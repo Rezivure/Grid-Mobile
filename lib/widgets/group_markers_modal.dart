@@ -174,9 +174,6 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
     final colorScheme = theme.colorScheme;
     
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
-      ),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),

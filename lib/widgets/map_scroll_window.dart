@@ -151,7 +151,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         value: context.read<InvitationsBloc>(),
         child: Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(modalContext).size.height * 0.8,
+            maxHeight: MediaQuery.of(modalContext).size.height * 0.95,
           ),
           decoration: BoxDecoration(
             color: Theme.of(modalContext).colorScheme.surface,
@@ -889,7 +889,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
         ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -1018,7 +1018,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     backgroundColor: Colors.transparent,
                     builder: (context) => Container(
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
                       ),
                       child: GroupProfileModal(
                         room: room,
@@ -1031,12 +1031,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (context) => AddGroupMemberModal(
-                              roomId: room.roomId,
-                              roomService: _roomService,
-                              userService: _userService,
-                              userRepository: _userRepository,
-                              onInviteSent: null,
+                            builder: (context) => Container(
+                              constraints: BoxConstraints(
+                                maxHeight: MediaQuery.of(context).size.height * 0.95,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              child: AddGroupMemberModal(
+                                roomId: room.roomId,
+                                roomService: _roomService,
+                                userService: _userService,
+                                userRepository: _userRepository,
+                                onInviteSent: null,
+                              ),
                             ),
                           );
                         },
@@ -1073,12 +1082,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (context) => AddGroupMemberModal(
-                      roomId: room.roomId,
-                      roomService: _roomService,
-                      userService: _userService,
-                      userRepository: _userRepository,
-                      onInviteSent: null,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: AddGroupMemberModal(
+                        roomId: room.roomId,
+                        roomService: _roomService,
+                        userService: _userService,
+                        userRepository: _userRepository,
+                        onInviteSent: null,
+                      ),
                     ),
                   );
                 },
@@ -1112,12 +1130,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (BuildContext context) {
-                      return LocationHistoryModal(
-                        userId: room.roomId,
-                        userName: room.name.split(':').length >= 5
-                            ? room.name.split(':')[3]
-                            : room.name,
-                        memberIds: filteredMembers.map((m) => m.userId as String).toList(),
+                      return Container(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.95,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        child: LocationHistoryModal(
+                          userId: room.roomId,
+                          userName: room.name.split(':').length >= 5
+                              ? room.name.split(':')[3]
+                              : room.name,
+                          memberIds: filteredMembers.map((m) => m.userId as String).toList(),
+                        ),
                       );
                     },
                   );
@@ -1151,12 +1178,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (context) => GroupMarkersModal(
-                      roomId: room.roomId,
-                      roomName: room.name.split(':').length >= 5
-                          ? room.name.split(':')[3]
-                          : room.name,
-                      mapIconRepository: MapIconRepository(DatabaseService()),
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: GroupMarkersModal(
+                        roomId: room.roomId,
+                        roomName: room.name.split(':').length >= 5
+                            ? room.name.split(':')[3]
+                            : room.name,
+                        mapIconRepository: MapIconRepository(DatabaseService()),
+                      ),
                     ),
                   );
                 },

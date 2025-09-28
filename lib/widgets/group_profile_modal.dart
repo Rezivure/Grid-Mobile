@@ -373,7 +373,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     Container(
                       width: 60,
@@ -1300,7 +1300,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Modern handle
             Container(
@@ -1313,7 +1313,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
               ),
             ),
             
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(

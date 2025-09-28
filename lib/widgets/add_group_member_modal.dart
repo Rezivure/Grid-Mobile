@@ -661,7 +661,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Modern handle
             Container(
@@ -674,7 +674,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               ),
             ),
 
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(
                   left: 24,

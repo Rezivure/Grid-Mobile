@@ -584,7 +584,6 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     final colorScheme = theme.colorScheme;
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: const BorderRadius.only(
