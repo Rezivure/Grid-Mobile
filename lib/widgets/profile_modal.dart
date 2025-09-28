@@ -61,6 +61,44 @@ class _ProfileModalState extends State<ProfileModal> {
     }
   }
 
+  void _showExpandedAvatar(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'avatar_$_userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: _userId!,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -160,12 +198,20 @@ class _ProfileModalState extends State<ProfileModal> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundColor: colorScheme.primary.withOpacity(0.1),
-                            child: UserAvatarBloc(
-                              userId: _userId!,
-                              size: 60,
+                          GestureDetector(
+                            onTap: () {
+                              _showExpandedAvatar(context);
+                            },
+                            child: Hero(
+                              tag: 'avatar_$_userId',
+                              child: CircleAvatar(
+                                radius: 30,
+                                backgroundColor: colorScheme.primary.withOpacity(0.1),
+                                child: UserAvatarBloc(
+                                  userId: _userId!,
+                                  size: 60,
+                                ),
+                              ),
                             ),
                           ),
                           SizedBox(width: 16),

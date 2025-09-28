@@ -137,6 +137,44 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
+  void _showExpandedAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'member_menu_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _kickMember(String userId) async {
     try {
       final success = await widget.roomService.kickMemberFromRoom(
@@ -236,12 +274,20 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatarBloc(
-                        userId: user.userId,
-                        size: 40,
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedAvatar(context, user.userId);
+                      },
+                      child: Hero(
+                        tag: 'member_menu_avatar_${user.userId}',
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: UserAvatarBloc(
+                            userId: user.userId,
+                            size: 40,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),

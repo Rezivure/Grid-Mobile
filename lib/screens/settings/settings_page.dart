@@ -130,6 +130,45 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  void _showExpandedAvatar(BuildContext context) {
+    final client = Provider.of<Client>(context, listen: false);
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'settings_avatar_${client.userID}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: client.userID ?? '',
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _toggleBatterySaver(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final prefs = await SharedPreferences.getInstance();
@@ -2306,16 +2345,24 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           Stack(
             children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colorScheme.primary.withOpacity(0.1),
-                ),
-                child: UserAvatarBloc(
-                  userId: client.userID ?? '',
-                  size: 100,
+              GestureDetector(
+                onTap: () {
+                  _showExpandedAvatar(context);
+                },
+                child: Hero(
+                  tag: 'settings_avatar_${client.userID}',
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colorScheme.primary.withOpacity(0.1),
+                    ),
+                    child: UserAvatarBloc(
+                      userId: client.userID ?? '',
+                      size: 100,
+                    ),
+                  ),
                 ),
               ),
               Positioned(
