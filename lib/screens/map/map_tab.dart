@@ -121,6 +121,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Map style selector
   bool _showMapSelector = false;
   String _currentMapStyle = 'base'; // 'base' or 'satellite'
+  bool _isLoadingMapStyle = false;
   
   // Icon selection wheel
   bool _showIconWheel = false;
@@ -2017,14 +2018,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   Widget _buildMapSelector(bool isDarkMode, ColorScheme colorScheme) {
     return Container(
-      padding: EdgeInsets.all(12),
+      width: 220,
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDarkMode ? colorScheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
             offset: Offset(0, 4),
           ),
         ],
@@ -2032,39 +2034,100 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Base Map Option
-          _buildMapOption(
-            title: 'Standard Map',
-            imagePath: 'assets/extras/basemaps.png',
-            isSelected: _currentMapStyle == 'base',
-            onTap: () {
-              _selectMapStyle('base');
-            },
-            colorScheme: colorScheme,
-            isDarkMode: isDarkMode,
+          // Header with title and close button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Map Layers',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showMapSelector = false;
+                  });
+                },
+                child: Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 8),
-          // Satellite Map Option
-          _buildMapOption(
-            title: 'Satellite Map',
-            imagePath: 'assets/extras/satellite.png',
-            isSelected: _currentMapStyle == 'satellite',
-            showStar: true,
-            onTap: () async {
-              final hasSubscription = await _subscriptionService.hasActiveSubscription();
-              if (!hasSubscription) {
-                // Navigate to subscription page
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                );
-              } else {
-                _selectMapStyle('satellite');
-              }
-            },
-            colorScheme: colorScheme,
-            isDarkMode: isDarkMode,
-          ),
+          SizedBox(height: 12),
+
+          // Loading overlay if switching maps
+          if (_isLoadingMapStyle)
+            Container(
+              height: 120,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                      strokeWidth: 2,
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Loading map...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            // Base Map Option
+            _buildMapOption(
+              title: 'Standard Map',
+              imagePath: 'assets/extras/basemaps.png',
+              isSelected: _currentMapStyle == 'base',
+              onTap: _isLoadingMapStyle ? null : () {
+                _selectMapStyle('base');
+              },
+              colorScheme: colorScheme,
+              isDarkMode: isDarkMode,
+            ),
+            SizedBox(height: 8),
+            // Satellite Map Option
+            _buildMapOption(
+              title: 'Satellite Map',
+              imagePath: 'assets/extras/satellite.png',
+              isSelected: _currentMapStyle == 'satellite',
+              showStar: true,
+              onTap: _isLoadingMapStyle ? null : () async {
+                final hasSubscription = await _subscriptionService.hasActiveSubscription();
+                if (!hasSubscription) {
+                  // Navigate to subscription page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+                  );
+                } else {
+                  _selectMapStyle('satellite');
+                }
+              },
+              colorScheme: colorScheme,
+              isDarkMode: isDarkMode,
+            ),
+          ],
         ],
       ),
     );
@@ -2074,7 +2137,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     required String title,
     required String imagePath,
     required bool isSelected,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     required ColorScheme colorScheme,
     required bool isDarkMode,
     bool showStar = false,
@@ -2143,21 +2206,38 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   Future<void> _selectMapStyle(String style) async {
-    if (style == 'satellite') {
-      // Check subscription and get token
-      final hasSubscription = await _subscriptionService.hasActiveSubscription();
-      if (!hasSubscription) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-        );
-        return;
-      }
-      
-      // Try to get a map token (will use cached if valid)
-      final token = await _subscriptionService.getMapToken();
-      if (token == null) {
-        // Failed to get token, navigate to subscription page
+    // Don't allow switching if already loading
+    if (_isLoadingMapStyle) return;
+
+    // Don't switch if already on the selected style
+    if (_currentMapStyle == style) return;
+
+    setState(() {
+      _isLoadingMapStyle = true;
+    });
+
+    try {
+      if (style == 'satellite') {
+        // Check subscription and get token
+        final hasSubscription = await _subscriptionService.hasActiveSubscription();
+        if (!hasSubscription) {
+          setState(() {
+            _isLoadingMapStyle = false;
+          });
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+          );
+          return;
+        }
+
+        // Try to get a map token (will use cached if valid)
+        final token = await _subscriptionService.getMapToken();
+        if (token == null) {
+          setState(() {
+            _isLoadingMapStyle = false;
+          });
+          // Failed to get token, navigate to subscription page
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => SubscriptionScreen()),
@@ -2172,6 +2252,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         _satelliteMapToken = token;
         _currentMapStyle = style;
         _showMapSelector = false;
+        _isLoadingMapStyle = false;
       });
       
       // Save the preference
@@ -2199,6 +2280,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         _currentMapStyle = style;
         _showMapSelector = false;
         _satelliteMapToken = null; // Clear token when switching back
+        _isLoadingMapStyle = false;
       });
       
       // Save the preference
@@ -2209,6 +2291,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         SnackBar(
           content: Text('Switched to base maps'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+    } catch (e) {
+      // Handle any errors and reset loading state
+      print('Error switching map style: $e');
+      setState(() {
+        _isLoadingMapStyle = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to switch map layer'),
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
