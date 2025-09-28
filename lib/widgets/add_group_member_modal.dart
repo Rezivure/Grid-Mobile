@@ -89,7 +89,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   }
 
   void _addMember() async {
-    const int MAX_GROUP_MEMBERS = 15;
+    // No hard limit on group members
+    // const int MAX_GROUP_MEMBERS = 15;
 
     var username = _controller.text.trim().toLowerCase();
     bool isCustomServer = isCustomHomeserver();
@@ -156,23 +157,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         return;
       }
 
-      // Check member limit
-      final memberCount = room
-          .getParticipants()
-          .where((member) =>
-              member.membership == Membership.join ||
-              member.membership == Membership.invite)
-          .length;
-
-      if (memberCount >= MAX_GROUP_MEMBERS) {
-        if (mounted) {
-          setState(() {
-            _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
-            _isProcessing = false;
-          });
-        }
-        return;
-      }
+      // No member limit check - groups can have unlimited members
+      // Previously limited to 15, now removed per request
 
       // Verify user exists
       if (!await widget.userService.userExists(username)) {
