@@ -94,6 +94,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   LatLng? _initialCenter;  // Store the calculated center point
   int _lastKnownUserLocationsCount = 0;  // Track when contacts first load from sync
 
+  // Track if we're at the reset view for FAB highlighting
+  bool _isAtResetView = true;
+  LatLng? _resetCenter;
+  double? _resetZoom;
+
   bool _isPingOnCooldown = false;
   int _pingCooldownSeconds = 5;
   Timer? _pingCooldownTimer;
@@ -402,16 +407,22 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           userLocations
         );
         _zoom = result.zoom;
+        _resetCenter = result.center;
+        _resetZoom = result.zoom;
         _mapController.moveAndRotate(result.center, _zoom, 0);
       } else {
         // No contacts yet, just center on user
         _zoom = 3.5; // Full country view for faster loading
+        _resetCenter = _locationManager!.currentLatLng!;
+        _resetZoom = 3.5;
         _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
       }
 
       // Single setState at the end
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _isAtResetView = true;
+        });
       }
     }
   }
@@ -906,6 +917,46 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
 
+  void _resetToInitialZoom() {
+    // Reset to initial smart zoom calculation
+    if (_locationManager?.currentLatLng != null) {
+      final mapBloc = context.read<MapBloc>();
+      final userLocations = mapBloc.state.userLocations;
+      final colorScheme = Theme.of(context).colorScheme;
+
+      LatLng center;
+      double zoom;
+
+      if (userLocations.isNotEmpty) {
+        // Calculate optimal view including contacts
+        final result = _calculateOptimalZoomAndCenter(
+          _locationManager!.currentLatLng!,
+          userLocations
+        );
+        center = result.center;
+        zoom = result.zoom;
+      } else {
+        // No contacts, just center on user at country level
+        center = _locationManager!.currentLatLng!;
+        zoom = 3.5;
+      }
+
+      // Store reset position and zoom
+      _resetCenter = center;
+      _resetZoom = zoom;
+      _zoom = zoom;
+
+      // Move to reset position
+      _mapController.moveAndRotate(center, zoom, 0);
+
+      // Mark as at reset view and unlock follow mode
+      setState(() {
+        _isAtResetView = true;
+        _followUser = false;  // Unlock follow mode when resetting
+      });
+    }
+  }
+
   // Returns both optimal zoom and center point
   MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
     print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
@@ -1211,6 +1262,25 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         setState(() {
                           _currentMapRotation = position.rotation ?? 0.0;
                         });
+                      }
+
+                      // Check if we've moved away from reset view
+                      if (_resetCenter != null && _resetZoom != null && hasGesture) {
+                        final distance = const Distance().as(
+                          LengthUnit.Meter,
+                          _resetCenter!,
+                          position.center!,
+                        );
+
+                        // Consider moved if more than 100m away or zoom changed by more than 0.5
+                        final zoomDiff = (position.zoom - _resetZoom!).abs();
+                        final hasMoved = distance > 100 || zoomDiff > 0.5;
+
+                        if (_isAtResetView != !hasMoved) {
+                          setState(() {
+                            _isAtResetView = !hasMoved;
+                          });
+                        }
                       }
                     },
                     initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
@@ -1814,27 +1884,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 children: [
                   _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
-                  FloatingActionButton(
-                    heroTag: "centerUserBtn",
-                    backgroundColor: _followUser
-                        ? colorScheme.primary
-                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                    onPressed: () {
-                      // Center on user with same zoom level as other users
-                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
-                      setState(() {
-                        _followUser = true;
-                      });
-                    },
-                    child: Icon(
-                        Icons.my_location,
-                        color: _followUser
-                            ? Colors.white
-                            : (isDarkMode ? colorScheme.primary : Colors.black)
-                    ),
-                    mini: true,
-                  ),
-                  const SizedBox(height: 10),
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -1896,6 +1945,49 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                       mini: true,
                     ),
+                  const SizedBox(height: 10),
+                  // Center on user button
+                  FloatingActionButton(
+                    heroTag: 'center_on_user_fab',
+                    backgroundColor: _followUser
+                      ? colorScheme.primary
+                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                    onPressed: () {
+                      // Center on user with same zoom level as other users
+                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
+                      setState(() {
+                        _followUser = true;
+                        _isAtResetView = false;  // Unhighlight globe when centering on user
+                      });
+                    },
+                    child: Icon(
+                      Icons.my_location,
+                      color: _followUser
+                        ? Colors.white
+                        : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                    tooltip: 'Center on me',
+                    elevation: _followUser ? 6 : 2,
+                    mini: true,
+                  ),
+                  const SizedBox(height: 10),
+                  // Globe reset button
+                  FloatingActionButton(
+                    heroTag: 'reset_view_fab',
+                    backgroundColor: _isAtResetView
+                      ? colorScheme.primary
+                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                    onPressed: _resetToInitialZoom,
+                    child: Icon(
+                      Icons.public,
+                      color: _isAtResetView
+                        ? Colors.white
+                        : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                    tooltip: 'Reset view',
+                    elevation: _isAtResetView ? 6 : 2,
+                    mini: true,
+                  ),
                 ],
               ),
             ),
