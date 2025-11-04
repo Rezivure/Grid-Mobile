@@ -443,43 +443,37 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             final colorScheme = Theme.of(context).colorScheme;
             return Dialog(
               backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(horizontal: 120),
               child: Container(
-                padding: EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                            strokeWidth: 3,
-                          ),
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: colorScheme.primary,
+                          strokeWidth: 3,
                         ),
                       ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Uploading',
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                      SizedBox(height: 16),
+                      Text(
+                        'Uploading',
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -784,27 +778,15 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                     child: GestureDetector(
                       onTap: _pickAndUploadGroupAvatar,
                       child: Container(
-                        width: 28,
-                        height: 28,
+                        padding: EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: colorScheme.surface,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.shadow.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.camera_alt,
-                          color: colorScheme.onPrimary,
                           size: 16,
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
