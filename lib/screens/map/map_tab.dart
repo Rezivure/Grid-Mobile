@@ -1063,6 +1063,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         if (state.center != null && _isMapReady) {
           setState(() {
             _followUser = false;  // Turn off following when moving to new location
+            _isAtResetView = false;  // Turn off reset view when moving to a user
             _targetUserId = state.selectedUserId;
           });
           
@@ -1257,6 +1258,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           _followUser = false;
                         });
                       }
+
                       // Track map rotation changes
                       if (position.rotation != _currentMapRotation) {
                         setState(() {
@@ -1264,8 +1266,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         });
                       }
 
-                      // Check if we've moved away from reset view
-                      if (_resetCenter != null && _resetZoom != null && hasGesture) {
+                      // Check if we've moved away from reset view (on ANY movement, not just gestures)
+                      if (_resetCenter != null && _resetZoom != null) {
                         final distance = const Distance().as(
                           LengthUnit.Meter,
                           _resetCenter!,
@@ -1276,9 +1278,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         final zoomDiff = (position.zoom - _resetZoom!).abs();
                         final hasMoved = distance > 100 || zoomDiff > 0.5;
 
-                        if (_isAtResetView != !hasMoved) {
+                        if (_isAtResetView && hasMoved) {
                           setState(() {
-                            _isAtResetView = !hasMoved;
+                            _isAtResetView = false;
                           });
                         }
                       }
@@ -1928,8 +1930,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
+                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? '')) ...[
+                    const SizedBox(height: 10),
                     FloatingActionButton(
                       heroTag: "mapSelectorBtn",
                       backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
@@ -1945,6 +1947,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                       mini: true,
                     ),
+                  ],
                   const SizedBox(height: 10),
                   // Center on user button
                   FloatingActionButton(
