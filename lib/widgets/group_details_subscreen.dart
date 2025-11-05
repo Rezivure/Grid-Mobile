@@ -729,6 +729,17 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       await widget.roomService.leaveRoom(widget.room.roomId);
       if (mounted) {
         context.read<GroupsBloc>().add(RefreshGroups());
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('You have left the group'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
       }
       widget.onGroupLeft();
     } catch (e) {
