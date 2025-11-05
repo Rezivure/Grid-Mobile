@@ -27,10 +27,16 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'group_avatar.dart';
 import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
+import 'group_profile_modal.dart';
+import 'location_history_modal.dart';
+import 'add_group_member_modal.dart';
+import 'group_markers_modal.dart';
+import '../repositories/map_icon_repository.dart';
+import '../services/database_service.dart';
 
 class MapScrollWindow extends StatefulWidget {
   final bool isEditingMapIcon;
-  
+
   const MapScrollWindow({
     Key? key,
     this.isEditingMapIcon = false,
@@ -102,12 +108,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
+
+      // Preload group avatars after frame is built
+      _preloadGroupAvatars();
     });
-    
+
     // Load and cache user ID once
     _loadUserId();
   }
-  
+
   Future<void> _loadUserId() async {
     final userId = await _userService.getMyUserId();
     if (mounted) {
@@ -115,6 +124,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         _cachedUserId = userId;
       });
     }
+  }
+
+  // Preload all group avatars to avoid flicker
+  Future<void> _preloadGroupAvatars() async {
+    // No need for implementation here anymore - we'll use Offstage widgets
   }
 
   @override
@@ -137,7 +151,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         value: context.read<InvitationsBloc>(),
         child: Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(modalContext).size.height * 0.8,
+            maxHeight: MediaQuery.of(modalContext).size.height * 0.95,
           ),
           decoration: BoxDecoration(
             color: Theme.of(modalContext).colorScheme.surface,
@@ -164,14 +178,41 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
-    return DraggableScrollableSheet(
-      controller: _scrollableController,
-      initialChildSize: 0.3,
-      minChildSize: 0.3,
-      maxChildSize: 0.7,
-      builder: (BuildContext context, ScrollController scrollController) {
-        return NotificationListener<ScrollNotification>(
+    return Stack(
+      children: [
+        // Preload group avatars offstage to prevent flicker
+        BlocBuilder<GroupsBloc, GroupsState>(
+          builder: (context, state) {
+            if (state is GroupsLoaded) {
+              return Offstage(
+                offstage: true,
+                child: Row(
+                  children: state.groups.map((group) {
+                    return GroupAvatarBloc(
+                      key: ValueKey('preload_${group.roomId}'),
+                      roomId: group.roomId,
+                      memberIds: group.members,
+                      size: 36,
+                    );
+                  }).toList(),
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        // Main draggable sheet with FAB
+        Stack(
+          children: [
+            DraggableScrollableSheet(
+              controller: _scrollableController,
+              initialChildSize: 0.45,
+              minChildSize: 0.3,
+              maxChildSize: 0.7,
+              builder: (BuildContext context, ScrollController scrollController) {
+                return NotificationListener<ScrollNotification>(
           onNotification: (notification) {
             if (notification is ScrollStartNotification) {
               _isScrollingContent = true;
@@ -264,7 +305,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),  // End of AnimatedOpacity
         );  // End of NotificationListener
       },
-    );
+    ),  // End of DraggableScrollableSheet
+    ],  // End of Stack children
+    ),  // End of Stack
+    ],
+  );
   }
 
   Widget _buildModernHeader(ColorScheme colorScheme) {
@@ -335,16 +380,26 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildActionButton(
-                icon: Icons.person_add_outlined,
-                onPressed: () => _showAddFriendModal(context),
-                colorScheme: colorScheme,
-              ),
+              // Show group icon when viewing a group, otherwise show add contact
+              _selectedOption == SubscreenOption.groupDetails && _selectedRoom != null
+                ? _buildGroupActionButton(
+                    icon: Icons.group_outlined,
+                    onPressed: () => _showGroupDetailsMenu(context),
+                    colorScheme: colorScheme,
+                    tooltip: 'Group Settings',
+                  )
+                : _buildActionButton(
+                    icon: Icons.person_add_outlined,
+                    onPressed: () => _showAddFriendModal(context),
+                    colorScheme: colorScheme,
+                    tooltip: 'Add Contact',
+                  ),
               const SizedBox(width: 8),
               _buildActionButton(
                 icon: Icons.qr_code_scanner_outlined,
                 onPressed: () => _showProfileModal(context),
                 colorScheme: colorScheme,
+                tooltip: 'My QR Code',
               ),
               const SizedBox(width: 8),
               _buildNotificationButton(colorScheme),
@@ -359,6 +414,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     required IconData icon,
     required VoidCallback onPressed,
     required ColorScheme colorScheme,
+    String? tooltip,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -380,6 +436,38 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           minWidth: 40,
           minHeight: 40,
         ),
+        tooltip: tooltip,
+      ),
+    );
+  }
+
+  Widget _buildGroupActionButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required ColorScheme colorScheme,
+    String? tooltip,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.primary.withOpacity(0.3),
+        ),
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: colorScheme.primary,
+          size: 20,
+        ),
+        onPressed: onPressed,
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 40,
+        ),
+        tooltip: tooltip,
       ),
     );
   }
@@ -519,9 +607,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               },
             ),
           );
-      },
-    );
-  }
+        },
+      );
+    }
 
   Widget _buildModernContactOption(ColorScheme colorScheme, String userId) {
     final isSelected = _selectedLabel == 'My Contacts';
@@ -540,15 +628,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       },
       child: Container(
         width: 80,
-        height: 84,
+        height: 100,
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: isSelected 
-              ? colorScheme.primaryContainer 
+          color: isSelected
+              ? colorScheme.primaryContainer
               : colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected 
+            color: isSelected
                 ? colorScheme.primary.withOpacity(0.3)
                 : colorScheme.outline.withOpacity(0.1),
             width: isSelected ? 2 : 1,
@@ -566,21 +654,22 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             SizedBox(
-              width: 36,
-              height: 36,
+              width: 48,
+              height: 48,
               child: UserAvatarBloc(
                 userId: userId,
-                size: 36,
+                size: 48,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             SizedBox(
               width: 68, // Increased width to fit "Contacts" text
               child: Text(
                 'Contacts',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: isSelected 
+                  fontSize: 11,
+                  height: 1.0,
+                  color: isSelected
                       ? colorScheme.onPrimaryContainer
                       : colorScheme.onSurface,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -623,7 +712,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         },
         child: Container(
           width: 80,
-          height: 84,
+          height: 100,
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: isSelected 
@@ -652,12 +741,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 clipBehavior: Clip.none,
                 children: [
                   SizedBox(
-                    width: 36,
-                    height: 36,
+                    width: 48,
+                    height: 48,
                     child: GroupAvatarBloc(
                       roomId: room.roomId,
                       memberIds: room.members,
-                      size: 36,
+                      size: 48,
                     ),
                   ),
                   if (room.expirationTimestamp > 0)
@@ -686,14 +775,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               SizedBox(
                 width: 68, // Increased width to match contacts
                 child: Text(
                   groupName,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: isSelected 
+                    fontSize: 11,
+                    height: 1.0,
+                    color: isSelected
                         ? colorScheme.onPrimaryContainer
                         : colorScheme.onSurface,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -758,6 +848,45 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     });
   }
 
+  void _showExpandedGroupAvatar(BuildContext context, GridRoom.Room room) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'group_drawer_avatar_${room.roomId}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: GroupAvatarBloc(
+                        roomId: room.roomId,
+                        memberIds: room.members,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -806,7 +935,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
         ),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -824,6 +953,394 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),
         ),
       ),
+    );
+  }
+
+
+  void _showGroupDetailsMenu(BuildContext context) {
+    if (_selectedRoom == null) return;
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final room = _selectedRoom!;
+
+    // Get current members from the groups bloc
+    final groupsState = context.read<GroupsBloc>().state;
+    final filteredMembers = groupsState is GroupsLoaded && groupsState.selectedRoomMembers != null
+        ? groupsState.selectedRoomMembers!.where((user) =>
+            user.userId != _cachedUserId).toList()
+        : [];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Group info header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedGroupAvatar(context, room);
+                      },
+                      child: Hero(
+                        tag: 'group_drawer_avatar_${room.roomId}',
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: GroupAvatarBloc(
+                            roomId: room.roomId,
+                            memberIds: room.members,
+                            size: 40,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            room.name.split(':').length >= 5
+                                ? room.name.split(':')[3]
+                                : room.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '${filteredMembers.length} members',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Menu options - EXACT MATCH to GroupDetailsSubscreen menu
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Group Settings',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
+                      ),
+                      child: GroupProfileModal(
+                        room: room,
+                        roomService: _roomService,
+                        sharingPreferencesRepo: sharingPreferencesRepository,
+                        onMemberAdded: () {
+                          Navigator.pop(context);
+                          // Show add member modal
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => Container(
+                              constraints: BoxConstraints(
+                                maxHeight: MediaQuery.of(context).size.height * 0.95,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              child: AddGroupMemberModal(
+                                roomId: room.roomId,
+                                groupName: room.name.split(':').length >= 5
+                                    ? room.name.split(':')[3]
+                                    : room.name,
+                                roomService: _roomService,
+                                userService: _userService,
+                                userRepository: _userRepository,
+                                onInviteSent: null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // Add Member
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.person_add_outlined,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Add Member',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: AddGroupMemberModal(
+                        roomId: room.roomId,
+                        groupName: room.name.split(':').length >= 5
+                            ? room.name.split(':')[3]
+                            : room.name,
+                        roomService: _roomService,
+                        userService: _userService,
+                        userRepository: _userRepository,
+                        onInviteSent: null,
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // View History
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.history,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View History',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (BuildContext context) {
+                      return Container(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.95,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        child: LocationHistoryModal(
+                          userId: room.roomId,
+                          userName: room.name.split(':').length >= 5
+                              ? room.name.split(':')[3]
+                              : room.name,
+                          memberIds: filteredMembers.map((m) => m.userId as String).toList(),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+
+              // View Markers
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.location_on,
+                    color: colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'View Markers',
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => Container(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.95,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: GroupMarkersModal(
+                        roomId: room.roomId,
+                        roomName: room.name.split(':').length >= 5
+                            ? room.name.split(':')[3]
+                            : room.name,
+                        mapIconRepository: MapIconRepository(DatabaseService()),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // Leave Group
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.exit_to_app_outlined,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Leave Group',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  // Show leave confirmation
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        backgroundColor: colorScheme.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text('Leave Group'),
+                        content: Text('Are you sure you want to leave "${room.name.split(':').length >= 5 ? room.name.split(':')[3] : room.name}"?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorScheme.error,
+                              foregroundColor: colorScheme.onError,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('Leave'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (confirmed == true) {
+                    try {
+                      await _roomService.leaveRoom(room.roomId);
+                      _navigateToContacts();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Left group successfully')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error leaving group: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+              ),
+
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 

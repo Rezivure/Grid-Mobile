@@ -421,7 +421,7 @@ class MessageProcessor {
         final mediaId = mxcUri.path.substring(1);
         
         final file = await client.getContent(serverName, mediaId);
-        encryptedData = Uint8List.fromList(file.data);
+        encryptedData = file.data;
       } else {
         // Download from R2
         final response = await http.get(Uri.parse(avatarUrl));
@@ -467,7 +467,7 @@ class MessageProcessor {
         final mediaId = mxcUri.path.substring(1);
         
         final file = await client.getContent(serverName, mediaId);
-        encryptedData = Uint8List.fromList(file.data);
+        encryptedData = file.data;
       } else {
         // Download from R2
         final response = await http.get(Uri.parse(avatarUrl));

@@ -137,6 +137,54 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
+  Future<bool> _isUserAContact(String userId) async {
+    try {
+      final directRoom = await widget.userRepository.getDirectRoomForContact(userId);
+      return directRoom != null;
+    } catch (e) {
+      print('Error checking if user is contact: $e');
+      return false;
+    }
+  }
+
+  void _showExpandedAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'member_menu_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _kickMember(String userId) async {
     try {
       final success = await widget.roomService.kickMemberFromRoom(
@@ -201,11 +249,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final canKick = await _canCurrentUserKick();
-    
+
     // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = isCustomHomeserver(currentHomeserver);
-    
+
+    // Check if user is already a contact
+    final isAlreadyContact = await _isUserAContact(user.userId);
+
     if (!mounted) return;
     
     showModalBottomSheet(
@@ -236,12 +287,20 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatarBloc(
-                        userId: user.userId,
-                        size: 40,
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedAvatar(context, user.userId);
+                      },
+                      child: Hero(
+                        tag: 'member_menu_avatar_${user.userId}',
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: UserAvatarBloc(
+                            userId: user.userId,
+                            size: 56,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -276,6 +335,40 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
+                    // Send Friend Request option
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isAlreadyContact
+                              ? colorScheme.surfaceVariant
+                              : colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.person_add_outlined,
+                          color: isAlreadyContact
+                              ? colorScheme.onSurface.withOpacity(0.3)
+                              : colorScheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        isAlreadyContact ? 'Already in Contacts' : 'Send Friend Request',
+                        style: TextStyle(
+                          color: isAlreadyContact
+                              ? colorScheme.onSurface.withOpacity(0.3)
+                              : colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      enabled: !isAlreadyContact,
+                      onTap: !isAlreadyContact ? () {
+                        Navigator.pop(context);
+                        _showFriendRequestConfirmation(user, showFullMatrixId);
+                      } : null,
+                    ),
+
                     // Remove from group option
                     ListTile(
                       leading: Container(
@@ -315,6 +408,166 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         );
       },
     );
+  }
+
+  void _showFriendRequestConfirmation(GridUser user, bool showFullMatrixId) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_add,
+                color: colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Send Friend Request',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Send a friend request to:',
+                style: TextStyle(
+                  color: colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      child: UserAvatarBloc(
+                        userId: user.userId,
+                        size: 56,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.displayName ?? localpart(user.userId),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            showFullMatrixId
+                                ? user.userId
+                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
+              ),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _sendFriendRequest(user);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Send Request'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _sendFriendRequest(GridUser user) async {
+    try {
+      final success = await widget.roomService.createRoomAndInviteContact(user.userId);
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Friend request sent to ${user.displayName ?? localpart(user.userId)}'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to send friend request. User may not exist or is already a contact.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error sending friend request: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending friend request: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showKickConfirmation(GridUser user) {
@@ -476,6 +729,17 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       await widget.roomService.leaveRoom(widget.room.roomId);
       if (mounted) {
         context.read<GroupsBloc>().add(RefreshGroups());
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('You have left the group'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
       }
       widget.onGroupLeft();
     } catch (e) {
@@ -515,6 +779,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         ),
         child: AddGroupMemberModal(
           roomId: widget.room.roomId,
+          groupName: widget.room.name.split(':').length >= 5
+              ? widget.room.name.split(':')[3]
+              : widget.room.name,
           userService: widget.userService,
           roomService: widget.roomService,
           userRepository: widget.userRepository,
@@ -574,12 +841,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 20,
+                      radius: 28,
                       backgroundColor: colorScheme.primary.withOpacity(0.1),
                       child: GroupAvatarBloc(
                         roomId: widget.room.roomId,
                         memberIds: widget.room.members,
-                        size: 40,
+                        size: 56,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -844,11 +1111,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         ),
                       ),
                       child: CircleAvatar(
-                        radius: 22,
+                        radius: 28,
                         backgroundColor: colorScheme.primary.withOpacity(0.1),
                         child: UserAvatarBloc(
                           userId: user.userId,
-                          size: 44,
+                          size: 56,
                         ),
                       ),
                     ),
@@ -1040,47 +1307,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             ],
           ),
         ),
-        _buildActionButtons(),
       ],
     );
   }
 
-  Widget _buildActionButtons() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: _isProcessing ? null : () {
-            _showGroupDetailsMenu();
-          },
-          icon: Icon(
-            Icons.more_horiz,
-            size: 20,
-            color: colorScheme.onPrimary,
-          ),
-          label: Text(
-            'Group Details',
-            style: TextStyle(
-              color: colorScheme.onPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1147,18 +1377,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     : ListView.builder(
                         controller: widget.scrollController,
                         padding: const EdgeInsets.all(16.0),
-                        itemCount: _filteredMembers.length + 1,
+                        itemCount: _filteredMembers.length,
                         itemBuilder: (context, index) {
-                          if (index < _filteredMembers.length) {
-                            final user = _filteredMembers[index];
-                            return _buildMemberTile(
-                              user,
-                              state,
-                              userLocations,
-                            );
-                          } else {
-                            return _buildActionButtons();
-                          }
+                          final user = _filteredMembers[index];
+                          return _buildMemberTile(
+                            user,
+                            state,
+                            userLocations,
+                          );
                         },
                       ),
               ),

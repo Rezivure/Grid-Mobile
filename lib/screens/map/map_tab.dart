@@ -85,13 +85,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   SharingPreferencesRepository? sharingPreferencesRepository;
   MapIconRepository? _mapIconRepository;
   MapIconSyncService? _mapIconSyncService;
+  SelectedSubscreenProvider? _subscreenProvider;
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
-  double _zoom = 10;  // Changed default from 12 to 10
+  double _zoom = 3.5;  // Default to full country view for faster tile loading
   bool _initialZoomCalculated = false;
   LatLng? _initialCenter;  // Store the calculated center point
   int _lastKnownUserLocationsCount = 0;  // Track when contacts first load from sync
+
+  // Track if we're at the reset view for FAB highlighting
+  bool _isAtResetView = true;
+  LatLng? _resetCenter;
+  double? _resetZoom;
 
   bool _isPingOnCooldown = false;
   int _pingCooldownSeconds = 5;
@@ -119,7 +125,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // Map style selector
   bool _showMapSelector = false;
-  String _currentMapStyle = 'base'; // 'base' or 'satellite'
+  String? _currentMapStyle; // null until loaded from preferences
+  bool _isLoadingMapStyle = false;
+
+  // Force map rebuild when coming from background
+  Key _mapKey = UniqueKey();
   
   // Icon selection wheel
   bool _showIconWheel = false;
@@ -180,10 +190,35 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Defer to next frame to avoid build phase conflicts
     await Future.delayed(Duration.zero);
     if (!mounted) return;
-    
+
     await _initializeServices();
-    _loadMapProvider();
-    _loadMapStylePreference();
+
+    // Load map style preference FIRST before loading map provider
+    await _loadMapStylePreference();
+
+    // Check if app was launched from background (terminated state)
+    // This happens when background location updates wake the app
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    final wasLaunchedFromBackground = lifecycleState == AppLifecycleState.resumed ||
+        lifecycleState == AppLifecycleState.inactive;
+
+    if (wasLaunchedFromBackground) {
+      print('[MapTab] App launched from background/terminated state - forcing tile provider reinitialization');
+      // Clear tile provider first to ensure complete reinitialization
+      _tileProvider = null;
+    }
+
+    await _loadMapProvider();
+
+    // Only force rebuild if actually launched from background AND tile provider exists
+    if (wasLaunchedFromBackground && _tileProvider != null) {
+      // Single setState to trigger UI update after everything is loaded
+      if (mounted) {
+        setState(() {
+          print('[MapTab] UI refreshed after background launch');
+        });
+      }
+    }
   }
   
   // Keeping this function for potential future use, but no longer needed after avatar fix
@@ -247,7 +282,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       // Still need to re-add listeners that might have been removed
       _locationManager?.addListener(_onLocationUpdate);
       _syncManager?.addListener(_checkAuthenticationStatus);
-      context.read<SelectedSubscreenProvider>().addListener(_onSubscreenChanged);
+      _subscreenProvider = context.read<SelectedSubscreenProvider>();
+      _subscreenProvider?.addListener(_onSubscreenChanged);
       return;
     }
     
@@ -282,7 +318,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Initialize sync manager and listen for state changes
     _syncManager?.addListener(_onSyncStateChanged);
     _syncManager?.initialize();
-    
+
     // Queue orphaned data cleanup to run after sync completes
     _syncManager?.queuePostSyncOperation(() async {
       try {
@@ -301,11 +337,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _locationManager?.grabLocationAndPing().then((_) {
         if (mounted && _locationManager?.currentLatLng != null && _isMapReady && !_initialZoomCalculated) {
           // If map is ready and we haven't zoomed yet, do it now
-          _zoom = 14.0;
+          _zoom = 3.5; // Full country view for faster loading
           _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-          setState(() {
-            _initialZoomCalculated = true;
-          });
+          // Don't setState here - let _onLocationUpdate handle it to avoid double setState
+          _initialZoomCalculated = true;
         }
       });
     }
@@ -358,26 +393,37 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   void _onLocationUpdate() {
     // Check if we can calculate zoom now
     if (!_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null) {
-      // First center on user immediately
-      if (!_initialZoomCalculated) {
-        _zoom = 14.0;
-        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-      }
-      
-      // Then adjust if we have user locations
+      // Mark as calculated immediately to prevent multiple calls
+      _initialZoomCalculated = true;
+
+      // Get user locations to determine optimal view
       final mapBloc = context.read<MapBloc>();
       final userLocations = mapBloc.state.userLocations;
+
       if (userLocations.isNotEmpty) {
+        // Calculate optimal view including contacts
         final result = _calculateOptimalZoomAndCenter(
-          _locationManager!.currentLatLng!, 
+          _locationManager!.currentLatLng!,
           userLocations
         );
         _zoom = result.zoom;
+        _resetCenter = result.center;
+        _resetZoom = result.zoom;
         _mapController.moveAndRotate(result.center, _zoom, 0);
+      } else {
+        // No contacts yet, just center on user
+        _zoom = 3.5; // Full country view for faster loading
+        _resetCenter = _locationManager!.currentLatLng!;
+        _resetZoom = 3.5;
+        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
       }
-      setState(() {
-        _initialZoomCalculated = true;
-      });
+
+      // Single setState at the end
+      if (mounted) {
+        setState(() {
+          _isAtResetView = true;
+        });
+      }
     }
   }
 
@@ -395,14 +441,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   void _onSubscreenChanged() {
+    if (!mounted) return;
+
     // Reload icons when the selected subscreen changes
     _loadMapIcons();
-    
+
     // Clear selected icon if subscreen changes
-    setState(() {
-      _selectedMapIcon = null;
-      _selectedIconPosition = null;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedMapIcon = null;
+        _selectedIconPosition = null;
+      });
+    }
   }
 
   void _onSyncStateChanged() {
@@ -424,7 +474,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _locationManager?.removeListener(_onLocationUpdate);
     _syncManager?.removeListener(_checkAuthenticationStatus);
     _syncManager?.removeListener(_onSyncStateChanged);
-    context.read<SelectedSubscreenProvider>().removeListener(_onSubscreenChanged);
+    _subscreenProvider?.removeListener(_onSubscreenChanged);
     _mapController.dispose();
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
@@ -481,17 +531,39 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _refreshSatelliteTokenIfNeeded();
     }
     
-    // Always reinitialize tile provider on resume to fix background launch rendering issues
-    if (state == AppLifecycleState.resumed && _tileProvider != null) {
-      print('[MapTab] App resumed - refreshing tile provider');
-      
-      // Small delay to ensure we're fully in foreground
-      Future.delayed(const Duration(milliseconds: 200), () async {
-        if (mounted) {
-          await _loadMapProvider();
-          setState(() {});
-        }
-      });
+    // Only reinitialize if app was paused for a significant time
+    if (state == AppLifecycleState.resumed && _pausedTime != null) {
+      final pauseDuration = DateTime.now().difference(_pausedTime!);
+
+      // Only rebuild if paused for more than 5 seconds (to handle background location wakes)
+      if (pauseDuration.inSeconds > 5 && _tileProvider != null) {
+        print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - rebuilding map');
+
+        // Single rebuild after short delay
+        Future.delayed(const Duration(milliseconds: 400), () async {
+          if (mounted && _isMapReady) {
+            // Store current position
+            final currentCenter = _mapController.camera.center;
+            final currentZoom = _mapController.camera.zoom;
+
+            // Reload the tile provider
+            await _loadMapProvider();
+
+            // Single map rebuild
+            setState(() {
+              _mapKey = UniqueKey();
+              print('[MapTab] Map rebuilt after resume');
+            });
+
+            // Restore position after rebuild
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted && _isMapReady && currentCenter != null) {
+                _mapController.move(currentCenter, currentZoom);
+              }
+            });
+          }
+        });
+      }
     }
   }
 
@@ -684,9 +756,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         } catch (e) {
         }
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
       final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
+
+      // Clear existing tile provider to force complete reinitialization
+      _tileProvider = null;
 
       _mapTheme = ProtomapsThemes.light();
       _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
@@ -702,7 +777,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedStyle = prefs.getString(_mapStyleKey) ?? 'base';
-      
+
       // Check if user has an active subscription before loading satellite maps
       if (savedStyle == 'satellite') {
         final hasSubscription = await _subscriptionService.hasActiveSubscription();
@@ -710,41 +785,37 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           // Try to get a map token (will use cached if valid)
           final token = await _subscriptionService.getMapToken();
           if (token != null) {
-            setState(() {
-              _currentMapStyle = 'satellite';
-              _satelliteMapToken = token;
-            });
+            // Set satellite style without setState since we're in init
+            _currentMapStyle = 'satellite';
+            _satelliteMapToken = token;
           } else {
             // Failed to get token, revert to base maps
-            setState(() {
-              _currentMapStyle = 'base';
-            });
+            _currentMapStyle = 'base';
             await prefs.setString(_mapStyleKey, 'base');
           }
         } else {
           // No subscription, revert to base maps
-          setState(() {
-            _currentMapStyle = 'base';
-          });
+          _currentMapStyle = 'base';
           await prefs.setString(_mapStyleKey, 'base');
         }
       } else {
-        setState(() {
-          _currentMapStyle = savedStyle;
-        });
+        _currentMapStyle = savedStyle;
       }
     } catch (e) {
       // Default to base maps on error
-      setState(() {
-        _currentMapStyle = 'base';
-      });
+      _currentMapStyle = 'base';
     }
+
+    // If still null somehow, default to base
+    _currentMapStyle ??= 'base';
   }
 
   void _showMapErrorDialog() {
+    if (!mounted) return;
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -846,68 +917,142 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
 
+  void _resetToInitialZoom() {
+    // Reset to initial smart zoom calculation
+    if (_locationManager?.currentLatLng != null) {
+      final mapBloc = context.read<MapBloc>();
+      final userLocations = mapBloc.state.userLocations;
+      final colorScheme = Theme.of(context).colorScheme;
+
+      LatLng center;
+      double zoom;
+
+      if (userLocations.isNotEmpty) {
+        // Calculate optimal view including contacts
+        final result = _calculateOptimalZoomAndCenter(
+          _locationManager!.currentLatLng!,
+          userLocations
+        );
+        center = result.center;
+        zoom = result.zoom;
+      } else {
+        // No contacts, just center on user at country level
+        center = _locationManager!.currentLatLng!;
+        zoom = 3.5;
+      }
+
+      // Store reset position and zoom
+      _resetCenter = center;
+      _resetZoom = zoom;
+      _zoom = zoom;
+
+      // Move to reset position
+      _mapController.moveAndRotate(center, zoom, 0);
+
+      // Mark as at reset view and unlock follow mode
+      setState(() {
+        _isAtResetView = true;
+        _followUser = false;  // Unlock follow mode when resetting
+      });
+    }
+  }
+
   // Returns both optimal zoom and center point
   MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
     print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
-    
+
     if (userLocations.isEmpty) {
-      return MapZoomResult(zoom: 10.0, center: userPosition);
+      return MapZoomResult(zoom: 4.5, center: userPosition);
     }
 
-    // Find the closest contact
-    double minDistance = double.infinity;
-    UserLocation? closestLocation;
+    // Calculate bounds that include ALL contacts plus the user
+    double minLat = userPosition.latitude;
+    double maxLat = userPosition.latitude;
+    double minLng = userPosition.longitude;
+    double maxLng = userPosition.longitude;
+
+    // Find the bounding box of all users
     for (final location in userLocations) {
-      final distance = const Distance().as(LengthUnit.Meter, userPosition, location.position);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestLocation = location;
-      }
+      minLat = minLat < location.position.latitude ? minLat : location.position.latitude;
+      maxLat = maxLat > location.position.latitude ? maxLat : location.position.latitude;
+      minLng = minLng < location.position.longitude ? minLng : location.position.longitude;
+      maxLng = maxLng > location.position.longitude ? maxLng : location.position.longitude;
     }
-    
-    if (closestLocation == null) {
-      return MapZoomResult(zoom: 10.0, center: userPosition);
-    }
-    
-    
-    // Calculate the center point between user and closest contact
-    final centerLat = (userPosition.latitude + closestLocation.position.latitude) / 2;
-    final centerLng = (userPosition.longitude + closestLocation.position.longitude) / 2;
-    final centerPoint = LatLng(centerLat, centerLng);
-    
 
-    // Calculate zoom based on distance
-    // Balance between showing both points and not zooming out too far
+    // Calculate center of all positions (midpoint)
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    final centerPoint = LatLng(centerLat, centerLng);
+
+    // Calculate the maximum distance from center to any corner of the bounding box
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+
+    // Use the larger dimension to determine zoom
+    final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
+
+    // Calculate zoom based on the span of all users
     double zoomLevel;
-    if (minDistance < 100) {
-      zoomLevel = 14.0; // Very close - street level (reduced from 16 to prevent tile loading issues)
-    } else if (minDistance < 500) {
-      zoomLevel = 13.5; // Walking distance
-    } else if (minDistance < 1000) {
-      zoomLevel = 13.0; // Close neighborhood
-    } else if (minDistance < 5000) {
-      zoomLevel = 11.5; // Same area
-    } else if (minDistance < 20000) {
-      zoomLevel = 9.5; // Same city
-    } else if (minDistance < 50000) {
-      zoomLevel = 8.5; // Metro area
-    } else if (minDistance < 100000) {
-      zoomLevel = 7.5; // Multiple cities
-    } else if (minDistance < 250000) {
-      zoomLevel = 6.5; // State view
-    } else if (minDistance < 500000) {
-      zoomLevel = 5.5; // Multi-state view
-    } else if (minDistance < 1000000) {
-      zoomLevel = 4.5; // Large region
-    } else if (minDistance < 2500000) {
-      zoomLevel = 3.5; // Cross-country (e.g. East to West coast)
-    } else if (minDistance < 5000000) {
-      zoomLevel = 2.5; // Continental view
+    if (maxDiff < 0.01) {
+      zoomLevel = 14.0; // Very close together - neighborhood
+    } else if (maxDiff < 0.05) {
+      zoomLevel = 12.0; // City area
+    } else if (maxDiff < 0.1) {
+      zoomLevel = 10.0; // Metro area
+    } else if (maxDiff < 0.5) {
+      zoomLevel = 8.0; // Multi-city region
+    } else if (maxDiff < 2.0) {
+      zoomLevel = 6.0; // State-sized area
+    } else if (maxDiff < 10.0) {
+      zoomLevel = 4.5; // Multi-state / small country
+    } else if (maxDiff < 30.0) {
+      zoomLevel = 3.5; // Country-sized (like USA coast to coast)
+    } else if (maxDiff < 60.0) {
+      zoomLevel = 2.5; // Continental
     } else {
-      zoomLevel = 2.0; // Maximum zoom out for intercontinental
+      zoomLevel = 2.0; // Intercontinental
     }
-    
-    print('[SmartZoom] Calculated zoom: $zoomLevel');
+
+    // Cap zoom at country level for faster loading (3.5 for full USA view)
+    if (zoomLevel > 3.5) {
+      zoomLevel = 3.5;
+    }
+
+    // Estimate viewport size at this zoom level (degrees of lat/lng visible on screen)
+    // These are rough approximations for a typical phone screen
+    double viewportRadius;
+    if (zoomLevel <= 2.0) {
+      viewportRadius = 90.0; // World view - very zoomed out
+    } else if (zoomLevel <= 3.5) {
+      viewportRadius = 30.0; // Country view
+    } else if (zoomLevel <= 6.0) {
+      viewportRadius = 10.0; // State view
+    } else if (zoomLevel <= 8.0) {
+      viewportRadius = 2.0; // Multi-city view
+    } else if (zoomLevel <= 10.0) {
+      viewportRadius = 0.5; // Metro view
+    } else if (zoomLevel <= 12.0) {
+      viewportRadius = 0.1; // City view
+    } else {
+      viewportRadius = 0.02; // Neighborhood view
+    }
+
+    // Check if current user would be visible from the midpoint center
+    final distanceFromCenter = ((userPosition.latitude - centerLat).abs() +
+                                 (userPosition.longitude - centerLng).abs()) / 2;
+
+    // If current user is too far from midpoint, adjust center to keep them visible
+    if (distanceFromCenter > viewportRadius) {
+      // Shift center toward current user to ensure they're at the edge of viewport
+      final shiftFactor = (distanceFromCenter - viewportRadius) / distanceFromCenter;
+      final adjustedLat = centerLat + (userPosition.latitude - centerLat) * shiftFactor;
+      final adjustedLng = centerLng + (userPosition.longitude - centerLng) * shiftFactor;
+
+      print('[SmartZoom] Adjusted center to keep current user visible');
+      return MapZoomResult(zoom: zoomLevel, center: LatLng(adjustedLat, adjustedLng));
+    }
+
+    print('[SmartZoom] Calculated zoom: $zoomLevel for span: $maxDiff degrees');
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
@@ -951,11 +1096,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         if (state.center != null && _isMapReady) {
           setState(() {
             _followUser = false;  // Turn off following when moving to new location
+            _isAtResetView = false;  // Turn off reset view when moving to a user
             _targetUserId = state.selectedUserId;
           });
           
           // Use provided zoom or default to street level
-          final double targetZoom = state.zoom ?? 14.0;
+          final double targetZoom = state.zoom ?? 3.5; // Default to full country view
           
           _mapController.moveAndRotate(state.center!, targetZoom, 0);
           
@@ -1028,6 +1174,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     }
                   },
                   child: FlutterMap(
+                  key: _mapKey,
                   mapController: _mapController,
                   options: MapOptions(
                     onTap: (tapPosition, latLng) async {
@@ -1144,21 +1291,48 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           _followUser = false;
                         });
                       }
+
                       // Track map rotation changes
                       if (position.rotation != _currentMapRotation) {
                         setState(() {
                           _currentMapRotation = position.rotation ?? 0.0;
                         });
                       }
+
+                      // Check if we've moved away from reset view (on ANY movement, not just gestures)
+                      if (_resetCenter != null && _resetZoom != null) {
+                        final distance = const Distance().as(
+                          LengthUnit.Meter,
+                          _resetCenter!,
+                          position.center!,
+                        );
+
+                        // Consider moved if more than 100m away or zoom changed by more than 0.5
+                        final zoomDiff = (position.zoom - _resetZoom!).abs();
+                        final hasMoved = distance > 100 || zoomDiff > 0.5;
+
+                        if (_isAtResetView && hasMoved) {
+                          setState(() {
+                            _isAtResetView = false;
+                          });
+                        }
+                      }
                     },
                     initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
                     initialZoom: _zoom,
                     initialRotation: 0.0,
-                    minZoom: 2,
-                    maxZoom: 18,
+                    minZoom: 3.5, // Prevent zooming out too far (country level minimum)
+                    maxZoom: 17, // Prevent zooming in too close where tiles don't exist
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.all,
                       enableMultiFingerGestureRace: true,
+                    ),
+                    // Add camera constraints to prevent panning beyond world bounds
+                    cameraConstraint: CameraConstraint.contain(
+                      bounds: LatLngBounds(
+                        const LatLng(-85, -180), // Southwest corner of the world
+                        const LatLng(85, 180),   // Northeast corner of the world
+                      ),
                     ),
                     onMapReady: () {
                       print('[SMART ZOOM] Map is ready!');
@@ -1190,7 +1364,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             print('[SMART ZOOM] Got location: ${_locationManager?.currentLatLng}');
                             if (_locationManager?.currentLatLng != null && mounted) {
                               // Immediately center on user's location first
-                              _zoom = 14.0; // Good zoom level for single user
+                              _zoom = 3.5; // Full country view for faster tile loading
                               _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
                               
                               // Then check if we have user locations from sync
@@ -1214,7 +1388,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         } else {
                           // We already have location - immediately center on user
                           print('[SMART ZOOM] Have location: ${_locationManager?.currentLatLng}');
-                          _zoom = 14.0; // Good zoom level for single user
+                          _zoom = 3.5; // Full country view for faster tile loading
                           _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
                           
                           // Then check if we have user locations from sync
@@ -1238,11 +1412,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     },
                   ),
               children: [
-                // Show a subtle gray placeholder while tiles are loading
+                // Show a subtle gray placeholder while tiles are loading or style not yet determined
                 // This gives instant visual feedback like Google Maps
-                if (_tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
+                if (_currentMapStyle == null || _tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
                   Container(
-                    color: isDarkMode 
+                    color: isDarkMode
                       ? const Color(0xFF2C2C2C)  // Slightly lighter dark gray for visibility
                       : const Color(0xFFE8E8E8), // Light gray for light mode
                   ),
@@ -1745,27 +1919,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 children: [
                   _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
-                  FloatingActionButton(
-                    heroTag: "centerUserBtn",
-                    backgroundColor: _followUser
-                        ? colorScheme.primary
-                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                    onPressed: () {
-                      // Center on user with same zoom level as other users
-                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
-                      setState(() {
-                        _followUser = true;
-                      });
-                    },
-                    child: Icon(
-                        Icons.my_location,
-                        color: _followUser
-                            ? Colors.white
-                            : (isDarkMode ? colorScheme.primary : Colors.black)
-                    ),
-                    mini: true,
-                  ),
-                  const SizedBox(height: 10),
                   Stack(
                     alignment: Alignment.center,
                     children: [
@@ -1810,8 +1963,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
+                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? '')) ...[
+                    const SizedBox(height: 10),
                     FloatingActionButton(
                       heroTag: "mapSelectorBtn",
                       backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
@@ -1827,6 +1980,50 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                       mini: true,
                     ),
+                  ],
+                  const SizedBox(height: 10),
+                  // Center on user button
+                  FloatingActionButton(
+                    heroTag: 'center_on_user_fab',
+                    backgroundColor: _followUser
+                      ? colorScheme.primary
+                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                    onPressed: () {
+                      // Center on user with same zoom level as other users
+                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
+                      setState(() {
+                        _followUser = true;
+                        _isAtResetView = false;  // Unhighlight globe when centering on user
+                      });
+                    },
+                    child: Icon(
+                      Icons.my_location,
+                      color: _followUser
+                        ? Colors.white
+                        : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                    tooltip: 'Center on me',
+                    elevation: _followUser ? 6 : 2,
+                    mini: true,
+                  ),
+                  const SizedBox(height: 10),
+                  // Globe reset button
+                  FloatingActionButton(
+                    heroTag: 'reset_view_fab',
+                    backgroundColor: _isAtResetView
+                      ? colorScheme.primary
+                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                    onPressed: _resetToInitialZoom,
+                    child: Icon(
+                      Icons.public,
+                      color: _isAtResetView
+                        ? Colors.white
+                        : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                    tooltip: 'Reset view',
+                    elevation: _isAtResetView ? 6 : 2,
+                    mini: true,
+                  ),
                 ],
               ),
             ),
@@ -2001,14 +2198,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   Widget _buildMapSelector(bool isDarkMode, ColorScheme colorScheme) {
     return Container(
-      padding: EdgeInsets.all(12),
+      width: 220,
+      padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDarkMode ? colorScheme.surface : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
             offset: Offset(0, 4),
           ),
         ],
@@ -2016,39 +2214,100 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Base Map Option
-          _buildMapOption(
-            title: 'Standard Map',
-            imagePath: 'assets/extras/basemaps.png',
-            isSelected: _currentMapStyle == 'base',
-            onTap: () {
-              _selectMapStyle('base');
-            },
-            colorScheme: colorScheme,
-            isDarkMode: isDarkMode,
+          // Header with title and close button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Map Layers',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showMapSelector = false;
+                  });
+                },
+                child: Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurface.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 8),
-          // Satellite Map Option
-          _buildMapOption(
-            title: 'Satellite Map',
-            imagePath: 'assets/extras/satellite.png',
-            isSelected: _currentMapStyle == 'satellite',
-            showStar: true,
-            onTap: () async {
-              final hasSubscription = await _subscriptionService.hasActiveSubscription();
-              if (!hasSubscription) {
-                // Navigate to subscription page
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                );
-              } else {
-                _selectMapStyle('satellite');
-              }
-            },
-            colorScheme: colorScheme,
-            isDarkMode: isDarkMode,
-          ),
+          SizedBox(height: 12),
+
+          // Loading overlay if switching maps
+          if (_isLoadingMapStyle)
+            Container(
+              height: 120,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                      strokeWidth: 2,
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Loading map...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            // Base Map Option
+            _buildMapOption(
+              title: 'Standard Map',
+              imagePath: 'assets/extras/basemaps.png',
+              isSelected: _currentMapStyle == 'base',
+              onTap: _isLoadingMapStyle ? null : () {
+                _selectMapStyle('base');
+              },
+              colorScheme: colorScheme,
+              isDarkMode: isDarkMode,
+            ),
+            SizedBox(height: 8),
+            // Satellite Map Option
+            _buildMapOption(
+              title: 'Satellite Map',
+              imagePath: 'assets/extras/satellite.png',
+              isSelected: _currentMapStyle == 'satellite',
+              showStar: true,
+              onTap: _isLoadingMapStyle ? null : () async {
+                final hasSubscription = await _subscriptionService.hasActiveSubscription();
+                if (!hasSubscription) {
+                  // Navigate to subscription page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+                  );
+                } else {
+                  _selectMapStyle('satellite');
+                }
+              },
+              colorScheme: colorScheme,
+              isDarkMode: isDarkMode,
+            ),
+          ],
         ],
       ),
     );
@@ -2058,7 +2317,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     required String title,
     required String imagePath,
     required bool isSelected,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     required ColorScheme colorScheme,
     required bool isDarkMode,
     bool showStar = false,
@@ -2127,21 +2386,38 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   Future<void> _selectMapStyle(String style) async {
-    if (style == 'satellite') {
-      // Check subscription and get token
-      final hasSubscription = await _subscriptionService.hasActiveSubscription();
-      if (!hasSubscription) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-        );
-        return;
-      }
-      
-      // Try to get a map token (will use cached if valid)
-      final token = await _subscriptionService.getMapToken();
-      if (token == null) {
-        // Failed to get token, navigate to subscription page
+    // Don't allow switching if already loading
+    if (_isLoadingMapStyle) return;
+
+    // Don't switch if already on the selected style
+    if (_currentMapStyle == style) return;
+
+    setState(() {
+      _isLoadingMapStyle = true;
+    });
+
+    try {
+      if (style == 'satellite') {
+        // Check subscription and get token
+        final hasSubscription = await _subscriptionService.hasActiveSubscription();
+        if (!hasSubscription) {
+          setState(() {
+            _isLoadingMapStyle = false;
+          });
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+          );
+          return;
+        }
+
+        // Try to get a map token (will use cached if valid)
+        final token = await _subscriptionService.getMapToken();
+        if (token == null) {
+          setState(() {
+            _isLoadingMapStyle = false;
+          });
+          // Failed to get token, navigate to subscription page
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => SubscriptionScreen()),
@@ -2156,6 +2432,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         _satelliteMapToken = token;
         _currentMapStyle = style;
         _showMapSelector = false;
+        _isLoadingMapStyle = false;
       });
       
       // Save the preference
@@ -2183,6 +2460,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         _currentMapStyle = style;
         _showMapSelector = false;
         _satelliteMapToken = null; // Clear token when switching back
+        _isLoadingMapStyle = false;
       });
       
       // Save the preference
@@ -2193,6 +2471,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         SnackBar(
           content: Text('Switched to base maps'),
           backgroundColor: Theme.of(context).colorScheme.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+    } catch (e) {
+      // Handle any errors and reset loading state
+      print('Error switching map style: $e');
+      setState(() {
+        _isLoadingMapStyle = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to switch map layer'),
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),

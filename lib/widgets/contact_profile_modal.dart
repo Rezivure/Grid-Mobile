@@ -99,6 +99,44 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     await widget.sharingPreferencesRepo.setSharingPreferences(preferences);
   }
 
+  void _showExpandedAvatar(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'contact_avatar_${widget.contact.userId}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: widget.contact.userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   String? getRoomId(String userId) {
     // This method is simplified since we're not using it for device keys anymore
     return null;
@@ -483,27 +521,35 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       child: Row(
         children: [
           // Enhanced avatar
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: colorScheme.primary.withOpacity(0.3),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+          GestureDetector(
+            onTap: () {
+              _showExpandedAvatar(context);
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.3),
+                  width: 2,
                 ),
-              ],
-            ),
-            child: CircleAvatar(
-              radius: 32,
-              backgroundColor: colorScheme.primary.withOpacity(0.1),
-              child: UserAvatarBloc(
-                userId: widget.contact.userId,
-                size: 64,
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Hero(
+                tag: 'contact_avatar_${widget.contact.userId}',
+                child: CircleAvatar(
+                  radius: 32,
+                  backgroundColor: colorScheme.primary.withOpacity(0.1),
+                  child: UserAvatarBloc(
+                    userId: widget.contact.userId,
+                    size: 64,
+                  ),
+                ),
               ),
             ),
           ),

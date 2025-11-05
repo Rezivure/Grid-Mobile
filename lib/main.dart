@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:grid_frontend/services/android_background_task.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart';
 
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
@@ -55,8 +55,6 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
-
   // Load .env file
   await dotenv.load(fileName: ".env");
 
@@ -64,15 +62,10 @@ void main() async {
   final databaseService = DatabaseService();
   await databaseService.initDatabase();
 
-  // Initialize Matrix Client
+  // Initialize Matrix Client with backwards compatible database
   final client = Client(
     'Grid App',
-    databaseBuilder: (_) async {
-      final dir = await getApplicationSupportDirectory();
-      final db = HiveCollectionsDatabase('grid_app', dir.path);
-      await db.open();
-      return db;
-    },
+    databaseBuilder: (_) => BackwardsCompatibilityService.createMatrixDatabase(),
   );
   await client.init();
 

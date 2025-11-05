@@ -52,25 +52,54 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   bool _isRefreshing = false;
   late AnimationController _dotsAnimationController;
   late Animation<int> _dotsAnimation;
+  late AnimationController _checkmarkAnimationController;
+  late Animation<double> _checkmarkScaleAnimation;
+  late Animation<double> _checkmarkFadeAnimation;
+  bool _showCheckmark = false;
+  bool _syncJustCompleted = false;
+  SyncState? _previousSyncState;
+  bool _hasShownInitialLoading = false;
 
 
   @override
   void initState() {
     super.initState();
     context.read<ContactsBloc>().add(LoadContacts());
-    
+
     // Initialize animation for syncing dots
     _dotsAnimationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat();
-    
+
     _dotsAnimation = IntTween(begin: 0, end: 3).animate(
       CurvedAnimation(
         parent: _dotsAnimationController,
         curve: Curves.easeInOut,
       ),
     );
+
+    // Initialize checkmark animation
+    _checkmarkAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _checkmarkScaleAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _checkmarkAnimationController,
+      curve: Curves.elasticOut,
+    ));
+
+    _checkmarkFadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _checkmarkAnimationController,
+      curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
+    ));
 
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_isRefreshing) {
@@ -90,6 +119,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   void dispose() {
     _timer?.cancel();
     _dotsAnimationController.dispose();
+    _checkmarkAnimationController.dispose();
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
@@ -212,7 +242,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 }
               },
               builder: (context, state) {
-              if (state is ContactsLoading) {
+              if (state is ContactsLoading && !_hasShownInitialLoading) {
+                _hasShownInitialLoading = true;
                 return _buildLoadingState();
               }
 
@@ -233,19 +264,42 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         : Consumer<SyncManager>(
                             builder: (context, syncManager, child) {
                               final isSyncing = syncManager.syncState != SyncState.ready;
-                              
+
+                              // Handle sync state transitions
+                              if (_previousSyncState != null &&
+                                  _previousSyncState != SyncState.ready &&
+                                  syncManager.syncState == SyncState.ready) {
+                                // Sync just completed
+                                _syncJustCompleted = true;
+                                _showCheckmark = true;
+                                _checkmarkAnimationController.forward().then((_) {
+                                  if (mounted) {
+                                    Future.delayed(const Duration(milliseconds: 200), () {
+                                      if (mounted) {
+                                        setState(() {
+                                          _showCheckmark = false;
+                                          _syncJustCompleted = false;
+                                        });
+                                        _checkmarkAnimationController.reset();
+                                      }
+                                    });
+                                  }
+                                });
+                              }
+                              _previousSyncState = syncManager.syncState;
+
                               return ListView.builder(
                                 controller: widget.scrollController,
-                                itemCount: contactsWithLocation.length + (isSyncing ? 1 : 0),
+                                itemCount: contactsWithLocation.length + (isSyncing || _showCheckmark ? 1 : 0),
                                 padding: const EdgeInsets.all(16.0),
                                 itemBuilder: (context, index) {
                                   // Show sync indicator as first item
-                                  if (isSyncing && index == 0) {
-                                    return _buildSyncingIndicator(colorScheme);
+                                  if ((isSyncing || _showCheckmark) && index == 0) {
+                                    return _buildSyncingIndicator(colorScheme, isSyncing: isSyncing);
                                   }
-                                  
+
                                   // Adjust index for contacts when syncing indicator is shown
-                                  final contactIndex = isSyncing ? index - 1 : index;
+                                  final contactIndex = (isSyncing || _showCheckmark) ? index - 1 : index;
                                   final contact = contactsWithLocation[contactIndex];
 
                                   return _buildModernContactCard(contact, colorScheme, theme);
@@ -266,36 +320,58 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     );
   }
 
-  Widget _buildSyncingIndicator(ColorScheme colorScheme) {
+  Widget _buildSyncingIndicator(ColorScheme colorScheme, {required bool isSyncing}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(vertical: 8),
+      height: 24,
       child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Syncing',
-              style: TextStyle(
-                color: colorScheme.onSurface.withOpacity(0.5),
-                fontSize: 13,
-              ),
-            ),
-            AnimatedBuilder(
-              animation: _dotsAnimation,
-              builder: (context, child) {
-                final dots = '.' * (_dotsAnimation.value + 1);
-                return Text(
-                  dots.padRight(3),
-                  style: TextStyle(
-                    color: colorScheme.onSurface.withOpacity(0.5),
-                    fontSize: 13,
-                    fontFamily: 'monospace', // Ensures consistent width
-                  ),
-                );
-              },
-            ),
-          ],
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: _showCheckmark
+              ? AnimatedBuilder(
+                  animation: _checkmarkAnimationController,
+                  builder: (context, child) {
+                    return FadeTransition(
+                      opacity: _checkmarkFadeAnimation,
+                      child: ScaleTransition(
+                        scale: _checkmarkScaleAnimation,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              : AnimatedBuilder(
+                  animation: _dotsAnimation,
+                  builder: (context, child) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(3, (index) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: index <= _dotsAnimation.value
+                                ? colorScheme.primary
+                                : colorScheme.primary.withOpacity(0.3),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      }),
+                    );
+                  },
+                ),
         ),
       ),
     );
@@ -503,7 +579,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                     ),
                     child: UserAvatarBloc(
                       userId: contact.userId,
-                      size: 44,
+                      size: 56,
                     ),
                   ),
                   // Online status indicator
@@ -722,6 +798,44 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     return false;
   }
 
+  void _showExpandedAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'contact_menu_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -784,12 +898,20 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatarBloc(
-                        userId: contact.userId,
-                        size: 40,
+                    GestureDetector(
+                      onTap: () {
+                        _showExpandedAvatar(context, contact.userId);
+                      },
+                      child: Hero(
+                        tag: 'contact_menu_avatar_${contact.userId}',
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          child: UserAvatarBloc(
+                            userId: contact.userId,
+                            size: 56,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),

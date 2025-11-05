@@ -8,12 +8,14 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/grid_user.dart' as GridUser;
 import '../repositories/user_repository.dart';
 
 class AddGroupMemberModal extends StatefulWidget {
   final String roomId;
+  final String? groupName;
   final UserService userService;
   final RoomService roomService;
   final UserRepository userRepository;
@@ -21,6 +23,7 @@ class AddGroupMemberModal extends StatefulWidget {
 
   AddGroupMemberModal({
     required this.roomId,
+    this.groupName,
     required this.userService,
     required this.roomService,
     required this.userRepository,
@@ -88,8 +91,35 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return utils.isCustomHomeserver(homeserver);
   }
 
+  void _shareGroupInvite() async {
+    try {
+      final groupName = widget.groupName ?? 'our group';
+      final message = 'Join me on Grid! Download it at https://get.grid.lat and share your username to get invited to the $groupName group!';
+
+      await Share.share(
+        message,
+        subject: 'Grid Group Invite',
+      );
+    } catch (e) {
+      print('Error sharing group invite: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to share invite: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   void _addMember() async {
-    const int MAX_GROUP_MEMBERS = 15;
+    // No hard limit on group members
+    // const int MAX_GROUP_MEMBERS = 15;
 
     var username = _controller.text.trim().toLowerCase();
     bool isCustomServer = isCustomHomeserver();
@@ -156,23 +186,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         return;
       }
 
-      // Check member limit
-      final memberCount = room
-          .getParticipants()
-          .where((member) =>
-              member.membership == Membership.join ||
-              member.membership == Membership.invite)
-          .length;
-
-      if (memberCount >= MAX_GROUP_MEMBERS) {
-        if (mounted) {
-          setState(() {
-            _contactError = 'Group has reached maximum capacity: $MAX_GROUP_MEMBERS';
-            _isProcessing = false;
-          });
-        }
-        return;
-      }
+      // No member limit check - groups can have unlimited members
+      // Previously limited to 15, now removed per request
 
       // Verify user exists
       if (!await widget.userService.userExists(username)) {
@@ -597,6 +612,78 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     );
   }
 
+  Widget _buildShareInviteCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _buildModernCard(
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.share,
+                  color: colorScheme.secondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Share Invite',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      'Invite friends to join this group',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _shareGroupInvite,
+                icon: Icon(
+                  Icons.share,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+                label: Text(
+                  'Share',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: colorScheme.primary.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -675,7 +762,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Modern handle
             Container(
@@ -688,7 +775,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               ),
             ),
 
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: EdgeInsets.only(
                   left: 24,
@@ -702,6 +789,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     if (_isScanning) _buildQRScanner() else ...[
                       _buildUsernameInput(),
                       _buildQRScannerCard(),
+                      if (!isCustomHomeserver()) _buildShareInviteCard(),
                     ],
                   ],
                 ),
