@@ -127,7 +127,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   background_fetch: 39f11371c0dce04b001c4bfd5e782bcccb0a85e2
   CocoaLumberjack: 6a459bc897d6d80bd1b8c78482ec7ad05dffc3f0
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_background_geolocation: 0c6320679295ce63872295d85de144bfffbfc4b6
   flutter_compass: cbbd285cea1584c7ac9c4e0c3e1f17cbea55e855
   flutter_native_splash: f71420956eb811e6d310720fee915f1d42852e7a
@@ -150,6 +150,6 @@ SPEC CHECKSUMS:
   TOCropViewController: 80b8985ad794298fb69d3341de183f33d1853654
   url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
 
-PODFILE CHECKSUM: e951dee4c1394c54580f6aa43f9639e8904d95ae
+PODFILE CHECKSUM: 715b406803c384f45a0057359cd0ee5ebc102ffa
 
 COCOAPODS: 1.16.2
