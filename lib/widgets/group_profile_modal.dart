@@ -120,6 +120,83 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
     });
   }
 
+  void _showExpandedAvatar(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'group_avatar_${widget.room.roomId}',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: GroupAvatarBloc(
+                        roomId: widget.room.roomId,
+                        memberIds: widget.room.members,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showExpandedMemberAvatar(BuildContext context, String userId) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.all(20),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: Hero(
+                  tag: 'member_avatar_$userId',
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surface,
+                    ),
+                    child: ClipOval(
+                      child: UserAvatarBloc(
+                        userId: userId,
+                        size: MediaQuery.of(context).size.width * 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _loadGroupAvatar() async {
     final roomId = widget.room.roomId;
     
@@ -175,7 +252,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             final key = encrypt.Key.fromBase64(keyBase64);
             final iv = encrypt.IV.fromBase64(ivBase64);
             final encrypter = encrypt.Encrypter(encrypt.AES(key));
-            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final encrypted = encrypt.Encrypted(file.data);
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
@@ -366,43 +443,37 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             final colorScheme = Theme.of(context).colorScheme;
             return Dialog(
               backgroundColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(horizontal: 120),
               child: Container(
-                padding: EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                            strokeWidth: 3,
-                          ),
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: CircularProgressIndicator(
+                          color: colorScheme.primary,
+                          strokeWidth: 3,
                         ),
                       ),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Uploading',
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                      SizedBox(height: 16),
+                      Text(
+                        'Uploading',
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -687,10 +758,18 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Stack(
               children: [
-                GroupAvatarBloc(
-                  roomId: widget.room.roomId,
-                  memberIds: widget.room.members,
-                  size: 72,
+                GestureDetector(
+                  onTap: () {
+                    _showExpandedAvatar(context);
+                  },
+                  child: Hero(
+                    tag: 'group_avatar_${widget.room.roomId}',
+                    child: GroupAvatarBloc(
+                      roomId: widget.room.roomId,
+                      memberIds: widget.room.members,
+                      size: 72,
+                    ),
+                  ),
                 ),
                 if (_isCurrentUserAdmin)
                   Positioned(
@@ -699,27 +778,15 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                     child: GestureDetector(
                       onTap: _pickAndUploadGroupAvatar,
                       child: Container(
-                        width: 28,
-                        height: 28,
+                        padding: EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: colorScheme.surface,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.shadow.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
                           Icons.camera_alt,
-                          color: colorScheme.onPrimary,
                           size: 16,
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
@@ -1020,22 +1087,30 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
             ),
             child: Row(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isAdmin 
-                          ? colorScheme.primary.withOpacity(0.3)
-                          : colorScheme.outline.withOpacity(0.2),
-                      width: 2,
+                GestureDetector(
+                  onTap: () {
+                    _showExpandedMemberAvatar(context, member.userId);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isAdmin
+                            ? colorScheme.primary.withOpacity(0.3)
+                            : colorScheme.outline.withOpacity(0.2),
+                        width: 2,
+                      ),
                     ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                    child: UserAvatarBloc(
-                      userId: member.userId,
-                      size: 44,
+                    child: Hero(
+                      tag: 'member_avatar_${member.userId}',
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                        child: UserAvatarBloc(
+                          userId: member.userId,
+                          size: 44,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1300,7 +1375,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
           ),
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Modern handle
             Container(
@@ -1313,7 +1388,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
               ),
             ),
             
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(

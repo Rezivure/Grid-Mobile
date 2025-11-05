@@ -147,7 +147,7 @@ class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
             final key = encrypt.Key.fromBase64(keyBase64);
             final iv = encrypt.IV.fromBase64(ivBase64);
             final encrypter = encrypt.Encrypter(encrypt.AES(key));
-            final encrypted = encrypt.Encrypted(Uint8List.fromList(file.data));
+            final encrypted = encrypt.Encrypted(file.data);
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
             
             final avatarBytes = Uint8List.fromList(decrypted);
@@ -238,27 +238,28 @@ class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
       );
     }
 
-    // Only show loading if we haven't checked cache yet
-    if (_isLoading && !_hasCheckedCache) {
-      return SizedBox(
+    // Show a consistent placeholder while loading
+    // This prevents the flicker from TriangleAvatars changing
+    if (_isLoading) {
+      return Container(
         width: widget.size,
         height: widget.size,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
         child: Center(
-          child: SizedBox(
-            width: widget.size * 0.4,
-            height: widget.size * 0.4,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary.withOpacity(0.6),
-              ),
-            ),
+          child: Icon(
+            Icons.group,
+            size: widget.size * 0.5,
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
           ),
         ),
       );
     }
 
-    // Fallback to TriangleAvatars if memberIds provided, otherwise default group icon
+    // Only show TriangleAvatars as a final fallback when loading is complete
+    // and no avatar was found
     if (widget.memberIds != null && widget.memberIds!.isNotEmpty) {
       // TriangleAvatars has a fixed size of 60x60 (radius 30)
       // So we need to scale it to match the requested size
@@ -274,7 +275,7 @@ class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
         ),
       );
     }
-    
+
     return Container(
       width: widget.size,
       height: widget.size,

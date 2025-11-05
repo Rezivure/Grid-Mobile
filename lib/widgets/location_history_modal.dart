@@ -58,11 +58,13 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   String? _satelliteMapToken;
   final SubscriptionService _subscriptionService = SubscriptionService();
   Map<String, String> _userDisplayNames = {}; // Cache for display names
+  late RoomLocationHistoryRepository _roomHistoryRepo;
   
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
+    _roomHistoryRepo = RoomLocationHistoryRepository(DatabaseService());
     // Default to showing all members for group history
     _showAllMembers = widget.memberIds != null;
     _initializeMap();
@@ -198,6 +200,117 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     }
   }
 
+  Future<void> _showClearHistoryDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.delete_outline,
+                color: colorScheme.error,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Clear Location History',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to clear all location history for this group? This action cannot be undone.',
+            style: TextStyle(
+              color: colorScheme.onSurface.withOpacity(0.8),
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.onSurface.withOpacity(0.7),
+              ),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Clear History'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && widget.memberIds != null && widget.useRoomHistory) {
+      try {
+        // Show loading indicator
+        setState(() {
+          _isLoading = true;
+        });
+
+        // Clear the history for this room
+        final roomId = widget.userId; // For groups, userId is actually the roomId
+        await _roomHistoryRepo.deleteRoomHistory(roomId);
+
+        // Reload the history to show empty state
+        await _loadLocationHistory();
+
+        // Show success message
+        if (mounted) {
+          final colorScheme = Theme.of(context).colorScheme;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Location history cleared'),
+              backgroundColor: colorScheme.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(8),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error clearing location history: $e');
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          final colorScheme = Theme.of(context).colorScheme;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear history: $e'),
+              backgroundColor: colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(8),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _updateSliderRange() {
     if (_locationHistory != null && _locationHistory!.points.isNotEmpty) {
       _earliestTime = _locationHistory!.points.first.timestamp;
@@ -246,7 +359,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         final points = _currentPositions.values.toList();
         if (points.length == 1) {
           // For single point, just center on it
-          _mapController.move(points.first, 15.0);
+          _mapController.move(points.first, 12.0);
         } else if (points.length > 1) {
           // For multiple points, fit bounds with more padding for group view
           final bounds = LatLngBounds.fromPoints(points);
@@ -471,7 +584,6 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     final colorScheme = theme.colorScheme;
     
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: const BorderRadius.only(
@@ -528,6 +640,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     ],
                   ),
                 ),
+                // Clear history button for groups
+                if (widget.memberIds != null)
+                  IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: colorScheme.error,
+                    ),
+                    onPressed: _showClearHistoryDialog,
+                    tooltip: 'Clear History',
+                  ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
@@ -572,6 +694,11 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                                     _showAllMembers = false;
                                     _selectedMemberId = memberId;
                                     _updateSliderRange();
+
+                                    // Zoom to level 12 on the selected user
+                                    if (_currentPositions.containsKey(memberId)) {
+                                      _mapController.move(_currentPositions[memberId]!, 12.0);
+                                    }
                                   });
                                 } : null,
                                 child: Stack(
@@ -764,12 +891,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     child: FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
-                        initialCenter: _currentPositions.isNotEmpty 
+                        initialCenter: _currentPositions.isNotEmpty
                             ? (_showAllMembers && _currentPositions.length > 1
-                                ? _calculateCenterPoint(_currentPositions.values.toList())
+                                ? _calculateSmartZoom(_currentPositions.values.toList()).center
                                 : _currentPositions.values.first)
                             : const LatLng(37.7749, -122.4194), // Default to SF
-                        initialZoom: _showAllMembers ? 9.0 : 11.0,
+                        initialZoom: _currentPositions.isNotEmpty && _showAllMembers
+                            ? _calculateSmartZoom(_currentPositions.values.toList()).zoom
+                            : 10.0,
+                        minZoom: 2.0,  // Allow zooming out to see whole continent
+                        maxZoom: 16.0, // Prevent zooming in too close (street level)
                         onMapReady: () {
                           setState(() {
                             _mapReady = true;
@@ -1037,20 +1168,80 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       try {
         final points = _currentPositions.values.toList();
         if (points.length == 1) {
-          _mapController.move(points.first, 15.0);
+          // Single point - fixed zoom 6
+          _mapController.move(points.first, 6.0);
         } else if (points.length > 1) {
-          final bounds = LatLngBounds.fromPoints(points);
-          _mapController.fitCamera(
-            CameraFit.bounds(
-              bounds: bounds,
-              padding: const EdgeInsets.all(80),
-            ),
-          );
+          // Calculate smart zoom like main map
+          final result = _calculateSmartZoom(points);
+          _mapController.moveAndRotate(result.center, result.zoom, 0);
         }
       } catch (e) {
         print('Error fitting all members in view: $e');
       }
     }
+  }
+
+  // Smart zoom calculation matching main map logic
+  ({LatLng center, double zoom}) _calculateSmartZoom(List<LatLng> points) {
+    if (points.isEmpty) {
+      return (center: const LatLng(37.7749, -122.4194), zoom: 4.0);
+    }
+
+    if (points.length == 1) {
+      return (center: points.first, zoom: 8.0);  // Single user
+    }
+
+    // Calculate bounds
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final point in points) {
+      minLat = minLat < point.latitude ? minLat : point.latitude;
+      maxLat = maxLat > point.latitude ? maxLat : point.latitude;
+      minLng = minLng < point.longitude ? minLng : point.longitude;
+      maxLng = maxLng > point.longitude ? maxLng : point.longitude;
+    }
+
+    // Calculate center
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    final centerPoint = LatLng(centerLat, centerLng);
+
+    // Calculate span
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+    final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
+
+    // Calculate zoom with reduced levels for smaller window
+    double zoomLevel;
+    if (maxDiff < 0.01) {
+      zoomLevel = 12.0; // Very close together
+    } else if (maxDiff < 0.05) {
+      zoomLevel = 10.0; // City area
+    } else if (maxDiff < 0.1) {
+      zoomLevel = 8.0; // Metro area
+    } else if (maxDiff < 0.5) {
+      zoomLevel = 6.0; // Multi-city region
+    } else if (maxDiff < 2.0) {
+      zoomLevel = 5.0; // State-sized area
+    } else if (maxDiff < 10.0) {
+      zoomLevel = 4.0; // Multi-state
+    } else if (maxDiff < 50.0) {
+      zoomLevel = 3.0; // Country-sized (USA coast to coast)
+    } else {
+      zoomLevel = 2.0; // Continental/Intercontinental
+    }
+
+    // Reduce zoom by 0.5 for a bit of extra margin in the small window
+    zoomLevel = zoomLevel - 0.5;
+
+    // Now we can go down to 2.0 since we changed minZoom
+    if (zoomLevel < 2.0) zoomLevel = 2.0;
+    if (zoomLevel > 14.0) zoomLevel = 14.0;
+
+    return (center: centerPoint, zoom: zoomLevel);
   }
   
   LatLng _calculateCenterPoint(List<LatLng> points) {
