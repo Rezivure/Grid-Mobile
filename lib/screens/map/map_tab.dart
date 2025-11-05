@@ -979,7 +979,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       maxLng = maxLng > location.position.longitude ? maxLng : location.position.longitude;
     }
 
-    // Calculate center of all positions
+    // Calculate center of all positions (midpoint)
     final centerLat = (minLat + maxLat) / 2;
     final centerLng = (minLng + maxLng) / 2;
     final centerPoint = LatLng(centerLat, centerLng);
@@ -989,7 +989,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final lngDiff = maxLng - minLng;
 
     // Use the larger dimension to determine zoom
-    // This ensures all users fit in view
     final maxDiff = latDiff > lngDiff ? latDiff : lngDiff;
 
     // Calculate zoom based on the span of all users
@@ -1016,7 +1015,41 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     // Cap zoom at country level for faster loading (3.5 for full USA view)
     if (zoomLevel > 3.5) {
-      zoomLevel = 3.5; // Show full country even if users are closer
+      zoomLevel = 3.5;
+    }
+
+    // Estimate viewport size at this zoom level (degrees of lat/lng visible on screen)
+    // These are rough approximations for a typical phone screen
+    double viewportRadius;
+    if (zoomLevel <= 2.0) {
+      viewportRadius = 90.0; // World view - very zoomed out
+    } else if (zoomLevel <= 3.5) {
+      viewportRadius = 30.0; // Country view
+    } else if (zoomLevel <= 6.0) {
+      viewportRadius = 10.0; // State view
+    } else if (zoomLevel <= 8.0) {
+      viewportRadius = 2.0; // Multi-city view
+    } else if (zoomLevel <= 10.0) {
+      viewportRadius = 0.5; // Metro view
+    } else if (zoomLevel <= 12.0) {
+      viewportRadius = 0.1; // City view
+    } else {
+      viewportRadius = 0.02; // Neighborhood view
+    }
+
+    // Check if current user would be visible from the midpoint center
+    final distanceFromCenter = ((userPosition.latitude - centerLat).abs() +
+                                 (userPosition.longitude - centerLng).abs()) / 2;
+
+    // If current user is too far from midpoint, adjust center to keep them visible
+    if (distanceFromCenter > viewportRadius) {
+      // Shift center toward current user to ensure they're at the edge of viewport
+      final shiftFactor = (distanceFromCenter - viewportRadius) / distanceFromCenter;
+      final adjustedLat = centerLat + (userPosition.latitude - centerLat) * shiftFactor;
+      final adjustedLng = centerLng + (userPosition.longitude - centerLng) * shiftFactor;
+
+      print('[SmartZoom] Adjusted center to keep current user visible');
+      return MapZoomResult(zoom: zoomLevel, center: LatLng(adjustedLat, adjustedLng));
     }
 
     print('[SmartZoom] Calculated zoom: $zoomLevel for span: $maxDiff degrees');
