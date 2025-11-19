@@ -103,6 +103,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   int _pingCooldownSeconds = 5;
   Timer? _pingCooldownTimer;
 
+  // Track if user has completed onboarding (to avoid auto-requesting location permission)
+  bool _hasCompletedOnboarding = false;
+
   VectorTileProvider? _tileProvider;
   late vector_renderer.Theme _mapTheme;
 
@@ -177,9 +180,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     AppReviewManager.startSession();
     
     // Show onboarding modal if user hasn't seen it yet
+    // Pass callback to start location tracking AFTER disclosure is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      OnboardingModal.showOnboardingIfNeeded(context);
-      
+      OnboardingModal.showOnboardingIfNeeded(
+        context,
+        onComplete: () {
+          // Start location tracking after user has seen permission disclosure
+          setState(() {
+            _hasCompletedOnboarding = true;
+          });
+          _startLocationTracking();
+        },
+      );
+
       // Schedule review prompt check for later (after user has used the app for a bit)
       _scheduleReviewPromptCheck();
     });
@@ -328,6 +341,35 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       }
     });
 
+    // Check if user has completed onboarding v2 before starting location tracking
+    // This ensures we show the permission disclosure BEFORE requesting permissions
+    // Using v2 flag to force all users to see the new mandatory permission disclosure
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding_v2') ?? false;
+
+    setState(() {
+      _hasCompletedOnboarding = hasSeenOnboarding;
+    });
+
+    if (hasSeenOnboarding) {
+      // User has already seen onboarding v2, safe to start tracking
+      _startLocationTracking();
+    }
+    // If they haven't seen onboarding v2, tracking will start after onboarding completes
+    
+    // Listen for location updates to trigger zoom calculation
+    _locationManager?.addListener(_onLocationUpdate);
+    
+    // Load avatars ONCE on init without any refresh loops
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        _loadAvatarsOnce();
+      }
+    });
+  }
+  
+  // Start location tracking (only called after permission disclosure/onboarding)
+  Future<void> _startLocationTracking() async {
     final prefs = await SharedPreferences.getInstance();
     final isIncognitoMode = prefs.getBool('incognito_mode') ?? false;
 
@@ -344,18 +386,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         }
       });
     }
-    
-    // Listen for location updates to trigger zoom calculation
-    _locationManager?.addListener(_onLocationUpdate);
-    
-    // Load avatars ONCE on init without any refresh loops
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        _loadAvatarsOnce();
-      }
-    });
   }
-  
+
   // Removed periodic avatar check to prevent refresh loops
   
   void _loadAvatarsOnce() async {
@@ -1452,10 +1484,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       }
                     },
                   ),
-                CurrentLocationLayer(
-                  alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
-                  style: const LocationMarkerStyle(),
-                ),
+                // Only show CurrentLocationLayer AFTER onboarding (it auto-requests permissions)
+                if (_hasCompletedOnboarding)
+                  CurrentLocationLayer(
+                    alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
+                    style: const LocationMarkerStyle(),
+                  ),
                 BlocBuilder<MapBloc, MapState>(
                   buildWhen: (previous, current) => 
                       previous.userLocations != current.userLocations ||

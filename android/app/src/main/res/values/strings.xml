@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Grid</string>
+
+    <!-- Location permission descriptions -->
+    <string name="background_location_permission_rationale">This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.</string>
+
+    <!-- Data Safety Disclosure (for Android 13+) -->
+    <string name="location_data_usage">This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.</string>
+
+    <!-- Background Location Attribution (Android 15+) -->
+    <string name="attribution_background_location">This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.</string>
+</resources>

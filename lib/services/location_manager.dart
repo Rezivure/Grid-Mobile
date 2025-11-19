@@ -173,7 +173,7 @@ class LocationManager with ChangeNotifier {
       locationAuthorizationRequest: 'Always',
       backgroundPermissionRationale: bg.PermissionRationale(
         title: "Allow background location?",
-        message: "Needed to keep sharing location with your contacts, even if app is closed.",
+        message: "This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.",
         positiveAction: "Allow",
         negativeAction: "Cancel",
       ),
