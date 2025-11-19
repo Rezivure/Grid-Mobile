@@ -53,10 +53,10 @@ packages:
     dependency: transitive
     description:
       name: background_fetch
-      sha256: e9f26ae54d88310b7ac2a68f2f9fcee0081a4d5f11100f233a70702021e7ac4f
+      sha256: "6f0cec85480eac151f3971f883180d8c0acf6b40001153f1cf7c2c453df4f851"
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.7"
+    version: "1.5.0"
   base58check:
     dependency: transitive
     description:
@@ -306,10 +306,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_background_geolocation
-      sha256: c382103034f8c4e009816c61045fbb8c4d7074eb7d6817eebda1374e3150f6de
+      sha256: a7c01238f681bc617bd798fcbc443a4a6f314101441450e7ab7d11939702de20
       url: "https://pub.dev"
     source: hosted
-    version: "4.16.6"
+    version: "4.18.1"
   flutter_bloc:
     dependency: "direct main"
     description:
