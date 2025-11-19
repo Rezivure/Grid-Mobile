@@ -1,5 +1,10 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
+import 'package:url_launcher/url_launcher.dart';
 
 class OnboardingModal extends StatefulWidget {
   final VoidCallback? onComplete;
@@ -11,7 +16,8 @@ class OnboardingModal extends StatefulWidget {
 
   static Future<bool> shouldShowOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+    // Use v2 flag to force all users to see the new permission disclosure
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding_v2') ?? false;
     return !hasSeenOnboarding;
   }
 
@@ -34,30 +40,31 @@ class OnboardingModal extends StatefulWidget {
 }
 
 class _OnboardingModalState extends State<OnboardingModal>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late PageController _pageController;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
   int _currentPage = 0;
+
+  // Track permission grants (not just acknowledgments)
+  bool _locationAlwaysGranted = false;
+  bool _activityRecognitionGranted = false;
 
   final List<OnboardingPage> _pages = [
     OnboardingPage(
       icon: Icons.rocket_launch_rounded,
-      title: 'Congrats!',
-      description: 'You\'re taking the next step in privacy! Here are some tips to help you use Grid effectively and securely.',
+      title: 'Welcome to Grid!',
+      description: 'You\'re taking the next step in privacy! Grid uses end-to-end encryption to keep your location data completely private and secure.',
       color: const Color(0xFF2196F3),
     ),
     OnboardingPage(
       icon: Icons.shield_rounded,
-      title: 'End-to-End Encrypted',
-      description: 'Your location data is fully encrypted and only visible to people you choose to share with. Complete privacy guaranteed.',
+      title: 'Grant Permissions',
+      description: 'Your location is end-to-end encrypted and only visible to people you choose. Complete privacy guaranteed.',
       color: const Color(0xFF4CAF50),
-    ),
-    OnboardingPage(
-      icon: Icons.location_on_rounded,
-      title: 'Location Permissions',
-      description: 'Please enable location permissions and set to "Always Allow" in your device settings for Grid to work properly.',
-      color: const Color(0xFFFF9800),
+      isPermissionPage: true,
     ),
     OnboardingPage(
       icon: Icons.person_add_rounded,
@@ -100,6 +107,7 @@ class _OnboardingModalState extends State<OnboardingModal>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageController = PageController();
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -110,13 +118,54 @@ class _OnboardingModalState extends State<OnboardingModal>
       curve: Curves.easeInOut,
     );
     _fadeController.forward();
+
+    // Bounce animation for tap indicator
+    _bounceController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _bounceAnimation = Tween<double>(begin: -3.0, end: 3.0).animate(
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    // DON'T check permission status here - wait for user to reach permission page
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('[Onboarding] App lifecycle state changed to: $state');
+    // When app comes back to foreground (e.g., from Settings), check permissions
+    if (state == AppLifecycleState.resumed) {
+      print('[Onboarding] App resumed - checking permissions');
+      // Add small delay to ensure Settings changes are propagated
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _checkPermissionStatus();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     _fadeController.dispose();
+    _bounceController.dispose();
     super.dispose();
+  }
+
+  bool _canProceed() {
+    // If on permission page, check if all required permissions are granted
+    if (_pages[_currentPage].isPermissionPage) {
+      final needsActivity = Platform.isAndroid;
+      return _locationAlwaysGranted && (!needsActivity || _activityRecognitionGranted);
+    }
+    // All other pages can always proceed
+    return true;
   }
 
   void _nextPage() {
@@ -127,6 +176,118 @@ class _OnboardingModalState extends State<OnboardingModal>
       );
     } else {
       _completeOnboarding();
+    }
+  }
+
+  Future<void> _requestLocationPermission() async {
+    print('[Onboarding] Location permission tap - starting request');
+
+    try {
+      // IMPORTANT: Configure BackgroundGeolocation FIRST before requesting permission
+      // Otherwise it will show the default "[CHANGEME]" placeholder text
+      await bg.BackgroundGeolocation.ready(bg.Config(
+        locationAuthorizationRequest: 'Always',
+        backgroundPermissionRationale: bg.PermissionRationale(
+          title: "Allow background location?",
+          message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
+          positiveAction: "Allow",
+          negativeAction: "Cancel",
+        ),
+        reset: false, // Don't reset existing config
+      ));
+
+      // Now request permission after config is set
+      final status = await bg.BackgroundGeolocation.requestPermission();
+      print('[Onboarding] BackgroundGeolocation permission result: $status');
+
+      // Status codes: 0 = not determined, 1 = restricted, 2 = denied, 3 = always, 4 = whenInUse
+      if (status == 2) {
+        // Denied - need to go to settings
+        print('[Onboarding] Permission denied, opening settings');
+        await _showSettingsDialog('Location');
+        return;
+      }
+
+      final locationGranted = status >= 3;
+      print('[Onboarding] Final permission granted: $locationGranted');
+
+      setState(() {
+        _locationAlwaysGranted = locationGranted;
+      });
+    } catch (e) {
+      print('[Onboarding] ERROR requesting location permission: $e');
+      await _showSettingsDialog('Location');
+    }
+  }
+
+  Future<void> _requestActivityPermission() async {
+    print('[Onboarding] Activity permission tap - auto-granting (handled by BG geolocation)');
+
+    // Activity recognition is handled automatically by background_geolocation
+    // Just mark as granted
+    setState(() {
+      _activityRecognitionGranted = true;
+    });
+  }
+
+  Future<void> _showSettingsDialog(String permissionName) async {
+    // Show a clean snackbar instead of ugly dialog
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Opening Settings to enable $permissionName'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    // Small delay so user sees the message
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Go straight to settings
+    await openAppSettings();
+
+    // Check permissions when user comes back
+    await _checkPermissionStatus();
+  }
+
+  Future<void> _checkPermissionStatus() async {
+    print('[Onboarding] ============ CHECKING PERMISSION STATUS ============');
+
+    try {
+      // Configure FIRST before checking permission status
+      await bg.BackgroundGeolocation.ready(bg.Config(
+        locationAuthorizationRequest: 'Always',
+        backgroundPermissionRationale: bg.PermissionRationale(
+          title: "Allow background location?",
+          message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
+          positiveAction: "Allow",
+          negativeAction: "Cancel",
+        ),
+        reset: false, // Don't reset existing config
+      ));
+
+      // Call requestPermission which checks status without showing dialog if already granted/denied
+      final status = await bg.BackgroundGeolocation.requestPermission();
+      print('[Onboarding] BackgroundGeolocation permission status: $status');
+
+      // Status values: 0 = not determined, 1 = restricted, 2 = denied, 3 = always, 4 = whenInUse
+      final locationGranted = status >= 3; // 3 = always, 4 = whenInUse
+      print('[Onboarding]   - FINAL DECISION: locationGranted = $locationGranted (status code: $status)');
+
+      if (mounted) {
+        setState(() {
+          _locationAlwaysGranted = locationGranted;
+          _activityRecognitionGranted = true; // Auto-grant for now, BG geolocation handles it
+        });
+      }
+
+      print('[Onboarding] ========== PERMISSION CHECK COMPLETE ==========');
+      print('[Onboarding] UI State - _locationAlwaysGranted: $_locationAlwaysGranted, _activityRecognitionGranted: $_activityRecognitionGranted');
+    } catch (e, stackTrace) {
+      print('[Onboarding] ERROR checking permission status: $e');
+      print('[Onboarding] Stack trace: $stackTrace');
     }
   }
 
@@ -141,17 +302,14 @@ class _OnboardingModalState extends State<OnboardingModal>
 
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_seen_onboarding', true);
-    
+    await prefs.setBool('has_seen_onboarding_v2', true);
+
     if (mounted) {
       Navigator.of(context).pop();
       widget.onComplete?.call();
     }
   }
 
-  void _skipOnboarding() {
-    _completeOnboarding();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,29 +337,31 @@ class _OnboardingModalState extends State<OnboardingModal>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with skip button
+              // Header with conditional skip button
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Tips',
+                      'Welcome',
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: colorScheme.onSurface,
                       ),
                     ),
-                    TextButton(
-                      onPressed: _skipOnboarding,
-                      child: Text(
-                        'Skip',
-                        style: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                          fontWeight: FontWeight.w500,
+                    // Show skip button only AFTER permission page
+                    if (_currentPage > 1) // Pages 0, 1 are Welcome, Permissions (with encryption info)
+                      TextButton(
+                        onPressed: _completeOnboarding,
+                        child: Text(
+                          'Skip',
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -214,6 +374,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                     setState(() {
                       _currentPage = index;
                     });
+                    // Don't auto-check permissions - only when user taps the card
                   },
                   itemCount: _pages.length,
                   itemBuilder: (context, index) {
@@ -263,10 +424,12 @@ class _OnboardingModalState extends State<OnboardingModal>
                     Expanded(
                       flex: _currentPage == 0 ? 1 : 1,
                       child: ElevatedButton(
-                        onPressed: _nextPage,
+                        onPressed: _canProceed() ? _nextPage : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: colorScheme.primary,
                           foregroundColor: colorScheme.onPrimary,
+                          disabledBackgroundColor: colorScheme.surfaceVariant,
+                          disabledForegroundColor: colorScheme.onSurface.withOpacity(0.38),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -295,50 +458,237 @@ class _OnboardingModalState extends State<OnboardingModal>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Icon with background
+          // Icon with background (smaller on permission page to save space)
           Container(
-            width: 100,
-            height: 100,
+            width: page.isPermissionPage ? 80 : 100,
+            height: page.isPermissionPage ? 80 : 100,
             decoration: BoxDecoration(
               color: page.color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               page.icon,
-              size: 48,
+              size: page.isPermissionPage ? 40 : 48,
               color: page.color,
             ),
           ),
 
-          const SizedBox(height: 32),
+          SizedBox(height: page.isPermissionPage ? 20 : 32),
 
           // Title
           Text(
             page.title,
-            style: theme.textTheme.headlineMedium?.copyWith(
+            style: (page.isPermissionPage
+                ? theme.textTheme.headlineSmall
+                : theme.textTheme.headlineMedium)?.copyWith(
               fontWeight: FontWeight.w600,
               color: colorScheme.onSurface,
             ),
             textAlign: TextAlign.center,
           ),
 
-          const SizedBox(height: 16),
+          SizedBox(height: page.isPermissionPage ? 12 : 16),
 
           // Description
           Text(
             page.description,
-            style: theme.textTheme.bodyLarge?.copyWith(
+            style: (page.isPermissionPage
+                ? theme.textTheme.bodyMedium
+                : theme.textTheme.bodyLarge)?.copyWith(
               color: colorScheme.onSurface.withOpacity(0.7),
               height: 1.5,
             ),
             textAlign: TextAlign.center,
           ),
+
+          // Show permission explanation and privacy policy link if this is the permission page
+          if (page.isPermissionPage) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.7),
+                    height: 1.4,
+                  ),
+                  children: [
+                    const TextSpan(
+                      text: 'Skeptical? Read our ',
+                    ),
+                    TextSpan(
+                      text: 'Privacy Policy',
+                      style: TextStyle(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () async {
+                          final uri = Uri.parse('https://mygrid.app/privacy');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildPermissionCard(
+              context: context,
+              icon: Icons.location_on,
+              title: 'Location Always',
+              description: 'Don\'t worry, you can toggle this on/off in app',
+              isGranted: _locationAlwaysGranted,
+              onTap: _requestLocationPermission,
+              color: const Color(0xFF4CAF50),
+            ),
+            // Only show Physical Activity on Android (iOS includes it with location)
+            if (Platform.isAndroid) ...[
+              const SizedBox(height: 12),
+              _buildPermissionCard(
+                context: context,
+                icon: Icons.directions_run,
+                title: 'Physical Activity',
+                description: 'Better battery & accurate updates',
+                isGranted: _activityRecognitionGranted,
+                onTap: _requestActivityPermission,
+                color: const Color(0xFF2196F3),
+              ),
+            ],
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool isGranted,
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      elevation: isGranted ? 0 : 1,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () {
+          print('[Onboarding] Permission card tapped: $title (isGranted: $isGranted)');
+          if (!isGranted) {
+            onTap();
+          }
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isGranted
+                ? colorScheme.primary.withOpacity(0.15)
+                : colorScheme.surfaceVariant.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isGranted
+                  ? colorScheme.primary
+                  : colorScheme.outline.withOpacity(0.3),
+              width: 2,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isGranted
+                      ? colorScheme.primary.withOpacity(0.2)
+                      : colorScheme.surfaceVariant,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: isGranted ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Text content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: isGranted ? colorScheme.onSurface : colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Status indicator
+              if (isGranted)
+                Icon(
+                  Icons.check_circle,
+                  color: colorScheme.primary,
+                  size: 28,
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _bounceAnimation,
+                      builder: (context, child) {
+                        return Transform.translate(
+                          offset: Offset(0, _bounceAnimation.value),
+                          child: Icon(
+                            Icons.touch_app,
+                            color: colorScheme.primary.withOpacity(0.7),
+                            size: 20,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.circle_outlined,
+                      color: colorScheme.outline.withOpacity(0.5),
+                      size: 28,
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -366,11 +716,13 @@ class OnboardingPage {
   final String title;
   final String description;
   final Color color;
+  final bool isPermissionPage;
 
   OnboardingPage({
     required this.icon,
     required this.title,
     required this.description,
     required this.color,
+    this.isPermissionPage = false,
   });
 }

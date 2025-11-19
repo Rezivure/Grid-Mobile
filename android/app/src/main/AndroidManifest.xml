@@ -21,6 +21,11 @@
             android:name="com.transistorsoft.locationmanager.license"
             android:value="${transistorsoftKey}" />
 
+        <!-- Background Location Permission Rationale -->
+        <meta-data
+            android:name="com.google.android.gms.permission.AD_ID"
+            android:value="false" />
+
         <!-- Rest of your existing configuration -->
         <activity
             android:name=".MainActivity"
