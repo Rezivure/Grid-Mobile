@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
-import 'package:permission_handler/permission_handler.dart' show openAppSettings;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class OnboardingModal extends StatefulWidget {
@@ -221,13 +221,50 @@ class _OnboardingModalState extends State<OnboardingModal>
   }
 
   Future<void> _requestActivityPermission() async {
-    print('[Onboarding] Activity permission tap - auto-granting (handled by BG geolocation)');
+    print('[Onboarding] Activity/Motion permission tap');
 
-    // Activity recognition is handled automatically by background_geolocation
-    // Just mark as granted
-    setState(() {
-      _activityRecognitionGranted = true;
-    });
+    try {
+      if (Platform.isIOS) {
+        // Configure BackgroundGeolocation first
+        await bg.BackgroundGeolocation.ready(bg.Config(
+          locationAuthorizationRequest: 'Always',
+          backgroundPermissionRationale: bg.PermissionRationale(
+            title: "Allow background location?",
+            message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
+            positiveAction: "Allow",
+            negativeAction: "Cancel",
+          ),
+          reset: false,
+          // Enable motion tracking which should trigger motion permission
+          disableMotionActivityUpdates: false,
+          motionTriggerDelay: 0,
+        ));
+
+        // Start the service briefly to trigger motion permission request
+        // This is what happens after onboarding that makes it request motion
+        await bg.BackgroundGeolocation.start();
+
+        // Give it a moment to request permission
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Stop it again since we're just in onboarding
+        await bg.BackgroundGeolocation.stop();
+
+        setState(() {
+          _activityRecognitionGranted = true;
+        });
+      } else {
+        // Android - just mark as granted since it's bundled with location
+        setState(() {
+          _activityRecognitionGranted = true;
+        });
+      }
+    } catch (e) {
+      print('[Onboarding] ERROR requesting activity/motion permission: $e');
+      setState(() {
+        _activityRecognitionGranted = true;
+      });
+    }
   }
 
   Future<void> _showSettingsDialog(String permissionName) async {
@@ -276,10 +313,14 @@ class _OnboardingModalState extends State<OnboardingModal>
       final locationGranted = status >= 3; // 3 = always, 4 = whenInUse
       print('[Onboarding]   - FINAL DECISION: locationGranted = $locationGranted (status code: $status)');
 
+      // Motion/activity permission is handled by flutter_background_geolocation after onboarding
+      // We just mark it as true for UI purposes (to show users it will be requested)
+      bool activityGranted = true;
+
       if (mounted) {
         setState(() {
           _locationAlwaysGranted = locationGranted;
-          _activityRecognitionGranted = true; // Auto-grant for now, BG geolocation handles it
+          _activityRecognitionGranted = activityGranted;
         });
       }
 
