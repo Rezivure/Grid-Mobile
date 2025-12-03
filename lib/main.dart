@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart';
+import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
 
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/backwards_compatibility_service.dart';
@@ -47,6 +49,7 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
+import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 
 
@@ -62,10 +65,17 @@ void main() async {
   final databaseService = DatabaseService();
   await databaseService.initDatabase();
 
+  await vod.init();
+
   // Initialize Matrix Client with backwards compatible database
+  final database = await BackwardsCompatibilityService.createMatrixDatabase();
   final client = Client(
     'Grid App',
-    databaseBuilder: (_) => BackwardsCompatibilityService.createMatrixDatabase(),
+    database: database,
+    nativeImplementations: NativeImplementationsIsolate(
+      compute,
+      vodozemacInit: () => vod.init(),
+    ),
   );
   await client.init();
 
@@ -317,6 +327,11 @@ void main() async {
             '/login': (context) => LoginScreen(),
             '/signup': (context) => SignUpScreen(),
             '/main': (context) => const MapTab(),
+            '/migration': (context) => Scaffold(
+              body: Center(
+                child: MigrationModal(),
+              ),
+            ),
           },
         ),
       ),

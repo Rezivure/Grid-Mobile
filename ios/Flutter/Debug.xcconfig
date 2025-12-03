@@ -1,2 +1,5 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
+
+// Force load the vodozemac Rust library to ensure symbols are available
+OTHER_LDFLAGS = $(inherited) -force_load ${PODS_CONFIGURATION_BUILD_DIR}/flutter_vodozemac/libvodozemac_bindings_dart.a

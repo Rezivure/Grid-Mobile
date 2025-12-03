@@ -314,8 +314,8 @@ class SyncManager with ChangeNotifier {
         _processPendingMessages();
       }
       mapBloc.add(MapLoadUserLocations());
-      
-      if (!_isSyncing || !client.syncPending) {
+
+      if (client.isLogged() && (!_isSyncing || !client.syncPending)) {
         _startSyncStream();
       }
     }

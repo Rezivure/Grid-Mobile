@@ -555,19 +555,17 @@ class _OnboardingModalState extends State<OnboardingModal>
               onTap: _requestLocationPermission,
               color: const Color(0xFF4CAF50),
             ),
-            // Only show Physical Activity on Android (iOS includes it with location)
-            if (Platform.isAndroid) ...[
-              const SizedBox(height: 12),
-              _buildPermissionCard(
-                context: context,
-                icon: Icons.directions_run,
-                title: 'Physical Activity',
-                description: 'Better battery & accurate updates',
-                isGranted: _activityRecognitionGranted,
-                onTap: _requestActivityPermission,
-                color: const Color(0xFF2196F3),
-              ),
-            ],
+            // Show Physical Activity/Motion for both Android and iOS
+            const SizedBox(height: 12),
+            _buildPermissionCard(
+              context: context,
+              icon: Icons.directions_run,
+              title: Platform.isIOS ? 'Motion & Fitness' : 'Physical Activity',
+              description: 'Better battery & accurate updates',
+              isGranted: _activityRecognitionGranted,
+              onTap: _requestActivityPermission,
+              color: const Color(0xFF2196F3),
+            ),
           ],
         ],
       ),
