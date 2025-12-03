@@ -607,7 +607,10 @@ class RoomService {
         await client.inviteUser(roomId, fullMatrixId);
       }
 
-      await client.setRoomTag(effectiveUserId, roomId, 'Grid Group');
+      final room = client.getRoomById(roomId);
+      if (room != null) {
+        await room.addTag('Grid Group');
+      }
     } catch (e) {
       throw Exception('Failed to create group: $e');
     }
@@ -625,8 +628,9 @@ class RoomService {
 
     final prefs = await SharedPreferences.getInstance();
     var userID = client.userID ?? "";
-    var displayName = await client.getDisplayName(userID) ?? '';
-    if (displayName != null) {
+    var profileData = await client.getProfileField(userID, 'displayname');
+    var displayName = profileData?['displayname'] as String? ?? '';
+    if (displayName.isNotEmpty) {
       prefs.setString('displayName', displayName);
     }
   }
@@ -895,8 +899,11 @@ class RoomService {
   Future<void> addTag(String roomId, String tag, {double? order}) async {
     try {
       print("Attempting to add tag '$tag' to room ID $roomId");
-      await client.setRoomTag(client.userID!, roomId, tag, order: order);
-      print("Tag added successfully.");
+      final room = client.getRoomById(roomId);
+      if (room != null) {
+        await room.addTag(tag, order: order);
+        print("Tag added successfully.");
+      }
     } catch (e) {
       print("Failed to add tag: $e");
     }

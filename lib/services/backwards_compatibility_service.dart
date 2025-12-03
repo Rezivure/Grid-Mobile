@@ -55,6 +55,51 @@ class BackwardsCompatibilityService {
     print("Backfill of sharing preferences complete.");
   }
 
+  /// Check if user needs to re-login due to database migration
+  static Future<bool> needsReloginForMigration() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Check if we've already handled the migration
+    final hasCompletedVodozemacMigration = prefs.getBool('hasCompletedVodozemacMigration') ?? false;
+    if (hasCompletedVodozemacMigration) {
+      return false;
+    }
+
+    // Check for old Hive database
+    final dir = await getApplicationSupportDirectory();
+    final oldHivePath = path.join(dir.path, 'grid_app');
+    final hiveDirExists = await Directory(oldHivePath).exists();
+
+    // Check if there's an existing token (which would be from olm)
+    final hasOldToken = prefs.getString('token') != null;
+
+    // Need migration if:
+    // 1. Old Hive database exists OR
+    // 2. Has a token but hasn't completed vodozemac migration (meaning it's an old olm token)
+    if (hiveDirExists || hasOldToken) {
+      print('[Matrix Migration] Migration needed - Hive exists: $hiveDirExists, Has old token: $hasOldToken');
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Mark migration as completed
+  static Future<void> markMigrationComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hasCleanedOldHiveDB', true);
+    await prefs.setBool('hasCompletedVodozemacMigration', true);
+
+    final dir = await getApplicationSupportDirectory();
+    final oldHivePath = path.join(dir.path, 'grid_app');
+    try {
+      await Directory(oldHivePath).delete(recursive: true);
+      print('[Matrix Migration] Cleaned up old Hive database');
+    } catch (e) {
+      print('[Matrix Migration] Failed to clean old Hive database: $e');
+    }
+  }
+
   /// Handle Matrix database migration from Hive to SQLite
   static Future<DatabaseApi> createMatrixDatabase() async {
     final dir = await getApplicationSupportDirectory();
@@ -88,21 +133,16 @@ class BackwardsCompatibilityService {
       }
     }
 
-    // Create and configure SQLite database
-    final database = await sqflite.openDatabase(
+    final sqfliteDb = await sqflite.openDatabase(
       dbPath,
       version: 1,
-      onCreate: (db, version) {
-        print('[Matrix Database] Creating new Matrix database v$version');
-      },
-      onUpgrade: (db, oldVersion, newVersion) {
-        print('[Matrix Database] Upgrading from v$oldVersion to v$newVersion');
-      },
     );
 
-    // Create Matrix SDK database wrapper
-    final matrixDb = MatrixSdkDatabase('grid_app', database: database);
-    await matrixDb.open();
+    final matrixDb = await MatrixSdkDatabase.init(
+      'grid_app',
+      database: sqfliteDb,
+      sqfliteFactory: sqflite.databaseFactory,
+    );
 
     return matrixDb;
   }

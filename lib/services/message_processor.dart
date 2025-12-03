@@ -51,10 +51,8 @@ class MessageProcessor {
       print("Room not found for event ${matrixEvent.eventId}");
       return null;
     }
-    // Convert MatrixEvent to Event
     final Event finalEvent = await Event.fromMatrixEvent(matrixEvent, room);
-    // Decrypt the event
-    final Event decryptedEvent = await encryption.decryptRoomEvent(roomId, finalEvent);
+    final Event decryptedEvent = await encryption.decryptRoomEvent(finalEvent);
     // Check if the decrypted event is now a message
     if (decryptedEvent.type == EventTypes.Message && decryptedEvent.content['msgtype'] != null) {
       // Skip message if originated from self

@@ -24,7 +24,7 @@ apply from: "${background_geolocation.projectDir}/background_geolocation.gradle"
 android {
     namespace "app.mygrid.grid"
     compileSdkVersion rootProject.ext.compileSdkVersion
-    ndkVersion flutter.ndkVersion
+    ndkVersion "28.0.12433566"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -36,6 +36,12 @@ android {
         jvmTarget = '17'
     }
 
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
     defaultConfig {
         applicationId "app.mygrid.grid"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -45,6 +51,9 @@ android {
         manifestPlaceholders = [applicationName: "android.app.Application",
                                 transistorsoftKey: localProperties.getProperty('transistorsoft.key', '')
                                 ]
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
     }
 
 
