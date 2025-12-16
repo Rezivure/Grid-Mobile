@@ -47,6 +47,19 @@ enum SyncState {
   error,
 }
 
+/// Tracks a decryption error for display to the user
+class DecryptionError {
+  final String senderId;
+  final String roomId;
+  final DateTime timestamp;
+
+  DecryptionError({
+    required this.senderId,
+    required this.roomId,
+    required this.timestamp,
+  });
+}
+
 class SyncManager with ChangeNotifier {
   final Client client;
   final RoomService roomService;
@@ -70,7 +83,11 @@ class SyncManager with ChangeNotifier {
   bool _isInitialized = false;
   String? _sinceToken;
   bool _authenticationFailed = false;
-  
+
+  // Track decryption errors
+  final List<DecryptionError> _decryptionErrors = [];
+  static const int _maxDecryptionErrors = 50;
+
   // Elegant sync state management
   SyncState _syncState = SyncState.uninitialized;
   final List<Function> _postSyncOperations = [];
@@ -113,6 +130,32 @@ class SyncManager with ChangeNotifier {
   SyncState get syncState => _syncState;
   bool get isReady => _syncState == SyncState.ready;
 
+  /// Get recent decryption errors
+  List<DecryptionError> get decryptionErrors => List.unmodifiable(_decryptionErrors);
+
+  /// Check if there are unread decryption errors
+  bool get hasDecryptionErrors => _decryptionErrors.isNotEmpty;
+
+  /// Clear all decryption errors
+  void clearDecryptionErrors() {
+    _decryptionErrors.clear();
+    notifyListeners();
+  }
+
+  /// Add a decryption error (logged for debugging)
+  void _addDecryptionError(String senderId, String roomId) {
+    _decryptionErrors.add(DecryptionError(
+      senderId: senderId,
+      roomId: roomId,
+      timestamp: DateTime.now(),
+    ));
+    // Keep list bounded
+    if (_decryptionErrors.length > _maxDecryptionErrors) {
+      _decryptionErrors.removeAt(0);
+    }
+    notifyListeners();
+  }
+
   Future<void> _loadSinceToken() async {
     final prefs = await SharedPreferences.getInstance();
     _sinceToken = prefs.getString('syncSinceToken');
@@ -132,14 +175,32 @@ class SyncManager with ChangeNotifier {
 
   Future<void> initialize() async {
     if (_isInitialized || _syncState != SyncState.uninitialized) return;
-    
+
     // Defer state change to avoid build phase conflicts
     await Future.microtask(() => _setSyncState(SyncState.loadingToken));
     print("[SyncManager] Starting initialization sequence");
-    
+
+    // Verify token is still valid before proceeding
+    try {
+      final tokenOwner = await client.getTokenOwner();
+      if (tokenOwner.userId.isEmpty) {
+        print('[SyncManager] Token returned empty userId');
+        await _handleAuthenticationFailure();
+        return;
+      }
+      print('[SyncManager] Token valid for user: ${tokenOwner.userId}');
+    } catch (e) {
+      print('[SyncManager] Token invalid or device deleted: $e');
+      await _handleAuthenticationFailure();
+      return;
+    }
+
+    // Wire up decryption error callback
+    messageProcessor.setDecryptionErrorCallback(_addDecryptionError);
+
     // Ensure InvitationsBloc is ready before processing sync
     await Future.delayed(const Duration(milliseconds: 200));
-    
+
     try {
       await _loadSinceToken();
       

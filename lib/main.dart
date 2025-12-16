@@ -76,6 +76,9 @@ void main() async {
       compute,
       vodozemacInit: () => vod.init(),
     ),
+    // Share encryption keys with all devices, not just cross-verified ones
+    // This ensures location sharing works without requiring device verification
+    shareKeysWith: ShareKeysWith.all,
   );
   await client.init();
 
