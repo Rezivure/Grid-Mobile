@@ -511,7 +511,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
     AppReviewManager.stopSession(); // Stop tracking usage
-    
+
     // No longer need to reset initialization flag
     super.dispose();
   }
@@ -603,7 +603,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     if (userRepository == null || sharingPreferencesRepository == null) {
       return; // Services not yet initialized
     }
-    
+
     final backwardsService = BackwardsCompatibilityService(
       userRepository!,
       sharingPreferencesRepository!,
@@ -611,7 +611,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     await backwardsService.runBackfillIfNeeded();
   }
-  
+
   Future<void> _refreshSatelliteTokenIfNeeded() async {
     try {
       // Check if still has subscription
@@ -947,7 +947,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       ),
     );
   }
-
 
   void _resetToInitialZoom() {
     // Reset to initial smart zoom calculation
