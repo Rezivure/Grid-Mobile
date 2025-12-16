@@ -183,7 +183,8 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       final client = context.read<Client>();
       for (final userId in userIds) {
         try {
-          final displayName = await client.getDisplayName(userId);
+          final profileData = await client.getProfileField(userId, 'displayname');
+          final displayName = profileData?['displayname'] as String?;
           if (displayName != null && displayName.isNotEmpty) {
             _userDisplayNames[userId] = displayName;
           } else {

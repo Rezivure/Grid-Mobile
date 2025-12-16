@@ -13,12 +13,9 @@ PODS:
     - Flutter
   - flutter_native_splash (2.4.3):
     - Flutter
-  - flutter_olm (3.2.15):
-    - Flutter
-  - flutter_openssl_crypto (0.0.1):
-    - Flutter
-    - OpenSSL-Universal
   - flutter_secure_storage (6.0.0):
+    - Flutter
+  - flutter_vodozemac (0.0.1):
     - Flutter
   - geolocator_apple (1.2.0):
     - Flutter
@@ -31,7 +28,6 @@ PODS:
     - Flutter
     - FlutterMacOS
   - MTBBarcodeScanner (5.0.11)
-  - OpenSSL-Universal (3.3.2000)
   - package_info_plus (0.4.5):
     - Flutter
   - path_provider_foundation (0.0.1):
@@ -61,9 +57,8 @@ DEPENDENCIES:
   - flutter_background_geolocation (from `.symlinks/plugins/flutter_background_geolocation/ios`)
   - flutter_compass (from `.symlinks/plugins/flutter_compass/ios`)
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
-  - flutter_olm (from `.symlinks/plugins/flutter_olm/ios`)
-  - flutter_openssl_crypto (from `.symlinks/plugins/flutter_openssl_crypto/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
+  - flutter_vodozemac (from `.symlinks/plugins/flutter_vodozemac/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/ios`)
   - image_cropper (from `.symlinks/plugins/image_cropper/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
@@ -81,7 +76,6 @@ SPEC REPOS:
   trunk:
     - CocoaLumberjack
     - MTBBarcodeScanner
-    - OpenSSL-Universal
     - TOCropViewController
     - TSBackgroundFetch
 
@@ -96,12 +90,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_compass/ios"
   flutter_native_splash:
     :path: ".symlinks/plugins/flutter_native_splash/ios"
-  flutter_olm:
-    :path: ".symlinks/plugins/flutter_olm/ios"
-  flutter_openssl_crypto:
-    :path: ".symlinks/plugins/flutter_openssl_crypto/ios"
   flutter_secure_storage:
     :path: ".symlinks/plugins/flutter_secure_storage/ios"
+  flutter_vodozemac:
+    :path: ".symlinks/plugins/flutter_vodozemac/ios"
   geolocator_apple:
     :path: ".symlinks/plugins/geolocator_apple/ios"
   image_cropper:
@@ -134,15 +126,13 @@ SPEC CHECKSUMS:
   flutter_background_geolocation: a9a94f42e29b29d350c6e1fea8434281f8f466b8
   flutter_compass: cbbd285cea1584c7ac9c4e0c3e1f17cbea55e855
   flutter_native_splash: f71420956eb811e6d310720fee915f1d42852e7a
-  flutter_olm: 41bad3c821821a227ce3b793d338e9801fb8d0ae
-  flutter_openssl_crypto: 636ad25f56fbe0f45b9e13b8589540b341a486a1
   flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
+  flutter_vodozemac: a13abe22ea9e3c4a518c88b0e91288ef7726e372
   geolocator_apple: 9bcea1918ff7f0062d98345d238ae12718acfbc1
   image_cropper: 37d40f62177c101ff4c164906d259ea2c3aa70cf
   image_picker_ios: c560581cceedb403a6ff17f2f816d7fea1421fc1
   in_app_purchase_storekit: a1ce04056e23eecc666b086040239da7619cd783
   MTBBarcodeScanner: f453b33c4b7dfe545d8c6484ed744d55671788cb
-  OpenSSL-Universal: b60a3702c9fea8b3145549d421fdb018e53ab7b4
   package_info_plus: c0502532a26c7662a62a356cebe2692ec5fe4ec4
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
   permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
@@ -154,6 +144,6 @@ SPEC CHECKSUMS:
   TSBackgroundFetch: e91020924db32f27d0a43df7dec6f73f10743571
   url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
 
-PODFILE CHECKSUM: 5067c9011bf3063b6e18718c3d8607e3e4bc7006
+PODFILE CHECKSUM: f6c5134dbc4d1f65e0f1041a46a91c4f377ae1ec
 
 COCOAPODS: 1.16.2

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -135,6 +136,12 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         client.accessToken = token;
         var stat = client.isLogged();
         print("print stat of client log:{$stat} ");
+
+        if (await BackwardsCompatibilityService.needsReloginForMigration()) {
+          Navigator.pushReplacementNamed(context, '/migration');
+          return;
+        }
+
         if (client.isLogged()) {
           // Go directly to main app - let it handle loading states during sync
           Navigator.pushReplacementNamed(context, '/main');
