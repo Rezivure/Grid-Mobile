@@ -584,37 +584,6 @@ class _SettingsPageState extends State<SettingsPage> {
         await databaseService.deleteAndReinitialize();
         print("[Logout] Database cleared");
 
-        // After logout, try to clean up the Matrix database file
-        try {
-          // Small delay to ensure database is closed
-          await Future.delayed(Duration(milliseconds: 100));
-
-          final dir = await getApplicationSupportDirectory();
-          final matrixDbPath = path.join(dir.path, 'grid_app_matrix.db');
-          final matrixDbFile = File(matrixDbPath);
-          if (await matrixDbFile.exists()) {
-            await matrixDbFile.delete();
-            print("Deleted Matrix database file");
-          }
-
-          // Also check for any related database files (journal, wal, etc)
-          final dbJournalFile = File('$matrixDbPath-journal');
-          if (await dbJournalFile.exists()) {
-            await dbJournalFile.delete();
-          }
-          final dbWalFile = File('$matrixDbPath-wal');
-          if (await dbWalFile.exists()) {
-            await dbWalFile.delete();
-          }
-          final dbShmFile = File('$matrixDbPath-shm');
-          if (await dbShmFile.exists()) {
-            await dbShmFile.delete();
-          }
-        } catch (e) {
-          print("Note: Could not delete Matrix database files: $e");
-          // This is not critical - the database will be recreated on next login
-        }
-
         // 6. Clear shared preferences (but preserve some app settings if needed)
         print("[Logout] Clearing preferences...");
         final preserveKeys = ['app_theme', 'onboarding_complete']; // Add keys you want to preserve
@@ -1073,7 +1042,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final client = Provider.of<Client>(context, listen: false);
         final id = client.userID ?? '';
         if (id.isNotEmpty) {
-          await client.setDisplayName(id, newDisplayName);
+          await client.setProfileField(id, 'displayname', {'displayname': newDisplayName});
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('displayName', newDisplayName);
         }

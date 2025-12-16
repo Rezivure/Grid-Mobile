@@ -19,9 +19,11 @@ import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
 
+/// Callback type for decryption errors
+typedef DecryptionErrorCallback = void Function(String senderId, String roomId);
+
 class MessageProcessor {
   final Client client;
-  final Encryption encryption;
   final LocationRepository locationRepository;
   final LocationHistoryRepository locationHistoryRepository;
   final RoomLocationHistoryRepository? roomLocationHistoryRepository;
@@ -29,7 +31,9 @@ class MessageProcessor {
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
   final MapIconSyncService? mapIconSyncService;
-  
+
+  /// Callback for when decryption fails
+  DecryptionErrorCallback? _onDecryptionError;
 
   MessageProcessor(
       this.locationRepository,
@@ -39,7 +43,15 @@ class MessageProcessor {
       {this.avatarBloc,
       this.mapIconSyncService,
       this.roomLocationHistoryRepository}
-      ) : encryption = Encryption(client: client);
+      );
+
+  /// Use the client's encryption instance which has the actual keys
+  Encryption? get encryption => client.encryption;
+
+  /// Set a callback to be notified of decryption errors
+  void setDecryptionErrorCallback(DecryptionErrorCallback callback) {
+    _onDecryptionError = callback;
+  }
 
   /// Process a single event from a room. Decrypt if necessary,
   /// then parse and store location messages if found.
@@ -51,10 +63,23 @@ class MessageProcessor {
       print("Room not found for event ${matrixEvent.eventId}");
       return null;
     }
-    // Convert MatrixEvent to Event
     final Event finalEvent = await Event.fromMatrixEvent(matrixEvent, room);
-    // Decrypt the event
-    final Event decryptedEvent = await encryption.decryptRoomEvent(roomId, finalEvent);
+
+    // Use the client's encryption instance which has the actual decryption keys
+    final enc = encryption;
+    if (enc == null) {
+      print('[MessageProcessor] Encryption not available, cannot decrypt');
+      return null;
+    }
+    final Event decryptedEvent = await enc.decryptRoomEvent(finalEvent);
+
+    // Check for decryption failure
+    if (decryptedEvent.type == 'm.room.encrypted' &&
+        decryptedEvent.content['msgtype'] == 'm.bad.encrypted') {
+      print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}');
+      _onDecryptionError?.call(finalEvent.senderId ?? 'unknown', roomId);
+    }
+
     // Check if the decrypted event is now a message
     if (decryptedEvent.type == EventTypes.Message && decryptedEvent.content['msgtype'] != null) {
       // Skip message if originated from self

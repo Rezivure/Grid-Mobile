@@ -39,17 +39,19 @@ class AuthProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     //await prefs.setBool('isLoggedIn', _isLoggedIn);
     await prefs.setString('loginToken', jwt);
-    
+
     // Clear any stored custom homeserver since this is default server login
     await prefs.remove('custom_homeserver');
 
     try {
+      await client.init();
+
       // Check if we can communicate with the Matrix server
       await client.checkHomeserver(Uri.parse(dotenv.env['MATRIX_SERVER_URL']!));
 
 
       await client.login(
-        LoginType.mLoginJWT,
+        'org.matrix.login.jwt',
         token: jwt,
       );
 
