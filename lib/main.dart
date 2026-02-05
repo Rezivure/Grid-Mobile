@@ -10,6 +10,7 @@ import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
 
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/backwards_compatibility_service.dart';
+import 'package:grid_frontend/services/android_background_task.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
@@ -57,6 +58,8 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
 
   // Load .env file
   await dotenv.load(fileName: ".env");

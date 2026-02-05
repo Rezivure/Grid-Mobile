@@ -155,7 +155,7 @@ class LocationManager with ChangeNotifier {
       desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
       stopOnTerminate: false,
       startOnBoot: true,
-      enableHeadless: false,
+      enableHeadless: true,
       disableStopDetection: false,
       activityType: bg.Config.ACTIVITY_TYPE_OTHER,
       stopTimeout: 5, // Increased from 2 to 5 minutes
