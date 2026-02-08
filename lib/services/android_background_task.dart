@@ -10,6 +10,12 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/services/user_service.dart';
 
+// Static cache to reuse Matrix client across headless task invocations
+// This prevents expensive reinitialization on every location update
+Client? _cachedClient;
+DatabaseService? _cachedDatabaseService;
+DatabaseApi? _cachedDatabase;
+
 @pragma('vm:entry-point')
 void headlessTask(bg.HeadlessEvent headlessEvent) async {
   print('[BackgroundGeolocation HeadlessTask]: $headlessEvent');
@@ -27,46 +33,55 @@ void headlessTask(bg.HeadlessEvent headlessEvent) async {
         final bg.HeartbeatEvent hbEvent = headlessEvent.event as bg.HeartbeatEvent;
         final bg.Location? location = hbEvent.location;
         print('- Heartbeat location: $location');
-        await processBackgroundLocation(location!);
+
+        if (location != null) {
+          await processBackgroundLocation(location);
+        } else {
+          print('[HeadlessTask] ⚠️  Heartbeat location is null, skipping');
+        }
       }
       break;
   }
 }
 
 Future<void> processBackgroundLocation(bg.Location location) async {
-  Client? client;
-
   try {
-    // Initialize database
-    final databaseService = DatabaseService();
-    await databaseService.initDatabase();
+    // Reuse cached instances if available (HUGE performance gain!)
+    if (_cachedClient == null) {
+      print('[HeadlessTask] 🔄 Initializing Matrix client (first run)');
 
-    // Initialize Matrix client with backwards compatible database
-    final database = await BackwardsCompatibilityService.createMatrixDatabase();
-    client = Client(
-      'Grid App',
-      database: database,
-      // Note: We don't set shareKeysWith here as it's already configured in the main database
-    );
-    await client.init();
-    client.backgroundSync = false;
+      _cachedDatabaseService = DatabaseService();
+      await _cachedDatabaseService!.initDatabase();
 
-    // Initialize repositories
-    final locationRepository = LocationRepository(databaseService);
-    final userRepository = UserRepository(databaseService);
-    final sharingPreferencesRepository = SharingPreferencesRepository(databaseService);
-    final userKeysRepository = UserKeysRepository(databaseService);
-    final roomRepository = RoomRepository(databaseService);
+      _cachedDatabase = await BackwardsCompatibilityService.createMatrixDatabase();
+      _cachedClient = Client(
+        'Grid App',
+        database: _cachedDatabase!,
+      );
+      await _cachedClient!.init();
+      _cachedClient!.backgroundSync = false;
+
+      print('[HeadlessTask] ✓ Matrix client initialized and cached');
+    } else {
+      print('[HeadlessTask] ⚡ Reusing cached Matrix client (fast path)');
+    }
+
+    // Initialize repositories (these are lightweight, not cached)
+    final locationRepository = LocationRepository(_cachedDatabaseService!);
+    final userRepository = UserRepository(_cachedDatabaseService!);
+    final sharingPreferencesRepository = SharingPreferencesRepository(_cachedDatabaseService!);
+    final userKeysRepository = UserKeysRepository(_cachedDatabaseService!);
+    final roomRepository = RoomRepository(_cachedDatabaseService!);
 
     // Initialize services
     final userService = UserService(
-      client,
+      _cachedClient!,
       locationRepository,
       sharingPreferencesRepository,
     );
 
     // Process rooms and send updates
-    List<Room> rooms = client.rooms;
+    List<Room> rooms = _cachedClient!.rooms;
     print("Grid: Found ${rooms.length} total rooms to process");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -84,13 +99,13 @@ Future<void> processBackgroundLocation(bg.Location location) async {
 
         print("Grid: Room has ${joinedMembers.length} joined members");
 
-        if (!joinedMembers.any((member) => member.id == client?.userID)) {
+        if (!joinedMembers.any((member) => member.id == _cachedClient?.userID)) {
           print("Grid: Skipping room ${room.id} - I am not a joined member");
           continue;
         }
 
         if (joinedMembers.length > 1) {
-          if (!await _checkSharingWindow(room, joinedMembers, client, userService)) continue;
+          if (!await _checkSharingWindow(room, joinedMembers, _cachedClient!, userService)) continue;
 
           await _sendLocationUpdate(room, location);
         } else {
@@ -102,17 +117,16 @@ Future<void> processBackgroundLocation(bg.Location location) async {
       }
     }
 
-    // Important: Wait for any pending operations to complete
-    await client?.dispose(closeDatabase: true);
+    // Note: We DON'T dispose the client here since we're caching it for reuse!
+    print('[HeadlessTask] ✓ Location processing complete');
   } catch (e) {
     print('[Background Task Error]: $e');
-  } finally {
-    try {
-      // Close the database after all operations are done
-      await client?.dispose();
-    } catch (e) {
-      print('Error during cleanup: $e');
-    }
+
+    // Clear cache on error so it reinitializes fresh next time
+    print('[HeadlessTask] ⚠️  Error occurred, clearing cache for next run');
+    _cachedClient = null;
+    _cachedDatabase = null;
+    _cachedDatabaseService = null;
   }
 }
 
