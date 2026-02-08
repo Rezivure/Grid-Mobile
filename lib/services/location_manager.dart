@@ -145,9 +145,20 @@ class LocationManager with ChangeNotifier {
   Future<void> startTracking() async {
     if (_isTracking) return;
 
-    // Request permission (especially for iOS)
-    if (Platform.isIOS) {
-      await bg.BackgroundGeolocation.requestPermission();
+    print("====== STARTING LOCATION TRACKING ======");
+
+    // Request permissions for both iOS and Android
+    if (Platform.isIOS || Platform.isAndroid) {
+      print("Requesting location permissions...");
+      final status = await bg.BackgroundGeolocation.requestPermission();
+      print("Permission status: $status");
+
+      if (status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED ||
+          status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_RESTRICTED) {
+        print("✗ ERROR: Location permission denied or restricted!");
+        print("  → Please enable location permissions in device settings");
+        return;
+      }
     }
 
     // Configure plugin one time with more aggressive defaults to prevent stopping
@@ -221,15 +232,34 @@ class LocationManager with ChangeNotifier {
     bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
       print(">>> onMotionChange: isMoving = ${location.isMoving}");
       _isMoving = location.isMoving ?? false;
-      
+
       // Always update position from motion change event
       _lastPosition = location;
-      
+
       // If started moving, immediately broadcast the update
       if (_isMoving) {
         _lastLocationUpdate = DateTime.now();
         _locationStreamController.add(location);
         notifyListeners();
+      }
+    });
+
+    // Provider change listener (GPS on/off, permission changes)
+    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
+      print(">>> onProviderChange: ${event.toMap()}");
+
+      if (!event.enabled) {
+        print("⚠️  Location services disabled!");
+        // Could notify user or update UI state
+      }
+
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED) {
+        print("⚠️  Location permission denied!");
+        // Could show permission request dialog
+      }
+
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
+        print("✓ Location permission: Always (best for background tracking)");
       }
     });
 
