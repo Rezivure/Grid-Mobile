@@ -46,7 +46,7 @@ void headlessTask(bg.HeadlessEvent headlessEvent) async {
 
 Future<void> processBackgroundLocation(bg.Location location) async {
   try {
-    // Reuse cached instances if available (HUGE performance gain!)
+    // Reuse cached instances if available
     if (_cachedClient == null) {
       print('[HeadlessTask] 🔄 Initializing Matrix client (first run)');
 
@@ -185,6 +185,13 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
 }
 
 Future<void> _sendLocationUpdate(Room room, bg.Location location) async {
+  // Filter out low-accuracy locations to save battery and improve quality
+  final accuracy = location.coords.accuracy;
+  if (accuracy > 100) {
+    print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
+    return;
+  }
+
   final eventContent = {
     'msgtype': 'm.location',
     'body': 'Current location',
@@ -194,5 +201,5 @@ Future<void> _sendLocationUpdate(Room room, bg.Location location) async {
   };
 
   await room.sendEvent(eventContent);
-  print("Grid: Location event sent to room ${room.id} / ${room.name}");
+  print("Grid: Location event sent to room ${room.id} / ${room.name} (accuracy: ${accuracy.toStringAsFixed(1)}m)");
 }

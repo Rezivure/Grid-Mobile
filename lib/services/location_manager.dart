@@ -263,6 +263,54 @@ class LocationManager with ChangeNotifier {
       }
     });
 
+    // Activity-based tracking adjustment for battery optimization
+    bg.BackgroundGeolocation.onActivityChange((bg.ActivityChangeEvent event) {
+      print("🏃 Activity changed: ${event.activity} (confidence: ${event.confidence}%)");
+
+      // Only adjust if high confidence
+      if (event.confidence < 75) {
+        print("   Low confidence, keeping current config");
+        return;
+      }
+
+      switch (event.activity) {
+        case 'in_vehicle':
+          // Driving - more frequent updates, medium accuracy OK
+          print("   🚗 Driving mode: frequent updates, medium accuracy");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 100,  // Update every 100m
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+            heartbeatInterval: 600, // 10 min when stopped
+          ));
+          break;
+
+        case 'on_bicycle':
+        case 'running':
+        case 'walking':
+          // Moving but slower - balanced frequency
+          print("   🚶 Moving mode: balanced updates");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 50,
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+            heartbeatInterval: 900, // 15 min
+          ));
+          break;
+
+        case 'still':
+          // Stationary - minimal updates to save battery
+          print("   🛑 Stationary mode: minimal updates");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 200,
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+            heartbeatInterval: 1200, // 20 min
+          ));
+          break;
+
+        default:
+          print("   ❓ Unknown activity: ${event.activity}");
+      }
+    });
+
     // Start tracking
     await bg.BackgroundGeolocation.start();
     _isTracking = true;
