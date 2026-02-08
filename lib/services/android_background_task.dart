@@ -1,8 +1,8 @@
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/repositories/room_repository.dart';
@@ -35,22 +35,18 @@ void headlessTask(bg.HeadlessEvent headlessEvent) async {
 
 Future<void> processBackgroundLocation(bg.Location location) async {
   Client? client;
-  HiveCollectionsDatabase? db;
 
   try {
     // Initialize database
     final databaseService = DatabaseService();
     await databaseService.initDatabase();
 
-    // Initialize Matrix client
+    // Initialize Matrix client with backwards compatible database
+    final database = await BackwardsCompatibilityService.createMatrixDatabase();
     client = Client(
       'Grid App',
-      databaseBuilder: (_) async {
-        final dir = await getApplicationSupportDirectory();
-        db = HiveCollectionsDatabase('grid_app', dir.path);
-        await db?.open();
-        return db!;
-      },
+      database: database,
+      // Note: We don't set shareKeysWith here as it's already configured in the main database
     );
     await client.init();
     client.backgroundSync = false;
