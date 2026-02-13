@@ -248,8 +248,13 @@ class AuthProvider with ChangeNotifier {
         requestBody = {'username': username, 'phone_number': phoneNumber};
       }
 
+      final gauthUrl = dotenv.env['GAUTH_URL'];
+      if (gauthUrl == null || gauthUrl.isEmpty) {
+        throw Exception('GAUTH_URL is not configured in .env file');
+      }
+
       var response = await http.post(
-        Uri.parse('${dotenv.env['GAUTH_URL']!}$endpoint'),
+        Uri.parse('$gauthUrl$endpoint'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(requestBody),
       );

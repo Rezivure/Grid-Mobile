@@ -45,6 +45,11 @@ post_install do |installer|
       config.build_settings['STRIP_STYLE'] = 'non-global'
       config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
+
+      # Fix deployment target warnings - set minimum to 13.0
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 13.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      end
     end
   end
 
@@ -52,13 +57,18 @@ post_install do |installer|
 
   def strip_bitcode_from_framework(bitcode_strip_path, framework_relative_path)
     framework_path = File.join(Dir.pwd, framework_relative_path)
-    command = "#{bitcode_strip_path} #{framework_path} -r -o #{framework_path}"
-    puts "Stripping bitcode: #{command}"
-    system(command)
+    if File.exist?(framework_path)
+      command = "#{bitcode_strip_path} #{framework_path} -r -o #{framework_path}"
+      puts "Stripping bitcode: #{command}"
+      system(command)
+    else
+      puts "Skipping bitcode strip - file not found: #{framework_path}"
+    end
   end
 
   framework_paths = [
-    "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64_armv7/OpenSSL.framework/OpenSSL"
+    "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64_armv7/OpenSSL.framework/OpenSSL",
+    "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64_x86_64-simulator/OpenSSL.framework/OpenSSL"
   ]
 
   framework_paths.each do |framework_relative_path|
