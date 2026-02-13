@@ -145,9 +145,20 @@ class LocationManager with ChangeNotifier {
   Future<void> startTracking() async {
     if (_isTracking) return;
 
-    // Request permission (especially for iOS)
-    if (Platform.isIOS) {
-      await bg.BackgroundGeolocation.requestPermission();
+    print("====== STARTING LOCATION TRACKING ======");
+
+    // Request permissions for both iOS and Android
+    if (Platform.isIOS || Platform.isAndroid) {
+      print("Requesting location permissions...");
+      final status = await bg.BackgroundGeolocation.requestPermission();
+      print("Permission status: $status");
+
+      if (status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED ||
+          status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_RESTRICTED) {
+        print("✗ ERROR: Location permission denied or restricted!");
+        print("  → Please enable location permissions in device settings");
+        return;
+      }
     }
 
     // Configure plugin one time with more aggressive defaults to prevent stopping
@@ -155,7 +166,7 @@ class LocationManager with ChangeNotifier {
       desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
       stopOnTerminate: false,
       startOnBoot: true,
-      enableHeadless: false,
+      enableHeadless: true,
       disableStopDetection: false,
       activityType: bg.Config.ACTIVITY_TYPE_OTHER,
       stopTimeout: 5, // Increased from 2 to 5 minutes
@@ -221,15 +232,82 @@ class LocationManager with ChangeNotifier {
     bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
       print(">>> onMotionChange: isMoving = ${location.isMoving}");
       _isMoving = location.isMoving ?? false;
-      
+
       // Always update position from motion change event
       _lastPosition = location;
-      
+
       // If started moving, immediately broadcast the update
       if (_isMoving) {
         _lastLocationUpdate = DateTime.now();
         _locationStreamController.add(location);
         notifyListeners();
+      }
+    });
+
+    // Provider change listener (GPS on/off, permission changes)
+    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
+      print(">>> onProviderChange: ${event.toMap()}");
+
+      if (!event.enabled) {
+        print("⚠️  Location services disabled!");
+        // Could notify user or update UI state
+      }
+
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED) {
+        print("⚠️  Location permission denied!");
+        // Could show permission request dialog
+      }
+
+      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
+        print("✓ Location permission: Always (best for background tracking)");
+      }
+    });
+
+    // Activity-based tracking adjustment for battery optimization
+    bg.BackgroundGeolocation.onActivityChange((bg.ActivityChangeEvent event) {
+      print("🏃 Activity changed: ${event.activity} (confidence: ${event.confidence}%)");
+
+      // Only adjust if high confidence
+      if (event.confidence < 75) {
+        print("   Low confidence, keeping current config");
+        return;
+      }
+
+      switch (event.activity) {
+        case 'in_vehicle':
+          // Driving - more frequent updates, medium accuracy OK
+          print("   🚗 Driving mode: frequent updates, medium accuracy");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 100,  // Update every 100m
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+            heartbeatInterval: 600, // 10 min when stopped
+          ));
+          break;
+
+        case 'on_bicycle':
+        case 'running':
+        case 'walking':
+          // Moving but slower - balanced frequency
+          print("   🚶 Moving mode: balanced updates");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 50,
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
+            heartbeatInterval: 900, // 15 min
+          ));
+          break;
+
+        case 'still':
+          // Stationary - minimal updates to save battery
+          print("   🛑 Stationary mode: minimal updates");
+          bg.BackgroundGeolocation.setConfig(bg.Config(
+            distanceFilter: 200,
+            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
+            heartbeatInterval: 1200, // 20 min
+          ));
+          break;
+
+        default:
+          print("   ❓ Unknown activity: ${event.activity}");
       }
     });
 

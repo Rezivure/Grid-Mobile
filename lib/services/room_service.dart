@@ -36,6 +36,13 @@ class RoomService {
   final Map<String, Set<String>> _recentlySentMessages = {};
   final int _maxMessageHistory = 50;
 
+  // Distance-based duplicate prevention
+  final Map<String, bg.Location> _lastSentLocationByRoom = {};
+
+  // Offline queue for failed location sends
+  final List<Map<String, dynamic>> _offlineQueue = [];
+  static const int _maxOfflineQueueSize = 50;
+
   bg.Location? _currentLocation;
   DateTime? _lastUpdateTime;
   
@@ -75,12 +82,12 @@ class RoomService {
   
   void _queueLocationUpdate(bg.Location location) {
     _pendingLocation = location;
-    
+
     // Cancel any existing timer
     _locationUpdateTimer?.cancel();
-    
-    // Debounce location updates by 1 second to prevent spam
-    _locationUpdateTimer = Timer(const Duration(seconds: 1), () {
+
+    // Minimal debounce (100ms) to batch rapid GPS updates while staying responsive
+    _locationUpdateTimer = Timer(const Duration(milliseconds: 100), () {
       if (_pendingLocation != null) {
         updateRooms(_pendingLocation!);
         _pendingLocation = null;
@@ -644,14 +651,37 @@ class RoomService {
     if (room != null) {
       final latitude = location.coords.latitude;
       final longitude = location.coords.longitude;
+      final accuracy = location.coords.accuracy;
+
+      // Filter out low-accuracy locations to save battery and improve quality
+      if (accuracy > 100) {
+        print("⚠️  Skipping low-accuracy location for $roomId: ${accuracy.toStringAsFixed(1)}m error (threshold: 100m)");
+        return;
+      }
 
       if (latitude != null && longitude != null) {
-        // Create a unique hash for the location message
-        var timestamp = DateTime.now().millisecondsSinceEpoch;
+        // Distance-based duplicate prevention
+        final lastLocation = _lastSentLocationByRoom[roomId];
+        if (lastLocation != null) {
+          final distance = _calculateDistance(
+            lastLocation.coords.latitude,
+            lastLocation.coords.longitude,
+            latitude,
+            longitude,
+          );
 
+          if (distance < 10) {
+            print("⚠️  Skipping - only moved ${distance.toStringAsFixed(1)}m (threshold: 10m)");
+            return;
+          }
+          print("📍 Moved ${distance.toStringAsFixed(1)}m since last update");
+        }
+
+        // Create a unique hash for the location message (legacy fallback)
+        var timestamp = DateTime.now().millisecondsSinceEpoch;
         final messageHash = '$latitude:$longitude:$timestamp';
 
-        // Check if the message is already sent
+        // Check if the message is already sent (legacy check)
         if (_recentlySentMessages[roomId]?.contains(messageHash) == true) {
           print("Duplicate location event skipped for room $roomId");
           return;
@@ -668,15 +698,19 @@ class RoomService {
 
         try {
           await room.sendEvent(eventContent);
-          print("Location event sent to room $roomId: ${room.name}  $latitude, $longitude");
+          print("✓ Location event sent to room $roomId: ${room.name}  $latitude, $longitude");
 
           // Track the sent message
           _recentlySentMessages.putIfAbsent(roomId, () => {}).add(messageHash);
+          _lastSentLocationByRoom[roomId] = location; // Update last sent location
 
           // Trim history if needed
           if (_recentlySentMessages[roomId]!.length > _maxMessageHistory) {
             _recentlySentMessages[roomId]!.remove(_recentlySentMessages[roomId]!.first);
           }
+
+          // Success! Try to process offline queue if any
+          _processOfflineQueue();
           
           // Save to room-specific location history
           final myUserId = client.userID;
@@ -695,7 +729,27 @@ class RoomService {
             await locationHistoryRepository.addLocationPoint(myUserId, latitude, longitude);
           }
         } catch (e) {
-          print("Failed to send location event: $e");
+          print("✗ Failed to send location event: $e");
+
+          // Queue for retry when network returns
+          if (_offlineQueue.length < _maxOfflineQueueSize) {
+            _offlineQueue.add({
+              'roomId': roomId,
+              'location': location,
+              'eventContent': eventContent,
+              'timestamp': DateTime.now(),
+            });
+            print("📦 Queued location for offline sync (${_offlineQueue.length} pending)");
+          } else {
+            print("⚠️  Offline queue full (${_maxOfflineQueueSize}), dropping oldest");
+            _offlineQueue.removeAt(0);
+            _offlineQueue.add({
+              'roomId': roomId,
+              'location': location,
+              'eventContent': eventContent,
+              'timestamp': DateTime.now(),
+            });
+          }
         }
       } else {
         print("Latitude or Longitude is null");
@@ -731,6 +785,7 @@ class RoomService {
     print("Grid: Found ${rooms.length} total rooms to process (filtered for joined only)");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final List<String> roomsToUpdate = []; // Collect rooms that pass all checks
 
     for (Room room in rooms) {
       try {
@@ -806,9 +861,9 @@ class RoomService {
           }
 
 
-          print("Grid: Sending location event to room ${room.id} / ${room.name}");
-          sendLocationEvent(room.id, location);
-          print("Grid: Location event sent successfully");
+          // Room passed all checks - add to batch
+          print("Grid: ✓ Room ${room.id} / ${room.name} ready for update");
+          roomsToUpdate.add(room.id);
         } else {
           print("Grid: Skipping room ${room.id} - insufficient members");
         }
@@ -817,6 +872,22 @@ class RoomService {
         print('Error processing room ${room.name}: $e');
         continue;
       }
+    }
+
+    // Batch send location to all rooms in parallel for faster processing
+    if (roomsToUpdate.isNotEmpty) {
+      print("📤 Sending location to ${roomsToUpdate.length} rooms in parallel...");
+      final startTime = DateTime.now();
+
+      await Future.wait(
+        roomsToUpdate.map((roomId) => Future(() => sendLocationEvent(roomId, location))),
+        eagerError: false, // Continue even if some sends fail
+      );
+
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      print("✓ Batch update complete in ${elapsed}ms");
+    } else {
+      print("No rooms to update");
     }
   }
 
@@ -1030,5 +1101,56 @@ class RoomService {
         "userRoomMap": {},
       };
     }
+  }
+
+  // Process offline queue - retry failed location sends
+  Future<void> _processOfflineQueue() async {
+    if (_offlineQueue.isEmpty) return;
+
+    print("📤 Processing ${_offlineQueue.length} offline locations...");
+
+    final itemsToRetry = [..._offlineQueue];
+    _offlineQueue.clear();
+
+    int successCount = 0;
+    int failedCount = 0;
+
+    for (final item in itemsToRetry) {
+      try {
+        final room = client.getRoomById(item['roomId']);
+        if (room != null && room.membership == Membership.join) {
+          await room.sendEvent(item['eventContent']);
+          successCount++;
+        }
+      } catch (e) {
+        // Re-queue if still failing
+        _offlineQueue.add(item);
+        failedCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      print("✓ Sent $successCount offline locations");
+    }
+    if (failedCount > 0) {
+      print("⚠️  $failedCount locations still queued (network still down?)");
+    }
+  }
+
+  // Helper: Calculate distance between two coordinates using Haversine formula
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371000; // Earth radius in meters
+    final dLat = (lat2 - lat1) * (3.14159265359 / 180);
+    final dLon = (lon2 - lon1) * (3.14159265359 / 180);
+
+    final lat1Rad = lat1 * (3.14159265359 / 180);
+    final lat2Rad = lat2 * (3.14159265359 / 180);
+
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) *
+        sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return R * c; // Distance in meters
   }
 }
