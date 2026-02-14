@@ -833,10 +833,34 @@ main() {
   should_run "expiry"   && phase_expiry
   should_run "location" && phase_location_format
 
-  # Always tear down Synapse after tests
-  log_phase "Cleanup: Stopping Synapse"
+  # ── Full Cleanup ──────────────────────────────────────────────────────────────
+  log_phase "Cleanup"
+
+  # Stop Synapse + remove volumes
   (cd "$INFRA_DIR" && docker compose down -v 2>&1 | tail -3)
   echo -e "  ${GREEN}✓${NC} Synapse stopped and volumes removed"
+
+  # Uninstall app from simulator
+  if [ -n "$SIM_UDID" ]; then
+    xcrun simctl uninstall "$SIM_UDID" app.mygrid.grid 2>/dev/null
+    echo -e "  ${GREEN}✓${NC} App uninstalled from simulator"
+  fi
+
+  # Clean Flutter build artifacts
+  if [ -d "$PROJECT_ROOT/build" ]; then
+    rm -rf "$PROJECT_ROOT/build"
+    echo -e "  ${GREEN}✓${NC} Flutter build artifacts removed"
+  fi
+
+  # Prune old Maestro debug artifacts (keep last 5 runs)
+  local maestro_tests="$HOME/.maestro/tests"
+  if [ -d "$maestro_tests" ]; then
+    local count=$(ls -1d "$maestro_tests"/20* 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$count" -gt 10 ]; then
+      ls -1d "$maestro_tests"/20* | head -n $(( count - 10 )) | xargs rm -rf
+      echo -e "  ${GREEN}✓${NC} Pruned old Maestro debug artifacts (kept last 10)"
+    fi
+  fi
 
   print_report
 }
