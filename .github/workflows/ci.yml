@@ -3,8 +3,13 @@ name: Grid CI
 on:
   push:
     branches: ['**']
+    # Skip push runs when a PR is open (PR trigger handles it)
   pull_request:
     branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   unit-tests:
