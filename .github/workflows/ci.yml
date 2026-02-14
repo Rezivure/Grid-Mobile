@@ -2,7 +2,7 @@ name: Grid CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: ['**']
   pull_request:
     branches: [main]
 
@@ -14,11 +14,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create CI .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
       - name: Run Flutter unit tests
         run: |
           export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
           flutter test --reporter expanded 2>&1
-        working-directory: ${{ github.workspace }}
 
   e2e-tests:
     name: E2E Tests (Synapse + API + Maestro)
@@ -28,11 +37,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create CI .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
       - name: Run full E2E suite
         run: |
           export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
           bash test-infra/scripts/run-e2e.sh 2>&1
-        working-directory: ${{ github.workspace }}
 
       - name: Upload test report
         if: always()
