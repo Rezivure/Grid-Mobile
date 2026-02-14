@@ -1,0 +1,10 @@
+appId: app.mygrid.grid
+---
+# Test: App launches and shows welcome screen
+- launchApp
+- assertVisible: "WELCOME TO"
+- assertVisible: "Grid"
+- assertVisible: "Get Started"
+- assertVisible: "Custom Provider"
+- assertVisible: "Privacy Policy"
+- assertVisible: "Terms of Service"

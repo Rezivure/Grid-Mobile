@@ -1,0 +1,24 @@
+appId: app.mygrid.grid
+---
+# Test: View Device ID and Identity Key in Security Information section
+# Requires: App logged in, on map screen
+- launchApp
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Scroll down to reveal Security Information
+- swipe:
+    start: "50%,70%"
+    end: "50%,45%"
+- waitForAnimationToEnd
+
+# Verify Security Information section is visible
+- assertVisible: "Security Information"
+
+# Navigate back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

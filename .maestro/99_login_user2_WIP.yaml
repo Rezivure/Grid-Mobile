@@ -1,0 +1,33 @@
+appId: app.mygrid.grid
+---
+# Test: Login as testuser2 on second simulator
+- launchApp
+- assertVisible: "Custom Provider"
+- tapOn: "Custom Provider"
+
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser2"
+
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+
+- assertVisible: "Important Notice"
+- tapOn: "I Understand, Continue"
+- waitForAnimationToEnd
