@@ -1,0 +1,33 @@
+appId: app.mygrid.grid
+---
+# Test: Verify settings page has all major sections via scroll
+# Requires: App logged in, on map screen
+- launchApp
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Top sections visible without scroll
+- assertVisible: "Settings"
+- assertVisible: "Privacy & Location"
+
+# Scroll to see more sections
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "Security Information"
+
+# Scroll more to see Community
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "Community"
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

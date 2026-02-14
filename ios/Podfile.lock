@@ -120,29 +120,29 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
-  background_fetch: db658504e3a7de609c6cb3bac44863dfe1c12f5d
+  background_fetch: 7457cb2c7be3086b37d87207866f30bed2f9fb58
   CocoaLumberjack: 6a459bc897d6d80bd1b8c78482ec7ad05dffc3f0
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_background_geolocation: a9a94f42e29b29d350c6e1fea8434281f8f466b8
-  flutter_compass: cbbd285cea1584c7ac9c4e0c3e1f17cbea55e855
-  flutter_native_splash: f71420956eb811e6d310720fee915f1d42852e7a
-  flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
-  flutter_vodozemac: a13abe22ea9e3c4a518c88b0e91288ef7726e372
-  geolocator_apple: 9bcea1918ff7f0062d98345d238ae12718acfbc1
-  image_cropper: 37d40f62177c101ff4c164906d259ea2c3aa70cf
-  image_picker_ios: c560581cceedb403a6ff17f2f816d7fea1421fc1
-  in_app_purchase_storekit: a1ce04056e23eecc666b086040239da7619cd783
+  flutter_background_geolocation: 8c57d3ca52196c00cf36bec487ab3cd7106b78f7
+  flutter_compass: b236ab69b61545cce89fd58527f401a7587d5cc1
+  flutter_native_splash: 6cad9122ea0fad137d23137dd14b937f3e90b145
+  flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
+  flutter_vodozemac: 46015daf07988356d46784d05ab0c7afca00ff36
+  geolocator_apple: 1560c3c875af2a412242c7a923e15d0d401966ff
+  image_cropper: 5f162dcf988100dc1513f9c6b7eb42cd6fbf9156
+  image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
+  in_app_purchase_storekit: d1a48cb0f8b29dbf5f85f782f5dd79b21b90a5e6
   MTBBarcodeScanner: f453b33c4b7dfe545d8c6484ed744d55671788cb
-  package_info_plus: c0502532a26c7662a62a356cebe2692ec5fe4ec4
-  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
-  permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
-  qr_code_scanner_plus: 3bfe4deb7f28996a63a2a580819d49dae80d5ed3
-  share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f
-  shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
-  sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
+  package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
+  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  qr_code_scanner_plus: 7e087021bc69873140e0754750eb87d867bed755
+  share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
+  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   TOCropViewController: 80b8985ad794298fb69d3341de183f33d1853654
   TSBackgroundFetch: e91020924db32f27d0a43df7dec6f73f10743571
-  url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
+  url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
 
 PODFILE CHECKSUM: 31d0138a8264e0f8ce2e0970e92db21d9464c7d4
 

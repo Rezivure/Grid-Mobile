@@ -1,0 +1,44 @@
+appId: app.mygrid.grid
+---
+# Test: Toggle Incognito Mode and Battery Saver Mode
+# Requires: App logged in, on map screen
+- launchApp
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Verify Incognito Mode visible
+- assertVisible: "Incognito Mode"
+
+# Tap the Incognito Mode switch (right side of the card, roughly row 1)
+# The toggle card is around 58% down, switch is at ~85% horizontal
+- tapOn:
+    point: "85%,55%"
+- waitForAnimationToEnd
+
+# Small delay for any snackbar
+- extendedWaitUntil:
+    visible: "Incognito Mode"
+    timeout: 3000
+
+# Toggle it back off by tapping same position
+- tapOn:
+    point: "85%,55%"
+- waitForAnimationToEnd
+
+# Tap Battery Saver Mode switch (second toggle, further down)
+- tapOn:
+    point: "85%,65%"
+- waitForAnimationToEnd
+
+# Toggle it back off
+- tapOn:
+    point: "85%,65%"
+- waitForAnimationToEnd
+
+# Navigate back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

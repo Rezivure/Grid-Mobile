@@ -1,0 +1,38 @@
+appId: app.mygrid.grid
+---
+# Test: Custom Provider login screen
+- launchApp
+- tapOn: "Custom Provider"
+
+# Verify login screen loaded
+- assertVisible: "Custom Server"
+- assertVisible: "ADVANCED LOGIN"
+- assertVisible: "Connect to Custom Server"
+- assertVisible: "Maps Configuration"
+
+# Scroll to and fill homeserver
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "matrix.example.com"
+
+# Scroll to username
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser"
+
+# Scroll to password
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+# Scroll to Sign In
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- assertVisible: "Sign In"
