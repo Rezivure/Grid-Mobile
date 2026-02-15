@@ -343,6 +343,100 @@ grid_set_displayname() {
   echo "✓ Display name set to: ${displayname}"
 }
 
+# ─── Avatar Management ──────────────────────────────────────────────────────────
+
+grid_set_avatar() {
+  local avatar_url="$1"
+  local result
+  result=$(_matrix_api PUT "/_matrix/client/v3/profile/${GRID_USER_ID}/avatar_url" \
+    "{\"avatar_url\": \"${avatar_url}\"}")
+
+  local error
+  error=$(echo "$result" | jq -r '.errcode // empty')
+  if [ -z "$error" ]; then
+    echo "✓ Avatar set to: ${avatar_url}"
+    return 0
+  else
+    echo "✗ Failed to set avatar: $(echo "$result" | jq -r '.error // "unknown"')"
+    return 1
+  fi
+}
+
+grid_get_avatar() {
+  local user_id="${1:-$GRID_USER_ID}"
+  local result
+  result=$(_matrix_api GET "/_matrix/client/v3/profile/${user_id}/avatar_url")
+
+  local avatar_url
+  avatar_url=$(echo "$result" | jq -r '.avatar_url // empty')
+  if [ -n "$avatar_url" ]; then
+    echo "$avatar_url"
+    return 0
+  else
+    echo ""
+    return 1
+  fi
+}
+
+grid_get_displayname() {
+  local user_id="${1:-$GRID_USER_ID}"
+  local result
+  result=$(_matrix_api GET "/_matrix/client/v3/profile/${user_id}/displayname")
+
+  local displayname
+  displayname=$(echo "$result" | jq -r '.displayname // empty')
+  echo "$displayname"
+}
+
+# ─── Room Management (Advanced) ──────────────────────────────────────────────────
+
+grid_kick_user() {
+  local room_id="$1"
+  local user_id="$2"
+  local reason="${3:-Kicked by admin}"
+  
+  local full_user_id=$(_full_user_id "$user_id")
+  local result
+  result=$(_matrix_api POST "/_matrix/client/v3/rooms/${room_id}/kick" \
+    "{\"user_id\": \"${full_user_id}\", \"reason\": \"${reason}\"}")
+
+  local error
+  error=$(echo "$result" | jq -r '.errcode // empty')
+  if [ -z "$error" ]; then
+    echo "✓ Kicked ${full_user_id} from ${room_id}"
+    return 0
+  else
+    echo "✗ Failed to kick user: $(echo "$result" | jq -r '.error // "unknown"')"
+    return 1
+  fi
+}
+
+grid_get_power_levels() {
+  local room_id="$1"
+  _matrix_api GET "/_matrix/client/v3/rooms/${room_id}/state/m.room.power_levels"
+}
+
+grid_get_room_state() {
+  local room_id="$1"
+  local event_type="${2:-}"
+  local state_key="${3:-}"
+  
+  if [ -n "$event_type" ]; then
+    if [ -n "$state_key" ]; then
+      _matrix_api GET "/_matrix/client/v3/rooms/${room_id}/state/${event_type}/${state_key}"
+    else
+      _matrix_api GET "/_matrix/client/v3/rooms/${room_id}/state/${event_type}"
+    fi
+  else
+    _matrix_api GET "/_matrix/client/v3/rooms/${room_id}/state"
+  fi
+}
+
+grid_get_room_tags() {
+  local room_id="$1"
+  _matrix_api GET "/_matrix/client/v3/user/${GRID_USER_ID}/rooms/${room_id}/tags"
+}
+
 # ─── Print current state ────────────────────────────────────────────────────────
 
 grid_whoami() {
@@ -363,5 +457,12 @@ echo "  grid_get_members <room_id>"
 echo "  grid_get_locations <room_id> [limit]"
 echo "  grid_leave_room <room_id>"
 echo "  grid_set_displayname <name>"
+echo "  grid_get_displayname [user_id]"
+echo "  grid_set_avatar <avatar_url>"
+echo "  grid_get_avatar [user_id]"
+echo "  grid_kick_user <room_id> <user_id> [reason]"
+echo "  grid_get_power_levels <room_id>"
+echo "  grid_get_room_state <room_id> [event_type] [state_key]"
+echo "  grid_get_room_tags <room_id>"
 echo "  grid_sync"
 echo "  grid_whoami"
