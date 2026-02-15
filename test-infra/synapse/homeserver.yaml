@@ -31,6 +31,13 @@ enable_registration_captcha: false
 registration_shared_secret: "grid-test-secret-key-2024"
 
 # Disable rate limiting for tests
+rc_room_creation:
+  per_second: 1000
+  burst_count: 1000
+
+rc_joins_per_room:
+  per_second: 1000
+  burst_count: 1000
 rc_message:
   per_second: 1000
   burst_count: 1000
@@ -49,6 +56,33 @@ rc_login:
   failed_attempts:
     per_second: 1000
     burst_count: 1000
+
+rc_joins:
+  local:
+    per_second: 1000
+    burst_count: 1000
+  remote:
+    per_second: 1000
+    burst_count: 1000
+
+rc_invites:
+  per_room:
+    per_second: 1000
+    burst_count: 1000
+  per_user:
+    per_second: 1000
+    burst_count: 1000
+  per_issuer:
+    per_second: 1000
+    burst_count: 1000
+
+rc_admin_redaction:
+  per_second: 1000
+  burst_count: 1000
+
+rc_3pid_validation:
+  per_second: 1000
+  burst_count: 1000
 
 rc_federation:
   window_size: 10
