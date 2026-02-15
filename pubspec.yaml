@@ -67,6 +67,10 @@ dev_dependencies:
     sdk: flutter
   flutter_native_splash: ^2.3.10
   flutter_lints: ^5.0.0
+  mockito: ^5.4.4
+  build_runner: ^2.4.8
+  bloc_test: ^9.1.7
+  mocktail: ^1.0.4
 
 dependency_overrides:
   flutter_rust_bridge:

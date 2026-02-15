@@ -1,0 +1,34 @@
+appId: app.mygrid.grid
+---
+# Test: Sign out from the app
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to Settings (hamburger menu, top-left)
+- tapOn:
+    point: "10%,8%"
+- waitForAnimationToEnd
+
+# Scroll down to find Sign Out
+- scrollUntilVisible:
+    element: "Sign Out"
+    direction: DOWN
+    timeout: 10000
+
+# Tap Sign Out
+- tapOn: "Sign Out"
+- waitForAnimationToEnd
+
+# Confirm sign out in dialog
+- tapOn: "Sign Out"
+- waitForAnimationToEnd
+
+# Should be back on welcome screen
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 15000

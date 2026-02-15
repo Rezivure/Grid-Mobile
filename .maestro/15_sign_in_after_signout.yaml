@@ -1,0 +1,42 @@
+appId: app.mygrid.grid
+---
+# Test: Sign back in after sign out (no clearState - tests re-login flow)
+# Prerequisite: app on welcome screen after sign out
+
+- launchApp
+- waitForAnimationToEnd
+
+# Should be on welcome screen
+- assertVisible: "Custom Provider"
+
+# Tap Custom Provider
+- tapOn: "Custom Provider"
+- waitForAnimationToEnd
+
+# Enter homeserver URL
+- tapOn:
+    hint: "matrix.example.com"
+- inputText: "http://localhost:8008"
+- waitForAnimationToEnd
+
+# Tap Next/Continue
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Login form
+- tapOn:
+    hint: "Username"
+- inputText: "testuser1"
+- tapOn:
+    hint: "Password"
+- inputText: "testpass123"
+- waitForAnimationToEnd
+
+# Tap Login
+- tapOn: "Log In"
+- waitForAnimationToEnd
+
+# Should skip onboarding (returning user) and go to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 20000

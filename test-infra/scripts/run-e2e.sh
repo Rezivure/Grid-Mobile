@@ -301,6 +301,49 @@ phase_ui() {
   run_maestro_flow "08_settings_security_keys"
   run_maestro_flow "09_settings_display_name"
   run_maestro_flow "10_settings_links"
+
+  # ── API-orchestrated UI flows (require Synapse running + testuser1 logged in) ──
+
+  # Setup: create testuser2's friend request to testuser1 via API
+  log_step "Setting up friend request from testuser2 → testuser1..."
+  local t2_token
+  t2_token=$(curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/login" \
+    -H "Content-Type: application/json" \
+    -d '{"type":"m.login.password","user":"testuser2","password":"testpass123"}' | jq -r '.access_token')
+  
+  if [ -n "$t2_token" ]; then
+    local invite_room
+    invite_room=$(curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/createRoom" \
+      -H "Authorization: Bearer $t2_token" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Grid:Direct:@testuser2:localhost:@testuser1:localhost",
+        "is_direct": true,
+        "preset": "private_chat",
+        "invite": ["@testuser1:localhost"],
+        "initial_state": [{"type":"m.room.encryption","content":{"algorithm":"m.megolm.v1.aes-sha2"},"state_key":""}]
+      }' | jq -r '.room_id // empty')
+    
+    if [ -n "$invite_room" ]; then
+      log_step "Friend request created: $invite_room — waiting for sync..."
+      sleep 5  # Give app time to sync
+      run_maestro_flow "11_accept_friend_request"
+    else
+      record_fail "Setup friend request" "Room creation failed"
+    fi
+  else
+    record_fail "Setup friend request" "testuser2 login failed"
+  fi
+
+  # Flow 12: Send friend request to testuser3
+  run_maestro_flow "12_send_friend_request"
+
+  # Flow 13: Create group (testuser2 should be a contact now)
+  run_maestro_flow "13_create_group"
+
+  # Flow 14-15: Sign out and sign back in
+  run_maestro_flow "14_sign_out"
+  run_maestro_flow "15_sign_in_after_signout"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
