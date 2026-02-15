@@ -6,6 +6,7 @@ import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
@@ -22,7 +23,14 @@ class MockMapBloc extends Mock implements MapBloc {}
 class MockUserLocationProvider extends Mock implements UserLocationProvider {}
 class MockSharingPreferencesRepository extends Mock implements SharingPreferencesRepository {}
 
+// Fake classes for fallback values
+class FakeMapEvent extends Fake implements MapEvent {}
+
 void main() {
+  setUpAll(() {
+    registerFallbackValue(FakeMapEvent());
+  });
+
   group('ContactsBloc', () {
     late ContactsBloc bloc;
     late MockRoomService mockRoomService;
@@ -205,13 +213,15 @@ void main() {
           when(() => mockRoomService.getUserRoomMembership(any(), any())).thenAnswer((_) async => 'join');
           return bloc;
         },
-        act: (bloc) {
+        act: (bloc) async {
           bloc.add(LoadContacts()); // Load contacts first
+          await Future.delayed(const Duration(milliseconds: 10)); // Allow loading to complete
           bloc.add(SearchContacts('alice'));
         },
-        skip: 2, // Skip loading states
         expect: () => [
-          isA<ContactsLoaded>(),
+          isA<ContactsLoading>(),
+          isA<ContactsLoaded>(), // After LoadContacts
+          isA<ContactsLoaded>(), // After SearchContacts
         ],
         verify: (bloc) {
           final state = bloc.state as ContactsLoaded;
@@ -220,57 +230,59 @@ void main() {
         },
       );
 
-      blocTest<ContactsBloc, ContactsState>(
-        'emits full list when query is empty',
-        build: () {
-          when(() => mockUserRepository.getDirectContacts()).thenAnswer((_) async => [
-            GridUser(userId: 'alice123', displayName: 'Alice Smith', lastSeen: '2024-01-01T00:00:00Z'),
-            GridUser(userId: 'bob456', displayName: 'Bob Johnson', lastSeen: '2024-01-01T00:00:00Z'),
-          ]);
-          when(() => mockUserRepository.getDirectRoomForContact(any())).thenAnswer((_) async => 'room1');
-          when(() => mockUserRepository.getUserRelationshipsForRoom(any())).thenAnswer((_) async => []);
-          when(() => mockRoomService.getUserRoomMembership(any(), any())).thenAnswer((_) async => 'join');
-          return bloc;
-        },
-        act: (bloc) {
-          bloc.add(LoadContacts());
-          bloc.add(SearchContacts(''));
-        },
-        skip: 2, // Skip loading states
-        expect: () => [
-          isA<ContactsLoaded>(),
-        ],
-        verify: (bloc) {
-          final state = bloc.state as ContactsLoaded;
-          expect(state.contacts.length, equals(2));
-        },
-      );
+      test('emits full list when query is empty', () async {
+        // Setup mocks
+        when(() => mockUserRepository.getDirectContacts()).thenAnswer((_) async => [
+          GridUser(userId: 'alice123', displayName: 'Alice Smith', lastSeen: '2024-01-01T00:00:00Z'),
+          GridUser(userId: 'bob456', displayName: 'Bob Johnson', lastSeen: '2024-01-01T00:00:00Z'),
+        ]);
+        when(() => mockUserRepository.getDirectRoomForContact(any())).thenAnswer((_) async => 'room1');
+        when(() => mockUserRepository.getUserRelationshipsForRoom(any())).thenAnswer((_) async => []);
+        when(() => mockRoomService.getUserRoomMembership(any(), any())).thenAnswer((_) async => 'join');
+        
+        // Load contacts first
+        bloc.add(LoadContacts());
+        await Future.delayed(const Duration(milliseconds: 50));
+        
+        // Ensure contacts are loaded
+        expect(bloc.state, isA<ContactsLoaded>());
+        final loadedState = bloc.state as ContactsLoaded;
+        expect(loadedState.contacts.length, equals(2));
+        
+        // Search with empty query
+        bloc.add(SearchContacts(''));
+        await Future.delayed(const Duration(milliseconds: 10));
+        
+        // Verify result
+        final finalState = bloc.state as ContactsLoaded;
+        expect(finalState.contacts.length, equals(2));
+      });
 
-      blocTest<ContactsBloc, ContactsState>(
-        'search is case insensitive',
-        build: () {
-          when(() => mockUserRepository.getDirectContacts()).thenAnswer((_) async => [
-            GridUser(userId: 'alice123', displayName: 'Alice Smith', lastSeen: '2024-01-01T00:00:00Z'),
-          ]);
-          when(() => mockUserRepository.getDirectRoomForContact(any())).thenAnswer((_) async => 'room1');
-          when(() => mockUserRepository.getUserRelationshipsForRoom(any())).thenAnswer((_) async => []);
-          when(() => mockRoomService.getUserRoomMembership(any(), any())).thenAnswer((_) async => 'join');
-          return bloc;
-        },
-        act: (bloc) {
-          bloc.add(LoadContacts());
-          bloc.add(SearchContacts('ALICE'));
-        },
-        skip: 2, // Skip loading states
-        expect: () => [
-          isA<ContactsLoaded>(),
-        ],
-        verify: (bloc) {
-          final state = bloc.state as ContactsLoaded;
-          expect(state.contacts.length, equals(1));
-          expect(state.contacts.first.displayName, equals('Alice Smith'));
-        },
-      );
+      test('search is case insensitive', () async {
+        // Setup mocks
+        when(() => mockUserRepository.getDirectContacts()).thenAnswer((_) async => [
+          GridUser(userId: 'alice123', displayName: 'Alice Smith', lastSeen: '2024-01-01T00:00:00Z'),
+        ]);
+        when(() => mockUserRepository.getDirectRoomForContact(any())).thenAnswer((_) async => 'room1');
+        when(() => mockUserRepository.getUserRelationshipsForRoom(any())).thenAnswer((_) async => []);
+        when(() => mockRoomService.getUserRoomMembership(any(), any())).thenAnswer((_) async => 'join');
+        
+        // Load contacts first
+        bloc.add(LoadContacts());
+        await Future.delayed(const Duration(milliseconds: 50));
+        
+        // Ensure contacts are loaded
+        expect(bloc.state, isA<ContactsLoaded>());
+        
+        // Search with uppercase query
+        bloc.add(SearchContacts('ALICE'));
+        await Future.delayed(const Duration(milliseconds: 10));
+        
+        // Verify result
+        final state = bloc.state as ContactsLoaded;
+        expect(state.contacts.length, equals(1));
+        expect(state.contacts.first.displayName, equals('Alice Smith'));
+      });
     });
 
     group('DeleteContact', () {
@@ -393,7 +405,7 @@ void main() {
         ],
         verify: (bloc) {
           final state = bloc.state as ContactsError;
-          expect(state.message, contains('Network error'));
+          expect(state.message, contains('Exception: Network error'));
         },
       );
 
@@ -410,7 +422,7 @@ void main() {
         ],
         verify: (bloc) {
           final state = bloc.state as ContactsError;
-          expect(state.message, contains('Delete error'));
+          expect(state.message, contains('Exception: Delete error'));
         },
       );
     });
