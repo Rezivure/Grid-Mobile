@@ -1,0 +1,35 @@
+appId: app.mygrid.grid
+---
+# Test: Navigate to settings and verify key sections (custom homeserver)
+# Note: Flutter GestureDetector-wrapped menu items have limited accessibility
+# exposure, so we verify section headers and key toggles.
+- launchApp
+
+# Tap the hamburger menu FAB (top-left)
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Verify Settings page
+- assertVisible: "Settings"
+- assertVisible: "@testuser1:localhost"
+
+# Privacy & Location section (visible at top)
+- assertVisible: "Privacy & Location"
+- assertVisible: "Incognito Mode"
+- assertVisible: "Battery Saver Mode"
+
+# Scroll to see Security Information
+- swipe:
+    start: "50%,70%"
+    end: "50%,55%"
+- waitForAnimationToEnd
+- assertVisible: "Security Information"
+
+# Subscriptions should NOT be visible on custom homeserver (check before scrolling further)
+- assertNotVisible: "Subscriptions"
+
+# Navigate back to map for subsequent flows
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

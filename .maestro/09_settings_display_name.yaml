@@ -1,0 +1,19 @@
+appId: app.mygrid.grid
+---
+# Test: Verify display name is shown in settings profile
+# Requires: App logged in, on map screen
+- launchApp
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Verify display name is present (testuser1 is the username)
+- assertVisible: "testuser1"
+- assertVisible: "@testuser1:localhost"
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

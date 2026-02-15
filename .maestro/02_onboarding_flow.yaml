@@ -1,0 +1,11 @@
+appId: app.mygrid.grid
+---
+# Test: Onboarding signup flow - Get Started path
+- launchApp
+- assertVisible: "Get Started"
+- tapOn: "Get Started"
+
+# Should navigate to server select / username step
+- assertVisible:
+    text: ".*username.*"
+    optional: false

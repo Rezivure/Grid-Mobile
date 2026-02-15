@@ -89,7 +89,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('maps_url', mapsUrl);
 
-      await client.checkHomeserver(Uri.https(homeserver, ''));
+      // Support both http:// and https:// prefixes; default to https
+      final Uri homeserverUri = homeserver.startsWith('http://') || homeserver.startsWith('https://')
+          ? Uri.parse(homeserver)
+          : Uri.https(homeserver, '');
+      await client.checkHomeserver(homeserverUri);
       await client.login(
         LoginType.mLoginPassword,
         password: _passwordController.text,

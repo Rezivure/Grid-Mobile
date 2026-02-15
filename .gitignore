@@ -52,3 +52,9 @@ ios/build*
 android/build/*
 android/build
 *.jks
+# Test infrastructure
+test-infra/synapse-data/
+.maestro/tests/
+
+# Test reports (generated)
+test-infra/reports/
