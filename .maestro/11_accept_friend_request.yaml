@@ -1,0 +1,31 @@
+appId: app.mygrid.grid
+---
+# Test: Accept a friend request from testuser2
+# Prerequisite: testuser1 logged in, testuser2 has sent a friend request via API
+- launchApp
+- waitForAnimationToEnd
+
+# Tap the notification bell (bottom-right of the bottom sheet bar)
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Should see Notifications modal
+- assertVisible: "Notifications"
+
+# Tap on the invite card (first card in the list, roughly 25% down)
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+
+# Should see the Friend Request detail modal with Accept/Decline buttons
+- assertVisible: "Accept Request"
+
+# Accept the request
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# After accepting, should return to map with contact list
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
