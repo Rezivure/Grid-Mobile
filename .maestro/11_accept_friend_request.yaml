@@ -1,0 +1,29 @@
+appId: app.mygrid.grid
+---
+# Test: Accept a friend request
+# Prerequisite: testuser1 logged in on map screen, testuser2 invite exists
+# E2E runner creates the invite via API before this flow
+- launchApp
+- waitForAnimationToEnd
+
+# Tap the notification bell (bottom-right area of bottom sheet bar)
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Verify Notifications modal opened
+- assertVisible: "Notifications"
+
+# Tap the first invite card
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+
+# Tap Accept Request button
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Wait for processing and return to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
