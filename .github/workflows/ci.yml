@@ -1,0 +1,74 @@
+name: Grid CI
+
+on:
+  push:
+    branches: ['**']
+    # Skip push runs when a PR is open (PR trigger handles it)
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create CI .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Run Flutter unit tests
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          flutter test --reporter expanded 2>&1
+
+  e2e-tests:
+    name: E2E Tests (Synapse + API + Maestro)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 15
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create CI .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Run full E2E suite
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          bash test-infra/scripts/run-e2e.sh 2>&1
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report-${{ github.sha }}
+          path: test-infra/reports/
+          retention-days: 30
+
+      - name: Upload Maestro debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-debug-${{ github.sha }}
+          path: ~/.maestro/tests/
+          retention-days: 7

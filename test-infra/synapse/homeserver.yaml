@@ -1,0 +1,72 @@
+server_name: "localhost"
+pid_file: /data/homeserver.pid
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: false
+    resources:
+      - names: [client, federation]
+        compress: false
+
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+log_config: "/data/log.config"
+
+media_store_path: /data/media_store
+
+# Registration — open for test accounts
+enable_registration: true
+enable_registration_without_verification: true
+
+# No email/captcha needed
+registrations_require_3pid: []
+enable_registration_captcha: false
+
+# Admin shared secret for scripted account creation
+registration_shared_secret: "grid-test-secret-key-2024"
+
+# Disable rate limiting for tests
+rc_message:
+  per_second: 1000
+  burst_count: 1000
+
+rc_registration:
+  per_second: 1000
+  burst_count: 1000
+
+rc_login:
+  address:
+    per_second: 1000
+    burst_count: 1000
+  account:
+    per_second: 1000
+    burst_count: 1000
+  failed_attempts:
+    per_second: 1000
+    burst_count: 1000
+
+rc_federation:
+  window_size: 10
+  sleep_limit: 1000
+  sleep_delay: 0
+  reject_limit: 1000
+  concurrent: 1000
+
+# Suppress key warnings for local testing
+suppress_key_server_warning: true
+trusted_key_servers: []
+
+# Report stats
+report_stats: false
+
+# Signing key — auto-generated on first run
+signing_key_path: "/data/localhost.signing.key"
+
+# Macaroon secret
+macaroon_secret_key: "grid-test-macaroon-secret"
+form_secret: "grid-test-form-secret"

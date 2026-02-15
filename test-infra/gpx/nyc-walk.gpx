@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Grid Test">
+  <metadata>
+    <name>NYC Walk - Times Square to Central Park</name>
+  </metadata>
+  <trk>
+    <name>Test Walk</name>
+    <trkseg>
+      <!-- Times Square -->
+      <trkpt lat="40.7580" lon="-73.9855"><time>2026-01-01T12:00:00Z</time></trkpt>
+      <trkpt lat="40.7590" lon="-73.9850"><time>2026-01-01T12:00:30Z</time></trkpt>
+      <trkpt lat="40.7600" lon="-73.9845"><time>2026-01-01T12:01:00Z</time></trkpt>
+      <trkpt lat="40.7610" lon="-73.9840"><time>2026-01-01T12:01:30Z</time></trkpt>
+      <trkpt lat="40.7620" lon="-73.9835"><time>2026-01-01T12:02:00Z</time></trkpt>
+      <!-- Moving north -->
+      <trkpt lat="40.7635" lon="-73.9830"><time>2026-01-01T12:02:30Z</time></trkpt>
+      <trkpt lat="40.7650" lon="-73.9825"><time>2026-01-01T12:03:00Z</time></trkpt>
+      <trkpt lat="40.7665" lon="-73.9820"><time>2026-01-01T12:03:30Z</time></trkpt>
+      <trkpt lat="40.7680" lon="-73.9815"><time>2026-01-01T12:04:00Z</time></trkpt>
+      <trkpt lat="40.7695" lon="-73.9810"><time>2026-01-01T12:04:30Z</time></trkpt>
+      <!-- Approaching Central Park -->
+      <trkpt lat="40.7710" lon="-73.9805"><time>2026-01-01T12:05:00Z</time></trkpt>
+      <trkpt lat="40.7725" lon="-73.9800"><time>2026-01-01T12:05:30Z</time></trkpt>
+      <trkpt lat="40.7740" lon="-73.9795"><time>2026-01-01T12:06:00Z</time></trkpt>
+      <trkpt lat="40.7755" lon="-73.9790"><time>2026-01-01T12:06:30Z</time></trkpt>
+      <!-- Central Park South -->
+      <trkpt lat="40.7670" lon="-73.9785"><time>2026-01-01T12:07:00Z</time></trkpt>
+      <trkpt lat="40.7685" lon="-73.9770"><time>2026-01-01T12:07:30Z</time></trkpt>
+      <trkpt lat="40.7700" lon="-73.9755"><time>2026-01-01T12:08:00Z</time></trkpt>
+      <trkpt lat="40.7715" lon="-73.9740"><time>2026-01-01T12:08:30Z</time></trkpt>
+      <trkpt lat="40.7730" lon="-73.9725"><time>2026-01-01T12:09:00Z</time></trkpt>
+      <trkpt lat="40.7745" lon="-73.9710"><time>2026-01-01T12:09:30Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
