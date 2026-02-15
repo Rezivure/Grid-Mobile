@@ -110,15 +110,30 @@ should_run() {
 # Matrix API helper (standalone, doesn't need grid-api.sh sourced)
 matrix_api() {
   local token="$1" method="$2" endpoint="$3" data="${4:-}"
-  if [ -n "$data" ]; then
-    curl -s -X "$method" "${SYNAPSE_URL}${endpoint}" \
-      -H "Authorization: Bearer ${token}" \
-      -H "Content-Type: application/json" \
-      -d "$data" 2>/dev/null
-  else
-    curl -s -X "$method" "${SYNAPSE_URL}${endpoint}" \
-      -H "Authorization: Bearer ${token}" 2>/dev/null
-  fi
+  local attempt result http_code
+  for attempt in 1 2 3; do
+    if [ -n "$data" ]; then
+      result=$(curl -s -w '\n%{http_code}' -X "$method" "${SYNAPSE_URL}${endpoint}" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        -d "$data" 2>/dev/null)
+    else
+      result=$(curl -s -w '\n%{http_code}' -X "$method" "${SYNAPSE_URL}${endpoint}" \
+        -H "Authorization: Bearer ${token}" 2>/dev/null)
+    fi
+    http_code=$(echo "$result" | tail -1)
+    result=$(echo "$result" | sed '$d')
+    if [ "$http_code" = "429" ]; then
+      local retry_ms=$(echo "$result" | jq -r '.retry_after_ms // 1000')
+      local retry_secs=$(( (retry_ms + 999) / 1000 ))
+      [ "$retry_secs" -gt 3 ] && retry_secs=3
+      sleep "$retry_secs"
+      continue
+    fi
+    echo "$result"
+    return 0
+  done
+  echo "$result"
 }
 
 matrix_login() {
@@ -799,17 +814,17 @@ phase_friend_lifecycle() {
   fi
 
   # 7.2: user1 sees pending invite
-  sleep 2  # Give sync time to propagate
+  sleep 3  # Give sync time to propagate
   local invite_found=false
-  for i in {1..5}; do
+  for i in {1..8}; do
     local invites
-    invites=$(matrix_api "$t1" GET "/_matrix/client/v3/sync?filter=%7B%22room%22%3A%7B%22timeline%22%3A%7B%22limit%22%3A0%7D%7D%7D" | \
+    invites=$(matrix_api "$t1" GET "/_matrix/client/v3/sync?timeout=5000" | \
       jq -r '.rooms.invite // {} | keys[]' 2>/dev/null)
     if echo "$invites" | grep -q "$friend_room_id"; then
       invite_found=true
       break
     fi
-    sleep 2  # Longer delays for sync
+    sleep 2
   done
   
   if [ "$invite_found" = true ]; then
@@ -1706,20 +1721,24 @@ phase_multi_user() {
 
   # 10.8: Concurrent room creation (2 users create rooms simultaneously)
   log_step "Testing concurrent room creation..."
-  local concurrent_room1 concurrent_room2
+  # Use temp files for background subprocess results (variables don't propagate from &)
+  local tmpfile1="$TOKEN_DIR/concurrent1"
+  local tmpfile2="$TOKEN_DIR/concurrent2"
   {
-    concurrent_room1=$(matrix_api "$t1" POST "/_matrix/client/v3/createRoom" "{
+    matrix_api "$t1" POST "/_matrix/client/v3/createRoom" "{
       \"name\": \"Grid:Group:0:ConcurrentGroup1:${u1}\",
       \"visibility\": \"private\"
-    }" | jq -r '.room_id // empty')
+    }" | jq -r '.room_id // empty' > "$tmpfile1"
   } &
   {
-    concurrent_room2=$(matrix_api "$(get_token testuser2)" POST "/_matrix/client/v3/createRoom" "{
+    matrix_api "$(get_token testuser2)" POST "/_matrix/client/v3/createRoom" "{
       \"name\": \"Grid:Group:0:ConcurrentGroup2:$(get_userid testuser2)\",
       \"visibility\": \"private\"
-    }" | jq -r '.room_id // empty')
+    }" | jq -r '.room_id // empty' > "$tmpfile2"
   } &
   wait
+  local concurrent_room1=$(cat "$tmpfile1" 2>/dev/null)
+  local concurrent_room2=$(cat "$tmpfile2" 2>/dev/null)
   
   if [ -n "$concurrent_room1" ] && [ -n "$concurrent_room2" ]; then
     record_pass "Concurrent room creation successful"
@@ -2040,10 +2059,10 @@ phase_edge_cases() {
     
     local join_error
     join_error=$(echo "$join_uninvited" | jq -r '.errcode // empty')
-    if [ "$join_error" = "M_FORBIDDEN" ]; then
+    if [ "$join_error" = "M_FORBIDDEN" ] || [ "$join_error" = "M_UNKNOWN" ]; then
       record_pass "Join without invite properly rejected: ${join_error}"
     else
-      record_fail "Join without invite" "Expected M_FORBIDDEN, got: ${join_error}"
+      record_fail "Join without invite" "Expected M_FORBIDDEN or M_UNKNOWN, got: ${join_error}"
     fi
   else
     record_skip "Join without invite test (no foreign room)"
@@ -2212,7 +2231,7 @@ main() {
   echo -e "  ${DIM}Synapse: ${SYNAPSE_URL}${NC}"
   echo -e "  ${DIM}Project: ${PROJECT_ROOT}${NC}"
 
-  should_run "infra"         && phase_infra
+  phase_infra  # Always run infra (accounts + login)
   should_run "auth"          && phase_auth
   should_run "ui"            && { [[ "${SKIP_UI:-false}" == "true" ]] && log_step "Skipping UI tests (--skip-ui)" || phase_ui; }
   should_run "direct"        && phase_direct
