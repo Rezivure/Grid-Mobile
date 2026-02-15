@@ -1,0 +1,33 @@
+appId: app.mygrid.grid
+---
+# Test: Send a friend request to testuser3
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap the person-add icon (next to "My Contacts" label)
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Should see Add Contact modal
+- assertVisible: "Add Contact"
+
+# Type username in the text field (custom homeserver format)
+- tapOn:
+    hint: "john:homeserver.io"
+- inputText: "testuser3"
+- waitForAnimationToEnd
+
+# Tap Send Request
+- tapOn: "Send Request"
+- waitForAnimationToEnd
+
+# Should see success snackbar
+- extendedWaitUntil:
+    visible: "Friend request sent"
+    timeout: 10000
