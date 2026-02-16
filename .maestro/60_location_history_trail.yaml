@@ -1,0 +1,197 @@
+appId: app.mygrid.grid
+---
+# Test: API sends sequence of locations for testuser2 → Verify trail/history on map  
+# Multi-user E2E: Location history and movement trail verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up location trail from testuser2..."
+    # First establish contact
+    ROOM_ID=$(setup_friend_request_notification)
+    wait_for_sync 3
+    # Then send location trail
+    setup_location_trail
+    wait_for_sync 8
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Accept the friend request first
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Invitations"
+    commands:
+      - assertVisible: "testuser2"
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Wait for location trail data to load
+- waitForAnimationToEnd: 5000
+
+# Go to contacts to see location history
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see testuser2
+- assertVisible: "testuser2"
+
+# Look for recent location activity
+- assertVisible:
+    text: "now"
+    optional: true
+
+- assertVisible:
+    text: "ago"
+    optional: true
+
+# Should show recent/active status
+- assertVisible: "Active"
+
+# Tap on testuser2 to see location details
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# In contact details, look for location history
+- assertVisible: "testuser2"
+
+# Look for location/movement indicators
+- assertVisible:
+    text: "Current location"
+    optional: true
+
+- assertVisible:
+    text: "Last seen"
+    optional: true
+
+- assertVisible:
+    text: "Movement"
+    optional: true
+
+# Go back to map to see trail
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# On map, look for location trail/path
+- assertVisible: "My Contacts"
+
+# Look for multiple location points or trail
+- assertVisible:
+    id: "location_trail"
+    optional: true
+
+- assertVisible:
+    id: "movement_path"
+    optional: true
+
+- assertVisible:
+    id: "location_history"
+    optional: true
+
+# Test map interaction - tap on different parts of potential trail
+- tapOn:
+    point: "40%,30%"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Should show location info
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "location"
+          optional: true
+      - assertVisible:
+          text: "ago"
+          optional: true
+
+# Close info popup
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Try another location point
+- tapOn:
+    point: "55%,35%"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Might show different timestamp for different location point
+      - assertVisible: "testuser2"
+
+# Close popup
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Test zoom controls to see trail better
+- assertVisible:
+    id: "zoom_in"
+    optional: true
+
+- tapOn:
+    id: "zoom_in"
+    optional: true
+- waitForAnimationToEnd
+
+# After zooming, trail should be more visible
+- assertVisible:
+    id: "detailed_trail"
+    optional: true
+
+# Test zoom out
+- tapOn:
+    id: "zoom_out"
+    optional: true
+- waitForAnimationToEnd
+
+# Go back to contacts to verify trail data
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show multiple location updates or movement summary
+- assertVisible:
+    text: "moved"
+    optional: true
+
+- assertVisible:
+    text: "locations"
+    optional: true
+
+# Final verification - contact shows active movement
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"

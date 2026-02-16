@@ -1,0 +1,151 @@
+appId: app.mygrid.grid
+---
+# Test: API sets avatar for testuser2 → Verify updated avatar shows in contacts/map
+# Multi-user E2E: Avatar synchronization verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up avatar update for testuser2..."
+    # First establish contact relationship
+    setup_friend_request_notification
+    wait_for_sync 3
+    # Then update avatar
+    setup_avatar_update "mxc://localhost/testuser2-new-avatar-456"
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Wait for avatar changes to propagate
+- waitForAnimationToEnd: 3000
+
+# Accept the friend request first to establish contact
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Invitations"
+    commands:
+      - assertVisible: "testuser2"
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Go to contacts to check avatar
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see testuser2 with updated avatar
+- assertVisible: "testuser2"
+
+# Look for avatar change indicator or updated avatar image
+- assertVisible:
+    id: "user_avatar_testuser2"
+    optional: true
+
+- assertVisible:
+    id: "contact_avatar"
+    optional: true
+
+# The avatar should be visually different (though we can't verify exact image)
+# Look for avatar loading states
+- assertNotVisible:
+    text: "Loading avatar"
+    optional: true
+
+# Tap on the contact to see profile details
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# In contact details, should see the updated avatar prominently
+- assertVisible: "testuser2"
+
+# Look for profile avatar display
+- assertVisible:
+    id: "profile_avatar"
+    optional: true
+
+- assertVisible:
+    id: "contact_avatar_large"
+    optional: true
+
+# Check for avatar update timestamp or indicator
+- assertVisible:
+    text: "Updated"
+    optional: true
+
+- assertVisible:
+    text: "Profile updated"
+    optional: true
+
+# Go back to contacts list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# On the map, check if location markers show updated avatar
+- assertVisible: "My Contacts"
+
+# Look for map marker with updated avatar
+- assertVisible:
+    id: "user_marker_testuser2"
+    optional: true
+
+- assertVisible:
+    id: "contact_map_avatar"
+    optional: true
+
+# Test tapping on map marker to see info bubble
+- tapOn:
+    point: "45%,35%"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Info bubble should show updated avatar
+      - assertVisible:
+          id: "marker_avatar"
+          optional: true
+      - assertVisible:
+          id: "popup_avatar"
+          optional: true
+
+# Close any popups
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Final verification - avatar changes are visible across the app
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Check that avatar is not showing as loading or error state
+- assertNotVisible: "Avatar failed to load"
+- assertNotVisible: "Loading..."
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"

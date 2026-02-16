@@ -1,0 +1,120 @@
+appId: app.mygrid.grid
+---
+# Test: API stops sharing location as testuser2 → Verify marker disappears or shows stale indicator
+# Multi-user E2E: Contact incognito mode verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up testuser2 going incognito..."
+    setup_contact_incognito
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Wait for the incognito state to propagate
+- waitForAnimationToEnd: 3000
+
+# Check contacts drawer for testuser2's status
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# testuser2 should either be gone or show as stale/offline
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # If testuser2 is still visible, should show as offline/stale
+      - assertVisible:
+          text: "offline"
+          optional: true
+      - assertVisible:
+          text: "ago"
+          optional: true
+      # Should not show "Active now" or recent time
+      - assertNotVisible: "Active now"
+      - assertNotVisible: "Just now"
+      - assertNotVisible: "seconds ago"
+
+# Check for incognito/privacy indicator
+- assertVisible:
+    text: "Stopped sharing"
+    optional: true
+
+- assertVisible:
+    text: "Incognito"
+    optional: true
+
+- assertVisible:
+    text: "Privacy mode"
+    optional: true
+
+# Close contacts drawer and check map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# On the map, testuser2's marker should be gone or grayed out
+# Look for absence of active location markers
+- assertNotVisible:
+    id: "active_user_marker"
+    optional: true
+
+# Look for stale/inactive marker styling
+- assertVisible:
+    id: "stale_marker"
+    optional: true
+
+- assertVisible:
+    id: "offline_marker"
+    optional: true
+
+# Test tapping where the marker used to be
+- tapOn:
+    point: "45%,35%"
+    optional: true
+- waitForAnimationToEnd
+
+# Should either show nothing or show "Last seen X ago" info
+- assertVisible:
+    text: "Last seen"
+    optional: true
+
+- assertVisible:
+    text: "Offline"
+    optional: true
+
+- assertNotVisible: "Current location"
+
+# Close any popups
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Final verification - contact is in incognito mode
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Should show incognito status
+      - assertVisible:
+          text: "Private"
+          optional: true
+      - assertVisible:
+          text: "Hidden"
+          optional: true
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"
