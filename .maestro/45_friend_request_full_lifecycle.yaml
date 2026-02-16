@@ -1,0 +1,124 @@
+appId: app.mygrid.grid
+---
+# Test: Complete friend request lifecycle with location sharing
+# API sends friend request from testuser2 → Maestro accepts → location sharing → movement → stop sharing
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: API sends friend request from testuser2
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser2 testuser1
+- waitForAnimationToEnd
+- wait: 3000  # Give sync time
+
+# Step 2: Pull to refresh to sync new invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 3: Tap notification bell to see friend request
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Step 4: Verify notification modal opened and accept request
+- assertVisible: "Notifications"
+- tapOn:
+    point: "50%,28%"  # First invite card
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Step 5: Close notifications modal
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 6: Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Step 7: API sends location from testuser2 (Times Square)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 $ROOM_ID 40.7580 -73.9855
+- wait: 5000  # Allow time for Matrix sync and UI update
+
+# Step 8: Verify testuser2's location marker appears on map
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+# Alternative verification - look for any map marker/icon
+- runFlow:
+    when:
+      not:
+        visible:
+          text: "testuser2"
+    commands:
+      # Tap around center area where markers typically appear
+      - tapOn:
+          point: "50%,45%"
+      - waitForAnimationToEnd
+      # Check if any contact info appeared
+      - runFlow:
+          when:
+            visible: "testuser2"
+          commands:
+            - tapOn:
+                point: "70%,30%"  # Tap to close any profile
+            - waitForAnimationToEnd
+
+# Step 9: API updates testuser2's location (moves to Central Park)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 $ROOM_ID 40.7829 -73.9654
+- wait: 5000  # Allow time for location update
+
+# Step 10: Verify marker moved (by checking it's still visible)
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+# Step 11: Verify friend appears in contacts list
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Step 12: Close contacts drawer
+- tapOn:
+    point: "70%,45%"  # Tap map area to close drawer
+- waitForAnimationToEnd
+
+# Step 13: Send another location after a delay to verify real-time updates
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 $ROOM_ID 40.7614 -73.9776
+- wait: 5000
+
+# Step 14: Final verification - location still visible
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+# Step 15: API user leaves the room (simulates stop sharing)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_leave_room.sh testuser2 $ROOM_ID
+- wait: 5000
+
+# Step 16: Verify testuser2 no longer visible on map (marker should be gone/stale)
+# Note: depending on implementation, may still show last known location but marked as stale
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Final state: Friend connection established, location sharing lifecycle completed

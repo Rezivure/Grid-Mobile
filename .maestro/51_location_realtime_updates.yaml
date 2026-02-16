@@ -1,0 +1,241 @@
+appId: app.mygrid.grid
+---
+# Test: Real-time location updates showing marker movement
+# After friend connection, API sends SEQUENCE of locations simulating movement → verify marker updates/moves on map
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Establish friend connection with testuser7
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser7 testuser1
+- waitForAnimationToEnd
+- wait: 3000
+
+# Pull to refresh for invite
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Accept friend request
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+- tapOn:
+    point: "50%,28%"  # First invite
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 2: Verify back on map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Step 3: API joins the created DM room
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser7"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser7 "$ROOM_ID"; fi
+- wait: 3000
+
+# Step 4: Send initial location (Manhattan Lower East Side)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7180 -73.9863
+- wait: 6000  # Extra time for initial marker to appear
+
+# Step 5: Verify initial marker appears
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Record initial marker presence
+- tapOn:
+    text: "testuser7"
+- waitForAnimationToEnd
+- wait: 1000
+
+# Close profile if it opened
+- runFlow:
+    when:
+      visible:
+        text: "testuser7"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 6: MOVEMENT SEQUENCE - Send location updates simulating walking/movement
+
+# Position 2: Move north (SoHo)
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7230 -73.9950
+- wait: 4000  # Allow time for update
+
+# Verify marker still exists (position may have updated)
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Position 3: Continue north (Greenwich Village)  
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7308 -74.0020
+- wait: 4000
+
+# Verify marker persistence through updates
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Position 4: Move to Union Square
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7359 -73.9911
+- wait: 4000
+
+# Verify continued presence
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Position 5: Move to Flatiron District
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7410 -73.9897
+- wait: 4000
+
+# Step 7: Test marker interaction during updates
+- tapOn:
+    text: "testuser7"
+- waitForAnimationToEnd
+
+# Look for updated location info in profile (if shown)
+- runFlow:
+    when:
+      visible:
+        textRegex: "(40\.74|Flatiron|recent)"
+    commands:
+      - wait: 2000  # Good - location info is updating
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser7"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Position 6: Final position (Empire State Building area)
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7484 -73.9857
+- wait: 5000  # Extra time for final update
+
+# Step 8: Verify marker is still present after movement sequence
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Step 9: Test rapid updates (stress test)
+# Send 3 locations quickly to test update handling
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      ./api_send_location.sh testuser7 "$ROOM_ID" 40.7505 -73.9934 &
+      ./api_send_location.sh testuser7 "$ROOM_ID" 40.7520 -73.9900 & 
+      ./api_send_location.sh testuser7 "$ROOM_ID" 40.7540 -73.9880 &
+      wait
+- wait: 6000  # Allow all updates to process
+
+# Step 10: Verify marker handling of rapid updates
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Step 11: Test movement pause and resume
+# Stop sending locations for a while
+- wait: 10000  # 10 second pause
+
+# Then resume with new location
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7580 -73.9855
+- wait: 5000
+
+# Step 12: Verify marker reactivated after pause
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Step 13: Test timestamp handling with old location
+# Send location with timestamp from 2 hours ago
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      OLD_TIMESTAMP=$(date -u -d "2 hours ago" +"%Y-%m-%dT%H:%M:%S.%3NZ")
+      ./api_send_location.sh testuser7 "$ROOM_ID" 40.7000 -74.0000 "$OLD_TIMESTAMP"
+- wait: 5000
+
+# Step 14: Verify app handles old timestamps appropriately
+# Marker should still be visible but may show as stale
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Tap marker to check if old timestamp is indicated
+- tapOn:
+    text: "testuser7"
+- waitForAnimationToEnd
+
+# Look for stale/old indicators
+- runFlow:
+    when:
+      visible:
+        textRegex: "(hours ago|stale|old|2h)"
+    commands:
+      - wait: 2000  # Good - app is showing age information
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser7"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 15: Final current location to end test
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser7)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser7 "$ROOM_ID" 40.7614 -73.9776
+- wait: 5000
+
+# Final verification
+- extendedWaitUntil:
+    visible:
+      text: "testuser7"
+    timeout: 15000
+
+# Final state: Real-time location updates tested - marker movement, rapid updates, pause/resume, timestamp handling

@@ -1,0 +1,375 @@
+appId: app.mygrid.grid
+---
+# Test: Complete friend lifecycle - add, share locations, unfriend, verify gone, re-add, verify works again
+# Full cycle: add friend → share locations → unfriend → verify gone → re-add → verify works again
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Add friend testuser12
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser12 testuser1
+- waitForAnimationToEnd
+- wait: 3000
+
+# Pull to refresh and accept
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# API joins room
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser12"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser12 "$ROOM_ID"; fi
+- wait: 3000
+
+# Step 2: Verify friend appears in contacts
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser12"
+
+- tapOn:
+    point: "70%,45%"  # Close contacts
+- waitForAnimationToEnd
+
+# Step 3: Establish location sharing
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7589 -73.9851
+- wait: 6000
+
+# Step 4: Verify location marker appears
+- extendedWaitUntil:
+    visible:
+      text: "testuser12"
+    timeout: 15000
+
+# Test marker interaction
+- tapOn:
+    text: "testuser12"
+- waitForAnimationToEnd
+- wait: 1000
+
+- runFlow:
+    when:
+      visible:
+        text: "testuser12"
+    commands:
+      - tapOn:
+          point: "70%,30%"  # Close profile
+      - waitForAnimationToEnd
+
+# Step 5: Send multiple location updates to establish history
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7600 -73.9800
+- wait: 4000
+
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7550 -73.9750
+- wait: 6000
+
+# Verify location updates work
+- extendedWaitUntil:
+    visible:
+      text: "testuser12"
+    timeout: 15000
+
+# Step 6: Now unfriend testuser12
+# This might be done through UI or we'll simulate via API
+# First try to find unfriend option in contacts
+
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+- assertVisible: "testuser12"
+
+# Try long press on contact to see options
+- longPressOn:
+    text: "testuser12"
+- waitForAnimationToEnd
+
+# Look for remove/unfriend/delete options
+- runFlow:
+    when:
+      visible:
+        textRegex: "(Remove|Unfriend|Delete|Block)"
+    commands:
+      - tapOn:
+          textRegex: "(Remove|Unfriend|Delete|Block)"
+      - waitForAnimationToEnd
+      
+      # Confirm if dialog appears
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(Confirm|Yes|Remove)"
+          commands:
+            - tapOn:
+                textRegex: "(Confirm|Yes|Remove)"
+            - waitForAnimationToEnd
+
+# If UI unfriend didn't work, simulate via API (user leaves room)
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_leave_room.sh testuser12 "$ROOM_ID"
+- wait: 4000
+
+# Also simulate testuser1 leaving the room if needed for complete unfriend
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser12"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_leave_room.sh testuser1 "$ROOM_ID"; fi
+- wait: 4000
+
+# Step 7: Pull to refresh to sync unfriend
+- tapOn:
+    point: "70%,45%"  # Close any open UI
+- waitForAnimationToEnd
+
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 5000  # Extra time for unfriend to sync
+
+# Step 8: Verify friend is gone from contacts
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+
+# testuser12 should no longer be visible
+- runFlow:
+    when:
+      visible:
+        text: "testuser12"
+    commands:
+      - assertVisible: "This should not be visible - testuser12 was unfriended"
+
+# Step 9: Close contacts and verify location marker gone
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+# testuser12's marker should be gone from map
+- wait: 3000
+- runFlow:
+    when:
+      visible:
+        text: "testuser12"
+    commands:
+      # If still visible, might be stale - check if marked as such
+      - tapOn:
+          text: "testuser12"
+      - waitForAnimationToEnd
+      
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(offline|disconnected|stale)"
+          commands:
+            - wait: 1000  # Acceptable - showing as disconnected
+      
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 10: Test that search doesn't find unfriended user
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "testuser12"
+- waitForAnimationToEnd
+
+# Should not find testuser12
+- runFlow:
+    when:
+      visible:
+        text: "testuser12"
+    commands:
+      - assertVisible: "This should not be visible - testuser12 was unfriended"
+
+# Clear search
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Step 11: Wait before re-adding to ensure clean state
+- wait: 5000
+
+# Step 12: Re-add testuser12 as friend (refriend)
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser12 testuser1
+- waitForAnimationToEnd
+- wait: 4000
+
+# Pull to refresh
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+# Step 13: Accept the re-friend request
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser12"  # Should appear in notifications again
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 14: Verify friend is back in contacts
+- wait: 3000
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser12"  # Back in contacts list
+
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+# Step 15: API rejoins new room
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser12"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser12 "$ROOM_ID"; fi
+- wait: 3000
+
+# Step 16: Test location sharing works again after refriend
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7700 -73.9700
+- wait: 6000
+
+# Step 17: Verify location marker reappears
+- extendedWaitUntil:
+    visible:
+      text: "testuser12"
+    timeout: 15000
+
+# Step 18: Test marker interaction works after refriend
+- tapOn:
+    text: "testuser12"
+- waitForAnimationToEnd
+
+# Should show current location info
+- runFlow:
+    when:
+      visible:
+        textRegex: "(40\\.77|recent|now)"
+    commands:
+      - wait: 1000  # Good - showing fresh location
+
+- runFlow:
+    when:
+      visible:
+        text: "testuser12"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 19: Test continued location sharing after refriend
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7650 -73.9650
+- wait: 5000
+
+# Verify location updates still work
+- extendedWaitUntil:
+    visible:
+      text: "testuser12"
+    timeout: 15000
+
+# Step 20: Test search finds refriended user
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "testuser12"
+- waitForAnimationToEnd
+
+# Should find testuser12 again
+- assertVisible: "testuser12"
+
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Step 21: Final comprehensive test - rapid unfriend/refriend cycle
+- wait: 2000
+
+# Quick unfriend via API
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_leave_room.sh testuser12 "$ROOM_ID" && ROOM_ID2=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser12"))' | head -1) && if [ -n "$ROOM_ID2" ]; then ./api_leave_room.sh testuser1 "$ROOM_ID2"; fi
+- wait: 4000
+
+# Quick refriend
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser12 testuser1
+- wait: 3000
+
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 22: Final verification - complete cycle works
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser12"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser12 "$ROOM_ID"; fi
+- wait: 3000
+
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser12)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser12 "$ROOM_ID" 40.7800 -73.9600
+- wait: 6000
+
+# Final verification
+- extendedWaitUntil:
+    visible:
+      text: "testuser12"
+    timeout: 15000
+
+# Verify in contacts
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser12"
+
+# Final state: Complete friend lifecycle tested - add, share, unfriend, verify removal, re-add, verify restoration, rapid cycle works

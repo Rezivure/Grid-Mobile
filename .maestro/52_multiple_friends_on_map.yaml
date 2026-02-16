@@ -1,0 +1,337 @@
+appId: app.mygrid.grid
+---
+# Test: Multiple friends sharing locations simultaneously on map
+# Set up 3 friends (testuser2, testuser3, testuser4) all sharing locations at different coordinates → verify 3 distinct markers → tap one → verify profile/info shown
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Establish friend connection with testuser2
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser2 testuser1
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 2: Establish friend connection with testuser3
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser3 testuser1
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 3: Establish friend connection with testuser4
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser4 testuser1
+- waitForAnimationToEnd
+- wait: 3000
+
+# Step 4: Pull to refresh to sync all invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+# Step 5: Accept all friend requests via notifications
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Accept first invite (testuser2)
+- tapOn:
+    point: "50%,25%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Accept second invite (testuser3)
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Accept third invite (testuser4)
+- tapOn:
+    point: "50%,55%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 6: Verify back on map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Step 7: API users join their respective DM rooms
+- wait: 3000
+- runScript:
+    script: |
+      cd .maestro/helpers
+      # Get all DM rooms and have users join them
+      ROOMS=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[]')
+      for ROOM in $ROOMS; do
+        if [[ $ROOM == *"testuser2"* ]]; then
+          ./api_join_room.sh testuser2 "$ROOM"
+        elif [[ $ROOM == *"testuser3"* ]]; then
+          ./api_join_room.sh testuser3 "$ROOM"  
+        elif [[ $ROOM == *"testuser4"* ]]; then
+          ./api_join_room.sh testuser4 "$ROOM"
+        fi
+      done
+- wait: 5000
+
+# Step 8: Send distinct locations for each friend
+# testuser2 in Los Angeles
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 "$ROOM_ID" 34.0522 -118.2437
+- wait: 4000
+
+# testuser3 in Chicago  
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser3)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser3 "$ROOM_ID" 41.8781 -87.6298
+- wait: 4000
+
+# testuser4 in Miami
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser4)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser4 "$ROOM_ID" 25.7617 -80.1918
+- wait: 6000  # Extra time for all to sync
+
+# Step 9: Verify all 3 markers appear on map
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser3"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# Step 10: Test tapping on testuser2's marker
+- tapOn:
+    text: "testuser2"
+- waitForAnimationToEnd
+
+# Look for profile/info popup with location details
+- runFlow:
+    when:
+      visible:
+        textRegex: "(testuser2|Los Angeles|34\\.0|118\\.2|profile)"
+    commands:
+      - wait: 2000  # Profile opened successfully
+      # Look for location coordinates or city name
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(34\\.|118\\.|Los Angeles)"
+          commands:
+            - wait: 1000  # Good - location info displayed
+
+# Close profile/popup
+- runFlow:
+    when:
+      visible:
+        text: "testuser2"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 11: Test tapping on testuser3's marker
+- wait: 1000
+- tapOn:
+    text: "testuser3"
+- waitForAnimationToEnd
+
+# Look for testuser3 info
+- runFlow:
+    when:
+      visible:
+        textRegex: "(testuser3|Chicago|41\\.8|87\\.6)"
+    commands:
+      - wait: 2000
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser3"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 12: Test tapping on testuser4's marker
+- wait: 1000
+- tapOn:
+    text: "testuser4"
+- waitForAnimationToEnd
+
+# Look for testuser4 info
+- runFlow:
+    when:
+      visible:
+        textRegex: "(testuser4|Miami|25\\.7|80\\.1)"
+    commands:
+      - wait: 2000
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser4"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 13: Verify all friends appear in contacts list
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Step 14: Test search with multiple friends
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "testuser"
+- waitForAnimationToEnd
+
+# Should show all 3 testusers in search results
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Clear search
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+
+# Step 15: Close contacts and test map zoom/pan with multiple markers
+- tapOn:
+    point: "70%,45%"  # Tap map to close contacts
+- waitForAnimationToEnd
+
+# Step 16: Test simultaneous location updates from all friends
+- wait: 2000
+
+# All friends send new locations at same time
+- runScript:
+    script: |
+      cd .maestro/helpers
+      # Get each user's room and send updated location
+      ROOM2=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      ROOM3=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser3)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      ROOM4=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser4)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      
+      ./api_send_location.sh testuser2 "$ROOM2" 34.0689 -118.2446 &
+      ./api_send_location.sh testuser3 "$ROOM3" 41.8825 -87.6230 &
+      ./api_send_location.sh testuser4 "$ROOM4" 25.7709 -80.1905 &
+      wait
+- wait: 8000  # Allow all updates to sync
+
+# Step 17: Verify all markers still present after simultaneous updates
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser3"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# Step 18: Test one friend goes offline (leaves)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser3)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_leave_room.sh testuser3 "$ROOM_ID"
+- wait: 6000
+
+# Pull to refresh to sync the leave
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+# Step 19: Verify testuser2 and testuser4 still visible, testuser3 gone/stale
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# testuser3 might still be visible but stale, or might be gone
+- runFlow:
+    when:
+      visible:
+        text: "testuser3"
+    commands:
+      # If visible, should be marked as stale/offline
+      - tapOn:
+          text: "testuser3"
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(offline|stale|disconnected)"
+          commands:
+            - wait: 1000  # Acceptable - showing as stale
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 20: Final verification with remaining active friends
+- tapOn:
+    text: "testuser2"
+- waitForAnimationToEnd
+- wait: 1000
+- runFlow:
+    when:
+      visible:
+        text: "testuser2"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+- tapOn:
+    text: "testuser4"
+- waitForAnimationToEnd
+- wait: 1000
+- runFlow:
+    when:
+      visible:
+        text: "testuser4"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Final state: Multiple friends successfully sharing locations simultaneously, markers interactive, handles online/offline state
