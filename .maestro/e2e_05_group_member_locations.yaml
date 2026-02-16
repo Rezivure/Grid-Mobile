@@ -1,0 +1,393 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Group member location updates
+# API: testuser2 sends location in shared group → UI: testuser1 sees it on map
+# Tests location sharing within groups end-to-end
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2-4 accounts exist
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up group with multiple members for location sharing..."
+    
+    # testuser2 creates group and invites testuser1, testuser3, testuser4
+    login_as_user "testuser2"
+    GROUP_ID=$(grid_create_group "NYC Food Tour" 7200 "testuser1" "testuser3" "testuser4")
+    echo "Group created: $GROUP_ID"
+    echo "$GROUP_ID" > /tmp/test_group_room_id
+    
+    # testuser1 accepts the invite (we'll do this in UI)
+    echo "✓ Group setup ready for testuser1 to accept"
+    
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+
+# Should see group invitation notification
+- assertVisible: "My Contacts"
+
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+    timeout: 10000
+
+# Accept the group invitation
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Invitations"
+- assertVisible: "NYC Food Tour"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Set up other members to join the group and send locations
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 Other members joining group and sharing locations..."
+    
+    # testuser3 accepts invite and sends location (Central Park)
+    login_as_user "testuser3"
+    grid_accept_invite "$GROUP_ID"
+    grid_send_location "$GROUP_ID" 40.7829 -73.9654  # Central Park
+    
+    # testuser4 accepts invite and sends location (Brooklyn)  
+    login_as_user "testuser4"
+    grid_accept_invite "$GROUP_ID"
+    grid_send_location "$GROUP_ID" 40.6892 -73.9442  # Brooklyn Heights
+    
+    # testuser2 sends their location (Times Square)
+    login_as_user "testuser2"
+    grid_send_location "$GROUP_ID" 40.7580 -73.9855  # Times Square
+    
+    echo "⏳ Waiting for group locations to sync..."
+    wait_for_sync 8
+    
+    echo "✓ Group location sharing setup complete"
+
+# Wait for locations to appear on map
+- waitForAnimationToEnd: 8000
+
+# Should now see group members' locations on map
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test tapping on group member location
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show location info and group context
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "NYC Food Tour"
+          optional: true
+      - assertVisible:
+          text: "Group member"
+          optional: true
+      - assertVisible:
+          text: "Times Square"
+          optional: true
+      - assertVisible:
+          text: "Group:"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Test another group member location
+- tapOn: "testuser3"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - assertVisible: "testuser3"
+      - assertVisible:
+          text: "Central Park"
+          optional: true
+      - assertVisible:
+          text: "NYC Food Tour"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Check group details in contacts drawer
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see the group
+- assertVisible: "NYC Food Tour"
+
+# Should show group has multiple active members
+- assertVisible:
+    text: "4 members"
+    optional: true
+
+- assertVisible:
+    text: "3 active"
+    optional: true
+
+# Tap on group to see details
+- tapOn: "NYC Food Tour"
+- waitForAnimationToEnd
+
+# Should show group member list with location status
+- assertVisible: "NYC Food Tour"
+- assertVisible: "testuser1"  # Myself
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Members with locations should show as active
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Sharing location"
+    optional: true
+
+- assertNotVisible: "No location"
+
+# Should show group expiry (2 hours)
+- assertVisible:
+    text: "2 hours"
+    optional: true
+
+- assertVisible:
+    text: "120 min"
+    optional: true
+
+- assertVisible:
+    text: "expires"
+    optional: true
+
+# Test member locations in group context
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show member detail with location
+- assertVisible: "testuser2"
+- assertVisible:
+    text: "Times Square"
+    optional: true
+
+- assertVisible:
+    text: "Manhattan"
+    optional: true
+
+# Should show they're in this group
+- assertVisible:
+    text: "NYC Food Tour"
+    optional: true
+
+# Go back to group
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Test location updates within group - send movement
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 Simulating group member movement..."
+    
+    # testuser2 moves from Times Square to Chelsea Market
+    login_as_user "testuser2"
+    grid_send_location "$GROUP_ID" 40.7424 -74.0061  # Chelsea Market
+    
+    # testuser3 moves within Central Park
+    login_as_user "testuser3"
+    grid_send_location "$GROUP_ID" 40.7851 -73.9683  # Central Park Reservoir
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd: 7000
+
+# Should see updated locations on map
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test tapping on moved member
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Chelsea"
+          optional: true
+      - assertVisible:
+          text: "Market"
+          optional: true
+      # Should still show group context
+      - assertVisible:
+          text: "NYC Food Tour"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Test group member going offline/leaving
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 testuser4 leaving the group..."
+    
+    # testuser4 leaves the group
+    login_as_user "testuser4"
+    grid_leave_room "$GROUP_ID"
+    
+    wait_for_sync 4
+
+- waitForAnimationToEnd: 5000
+
+# testuser4 should disappear from map
+- assertNotVisible: "testuser4"
+
+# But testuser2 and testuser3 should still be visible
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Check group member count updated
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- tapOn: "NYC Food Tour"
+- waitForAnimationToEnd
+
+# Should now show 3 members instead of 4
+- assertVisible:
+    text: "3 members"
+    optional: true
+
+- assertNotVisible: "testuser4"
+
+# But other members should still be there
+- assertVisible: "testuser1"
+- assertVisible: "testuser2" 
+- assertVisible: "testuser3"
+
+# Test adding new member to group during active session
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 Adding testuser5 to the group..."
+    
+    # testuser2 invites testuser5
+    login_as_user "testuser2"
+    grid_invite_to_room "$GROUP_ID" "testuser5"
+    
+    # testuser5 accepts and sends location
+    login_as_user "testuser5"
+    grid_accept_invite "$GROUP_ID"
+    grid_send_location "$GROUP_ID" 40.6782 -73.9442  # Prospect Park, Brooklyn
+    
+    wait_for_sync 5
+
+# Go back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd: 6000
+
+# Should see the new member on map
+- assertVisible: "testuser5"
+
+# Test that new member shows group context
+- tapOn: "testuser5"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser5"
+    commands:
+      - assertVisible: "testuser5"
+      - assertVisible:
+          text: "Brooklyn"
+          optional: true
+      - assertVisible:
+          text: "NYC Food Tour"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Final verification - group location sharing working properly
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "NYC Food Tour"
+
+# Group should show updated member count
+- tapOn: "NYC Food Tour"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser1"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser5"
+
+# Should show 4 members now
+- assertVisible:
+    text: "4 members"
+    optional: true
+
+# testuser4 should be gone
+- assertNotVisible: "testuser4"
+
+# All present members should show as active with locations
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Sharing location"
+    optional: true

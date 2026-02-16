@@ -445,6 +445,28 @@ grid_whoami() {
   echo "Token:     ${GRID_ACCESS_TOKEN:0:16}..."
 }
 
+# ─── Additional Room Management ────────────────────────────────────────────────
+
+grid_invite_to_room() {
+  local room_id="$1"
+  local user="$2"
+  local full_user_id=$(_full_user_id "$user")
+
+  local result
+  result=$(_matrix_api POST "/_matrix/client/v3/rooms/${room_id}/invite" \
+    "{\"user_id\": \"${full_user_id}\"}")
+
+  local error
+  error=$(echo "$result" | jq -r '.errcode // empty')
+  if [ -z "$error" ]; then
+    echo "✓ Invited ${full_user_id} to room ${room_id}"
+    return 0
+  else
+    echo "✗ Failed to invite user: $(echo "$result" | jq -r '.error // "unknown"')"
+    return 1
+  fi
+}
+
 echo "Grid Test API loaded. Functions available:"
 echo "  grid_login <user> [password]"
 echo "  grid_create_direct <target_user>"
@@ -456,6 +478,7 @@ echo "  grid_get_invites"
 echo "  grid_get_members <room_id>"
 echo "  grid_get_locations <room_id> [limit]"
 echo "  grid_leave_room <room_id>"
+echo "  grid_invite_to_room <room_id> <user>"
 echo "  grid_set_displayname <name>"
 echo "  grid_get_displayname [user_id]"
 echo "  grid_set_avatar <avatar_url>"

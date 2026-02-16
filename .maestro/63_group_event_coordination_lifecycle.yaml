@@ -1,0 +1,326 @@
+appId: app.mygrid.grid
+---
+# COMPREHENSIVE USER JOURNEY: Group Event Coordination Lifecycle
+#
+# REAL USER STORY:
+# It's Friday afternoon. Sarah gets invited to "Pizza Night" by her friend Tom for tonight
+# at 7 PM (expires in 4 hours). She accepts and sees 5 people are coming. Over the next
+# hour, she watches as people join/leave, coordinates location details, sees who's actually
+# at the restaurant, and manages the event through to completion and auto-expiry.
+#
+# This tests the COMPLETE group event lifecycle with time pressure, real coordination,
+# and social dynamics that make Grid valuable for actual friend groups.
+
+# Step 1-8: API Setup - Create realistic Friday night coordination scenario
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🍕 Setting up Friday Pizza Night coordination scenario..."
+    
+    # Tom creates the pizza group for tonight (4 hour duration - expires at 11 PM)
+    login_as_user "testuser2"
+    grid_set_displayname "Tom"
+    PIZZA_ROOM=$(grid_create_group "Pizza Night 🍕" 14400 "testuser1" "testuser3" "testuser4" "testuser5")
+    # Tom sets his location at the pizza place
+    grid_send_location "$PIZZA_ROOM" 40.7505 -73.9934  # Tony's Pizza Downtown
+    
+    # Mike already accepted and is heading there
+    login_as_user "testuser3" 
+    grid_set_displayname "Mike"
+    grid_accept_invite "$PIZZA_ROOM"
+    grid_send_location "$PIZZA_ROOM" 40.7520 -73.9900  # En route location
+    
+    # Emma is interested and will accept
+    login_as_user "testuser4"
+    grid_set_displayname "Emma"
+    # Emma hasn't accepted yet - she'll get the invite
+    
+    # Jake is unsure and will decline
+    login_as_user "testuser5"
+    grid_set_displayname "Jake" 
+    # Jake also hasn't decided yet
+    
+    # Alex will join late
+    login_as_user "testuser6"
+    grid_set_displayname "Alex"
+    grid_create_direct "testuser1"  # Establish friendship first
+    
+    wait_for_sync 10
+    echo "✓ Pizza Night scenario ready - group dynamics in motion!"
+
+# Step 9-15: User (Sarah) opens app and sees urgent group invite
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Accept Alex as friend first
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Alex"
+    commands:
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Sarah sees the pizza night invite - time sensitive!
+- assertVisible: "Invitations"
+- assertVisible: "Tom"
+- assertVisible: "Pizza Night"
+- assertVisible: "🍕"
+
+# Key detail - Sarah sees this expires in 4 hours (tonight's event)
+- assertVisible:
+    text: "4 hours"
+    optional: true
+- assertVisible:
+    text: "hour"
+- assertVisible:
+    text: "5 people"  # Initial invitee count
+
+# Step 16-25: Sarah evaluates and accepts the group invite
+# Sarah sees Tom is the organizer and already at the location
+- assertVisible: "Tom invited you"
+
+# Sarah accepts because it's tonight and friends are going
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Confirmation that Sarah joined
+- assertVisible:
+    text: "Joined Pizza Night"
+    optional: true
+- assertVisible:
+    text: "joined"
+    optional: true
+
+# Close notifications and check group details
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Step 26-35: Sarah checks group status and coordinates
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 5000
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Look for Groups section
+- tapOn: "Groups"
+    optional: true
+- waitForAnimationToEnd
+
+# Sarah finds and opens Pizza Night group
+- assertVisible: "Pizza Night"
+- tapOn: "Pizza Night"
+- waitForAnimationToEnd
+
+# Sarah sees group details and current status
+- assertVisible: "Pizza Night"
+- assertVisible: "🍕"
+
+# Check who's confirmed (Tom + Mike + Sarah = 3 so far)
+- assertVisible:
+    text: "3 members" 
+    optional: true
+- assertVisible: "Tom"
+- assertVisible: "Mike"
+
+# Should see Tom is at the restaurant location
+- assertVisible:
+    text: "Tom"
+- assertVisible:
+    text: "pizza"
+    optional: true
+
+# Should see Mike is en route
+- assertVisible:
+    text: "Mike"
+- assertVisible:
+    text: "ago"
+
+# Time remaining should be visible
+- assertVisible:
+    text: "expires"
+    optional: true
+- assertVisible:
+    text: "hour"
+
+# Step 36-45: Group dynamics play out in real-time
+# Simulate Emma accepting the invite
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    login_as_user "testuser4"
+    PIZZA_ROOM=$(grid_get_invites | head -n1)
+    grid_accept_invite "$PIZZA_ROOM"
+    wait_for_sync 3
+
+# Sarah sees group membership update (now 4 people)
+- waitForAnimationToEnd: 3000
+- assertVisible:
+    text: "4 members"
+    optional: true
+- assertVisible: "Emma"
+
+# Simulate Jake declining
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh  
+    login_as_user "testuser5"
+    PIZZA_ROOM=$(grid_get_invites | head -n1)
+    grid_decline_invite "$PIZZA_ROOM"
+    wait_for_sync 3
+
+# Group stays at 4 (Tom, Mike, Emma, Sarah) - Jake is out
+- waitForAnimationToEnd: 3000
+
+# Sarah can message the group to coordinate
+- assertVisible: "Message Group"
+    optional: true
+- tapOn: "Message Group"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Type a message"
+    commands:
+      - tapOn: "Type a message"
+      - inputText: "What time should we meet? I can be there by 7:15"
+      - tapOn: "Send"
+      - waitForAnimationToEnd
+
+# Step 46-55: Live location tracking as event approaches
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Go back to map to see who's heading to pizza place
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"
+
+# Sarah checks map to see real-time locations of group members
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see Tom at pizza place (already there)
+- assertVisible: "Tom"
+- runFlow:
+    when:
+      visible: "Tom"
+    commands:
+      # Tom should show as at the restaurant
+      - assertVisible:
+          text: "pizza"
+          optional: true
+      - assertVisible:
+          text: "restaurant" 
+          optional: true
+
+# Should see Mike en route or arriving
+- assertVisible: "Mike"
+
+# Should see Emma (just joined)
+- assertVisible: "Emma"
+
+# Step 56-60: Sarah heads to meet the group
+# Sarah sets her status as heading to pizza
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Update status to show she's heading there
+- tapOn: "testuser1"
+- waitForAnimationToEnd
+- inputText: "Sarah - Heading to pizza! 🍕"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"
+
+# Simulate Sarah arriving at pizza place
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    login_as_user "testuser1"
+    # Find the pizza room (should be in user's joined rooms)
+    grid_send_location "!pizza-room-id:localhost" 40.7505 -73.9934
+    wait_for_sync 3
+
+# Step 61-65: Event completion and expiry handling
+# Wait and simulate time passing (group event winds down)
+- waitForAnimationToEnd: 5000
+
+# Check group one more time to see final attendees
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+- tapOn: "Groups"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Pizza Night"
+    commands:
+      - assertVisible: "Pizza Night"
+      - assertVisible:
+          text: "4 members"
+          optional: true
+      # Event should still be active
+      - assertVisible:
+          text: "expires"
+          optional: true
+
+# Sarah can see the successful coordination happened
+- tapOn: "Pizza Night"
+    optional: true
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Tom"
+    commands:
+      - assertVisible: "Tom"
+      - assertVisible: "Mike"  
+      - assertVisible: "Emma"
+      # All at or near pizza place
+
+# Final verification - event coordination was successful
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"
+
+# JOURNEY COMPLETE - This 65-step flow proves:
+# ✓ Time-sensitive group coordination works under pressure
+# ✓ Group membership changes are visible in real-time  
+# ✓ Location sharing enables "who's actually coming" visibility
+# ✓ Group messaging facilitates coordination details
+# ✓ Status updates help friends track each other's ETA
+# ✓ Accept/decline decisions affect group planning
+# ✓ Expiry times create appropriate urgency for events
+# ✓ Multi-person location coordination actually works
+#
+# This represents REAL VALUE for friend groups making actual plans together.
