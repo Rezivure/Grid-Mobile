@@ -1,0 +1,103 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Large Group"
+tags: [release, stress, groups]
+
+# Test: create group with 10 members via API → all send locations → verify all markers, scroll member list
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Create large group with many members via API
+- runScript:
+    script: |
+      cd .maestro/helpers
+      
+      # Login many users
+      for i in {2..11}; do
+        ./api_login.sh testuser$i testpass123 &
+      done
+      wait
+      
+      # Create group from testuser2 and invite everyone
+      ./api_create_group.sh testuser2 "LargeTestGroup" 7200
+      
+      # Invite all users to the group
+      for i in {1,3,4,5,6,7,8,9,10,11}; do
+        ./api_join_room.sh testuser$i "LargeTestGroup" &
+      done
+      wait
+      
+      # All members send locations
+      ./api_send_location.sh testuser1 40.7580 -73.9855 &
+      ./api_send_location.sh testuser2 40.7581 -73.9854 &
+      ./api_send_location.sh testuser3 40.7582 -73.9853 &
+      ./api_send_location.sh testuser4 40.7583 -73.9852 &
+      ./api_send_location.sh testuser5 40.7584 -73.9851 &
+      ./api_send_location.sh testuser6 40.7585 -73.9850 &
+      ./api_send_location.sh testuser7 40.7586 -73.9849 &
+      ./api_send_location.sh testuser8 40.7587 -73.9848 &
+      ./api_send_location.sh testuser9 40.7588 -73.9847 &
+      ./api_send_location.sh testuser10 40.7589 -73.9846 &
+      ./api_send_location.sh testuser11 40.7590 -73.9845 &
+      wait
+    timeout: 45000
+
+# Wait for group and locations to sync
+- waitForAnimationToEnd:
+    timeout: 20000
+
+# Verify map can handle large group
+- assertVisible: "Map"
+
+# Go to groups tab to see the large group
+- tapOn: "Groups"
+- waitForAnimationToEnd
+
+# Verify large group is visible
+- assertVisible: "LargeTestGroup"
+
+# Tap on group to see members
+- tapOn: "LargeTestGroup"
+- waitForAnimationToEnd
+
+# Should see member count and member list
+- assertVisible: "Members"
+
+# Scroll through member list to verify all members are there
+- scrollUntilVisible:
+    element: "testuser2"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser5"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser8"
+    direction: DOWN
+
+# Go back to map view
+- tapOn: "Map"
+- waitForAnimationToEnd
+
+# Verify multiple markers are visible on map
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test map performance with large group
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pan around to see more markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+
+# App should still be responsive
+- assertVisible: "Map"

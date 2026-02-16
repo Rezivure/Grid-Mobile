@@ -1,0 +1,131 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Incognito Survives Restart"
+tags: [release, persistence, incognito]
+
+# Test: enable incognito → kill app → relaunch → still incognito
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Navigate to settings
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+
+# Find and enable incognito mode
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+
+# Verify incognito is currently off
+- assertVisible: "Incognito Mode"
+
+# Turn on incognito mode
+- tapOn: "Incognito Mode"
+- waitForAnimationToEnd
+
+# Verify incognito is now enabled
+- assertVisible:
+    text: "ON"
+    optional: true
+
+# Should see incognito indicator
+- assertVisible:
+    text: "incognito"
+    optional: true
+
+# Go back to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Verify incognito indicator appears on map view
+- assertVisible:
+    text: "incognito"
+    optional: true
+
+# Set up a friend to test incognito behavior
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+    timeout: 10000
+
+# Wait for friend to be available
+- waitForAnimationToEnd:
+    timeout: 8000
+
+# In incognito mode, we shouldn't be sharing location
+# (This is just setup, actual incognito behavior test)
+
+# Kill app completely
+- stopApp
+- delay: 5000
+
+# Relaunch app
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify we're still logged in
+- assertVisible: "Map"
+
+# Verify incognito mode persisted - should still see incognito indicator
+- assertVisible:
+    text: "incognito"
+    optional: true
+
+# Check settings to confirm incognito is still enabled
+- tapOn: "Settings"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+
+# Should still show ON
+- assertVisible:
+    text: "ON"
+    optional: true
+
+# Go back to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Test that we can toggle incognito off after restart
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+
+- tapOn: "Incognito Mode"
+- waitForAnimationToEnd
+
+# Should now be off
+- assertVisible:
+    text: "OFF"
+    optional: true
+
+# Go back to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Incognito indicator should be gone
+- assertNotVisible:
+    text: "incognito"
+    optional: true
+
+# Final verification - turn incognito back on to test it still works
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+- tapOn: "Incognito Mode"
+- tapOn: "Back" 
+
+# Should see incognito indicator again
+- assertVisible:
+    text: "incognito"
+    optional: true

@@ -1,0 +1,86 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Location Persistence Across Restart"
+tags: [release, persistence, location]
+
+# Test: friends share locations → kill app → relaunch → last known locations still shown
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up friends with locations
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_login.sh testuser3 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_friend_request.sh testuser3 testuser1
+      
+      # Send specific locations we'll verify after restart
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+      ./api_send_location.sh testuser3 40.7614 -73.9776
+    timeout: 15000
+
+# Wait for locations to sync and appear
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Record that we can see both friends on map
+- tapOn:
+    point: "50%,50%"
+- delay: 500
+- assertVisible: "Map"
+
+# Completely kill the app
+- stopApp
+- delay: 3000
+
+# Relaunch app
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify we're still logged in
+- assertVisible: "Map"
+
+# Verify last known locations are still shown (persistence test)
+# Friends should still be visible at their previous locations
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test that map is functional with persisted locations
+- tapOn:
+    point: "50%,50%"
+- delay: 500
+
+# Verify we can navigate with persisted state
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Verify friends are still there after navigation
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Send new location to verify live updates still work
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7590 -73.9865
+    timeout: 10000
+
+# Verify new location update is received
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "testuser2"
+
+# Final verification that persistence + live updates both work
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
