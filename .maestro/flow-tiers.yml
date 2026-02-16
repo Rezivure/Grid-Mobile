@@ -138,3 +138,4 @@ release:  # Weekly pre-release - FULL, 30-60 min
   - 79_offline_queue
   - 80_slow_sync
   - 81_full_regression_journey
+  - 81_full_regression_journey

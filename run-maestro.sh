@@ -209,9 +209,11 @@ run_flows_sequential() {
 main() {
     parse_args "$@"
     
-    # Get flows for tier
-    local flows
-    mapfile -t flows < <(get_flows_for_tier "$TIER")
+    # Get flows for tier (compatible with older bash)
+    local flows=()
+    while IFS= read -r flow; do
+        flows+=("$flow")
+    done < <(get_flows_for_tier "$TIER")
     
     if [[ ${#flows[@]} -eq 0 ]]; then
         error "No flows found for tier: $TIER"
