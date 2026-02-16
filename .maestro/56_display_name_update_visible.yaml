@@ -1,0 +1,344 @@
+appId: app.mygrid.grid
+---
+# Test: Display name changes propagate and are visible in UI
+# API changes testuser2's display name → Maestro navigates to contacts/map → verifies new name shown
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Establish friend connection with testuser2
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser2 testuser1
+- waitForAnimationToEnd
+- wait: 3000
+
+# Pull to refresh and accept
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# API joins room
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser2"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser2 "$ROOM_ID"; fi
+- wait: 3000
+
+# Step 2: Verify baseline - testuser2 appears with default name
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Should see testuser2 with original Matrix ID format
+- assertVisible: "testuser2"
+
+# Step 3: Send location so testuser2 appears on map
+- tapOn:
+    point: "70%,45%"  # Close contacts
+- waitForAnimationToEnd
+
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 "$ROOM_ID" 40.7589 -73.9851
+- wait: 6000
+
+# Verify testuser2 marker appears on map
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 15000
+
+# Step 4: API changes testuser2's display name to "Alice Smith"
+- runScript:
+    script: cd .maestro/helpers && ./api_set_displayname.sh testuser2 "Alice Smith"
+- waitForAnimationToEnd
+- wait: 5000  # Give time for display name change to propagate
+
+# Step 5: Pull to refresh to sync display name update
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 4000  # Extra time for Matrix sync
+
+# Step 6: Check if map marker shows updated display name
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Alice|Smith|Alice Smith)"
+    timeout: 20000
+
+# Alternative: testuser2 might still be visible but tap to check profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser2"
+    commands:
+      - tapOn:
+          text: "testuser2"
+      - waitForAnimationToEnd
+      
+      # Look for display name in profile
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(Alice|Smith|Alice Smith)"
+          commands:
+            - wait: 2000  # Good - display name updated in profile
+      
+      # Close profile
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 7: Check contacts list for display name update
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Should see Alice Smith instead of or alongside testuser2
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Alice|Smith|Alice Smith)"
+    timeout: 15000
+
+# Step 8: Test search with new display name
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "Alice"
+- waitForAnimationToEnd
+
+# Should find the contact by display name
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Alice|Smith)"
+    timeout: 10000
+
+# Clear search and try searching by last name
+- tapOn: "Search Contacts"
+- inputText: "Smith"
+- waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Alice|Smith)"
+    timeout: 10000
+
+# Clear search
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+
+# Step 9: Close contacts and test another display name change
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+# Step 10: Change display name again to test update propagation
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ./api_set_displayname.sh testuser2 "Bob Johnson"
+- waitForAnimationToEnd
+- wait: 5000
+
+# Pull to refresh
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 4000
+
+# Step 11: Verify second name change appears on map
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Bob|Johnson|Bob Johnson)"
+    timeout: 20000
+
+# Alternative check via profile tap
+- runFlow:
+    when:
+      not:
+        visible:
+          textRegex: "(Bob|Johnson)"
+    commands:
+      # Try tapping marker to see if profile shows new name
+      - runFlow:
+          when:
+            visible:
+              text: "testuser2"
+          commands:
+            - tapOn:
+                text: "testuser2"
+            - waitForAnimationToEnd
+            
+            - runFlow:
+                when:
+                  visible:
+                    textRegex: "(Bob|Johnson)"
+                commands:
+                  - wait: 1000  # Name updated in profile
+            
+            - tapOn:
+                point: "70%,30%"
+            - waitForAnimationToEnd
+
+# Step 12: Verify contacts list reflects second change
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Bob|Johnson|Bob Johnson)"
+    timeout: 15000
+
+# Verify old name (Alice Smith) is no longer shown
+- runFlow:
+    when:
+      visible:
+        text: "Alice Smith"
+    commands:
+      - assertVisible: "This should not be visible - name should have updated"
+
+# Step 13: Test that old Matrix ID search still works
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "testuser2"
+- waitForAnimationToEnd
+
+# Should still find contact by Matrix ID
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Bob|Johnson|testuser2)"
+    timeout: 10000
+
+# Clear search
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+
+# Step 14: Test display name with special characters
+- tapOn:
+    point: "70%,45%"  # Close contacts
+- waitForAnimationToEnd
+
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ./api_set_displayname.sh testuser2 "Charlie O'Connor 🚀"
+- waitForAnimationToEnd
+- wait: 5000
+
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 4000
+
+# Step 15: Verify special characters and emoji display correctly
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Charlie|O'Connor|🚀)"
+    timeout: 20000
+
+# Check in contacts list too
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Charlie|O'Connor|🚀)"
+    timeout: 15000
+
+# Step 16: Test empty/clearing display name
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ./api_set_displayname.sh testuser2 ""
+- waitForAnimationToEnd
+- wait: 5000
+
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 4000
+
+# Step 17: Verify fallback to Matrix ID when display name cleared
+- extendedWaitUntil:
+    visible:
+      text: "testuser2"
+    timeout: 20000
+
+# Should no longer show Charlie O'Connor
+- runFlow:
+    when:
+      visible:
+        text: "Charlie"
+    commands:
+      - assertVisible: "This should not be visible - display name was cleared"
+
+# Check contacts list shows Matrix ID
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Step 18: Final test - set a normal display name and verify persistence
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ./api_set_displayname.sh testuser2 "Dave Wilson"
+- waitForAnimationToEnd
+- wait: 5000
+
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 4000
+
+# Final verification
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Dave|Wilson|Dave Wilson)"
+    timeout: 20000
+
+# Send a new location to verify name persists with location updates
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser2)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser2 "$ROOM_ID" 40.7400 -73.9900
+- wait: 6000
+
+# Verify display name persists through location updates
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Dave|Wilson)"
+    timeout: 15000
+
+# Final state: Display name changes tested - initial name, updates, special chars, clearing, fallback to Matrix ID, persistence

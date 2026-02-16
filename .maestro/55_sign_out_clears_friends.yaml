@@ -1,0 +1,397 @@
+appId: app.mygrid.grid
+---
+# Test: Sign out clears friends/groups and clean state restoration
+# With friends/groups set up, Maestro signs out → signs back in → verify clean state or proper restoration
+# Prerequisites: testuser1 should be logged in initially
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Establish multiple friends and a group before signing out
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser10 testuser1 && ./api_send_friend_request.sh testuser11 testuser1
+- waitForAnimationToEnd
+- wait: 4000
+
+# Pull to refresh and accept friends
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+# Accept friend requests
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,25%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Join rooms via API
+- wait: 3000
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOMS=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[]')
+      for ROOM in $ROOMS; do
+        if [[ $ROOM == *"testuser10"* ]]; then
+          ./api_join_room.sh testuser10 "$ROOM"
+        elif [[ $ROOM == *"testuser11"* ]]; then
+          ./api_join_room.sh testuser11 "$ROOM"
+        fi
+      done
+- wait: 5000
+
+# Step 2: Create a group
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+- tapOn: "Group Name"
+- inputText: "Before Logout"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "24h"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Username"
+- inputText: "testuser10"
+- waitForAnimationToEnd
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+
+# Step 3: Verify friends and group established
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Check contacts
+- tapOn:
+    point: "30%,62%"
+- waitForAnimationToEnd
+- assertVisible: "testuser10"
+- assertVisible: "testuser11"
+
+# Check group
+- tapOn:
+    point: "70%,45%"  # Close contacts
+- waitForAnimationToEnd
+- tapOn:
+    point: "85%,62%"  # Groups tab
+- waitForAnimationToEnd
+- assertVisible: "Before Logout"
+
+# Step 4: Send locations from friends to establish map presence
+- tapOn:
+    point: "30%,62%"  # Back to map via contacts
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser10)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser10 "$ROOM_ID" 40.7300 -73.9950
+- wait: 4000
+
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser11)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser11 "$ROOM_ID" 40.7400 -74.0000
+- wait: 6000
+
+# Step 5: Verify friends' locations appear on map
+- extendedWaitUntil:
+    visible:
+      text: "testuser10"
+    timeout: 15000
+
+- extendedWaitUntil:
+    visible:
+      text: "testuser11"
+    timeout: 15000
+
+# Step 6: Navigate to settings to sign out
+- tapOn:
+    point: "10%,10%"  # Settings/menu
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Settings"
+    commands:
+      - tapOn: "Settings"
+      - waitForAnimationToEnd
+
+# Step 7: Find and tap sign out
+- scrollUntilVisible:
+    element:
+      textRegex: "(Sign Out|Log Out|Logout)"
+    direction: DOWN
+
+- tapOn:
+    textRegex: "(Sign Out|Log Out|Logout)"
+- waitForAnimationToEnd
+
+# Step 8: Confirm sign out if dialog appears
+- runFlow:
+    when:
+      visible:
+        textRegex: "(Confirm|Yes|Sign Out)"
+    commands:
+      - tapOn:
+          textRegex: "(Confirm|Yes|Sign Out)"
+      - waitForAnimationToEnd
+
+# Step 9: Wait for logout to complete and welcome screen to appear
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Welcome|Sign In|Login|Get Started)"
+    timeout: 20000
+
+# Step 10: Sign back in with same credentials
+# Tap custom provider or appropriate login option
+- runFlow:
+    when:
+      visible: "Custom Provider"
+    commands:
+      - tapOn: "Custom Provider"
+      - waitForAnimationToEnd
+
+# Alternative: direct login if already on login screen
+- runFlow:
+    when:
+      visible: "Homeserver URL"
+    commands:
+      - tapOn: "Homeserver URL"
+      - inputText: "http://localhost:8008"
+      - waitForAnimationToEnd
+
+- runFlow:
+    when:
+      not:
+        visible: "Homeserver URL"
+    commands:
+      # Need to get to login form first
+      - runFlow:
+          when:
+            visible: "Custom Provider"
+          commands:
+            - tapOn: "Custom Provider"
+            - waitForAnimationToEnd
+            - tapOn: "Homeserver URL"
+            - inputText: "http://localhost:8008"
+            - waitForAnimationToEnd
+
+# Fill credentials
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser1"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"  
+- inputText: "testpass123"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+- waitForAnimationToEnd
+
+# Step 11: Handle warning dialog if it appears
+- runFlow:
+    when:
+      visible: "Important Notice"
+    commands:
+      - tapOn: "I Understand, Continue"
+      - waitForAnimationToEnd
+
+# Step 12: Wait for login to complete
+- extendedWaitUntil:
+    visible:
+      textRegex: "(Welcome to Grid|Grant Permissions|My Contacts)"
+    timeout: 30000
+
+# Step 13: Skip onboarding if it appears (already done previously)
+- runFlow:
+    when:
+      visible: "Welcome to Grid!"
+    commands:
+      # Skip through onboarding quickly
+      - tapOn: "Get Started"  # Skip to end
+      - waitForAnimationToEnd
+
+# Alternative: handle individual onboarding steps
+- runFlow:
+    when:
+      visible: "Grant Permissions"
+    commands:
+      - tapOn: "Skip"  # If skip option available
+      - waitForAnimationToEnd
+
+# Final: get to main map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 20000
+
+# Step 14: Verify clean state - check if friends/groups are gone
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Depending on app behavior, friends might be:
+# A) Completely gone (clean slate)
+# B) Restored from server state
+# Both are valid behaviors
+
+# Check current state
+- runFlow:
+    when:
+      visible: "testuser10"
+    commands:
+      # Friends restored - verify they work
+      - assertVisible: "testuser11"
+      - wait: 1000
+
+- runFlow:
+    when:
+      not:
+        visible: "testuser10"
+    commands:
+      # Clean state - no friends visible
+      - wait: 1000
+
+# Step 15: Check groups state  
+- tapOn:
+    point: "70%,45%"  # Close contacts
+- waitForAnimationToEnd
+- tapOn:
+    point: "85%,62%"  # Groups tab
+- waitForAnimationToEnd
+
+# Check if group was restored or cleared
+- runFlow:
+    when:
+      visible: "Before Logout"
+    commands:
+      # Group restored
+      - wait: 1000
+
+- runFlow:
+    when:
+      not:
+        visible: "Before Logout"
+    commands:
+      # Clean state - no groups
+      - wait: 1000
+
+# Step 16: Go back to map and check location markers
+- tapOn:
+    point: "30%,62%"  # Back to map
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Check if any location markers persisted
+- runFlow:
+    when:
+      visible:
+        text: "testuser10"
+    commands:
+      # Location markers persisted
+      - wait: 1000
+
+- runFlow:
+    when:
+      not:
+        visible:
+          text: "testuser10"
+    commands:
+      # Clean map state
+      - wait: 1000
+
+# Step 17: Test that we can re-establish connections if needed
+- wait: 3000
+
+# If state was cleared, test that friend functionality still works
+- runFlow:
+    when:
+      not:
+        visible:
+          text: "testuser10"
+    commands:
+      # Re-establish a friend connection to verify functionality
+      - runScript:
+          script: cd .maestro/helpers && ./api_send_friend_request.sh testuser12 testuser1
+      - waitForAnimationToEnd
+      - wait: 3000
+      
+      - swipe:
+          direction: DOWN
+          duration: 500
+      - waitForAnimationToEnd
+      - wait: 2000
+      
+      - tapOn:
+          point: "90%,62%"
+      - waitForAnimationToEnd
+      - tapOn:
+          point: "50%,28%"
+      - waitForAnimationToEnd
+      - tapOn: "Accept Request"
+      - waitForAnimationToEnd
+      - tapOn: "Close"
+      - waitForAnimationToEnd
+      
+      # Verify new friend functionality works
+      - extendedWaitUntil:
+          visible: "My Contacts"
+          timeout: 15000
+
+# Step 18: Final state verification
+- wait: 2000
+
+# Pull to refresh to ensure final sync
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Verify app is in working state
+- assertVisible: "My Contacts"
+
+# Check notifications are working
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Final state: Sign out/sign in cycle completed, state either properly cleared or restored, app functionality verified

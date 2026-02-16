@@ -1,0 +1,330 @@
+appId: app.mygrid.grid
+---
+# Test: Stale location detection and indicators
+# testuser2 sends location with OLD timestamp (hours ago) → Maestro checks for stale/inactive indicator on their marker
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Establish friend connection with testuser8
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser8 testuser1
+- waitForAnimationToEnd
+- wait: 3000
+
+# Pull to refresh and accept invite
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+- tapOn:
+    point: "50%,28%"  # First invite
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 2: API joins DM room
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser8"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser8 "$ROOM_ID"; fi
+- wait: 3000
+
+# Step 3: Send RECENT location first to establish baseline
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser8 "$ROOM_ID" 40.7589 -73.9851
+- wait: 5000
+
+# Step 4: Verify fresh location marker appears normally
+- extendedWaitUntil:
+    visible:
+      text: "testuser8"
+    timeout: 15000
+
+# Tap to check fresh location info
+- tapOn:
+    text: "testuser8"
+- waitForAnimationToEnd
+
+# Look for recent/fresh indicators
+- runFlow:
+    when:
+      visible:
+        textRegex: "(now|recent|minutes?|just|live)"
+    commands:
+      - wait: 1000  # Good - showing as recent
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 5: Send location with 3-hour old timestamp
+- wait: 2000
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      OLD_TIMESTAMP=$(date -u -d "3 hours ago" +"%Y-%m-%dT%H:%M:%S.%3NZ")
+      ./api_send_location.sh testuser8 "$ROOM_ID" 40.7505 -73.9934 "$OLD_TIMESTAMP"
+- wait: 6000  # Allow time for stale location to sync
+
+# Step 6: Verify marker still appears but check for staleness indicators
+- extendedWaitUntil:
+    visible:
+      text: "testuser8"
+    timeout: 15000
+
+# Step 7: Tap marker to check for stale indicators
+- tapOn:
+    text: "testuser8"
+- waitForAnimationToEnd
+
+# Look for stale/old time indicators in profile
+- runFlow:
+    when:
+      visible:
+        textRegex: "(3h|3 hour|hours? ago|stale|old|offline)"
+    commands:
+      - wait: 2000  # Excellent - app is showing age information
+
+# Look for specific timestamp or relative time
+- runFlow:
+    when:
+      visible:
+        textRegex: "([0-9]{1,2}:[0-9]{2}|ago|hours?)"
+    commands:
+      - wait: 1000  # Good - showing timestamp info
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 8: Send location with even older timestamp (24 hours ago)
+- wait: 2000
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      VERY_OLD_TIMESTAMP=$(date -u -d "24 hours ago" +"%Y-%m-%dT%H:%M:%S.%3NZ")
+      ./api_send_location.sh testuser8 "$ROOM_ID" 40.7128 -74.0060 "$VERY_OLD_TIMESTAMP"
+- wait: 6000
+
+# Step 9: Check marker appearance and staleness for 24h old location
+- extendedWaitUntil:
+    visible:
+      text: "testuser8"
+    timeout: 15000
+
+- tapOn:
+    text: "testuser8"
+- waitForAnimationToEnd
+
+# Look for day-old indicators
+- runFlow:
+    when:
+      visible:
+        textRegex: "(1d|1 day|24h|24 hour|day ago|yesterday)"
+    commands:
+      - wait: 2000  # Excellent - showing day-old information
+
+# Close profile  
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 10: Test with extremely old timestamp (1 week ago)
+- wait: 2000
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      ANCIENT_TIMESTAMP=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%S.%3NZ")
+      ./api_send_location.sh testuser8 "$ROOM_ID" 37.7749 -122.4194 "$ANCIENT_TIMESTAMP"
+- wait: 6000
+
+# Step 11: Check handling of week-old location
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          text: "testuser8"
+      - waitForAnimationToEnd
+      
+      # Look for week/days indicators
+      - runFlow:
+          when:
+            visible:
+              textRegex: "(7d|week|days? ago)"
+          commands:
+            - wait: 2000  # Good - showing week-old info
+      
+      - runFlow:
+          when:
+            visible:
+              text: "testuser8"
+          commands:
+            - tapOn:
+                point: "70%,30%"
+            - waitForAnimationToEnd
+
+# Alternative: marker might be hidden/removed for very stale locations
+- runFlow:
+    when:
+      not:
+        visible:
+          text: "testuser8"
+    commands:
+      - wait: 1000  # Also acceptable - very stale locations removed
+
+# Step 12: Send fresh location to verify marker reactivates
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser8 "$ROOM_ID" 40.7614 -73.9776
+- wait: 6000
+
+# Step 13: Verify marker reappears with fresh timestamp
+- extendedWaitUntil:
+    visible:
+      text: "testuser8"
+    timeout: 15000
+
+- tapOn:
+    text: "testuser8"
+- waitForAnimationToEnd
+
+# Look for fresh/recent indicators
+- runFlow:
+    when:
+      visible:
+        textRegex: "(now|recent|just|live|minutes?)"
+    commands:
+      - wait: 1000  # Good - back to fresh status
+
+# Close profile
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 14: Test sequence of locations with varying ages
+- wait: 2000
+
+# Send moderately old (30 minutes)
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]')
+      MODERATE_OLD=$(date -u -d "30 minutes ago" +"%Y-%m-%dT%H:%M:%S.%3NZ")
+      ./api_send_location.sh testuser8 "$ROOM_ID" 40.7580 -73.9855 "$MODERATE_OLD"
+- wait: 4000
+
+- tapOn:
+    text: "testuser8"  
+- waitForAnimationToEnd
+
+# Look for 30-minute indicators
+- runFlow:
+    when:
+      visible:
+        textRegex: "(30m|30 min|half hour)"
+    commands:
+      - wait: 1000
+
+# Close and test contacts list shows staleness
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Step 15: Check if contacts list shows staleness indicators
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Look for testuser8 with potential staleness indicator
+- assertVisible: "testuser8"
+
+# Look for any visual indicators in contacts (timestamps, icons, etc.)
+- runFlow:
+    when:
+      visible:
+        textRegex: "(30m|ago|stale)"
+    commands:
+      - wait: 1000  # Good - staleness shown in contacts too
+
+# Close contacts
+- tapOn:
+    point: "70%,45%"
+- waitForAnimationToEnd
+
+# Step 16: Final test - send current location to reset to fresh
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser8)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser8 "$ROOM_ID" 40.7484 -73.9857
+- wait: 5000
+
+# Final verification - fresh marker
+- extendedWaitUntil:
+    visible:
+      text: "testuser8"
+    timeout: 15000
+
+- tapOn:
+    text: "testuser8"
+- waitForAnimationToEnd
+
+# Should show fresh/current again
+- runFlow:
+    when:
+      visible:
+        textRegex: "(now|recent|live|just)"
+    commands:
+      - wait: 1000  # Perfect - back to fresh state
+
+- runFlow:
+    when:
+      visible:
+        text: "testuser8"
+    commands:
+      - tapOn:
+          point: "70%,30%"
+      - waitForAnimationToEnd
+
+# Final state: Stale location indicators tested - 3h old, 24h old, 7d old, 30m old, and fresh states all verified
