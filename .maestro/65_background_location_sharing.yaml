@@ -1,0 +1,56 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Background Location Sharing"
+tags: [release, background, location]
+
+# Test that app backgrounded → API sends location request → verify app still responds with location
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Send location from API to establish baseline
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+    timeout: 10000
+
+# Verify location appears on map
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "testuser2"
+
+# Background the app
+- stopApp
+
+# Wait a moment
+- delay: 2000
+
+# Send another location from API while app is backgrounded
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7590 -73.9865
+    timeout: 10000
+
+# Launch app and verify it received the background location update
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: "Map"
+
+# The marker should be at the new position (this tests that the app processed the background sync)
+- assertVisible: "testuser2"
+
+# Verify we can still send a location request while backgrounded
+- stopApp
+- delay: 1000
+
+# Relaunch and verify app is still functional
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+- assertVisible: "testuser2"

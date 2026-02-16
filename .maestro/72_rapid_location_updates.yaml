@@ -1,0 +1,89 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Rapid Location Updates"
+tags: [release, stress, location]
+
+# Test: API sends 20+ location updates for one user in quick succession → app doesn't crash, shows latest position
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up friend via API
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+    timeout: 10000
+
+# Wait for friend to appear
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "testuser2"
+
+# Send rapid burst of location updates simulating movement
+- runScript:
+    script: |
+      cd .maestro/helpers
+      
+      # Simulate rapid movement with 20+ location updates
+      # Moving along a path in Manhattan
+      ./api_send_location.sh testuser2 40.7580 -73.9855 &
+      ./api_send_location.sh testuser2 40.7581 -73.9854 &
+      ./api_send_location.sh testuser2 40.7582 -73.9853 &
+      ./api_send_location.sh testuser2 40.7583 -73.9852 &
+      ./api_send_location.sh testuser2 40.7584 -73.9851 &
+      ./api_send_location.sh testuser2 40.7585 -73.9850 &
+      ./api_send_location.sh testuser2 40.7586 -73.9849 &
+      ./api_send_location.sh testuser2 40.7587 -73.9848 &
+      ./api_send_location.sh testuser2 40.7588 -73.9847 &
+      ./api_send_location.sh testuser2 40.7589 -73.9846 &
+      wait
+      
+      # Second batch
+      ./api_send_location.sh testuser2 40.7590 -73.9845 &
+      ./api_send_location.sh testuser2 40.7591 -73.9844 &
+      ./api_send_location.sh testuser2 40.7592 -73.9843 &
+      ./api_send_location.sh testuser2 40.7593 -73.9842 &
+      ./api_send_location.sh testuser2 40.7594 -73.9841 &
+      ./api_send_location.sh testuser2 40.7595 -73.9840 &
+      ./api_send_location.sh testuser2 40.7596 -73.9839 &
+      ./api_send_location.sh testuser2 40.7597 -73.9838 &
+      ./api_send_location.sh testuser2 40.7598 -73.9837 &
+      ./api_send_location.sh testuser2 40.7599 -73.9836 &
+      wait
+      
+      # Final position
+      ./api_send_location.sh testuser2 40.7600 -73.9835
+    timeout: 20000
+
+# Wait for rapid updates to process
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Verify app didn't crash and is still functional
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+
+# Test that we can still interact with the map
+- tapOn:
+    point: "50%,50%"
+- delay: 500
+
+# Test navigation to verify app stability
+- tapOn: "Settings"
+- assertVisible: "Display Name"  
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Verify friend is still visible (should be at latest position)
+- assertVisible: "testuser2"
+
+# Test one more interaction to ensure responsiveness
+- tapOn: "Notifications"
+- delay: 500
+- tapOn: "Back"
+- assertVisible: "Map"

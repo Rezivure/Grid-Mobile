@@ -135,17 +135,13 @@ run_test_suite() {
     
     cd "$PROJECT_ROOT"
     
-    # Define test cases in priority order
+    # Define test cases - REAL USER STORIES that matter
     declare -A TESTS=(
-        ["e2e_01_incoming_location_sharing.yaml"]="Location Sharing E2E"
-        ["e2e_02_friend_request_received.yaml"]="Friend Request Notification"
-        ["e2e_03_group_invite_received.yaml"]="Group Invitation Flow"
-        ["e2e_04_multiple_locations_map.yaml"]="Multiple Simultaneous Locations"
-        ["e2e_05_group_member_locations.yaml"]="Group Member Location Updates"
-        ["e2e_06_display_name_propagation.yaml"]="Display Name Change Propagation"
-        ["e2e_07_user_presence_status.yaml"]="User Presence/Status Updates"
-        ["e2e_08_removed_from_group.yaml"]="Group Removal/Kick Handling"
-        ["e2e_09_friend_request_accepted_api.yaml"]="Friend Request Acceptance API Verification"
+        ["e2e_user_story_complete_friend_lifecycle.yaml"]="Complete Friend Lifecycle Story"
+        ["e2e_user_story_weekend_trip_group.yaml"]="Weekend Trip Group with Time Expiry"
+        ["e2e_01_incoming_location_sharing.yaml"]="Location Sharing E2E (Core Flow)"
+        ["e2e_02_friend_request_received.yaml"]="Friend Request Notification (Core Flow)"
+        ["e2e_03_group_invite_received.yaml"]="Group Invitation Flow (Core Flow)"
     )
     
     # Run each test

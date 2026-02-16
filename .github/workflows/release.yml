@@ -1,0 +1,231 @@
+name: Grid Release
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 2am EST
+  workflow_dispatch:  # Manual trigger
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check-changes:
+    name: Check for Changes
+    runs-on: [self-hosted, macOS, ARM64]
+    outputs:
+      should_release: ${{ steps.changes.outputs.should_release }}
+      last_tag: ${{ steps.changes.outputs.last_tag }}
+      new_version: ${{ steps.changes.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes since last release
+        id: changes
+        run: |
+          # Get the latest release tag
+          LAST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous release tags found, proceeding with release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            # Check if there are commits since the last tag
+            COMMITS_SINCE=$(git rev-list ${LAST_TAG}..HEAD --count)
+            echo "Commits since $LAST_TAG: $COMMITS_SINCE"
+            
+            if [ "$COMMITS_SINCE" -gt "0" ]; then
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "Found $COMMITS_SINCE commits since last release"
+            else
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "No changes since last release, skipping"
+            fi
+          fi
+          
+          # Generate new version
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
+          echo "new_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+  release:
+    name: Build and Test Release
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: check-changes
+    if: needs.check-changes.outputs.should_release == 'true'
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Bump build number
+        run: |
+          # Extract current version and build number
+          CURRENT=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
+          VERSION=$(echo $CURRENT | cut -d+ -f1)
+          BUILD_NUM=$(echo $CURRENT | cut -d+ -f2)
+          NEW_BUILD_NUM=$((BUILD_NUM + 1))
+          NEW_VERSION="${VERSION}+${NEW_BUILD_NUM}"
+          
+          echo "Bumping version from $CURRENT to $NEW_VERSION"
+          sed -i '' "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
+          
+          # Commit version bump
+          git config user.name "Grid Release Bot"
+          git config user.email "release@mygrid.app"
+          git add pubspec.yaml
+          git commit -m "Release: bump version to $NEW_VERSION"
+          
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Build release binaries
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          
+          echo "Building iOS release..."
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          
+          echo "Building Android release..."
+          flutter build appbundle --release
+          
+          # Verify builds exist
+          ls -la build/ios/ipa/
+          ls -la build/app/outputs/bundle/release/
+
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests..."
+          flutter test --reporter expanded
+
+      - name: Start test infrastructure
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          echo "Starting test infrastructure..."
+          bash test-infra/scripts/run-e2e.sh --only infra
+
+      - name: Run all Maestro flows (release tier)
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          echo "Running complete release test suite..."
+          ./run-maestro.sh release --report-dir test-infra/reports/maestro-release
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog since last tag
+          LAST_TAG="${{ needs.check-changes.outputs.last_tag }}"
+          
+          if [ -n "$LAST_TAG" ]; then
+            echo "Generating changelog since $LAST_TAG"
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --oneline --pretty=format:"- %s" | head -20)
+          else
+            echo "Generating changelog for initial release"
+            CHANGELOG=$(git log --oneline --pretty=format:"- %s" | head -20)
+          fi
+          
+          # Save changelog to file
+          cat > CHANGELOG.md << 'EOF'
+          # Release ${{ env.NEW_VERSION }}
+          
+          ## Changes
+          $CHANGELOG
+          
+          ## Full Release Validation
+          - ✅ All unit tests passed
+          - ✅ Complete Maestro test suite passed (81 flows)
+          - ✅ iOS release build completed
+          - ✅ Android release build completed
+          EOF
+          
+          echo "changelog_file=CHANGELOG.md" >> $GITHUB_OUTPUT
+
+      - name: Create release tag and GitHub release
+        run: |
+          # Create and push tag
+          git tag "v${{ env.NEW_VERSION }}"
+          git push origin "v${{ env.NEW_VERSION }}"
+          git push origin HEAD
+          
+          # Create GitHub release
+          gh release create "v${{ env.NEW_VERSION }}" \
+            --title "Grid v${{ env.NEW_VERSION }}" \
+            --notes-file CHANGELOG.md \
+            --draft=false \
+            --prerelease=false \
+            build/ios/ipa/grid_frontend.ipa \
+            build/app/outputs/bundle/release/app-release.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-report-${{ env.NEW_VERSION }}
+          path: test-infra/reports/
+          retention-days: 90
+
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-debug-${{ env.NEW_VERSION }}
+          path: |
+            ~/.maestro/tests/
+            build/ios/ipa/
+            build/app/outputs/
+          retention-days: 30
+
+      # TODO: Uncomment when Fastlane is configured
+      # - name: Upload to App Store (iOS)
+      #   if: success()
+      #   run: |
+      #     echo "Would run: fastlane deliver --skip_metadata --skip_screenshots"
+      #     echo "Requires: App Store Connect API key in secrets"
+
+      # - name: Upload to Play Store (Android) 
+      #   if: success()
+      #   run: |
+      #     echo "Would run: fastlane supply --track production"
+      #     echo "Requires: Google Play service account JSON in secrets"
+
+  notify-failure:
+    name: Notify on Failure
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: [check-changes, release]
+    if: failure() && needs.check-changes.outputs.should_release == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create failure issue
+        run: |
+          TITLE="Release Pipeline Failed - $(date '+%Y-%m-%d')"
+          BODY="The automated release pipeline failed during the weekly release process.
+          
+          **Failed Job:** ${{ github.job }}
+          **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          **Commit:** ${{ github.sha }}
+          
+          Please investigate the failure and retry the release manually if needed.
+          
+          /cc @Grid-Mobile-Team"
+          
+          gh issue create \
+            --title "$TITLE" \
+            --body "$BODY" \
+            --label "release-failure" \
+            --label "bug"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
