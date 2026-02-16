@@ -1,0 +1,30 @@
+appId: app.mygrid.grid
+---
+# Test: Open Add Contact modal and dismiss without sending
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap the person-add icon
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Should see Add Contact modal
+- assertVisible: "Add Contact"
+
+# Dismiss by tapping outside / close area (swipe down to dismiss modal)
+- swipe:
+    start: "50%,20%"
+    end: "50%,90%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

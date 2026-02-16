@@ -341,9 +341,122 @@ phase_ui() {
   # Flow 13: Create group (testuser2 should be a contact now)
   run_maestro_flow "13_create_group"
 
-  # Flow 14-15: Sign out and sign back in
+  # ── New API-orchestrated flows ──
+
+  # Flow 16: Decline a friend request from testuser4
+  log_step "Setting up friend request from testuser4 → testuser1 for decline test..."
+  local t4_token
+  t4_token=$(curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/login" \
+    -H "Content-Type: application/json" \
+    -d '{"type":"m.login.password","user":"testuser4","password":"testpass123"}' | jq -r '.access_token')
+
+  if [ -n "$t4_token" ]; then
+    local decline_room
+    decline_room=$(curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/createRoom" \
+      -H "Authorization: Bearer $t4_token" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Grid:Direct:@testuser4:localhost:@testuser1:localhost",
+        "is_direct": true,
+        "preset": "private_chat",
+        "invite": ["@testuser1:localhost"],
+        "initial_state": [{"type":"m.room.encryption","content":{"algorithm":"m.megolm.v1.aes-sha2"},"state_key":""}]
+      }' | jq -r '.room_id // empty')
+
+    if [ -n "$decline_room" ]; then
+      log_step "Friend request for decline test created: $decline_room — waiting for sync..."
+      sleep 5
+      run_maestro_flow "16_decline_friend_request"
+    else
+      record_fail "Setup decline friend request" "Room creation failed"
+    fi
+  else
+    record_fail "Setup decline friend request" "testuser4 login failed"
+  fi
+
+  # Flow 17: Search contacts
+  run_maestro_flow "17_search_contacts"
+
+  # Flow 18: Change display name
+  run_maestro_flow "18_change_display_name"
+
+  # Flow 19: Accept a group invite
+  log_step "Setting up group invite from testuser2 → testuser1..."
+  if [ -n "$t2_token" ]; then
+    local group_invite_room
+    group_invite_room=$(curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/createRoom" \
+      -H "Authorization: Bearer $t2_token" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"name\": \"Grid:Group:0:InviteTestGroup:@testuser2:localhost\",
+        \"is_direct\": false,
+        \"visibility\": \"private\",
+        \"initial_state\": [{\"type\":\"m.room.encryption\",\"content\":{\"algorithm\":\"m.megolm.v1.aes-sha2\"},\"state_key\":\"\"}]
+      }" | jq -r '.room_id // empty')
+
+    if [ -n "$group_invite_room" ]; then
+      # Invite testuser1 to the group
+      curl -sf -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${group_invite_room}/invite" \
+        -H "Authorization: Bearer $t2_token" \
+        -H "Content-Type: application/json" \
+        -d '{"user_id":"@testuser1:localhost"}' > /dev/null
+
+      log_step "Group invite created: $group_invite_room — waiting for sync..."
+      sleep 5
+      run_maestro_flow "19_accept_group_invite"
+    else
+      record_fail "Setup group invite" "Room creation failed"
+    fi
+  else
+    record_fail "Setup group invite" "testuser2 token not available"
+  fi
+
+  # Flow 20: Notification bell (empty state, after all invites handled)
+  run_maestro_flow "20_notification_bell_empty"
+
+  # Flow 21: View contacts drawer
+  run_maestro_flow "21_view_groups_tab"
+
+  # ── Non-API UI flows (no setup needed, run while logged in) ──
+
+  # Settings deep-dives
+  run_maestro_flow "22_incognito_toggle_verify"
+  run_maestro_flow "23_battery_saver_toggle"
+  run_maestro_flow "24_settings_community_section"
+  run_maestro_flow "25_settings_support_info"
+  run_maestro_flow "26_sign_out_cancel"
+
+  # Modal & navigation flows
+  run_maestro_flow "27_add_contact_modal_dismiss"
+  run_maestro_flow "28_create_group_modal_tabs"
+  run_maestro_flow "29_contacts_drawer_expand_collapse"
+  run_maestro_flow "30_notification_bell_open_close"
+  run_maestro_flow "31_settings_back_navigation"
+
+  # Search & validation flows
+  run_maestro_flow "32_search_contacts_empty_query"
+  run_maestro_flow "33_settings_profile_header"
+  run_maestro_flow "34_map_screen_elements"
+  run_maestro_flow "35_send_friend_request_empty"
+  run_maestro_flow "36_create_group_no_members"
+
+  # Settings verification
+  run_maestro_flow "37_settings_no_subscription_custom"
+  run_maestro_flow "38_change_display_name_short"
+  run_maestro_flow "39_create_group_duration_options"
+  run_maestro_flow "40_settings_scroll_full"
+
+  # App state flows
+  run_maestro_flow "41_app_resume_state"
+
+  # Flow 14-15: Sign out and sign back in (keep last — they reset app state)
   run_maestro_flow "14_sign_out"
   run_maestro_flow "15_sign_in_after_signout"
+
+  # ── Post-signout flows (clearState flows) ──
+  run_maestro_flow "42_welcome_screen_elements"
+  run_maestro_flow "43_get_started_flow"
+  run_maestro_flow "44_custom_provider_form"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════

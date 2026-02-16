@@ -1,19 +1,13 @@
 appId: app.mygrid.grid
 ---
-# Test: Accept a friend request from testuser2
-# Prerequisite: testuser1 logged in on map screen, testuser2 invite created via API
+# Test: Verify notification bell opens modal and shows empty state when no invites
+# Prerequisite: testuser1 logged in on map screen, no pending invites
 
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
-
-# Give sync time to fetch the invite
-- swipe:
-    direction: DOWN
-    duration: 500
-- waitForAnimationToEnd
 
 # Tap the notification bell
 - tapOn:
@@ -23,15 +17,6 @@ appId: app.mygrid.grid
 # Verify Notifications modal opened
 - assertVisible: "Notifications"
 
-# Tap the first invite card
-- tapOn:
-    point: "50%,28%"
-- waitForAnimationToEnd
-
-# Tap Accept Request button
-- tapOn: "Accept Request"
-- waitForAnimationToEnd
-
 # Close the notifications modal
 - tapOn: "Close"
 - waitForAnimationToEnd
@@ -39,4 +24,4 @@ appId: app.mygrid.grid
 # Verify back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 15000
+    timeout: 10000

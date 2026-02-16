@@ -1,7 +1,7 @@
 appId: app.mygrid.grid
 ---
-# Test: Accept a friend request from testuser2
-# Prerequisite: testuser1 logged in on map screen, testuser2 invite created via API
+# Test: Decline a friend request from testuser4
+# Prerequisite: testuser1 logged in on map screen, testuser4 invite created via API
 
 - launchApp
 - waitForAnimationToEnd
@@ -28,8 +28,8 @@ appId: app.mygrid.grid
     point: "50%,28%"
 - waitForAnimationToEnd
 
-# Tap Accept Request button
-- tapOn: "Accept Request"
+# Tap Decline button
+- tapOn: "Decline"
 - waitForAnimationToEnd
 
 # Close the notifications modal

@@ -1,0 +1,20 @@
+appId: app.mygrid.grid
+---
+# Test: Tap Get Started on welcome screen (official provider path)
+# Note: Uses clearState — run independently
+
+- clearState
+- launchApp
+- waitForAnimationToEnd
+
+# Verify welcome screen
+- assertVisible: "Get Started"
+
+# Tap Get Started
+- tapOn: "Get Started"
+- waitForAnimationToEnd
+
+# Should navigate to official login/registration (may show loading or login form)
+# Go back to welcome screen
+- back
+- waitForAnimationToEnd
