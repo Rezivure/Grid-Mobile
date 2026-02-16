@@ -14,9 +14,14 @@ class TwoUserAvatars extends StatelessWidget {
 
     // Ensure there are at least two distinct avatars
     List<String> displayedUserIds = userIds.toSet().toList();
-    if (displayedUserIds.length < 2) {
+    
+    // Fix the original empty list bug that was causing RangeError
+    if (displayedUserIds.isEmpty) {
+      displayedUserIds = ['default_user_1', 'default_user_2'];
+    } else if (displayedUserIds.length < 2) {
       displayedUserIds.add(displayedUserIds[0]);
     }
+    
     displayedUserIds = displayedUserIds.take(2).toList();
 
     return CircleAvatar(
