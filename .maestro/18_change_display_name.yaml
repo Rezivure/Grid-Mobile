@@ -1,0 +1,53 @@
+appId: app.mygrid.grid
+---
+# Test: Change display name in settings
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Verify Settings page
+- assertVisible: "Settings"
+
+# Tap on the edit pencil icon next to display name
+# The pencil icon is at ~55%,22% based on screenshot analysis
+- tapOn:
+    point: "55%,22%"
+- waitForAnimationToEnd
+
+# Should show Edit Display Name dialog
+- extendedWaitUntil:
+    visible: "Edit Display Name"
+    timeout: 5000
+
+# Clear existing name and type new one (name is 3-14 chars)
+- eraseText: 20
+- inputText: "RenamedUser1"
+- waitForAnimationToEnd
+
+# Tap Save button
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Verify the new display name appears
+- extendedWaitUntil:
+    visible: "RenamedUser1"
+    timeout: 10000
+
+# Navigate back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

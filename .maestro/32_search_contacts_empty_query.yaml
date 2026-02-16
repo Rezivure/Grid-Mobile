@@ -1,0 +1,45 @@
+appId: app.mygrid.grid
+---
+# Test: Open search contacts with empty query, verify no crash
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Pull up the contacts drawer
+- swipe:
+    start: "50%,95%"
+    end: "50%,50%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Tap the Search Contacts field
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+
+# Type and clear to verify empty state
+- inputText: "nonexistentuser999"
+- waitForAnimationToEnd
+
+# Clear the search
+- eraseText: 18
+- waitForAnimationToEnd
+
+# Dismiss keyboard
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Collapse the drawer
+- swipe:
+    start: "50%,50%"
+    end: "50%,95%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

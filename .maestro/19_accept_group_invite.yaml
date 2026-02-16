@@ -1,7 +1,7 @@
 appId: app.mygrid.grid
 ---
-# Test: Accept a friend request from testuser2
-# Prerequisite: testuser1 logged in on map screen, testuser2 invite created via API
+# Test: Accept a group invite from testuser2
+# Prerequisite: testuser1 logged in on map screen, group invite created via API
 
 - launchApp
 - waitForAnimationToEnd
@@ -23,13 +23,13 @@ appId: app.mygrid.grid
 # Verify Notifications modal opened
 - assertVisible: "Notifications"
 
-# Tap the first invite card
+# Tap the first invite card (group invite)
 - tapOn:
     point: "50%,28%"
 - waitForAnimationToEnd
 
-# Tap Accept Request button
-- tapOn: "Accept Request"
+# Tap Join Group button (group invites show "Join Group", not "Accept Request")
+- tapOn: "Join Group"
 - waitForAnimationToEnd
 
 # Close the notifications modal

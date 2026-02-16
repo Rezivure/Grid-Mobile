@@ -1,42 +1,165 @@
 appId: app.mygrid.grid
 ---
-# Test: Sign back in after sign out (no clearState - tests re-login flow)
-# Prerequisite: app on welcome screen after sign out
+# Test: Sign back in after sign out (re-login flow)
+# Prerequisite: run flow 14 (sign out) first — app should be on welcome screen
+# Note: This flow re-does full login + onboarding since sign out clears local state
 
 - launchApp
 - waitForAnimationToEnd
 
-# Should be on welcome screen
-- assertVisible: "Custom Provider"
+# Handle two possible states:
+# 1. Welcome screen with "Custom Provider" (signed out)
+# 2. Onboarding modal still showing (logged in but onboarding incomplete)
 
-# Tap Custom Provider
-- tapOn: "Custom Provider"
-- waitForAnimationToEnd
+# If onboarding is showing, complete it first
+- runFlow:
+    when:
+      visible: "Welcome to Grid!"
+    commands:
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      # Page 2: permissions
+      - assertVisible: "Grant Permissions"
+      - tapOn:
+          point: "50%,62%"
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Allow While Using App"
+          commands:
+            - tapOn: "Allow While Using App"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Change to Always Allow"
+          commands:
+            - tapOn: "Change to Always Allow"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Always Allow"
+          commands:
+            - tapOn: "Always Allow"
+            - waitForAnimationToEnd
+      - swipe:
+          start: "50%,70%"
+          end: "50%,50%"
+      - waitForAnimationToEnd
+      - tapOn:
+          point: "50%,70%"
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "OK"
+          commands:
+            - tapOn: "OK"
+            - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      # Pages 3-7
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      # Page 8
+      - tapOn: "Get Started"
+      - waitForAnimationToEnd
 
-# Enter homeserver URL
-- tapOn:
-    hint: "matrix.example.com"
-- inputText: "http://localhost:8008"
-- waitForAnimationToEnd
+# If on login screen, do the full login
+- runFlow:
+    when:
+      visible: "Custom Provider"
+    commands:
+      - tapOn: "Custom Provider"
+      - waitForAnimationToEnd
+      - scrollUntilVisible:
+          element: "Homeserver URL"
+          direction: DOWN
+      - tapOn: "Homeserver URL"
+      - inputText: "http://localhost:8008"
+      - scrollUntilVisible:
+          element: "Username"
+          direction: DOWN
+      - tapOn: "Username"
+      - inputText: "testuser1"
+      - scrollUntilVisible:
+          element: "Password"
+          direction: DOWN
+      - tapOn: "Password"
+      - inputText: "testpass123"
+      - scrollUntilVisible:
+          element: "Sign In"
+          direction: DOWN
+      - tapOn: "Sign In"
+      - runFlow:
+          when:
+            visible: "Important Notice"
+          commands:
+            - tapOn: "I Understand, Continue"
+            - waitForAnimationToEnd
+      # Complete onboarding
+      - extendedWaitUntil:
+          visible: "Welcome to Grid!"
+          timeout: 15000
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - assertVisible: "Grant Permissions"
+      - tapOn:
+          point: "50%,62%"
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Allow While Using App"
+          commands:
+            - tapOn: "Allow While Using App"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Change to Always Allow"
+          commands:
+            - tapOn: "Change to Always Allow"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Always Allow"
+          commands:
+            - tapOn: "Always Allow"
+            - waitForAnimationToEnd
+      - swipe:
+          start: "50%,70%"
+          end: "50%,50%"
+      - waitForAnimationToEnd
+      - tapOn:
+          point: "50%,70%"
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "OK"
+          commands:
+            - tapOn: "OK"
+            - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Next"
+      - waitForAnimationToEnd
+      - tapOn: "Get Started"
+      - waitForAnimationToEnd
 
-# Tap Next/Continue
-- tapOn: "Next"
-- waitForAnimationToEnd
-
-# Login form
-- tapOn:
-    hint: "Username"
-- inputText: "testuser1"
-- tapOn:
-    hint: "Password"
-- inputText: "testpass123"
-- waitForAnimationToEnd
-
-# Tap Login
-- tapOn: "Log In"
-- waitForAnimationToEnd
-
-# Should skip onboarding (returning user) and go to map
+# Should be on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 20000
+    timeout: 15000

@@ -1,0 +1,36 @@
+appId: app.mygrid.grid
+---
+# Test: Open and close notification bell multiple times
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Open notifications
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Open again
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Close again
+- tapOn: "Close"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

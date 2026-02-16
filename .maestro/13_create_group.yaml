@@ -2,6 +2,7 @@ appId: app.mygrid.grid
 ---
 # Test: Create a group with testuser2
 # Prerequisite: testuser1 logged in on map screen, testuser2 is a contact
+# Group creation is a 4-step wizard: Name → Duration → Members → Summary
 
 - launchApp
 - waitForAnimationToEnd
@@ -18,28 +19,39 @@ appId: app.mygrid.grid
 - tapOn: "Create Group"
 - waitForAnimationToEnd
 
-# Enter group name
-- tapOn:
-    hint: "Enter group name"
+# Step 0: Enter group name
+- tapOn: "Group Name"
 - inputText: "TestSquad"
 - waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
 
-# Add a member - type username
-- tapOn:
-    hint: "Add member"
+# Advance to Step 1: Duration
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 1: Select duration - tap "24h" quick button
+- tapOn: "24h"
+- waitForAnimationToEnd
+
+# Advance to Step 2: Members
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 2: Add a member
+- tapOn: "Username"
 - inputText: "testuser2"
 - waitForAnimationToEnd
 
-# Tap the add member button (+ icon next to the input)
-- tapOn:
-    point: "90%,50%"
+# Tap the Add Member button
+- tapOn: "Add Member"
 - waitForAnimationToEnd
 
-# Select duration - tap "1h" quick button
-- tapOn: "1h"
+# Advance to Step 3: Summary
+- tapOn: "Next"
 - waitForAnimationToEnd
 
-# Create the group
+# Step 3: Create the group
 - tapOn: "Create Group"
 - waitForAnimationToEnd
 

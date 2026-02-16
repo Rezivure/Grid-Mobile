@@ -1,15 +1,21 @@
 appId: app.mygrid.grid
 ---
-# Test: Sign out from the app
+# Test: Open sign out dialog and cancel — verify stays logged in
+# Prerequisite: testuser1 logged in on map screen
+
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
+
+# Navigate to settings
 - tapOn:
     point: "16,100"
 - waitForAnimationToEnd
 - assertVisible: "Settings"
+
+# Scroll to Account Actions
 - swipe:
     direction: UP
     duration: 1000
@@ -22,16 +28,28 @@ appId: app.mygrid.grid
     direction: UP
     duration: 1000
 - waitForAnimationToEnd
+
 - assertVisible: "Account Actions"
+
 # Tap Sign Out card
 - tapOn:
     point: "50%,75%"
 - waitForAnimationToEnd
-# Dialog should show Cancel and Confirm Sign Out buttons
+
+# Dialog should show Cancel and Confirm Sign Out
 - assertVisible: "Cancel"
-- tapOn: "Confirm Sign Out"
+
+# Tap Cancel
+- tapOn: "Cancel"
 - waitForAnimationToEnd
-# Should return to welcome screen
+
+# Should still be on settings
+- assertVisible: "Settings"
+
+# Navigate back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
 - extendedWaitUntil:
-    visible: "Get Started"
-    timeout: 30000
+    visible: "My Contacts"
+    timeout: 10000

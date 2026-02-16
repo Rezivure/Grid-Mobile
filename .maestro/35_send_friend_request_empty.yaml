@@ -1,6 +1,6 @@
 appId: app.mygrid.grid
 ---
-# Test: Send a friend request to testuser3
+# Test: Attempt to send friend request with empty username field
 # Prerequisite: testuser1 logged in on map screen
 
 - launchApp
@@ -17,23 +17,21 @@ appId: app.mygrid.grid
 # Should see Add Contact modal
 - assertVisible: "Add Contact"
 
-# Tap on the username text field and enter full Matrix ID format
-- tapOn: "john:homeserver.io"
-- inputText: "testuser3:localhost"
-- waitForAnimationToEnd
-
-# Dismiss keyboard
-- hideKeyboard
-- waitForAnimationToEnd
-
-# Tap Send Request
+# Don't enter a username, just tap Send Request
 - tapOn: "Send Request"
 - waitForAnimationToEnd
 
-# Verify we returned to map screen
+# Should still be on Add Contact modal (request not sent)
+- assertVisible: "Add Contact"
+
+# Dismiss modal
+- swipe:
+    start: "50%,20%"
+    end: "50%,90%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Verify back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
-
-# Verify Search Contacts visible (confirms we're on the main map, not modal)
-- assertVisible: "Search Contacts"
