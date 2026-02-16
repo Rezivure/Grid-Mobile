@@ -1,0 +1,148 @@
+appId: app.mygrid.grid
+---
+# Test: API creates group + invites testuser1 → Maestro taps accept → verify group appears
+# Multi-user E2E: API group creation + UI acceptance verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up group invite from testuser2..."
+    setup_group_invite "Pizza Night Party" 7200
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Wait for invite to propagate
+- waitForAnimationToEnd: 3000
+
+# Check for notification bell badge indicating group invite
+- assertVisible:
+    id: "notification_bell"
+    optional: true
+
+# Tap notification bell to see invites
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see the group invitation
+- assertVisible: "Invitations"
+
+# Look for the group invite from testuser2
+- assertVisible: "testuser2"
+- assertVisible: "Pizza Night Party"
+
+# Should see group invite specific text
+- assertVisible:
+    text: "invited you to join"
+    optional: true
+
+- assertVisible:
+    text: "group"
+    optional: true
+
+# Should see Accept/Decline buttons
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Accept the group invite
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Look for acceptance confirmation
+- assertVisible:
+    text: "Joined group"
+    optional: true
+
+- assertVisible:
+    text: "Group joined"
+    optional: true
+
+# Wait for UI to update after acceptance
+- waitForAnimationToEnd: 2000
+
+# Close notifications modal
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Alternative close method
+- tapOn:
+    point: "50%,20%"
+- waitForAnimationToEnd
+
+# Verify we're back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 5000
+
+# Now verify the group appears in contacts drawer
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Look for Groups section or tab
+- assertVisible:
+    text: "Groups"
+    optional: true
+
+# Tap on Groups tab if it exists
+- tapOn:
+    text: "Groups"
+    optional: true
+- waitForAnimationToEnd
+
+# Should see the Pizza Night Party group
+- assertVisible: "Pizza Night Party"
+
+# Should see group member count (2 members: testuser1 + testuser2)
+- assertVisible:
+    text: "2"
+    optional: true
+
+- assertVisible:
+    text: "members"
+    optional: true
+
+# Test tapping on the group to see details
+- tapOn: "Pizza Night Party"
+- waitForAnimationToEnd
+
+# Should see group details/info
+- assertVisible:
+    text: "Pizza Night Party"
+
+# Should see group members
+- assertVisible: "testuser2"
+
+# Should see ourselves in the group
+- assertVisible: "testuser1"
+
+# Look for group expiration info (7200 seconds = 2 hours)
+- assertVisible:
+    text: "hour"
+    optional: true
+
+# Look for group controls (Leave group option)
+- assertVisible:
+    text: "Leave"
+    optional: true
+
+# Go back to contacts list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification - back on map
+- assertVisible: "My Contacts"
