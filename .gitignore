@@ -64,3 +64,4 @@ test-infra/reports/
 fastlane/report.xml
 fastlane/README.md
 google-play-key.json
+fastlane/.env
