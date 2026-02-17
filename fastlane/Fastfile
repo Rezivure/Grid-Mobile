@@ -1,0 +1,97 @@
+default_platform(:ios)
+
+# Shared: App Store Connect API Key
+def api_key
+  app_store_connect_api_key(
+    key_id: "REDACTED_KEY_ID",
+    issuer_id: "REDACTED_ISSUER_ID",
+    key_filepath: File.join(Dir.pwd, "AuthKey_REDACTED_KEY_ID.p8"),
+    in_house: false
+  )
+end
+
+platform :ios do
+  desc "Build and upload to TestFlight"
+  lane :beta do |options|
+    api_key
+
+    # Read current pubspec version
+    pubspec_path = File.join(Dir.pwd, "..", "pubspec.yaml")
+    pubspec = File.read(pubspec_path)
+    current_version = pubspec.match(/version:\s*(\S+)/)[1]
+    version_name, build_number = current_version.split("+")
+    
+    # Always increment build number
+    new_build = build_number.to_i + 1
+    
+    # Version bumps only on release builds, not regular beta/TestFlight uploads
+    # Pass version:1.2.0 explicitly OR release:true to auto-bump patch
+    if options[:version]
+      new_version = options[:version]
+    elsif options[:release]
+      parts = version_name.split(".")
+      parts[2] = parts[2].to_i + 1
+      new_version = parts.join(".")
+    else
+      new_version = version_name
+    end
+    
+    new_full = "#{new_version}+#{new_build}"
+    UI.message("📦 Bumping: #{current_version} → #{new_full}")
+    
+    # Write back to pubspec.yaml
+    pubspec.gsub!(/version:\s*\S+/, "version: #{new_full}")
+    File.write(pubspec_path, pubspec)
+
+    # Build the Flutter IPA
+    sh("cd #{File.join(Dir.pwd, '..')} && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist")
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: File.join(Dir.pwd, "..", "build", "ios", "ipa", "Grid.ipa"),
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Submit to App Store (from latest TestFlight build)"
+  lane :release do
+    api_key
+
+    deliver(
+      api_key: api_key,
+      submit_for_review: true,
+      automatic_release: false, # Manual release after review
+      skip_binary_upload: true, # Use the TestFlight build
+      skip_metadata: false,
+      skip_screenshots: true,
+      force: true,
+      precheck_include_in_app_purchases: false
+    )
+  end
+end
+
+platform :android do
+  desc "Build and upload to Play Store internal track"
+  lane :beta do
+    sh("cd #{File.join(Dir.pwd, '..')} && flutter build appbundle --release")
+
+    upload_to_play_store(
+      track: "internal",
+      aab: File.join(Dir.pwd, "..", "build", "app", "outputs", "bundle", "release", "app-release.aab"),
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Promote internal to production"
+  lane :release do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      skip_upload_aab: true,
+      skip_upload_metadata: false
+    )
+  end
+end

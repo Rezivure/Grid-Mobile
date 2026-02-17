@@ -13,6 +13,15 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+// Load key.properties for signing
+def keyProperties = new Properties()
+def keyPropertiesFile = rootProject.file('key.properties')
+if (keyPropertiesFile.exists()) {
+    keyPropertiesFile.withReader('UTF-8') { reader ->
+        keyProperties.load(reader)
+    }
+}
+
 // Provide defaults if not found in local.properties
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode', '1')
 def flutterVersionName = localProperties.getProperty('flutter.versionName', '1.0')
