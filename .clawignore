@@ -1,0 +1,6 @@
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+fastlane/google-play-key.json
+fastlane/AuthKey_*.p8
