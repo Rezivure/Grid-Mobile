@@ -39,8 +39,8 @@ void main() {
         createWidget(userIds: ['user1', 'user2']),
       );
 
-      // Assert
-      expect(find.byType(Stack), findsOneWidget);
+      // Assert - find the Stack that is a direct child of CircleAvatar
+      expect(find.descendant(of: find.byType(CircleAvatar), matching: find.byType(Stack)), findsOneWidget);
     });
 
     testWidgets('should have two Positioned widgets', (WidgetTester tester) async {
@@ -61,7 +61,7 @@ void main() {
 
       // Assert - Should still have two positioned elements (duplicated user)
       expect(find.byType(Positioned), findsNWidgets(2));
-      expect(find.byType(Stack), findsOneWidget);
+      expect(find.descendant(of: find.byType(CircleAvatar), matching: find.byType(Stack)), findsOneWidget);
     });
 
     testWidgets('should handle empty user list gracefully', (WidgetTester tester) async {
@@ -72,7 +72,7 @@ void main() {
 
       // Assert - Should still render without crashing
       expect(find.byType(CircleAvatar), findsOneWidget);
-      expect(find.byType(Stack), findsOneWidget);
+      expect(find.descendant(of: find.byType(CircleAvatar), matching: find.byType(Stack)), findsOneWidget);
     });
 
     testWidgets('should deduplicate identical userIds', (WidgetTester tester) async {
@@ -128,8 +128,9 @@ void main() {
           createWidget(userIds: ['user1', 'user2']),
         );
 
-        // Assert - Check Stack alignment
-        final stack = tester.widget<Stack>(find.byType(Stack));
+        // Assert - Check Stack alignment (use descendant to find the right Stack)
+        final stackFinder = find.descendant(of: find.byType(CircleAvatar), matching: find.byType(Stack));
+        final stack = tester.widget<Stack>(stackFinder);
         expect(stack.alignment, equals(Alignment.center));
       });
     });
