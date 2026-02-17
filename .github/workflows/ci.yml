@@ -78,3 +78,36 @@ jobs:
           name: maestro-core-debug-${{ github.sha }}
           path: ~/.maestro/tests/
           retention-days: 7
+
+  deploy-testflight:
+    name: Deploy to TestFlight & Play Store
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: [unit-tests, core-e2e-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Build & Upload iOS to TestFlight
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          fastlane ios beta
+
+      - name: Build & Upload Android to Play Store Internal
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          fastlane android beta

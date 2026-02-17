@@ -97,12 +97,16 @@ jobs:
           echo "Building iOS release..."
           flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
           
-          echo "Building Android release..."
+          echo "Building Android AAB..."
           flutter build appbundle --release
+          
+          echo "Building Android APK..."
+          flutter build apk --release
           
           # Verify builds exist
           ls -la build/ios/ipa/
           ls -la build/app/outputs/bundle/release/
+          ls -la build/app/outputs/flutter-apk/
 
       - name: Run unit tests
         run: |
@@ -164,8 +168,9 @@ jobs:
             --notes-file CHANGELOG.md \
             --draft=false \
             --prerelease=false \
-            build/ios/ipa/grid_frontend.ipa \
-            build/app/outputs/bundle/release/app-release.aab
+            build/ios/ipa/Grid.ipa \
+            build/app/outputs/bundle/release/app-release.aab \
+            build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -188,18 +193,21 @@ jobs:
             build/app/outputs/
           retention-days: 30
 
-      # TODO: Uncomment when Fastlane is configured
-      # - name: Upload to App Store (iOS)
-      #   if: success()
-      #   run: |
-      #     echo "Would run: fastlane deliver --skip_metadata --skip_screenshots"
-      #     echo "Requires: App Store Connect API key in secrets"
+      - name: Upload to TestFlight (iOS)
+        if: success()
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          cd fastlane && fastlane ios beta
 
-      # - name: Upload to Play Store (Android) 
-      #   if: success()
-      #   run: |
-      #     echo "Would run: fastlane supply --track production"
-      #     echo "Requires: Google Play service account JSON in secrets"
+      - name: Upload to Play Store Internal (Android)
+        if: success()
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          cd fastlane && fastlane android beta
 
   notify-failure:
     name: Notify on Failure
