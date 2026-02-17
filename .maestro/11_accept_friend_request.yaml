@@ -1,7 +1,9 @@
 appId: app.mygrid.grid
+env:
+  MAESTRO_DIR: .maestro
 ---
 # Test: Accept a friend request from testuser2
-# Prerequisite: testuser1 logged in on map screen, testuser2 invite created via API
+# Prerequisite: testuser1 logged in on map screen, local Synapse server running
 
 - launchApp
 - waitForAnimationToEnd
@@ -9,7 +11,17 @@ appId: app.mygrid.grid
     visible: "My Contacts"
     timeout: 10000
 
-# Give sync time to fetch the invite
+# API: Send friend request from testuser2 to testuser1
+- runScript:
+    file: scripts/api_send_friend_request.js
+    env:
+      FROM_USER: testuser2
+      TO_USER: testuser1
+      MAESTRO_DIR: ${MAESTRO_DIR}
+
+- wait: 3000  # Give sync time
+
+# Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
