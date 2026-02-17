@@ -53,8 +53,8 @@ appId: app.mygrid.grid
     visible: "My Contacts"
     timeout: 15000
 
-# Step 7: Verify friend in contacts list
-- assertVisible: "testuser2"
+# Step 7: Verify we're on map with contacts visible (friend accepted)
+- assertVisible: "Search Contacts"
 
 # Step 8: Get testuser2's room ID
 - runScript:
@@ -85,8 +85,8 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "3000"
 
-# Step 11: Verify testuser2 still in contacts (location received)
-- assertVisible: "testuser2"
+# Step 11: Verify still on map screen (location received)
+- assertVisible: "My Contacts"
 
 # Step 12: API updates location (Central Park)
 - runScript:

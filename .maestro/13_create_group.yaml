@@ -15,13 +15,12 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Switch to Create Group tab
-# Try text tap first, fall back to coordinate if Flutter doesn't expose it
+# Switch to Create Group tab (coordinate: right half of tab bar)
 - extendedWaitUntil:
     visible: "Add Contact"
     timeout: 5000
 - tapOn:
-    point: "75%,7%"
+    point: "58%,7%"
 - runScript:
     file: scripts/sleep.js
     env:

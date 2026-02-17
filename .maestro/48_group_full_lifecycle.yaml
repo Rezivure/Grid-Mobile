@@ -14,12 +14,12 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Step 2: Switch to Create Group tab (coordinate tap - Flutter accessibility)
+# Step 2: Switch to Create Group tab (coordinate: right half of tab bar)
 - extendedWaitUntil:
     visible: "Add Contact"
     timeout: 5000
 - tapOn:
-    point: "75%,7%"
+    point: "58%,7%"
 - runScript:
     file: scripts/sleep.js
     env:
