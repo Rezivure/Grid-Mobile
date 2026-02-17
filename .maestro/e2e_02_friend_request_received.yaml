@@ -1,0 +1,283 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Friend request notification received
+# API: testuser2 sends friend request → UI: testuser1 sees notification and invite
+# Tests the invitation/notification system end-to-end
+
+# Prerequisites:
+# - testuser1 logged in and on map screen  
+# - Docker Synapse running on localhost:8008
+# - testuser2 account exists
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up friend request notification from testuser2..."
+    
+    # testuser2 sends friend request to testuser1
+    # This creates a direct room invite
+    setup_friend_request_notification
+    
+    echo "⏳ Waiting for notification to propagate..."
+    wait_for_sync 4
+    
+    echo "✓ Friend request sent - testuser1 should see notification"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Should be on map screen with notification badge
+- assertVisible: "My Contacts"
+
+# Check for notification badge in top-right corner
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+    timeout: 8000
+
+- assertVisible:
+    id: "notification_count"
+
+# Badge should show "1" for the new invite
+- runFlow:
+    when:
+      visible: "1"
+    commands:
+      - assertVisible: "1"
+
+# Tap on the notification area
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should open notifications/invitations screen
+- assertVisible: "Invitations"
+
+# Should see the friend request from testuser2
+- assertVisible: "testuser2"
+
+# Should show it's a direct message/contact request
+- assertVisible:
+    text: "wants to connect"
+    optional: true
+
+- assertVisible:
+    text: "sent you a message"
+    optional: true
+
+- assertVisible:
+    text: "Direct message"
+    optional: true
+
+# Should see Accept and Decline buttons
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Test declining first (then we'll test accepting)
+- tapOn: "Decline"
+- waitForAnimationToEnd
+
+# Should remove the invitation
+- assertNotVisible: "testuser2"
+
+# Notification badge should clear or decrease
+- runFlow:
+    when:
+      visible:
+        id: "notification_badge"
+    commands:
+      # Badge should be gone or show 0
+      - assertNotVisible: "1"
+
+# Close notifications screen
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Back on map - no notification badge
+- assertVisible: "My Contacts"
+- assertNotVisible:
+    id: "notification_badge"
+
+# Test accepting a friend request - send another one
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Sending second friend request for accept test..."
+    
+    # Send another friend request  
+    setup_friend_request_notification
+    wait_for_sync 3
+
+- waitForAnimationToEnd: 4000
+
+# Notification badge should reappear
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+    timeout: 8000
+
+# Tap notification area again
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see the new invitation
+- assertVisible: "Invitations"
+- assertVisible: "testuser2"
+- assertVisible: "Accept"
+
+# This time accept the request
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Should show acceptance confirmation
+- assertVisible:
+    text: "Added to contacts"
+    optional: true
+
+- assertVisible:
+    text: "Contact added"
+    optional: true
+
+- assertVisible:
+    text: "Connected"
+    optional: true
+
+# Invitation should be removed from list
+- assertNotVisible: "testuser2"
+
+# Or if still visible, should show accepted state
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible:
+          text: "Accepted"
+          optional: true
+      - assertVisible:
+          text: "Connected"
+          optional: true
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Back on map - notification badge should be gone
+- assertVisible: "My Contacts"
+- assertNotVisible:
+    id: "notification_badge"
+
+# testuser2 should now appear in contacts list
+- tapOn: "My Contacts"  
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show as contact (not as invitation)
+- assertNotVisible:
+    text: "Pending"
+
+- assertVisible:
+    text: "Contact"
+    optional: true
+
+# Contact should show as offline (no location yet)
+- assertVisible:
+    text: "Offline"
+    optional: true
+
+- assertVisible:
+    text: "No location"
+    optional: true
+
+# Tap on the contact to see details
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show contact profile
+- assertVisible: "testuser2"
+
+# Should show contact options
+- assertVisible:
+    text: "Message"
+    optional: true
+
+- assertVisible:
+    text: "Remove Contact"
+    optional: true
+
+- assertVisible:
+    text: "Block"
+    optional: true
+
+# Go back to contacts list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification - we're back on map with testuser2 as contact
+- assertVisible: "My Contacts"
+- assertNotVisible:
+    id: "notification_badge"
+
+# Test multiple simultaneous friend requests
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Sending multiple friend requests..."
+    
+    # Send 3 friend requests from different users
+    setup_multiple_friend_requests 3
+    wait_for_sync 4
+
+- waitForAnimationToEnd: 5000
+
+# Should see notification badge with count > 1
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+    timeout: 10000
+
+# Badge should show multiple notifications
+- runFlow:
+    when:
+      visible: "2"
+    commands:
+      - assertVisible: "2"
+
+- runFlow:
+    when:
+      visible: "3"  
+    commands:
+      - assertVisible: "3"
+
+# Tap to see all invitations
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Invitations"
+
+# Should see multiple users
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Can accept/decline multiple invitations
+- tapOn: "Accept"  # Accept first one
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100" 
+- waitForAnimationToEnd
+
+# Notification badge should still show remaining invites
+- assertVisible:
+    id: "notification_badge"

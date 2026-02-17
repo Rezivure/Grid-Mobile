@@ -1,0 +1,181 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Location sharing received from another user
+# API: testuser2 sends location update → UI: testuser1 sees location on map
+# Tests the core location sharing flow end-to-end
+
+# Prerequisites: 
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2 account exists
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up incoming location from testuser2..."
+    
+    # Set up testuser2 to send location to testuser1
+    # This creates a direct room and sends location (NYC Times Square)
+    setup_incoming_location 40.7580 -73.9855
+    
+    echo "⏳ Waiting for sync to propagate..."
+    wait_for_sync 5
+    
+    echo "✓ Location setup complete - testuser1 should receive location on map"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Ensure we're on the map screen
+- assertVisible: "My Contacts"
+- waitForAnimationToEnd: 2000
+
+# Should see notification badge indicating new contact/location
+- runFlow:
+    when:
+      visible:
+        id: "notification_badge"
+    commands:
+      - assertVisible:
+          id: "notification_count"
+      - tapOn:
+          point: "90%,10%"  # Notification area
+      - waitForAnimationToEnd
+
+# Accept the contact request if it appears
+- runFlow:
+    when:
+      visible: "Invitations"
+    commands:
+      - assertVisible: "testuser2"
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+      - tapOn:
+          point: "30,100"  # Close notifications
+
+# Wait for location to appear on map
+- waitForAnimationToEnd: 3000
+
+# Should now see testuser2's location marker on the map
+- assertVisible:
+    text: "testuser2"
+    timeout: 10000
+
+# Look for the user's location marker/pin
+- assertVisible:
+    id: "user_marker_testuser2"
+    optional: true
+
+- assertVisible:
+    id: "location_marker"
+    optional: true
+
+# Tap on the location marker to see details
+- tapOn:
+    text: "testuser2"
+- waitForAnimationToEnd
+
+# Should show location details popup/sheet
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Check for location details
+      - assertVisible:
+          text: "New York"
+          optional: true
+      - assertVisible:
+          text: "Manhattan"
+          optional: true
+      - assertVisible:
+          text: "Times Square"
+          optional: true
+      
+      # Check for timestamp indicating recent location
+      - assertVisible:
+          text: "now"
+          optional: true
+      - assertVisible:
+          text: "Just now"
+          optional: true
+      - assertVisible:
+          text: "1 min ago"
+          optional: true
+      
+      # Close the popup
+      - tapOn:
+          point: "50%,70%"
+
+# Verify map shows the location marker properly
+- waitForAnimationToEnd
+
+# Check contacts drawer shows testuser2
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Check that testuser2 shows as "active" or with recent location
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertNotVisible: "No location"
+
+# Tap on contact to see detail view
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show contact details with location info
+- assertVisible: "testuser2"
+
+# Look for location info in contact details
+- assertVisible:
+    text: "Location"
+    optional: true
+
+- assertVisible:
+    text: "New York"
+    optional: true
+
+# Check for last seen timestamp
+- assertVisible:
+    text: "Last seen"
+    optional: true
+
+- assertVisible:
+    text: "now"
+    optional: true
+
+# Go back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification: location is visible on map
+- assertVisible: "My Contacts"
+- assertVisible: "testuser2"
+
+# Test map interaction - zoom/pan should keep marker visible
+- tapOn:
+    point: "50%,50%"
+- waitForAnimationToEnd
+
+- swipeUp:
+    start: 50%,60%
+    end: 50%,40%
+
+- waitForAnimationToEnd
+
+# Marker should still be visible after map interaction
+- assertVisible:
+    text: "testuser2"
+    timeout: 5000

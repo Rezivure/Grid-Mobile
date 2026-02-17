@@ -1,0 +1,53 @@
+appId: app.mygrid.grid
+---
+# Test: Try to set a very short display name (validation check)
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Tap on the edit pencil icon next to display name
+- tapOn:
+    point: "55%,22%"
+- waitForAnimationToEnd
+
+# Should show Edit Display Name dialog
+- extendedWaitUntil:
+    visible: "Edit Display Name"
+    timeout: 5000
+
+# Clear and type a too-short name (less than 3 chars)
+- eraseText: 20
+- inputText: "Ab"
+- waitForAnimationToEnd
+
+# Tap Save - should fail validation (3-14 chars required)
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Should still be on Edit Display Name dialog (save didn't close it)
+- assertVisible: "Edit Display Name"
+
+# Fix with valid name
+- eraseText: 5
+- inputText: "TestUser1"
+- waitForAnimationToEnd
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Navigate back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

@@ -1,0 +1,76 @@
+appId: app.mygrid.grid
+---
+# Test: Verify empty states handling - contacts with no data
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Access contacts drawer
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Check if contacts list is empty or has content
+- assertVisible:
+    text: "My Contacts"
+
+# Look for empty state messaging
+- assertVisible:
+    text: "No contacts"
+    optional: true
+
+- assertVisible:
+    text: "Add friends"
+    optional: true
+
+- assertVisible:
+    text: "Invite"
+    optional: true
+
+# Test expanding contacts section if available
+- tapOn:
+    id: "expand_contacts"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify empty state handling
+- assertVisible:
+    text: "Start sharing your location"
+    optional: true
+
+# Check for add contact functionality
+- assertVisible:
+    text: "+"
+    optional: true
+
+# Test tapping add contact if available
+- tapOn:
+    text: "+"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for add contact interface
+- assertVisible:
+    text: "Add Contact"
+    optional: true
+
+- assertVisible:
+    text: "Invite"
+    optional: true
+
+# Navigate back if modal opened
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Close contacts drawer by tapping outside or on map
+- tapOn:
+    point: "50%,50%"
+- waitForAnimationToEnd
+
+# Verify we're back to main map view
+- assertVisible: "My Contacts"

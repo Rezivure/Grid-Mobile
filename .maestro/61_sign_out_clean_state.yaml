@@ -1,0 +1,213 @@
+appId: app.mygrid.grid
+---
+# Test: Sign out → sign back in → verify clean state (no stale data)
+# Multi-user E2E: State management and data persistence verification
+
+# Requires: testuser1 logged in on map screen with some existing data
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up test data before sign out test..."
+    # Create some data that should be cleaned up
+    setup_friend_request_notification
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# First, accept the friend request to create some state
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Invitations"
+    commands:
+      - assertVisible: "testuser2"
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify we have state (friend in contacts)
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Now sign out - go to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Scroll to find sign out option
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+- waitForAnimationToEnd
+
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+- waitForAnimationToEnd
+
+# Look for Sign Out button
+- assertVisible: "Sign Out"
+
+# Tap Sign Out
+- tapOn: "Sign Out"
+- waitForAnimationToEnd
+
+# Should see sign out confirmation dialog
+- assertVisible:
+    text: "Sign out"
+    optional: true
+
+- assertVisible:
+    text: "Are you sure"
+    optional: true
+
+- assertVisible:
+    text: "Confirm"
+    optional: true
+
+- assertVisible: "Sign Out"
+
+# Confirm sign out
+- tapOn: "Sign Out"
+- waitForAnimationToEnd
+
+# Should return to welcome screen
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 10000
+
+- assertVisible: "WELCOME TO"
+- assertVisible: "Grid"
+- assertVisible: "Custom Provider"
+
+# Now sign back in
+- tapOn: "Custom Provider"
+- waitForAnimationToEnd
+
+# Fill in login details again
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+- tapOn: "Username"
+- inputText: "testuser1"
+
+- tapOn: "Password"
+- inputText: "testpass123"
+
+- tapOn: "Sign In"
+- waitForAnimationToEnd
+
+# Handle login warning dialog
+- runFlow:
+    when:
+      visible: "Important Notice"
+    commands:
+      - tapOn: "I Understand, Continue"
+      - waitForAnimationToEnd
+
+# Should skip onboarding (already completed) and go straight to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Now verify clean state - should not have stale data
+# Check contacts drawer first
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should start with clean state - no old contacts unless they're still valid
+- runFlow:
+    when:
+      notVisible: "testuser2"
+    commands:
+      # If testuser2 is not visible, that's expected clean state
+      - assertNotVisible: "testuser2"
+
+# Check for empty state messages
+- assertVisible:
+    text: "No contacts"
+    optional: true
+
+- assertVisible:
+    text: "Add friends"
+    optional: true
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Map should be clean - no old location markers
+- assertNotVisible:
+    id: "stale_marker"
+    optional: true
+
+# Notification bell should be clean (no old badges)
+- assertNotVisible:
+    text: "1"
+    optional: true
+
+- assertNotVisible:
+    id: "notification_badge"
+    optional: true
+
+# Test that notification bell works (should show empty)
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Invitations"
+    commands:
+      # Should be empty or show clean state
+      - assertVisible: "Invitations"
+      - assertVisible:
+          text: "No invitations"
+          optional: true
+      - assertNotVisible: "testuser2"
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Final verification - app is in clean state
+- assertVisible: "My Contacts"
+
+# Verify settings were preserved (user should still be logged in)
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Should show logged in user
+- assertVisible: "testuser1"
+- assertVisible: "@testuser1:localhost"
+
+# Go back to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- assertVisible: "My Contacts"

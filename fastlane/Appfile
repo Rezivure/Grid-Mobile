@@ -1,0 +1,12 @@
+app_identifier("app.mygrid.grid")
+apple_id("developer@rezivure.com")
+team_id("45NCU5QA4S")
+
+# App Store Connect API Key
+json_key_file("fastlane/google-play-key.json") # Google Play
+package_name("app.mygrid.grid")
+
+for_platform :ios do
+  app_identifier("app.mygrid.grid")
+  team_id("45NCU5QA4S")
+end

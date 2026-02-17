@@ -1,0 +1,37 @@
+appId: app.mygrid.grid
+---
+# Test: Attempt to send friend request with empty username field
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap the person-add icon
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Should see Add Contact modal
+- assertVisible: "Add Contact"
+
+# Don't enter a username, just tap Send Request
+- tapOn: "Send Request"
+- waitForAnimationToEnd
+
+# Should still be on Add Contact modal (request not sent)
+- assertVisible: "Add Contact"
+
+# Dismiss modal
+- swipe:
+    start: "50%,20%"
+    end: "50%,90%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

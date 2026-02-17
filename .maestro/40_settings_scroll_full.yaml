@@ -1,0 +1,50 @@
+appId: app.mygrid.grid
+---
+# Test: Scroll through entire settings page, verify all sections exist
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Section 1: Privacy & Location (visible at top)
+- assertVisible: "Settings"
+- assertVisible: "Privacy & Location"
+- assertVisible: "Incognito Mode"
+- assertVisible: "Battery Saver Mode"
+
+# Scroll to Section 2: Security Information
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "Security Information"
+
+# Scroll to Section 3: Community
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "Community"
+
+# Scroll to Section 4: Account Actions
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- assertVisible: "Account Actions"
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

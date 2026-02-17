@@ -1,0 +1,16 @@
+appId: app.mygrid.grid
+---
+# Test: Verify all welcome screen elements (fresh state)
+# Note: This uses clearState so run it independently or before flow 04
+
+- clearState
+- launchApp
+- waitForAnimationToEnd
+
+# Verify all welcome screen elements
+- assertVisible: "WELCOME TO"
+- assertVisible: "Grid"
+- assertVisible: "Get Started"
+- assertVisible: "Custom Provider"
+- assertVisible: "Privacy Policy"
+- assertVisible: "Terms of Service"

@@ -1,0 +1,128 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Settings Persistence"
+tags: [release, persistence, settings]
+
+# Test: change every setting → kill app → relaunch → all settings preserved
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Navigate to settings
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+
+# Change display name
+- tapOn: "Display Name"
+- waitForAnimationToEnd
+- clearText
+- inputText: "TestDisplayName123"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Go back to main settings
+- tapOn: "Back"
+- assertVisible: "Display Name"
+
+# Toggle incognito mode
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+- tapOn: "Incognito Mode"
+- waitForAnimationToEnd
+
+# Verify incognito is now enabled
+- assertVisible:
+    text: "ON"
+    optional: true
+
+# Toggle battery saver
+- scrollUntilVisible:
+    element: "Battery Saver"
+    direction: DOWN
+- tapOn: "Battery Saver"
+- waitForAnimationToEnd
+
+# Scroll to see more settings if available
+- scrollUntilVisible:
+    element: "Notification Settings"
+    direction: DOWN
+    optional: true
+
+# Change any available notification settings
+- tapOn:
+    text: "Notification Settings"
+    optional: true
+- waitForAnimationToEnd
+
+# Toggle some notification option if available
+- tapOn:
+    text: "Friend Requests"
+    optional: true
+
+- tapOn: "Back"
+- waitForAnimationToEnd
+
+# Go back to map to complete settings changes
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Kill app completely to test persistence
+- stopApp
+- delay: 5000
+
+# Relaunch app
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify we're still logged in
+- assertVisible: "Map"
+
+# Check that all settings were preserved
+- tapOn: "Settings"
+- waitForAnimationToEnd
+
+# Verify display name persisted
+- assertVisible: "TestDisplayName123"
+
+# Verify incognito mode is still enabled
+- scrollUntilVisible:
+    element: "Incognito Mode"
+    direction: DOWN
+
+- assertVisible:
+    text: "ON"
+    optional: true
+
+# Verify battery saver setting persisted
+- scrollUntilVisible:
+    element: "Battery Saver"
+    direction: DOWN
+
+# Should still show the state we set (enabled)
+- assertVisible: "Battery Saver"
+
+# Test that we can still change settings after restart
+- tapOn: "Display Name"
+- waitForAnimationToEnd
+- clearText
+- inputText: "TestPersistenceWorked"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Verify change worked
+- tapOn: "Back"
+- assertVisible: "TestPersistenceWorked"
+
+# Return to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Final verification that app is functional with persisted settings
+- tapOn: "Settings"
+- assertVisible: "TestPersistenceWorked"
+- tapOn: "Back"
+- assertVisible: "Map"

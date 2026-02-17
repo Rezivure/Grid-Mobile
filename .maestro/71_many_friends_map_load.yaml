@@ -1,0 +1,85 @@
+appId: app.mygrid.grid
+name: "Pre-Release: Many Friends Map Load"
+tags: [release, stress, performance]
+
+# Test: set up 8+ friends via API all sharing locations → verify map handles many markers without issues
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up many friends with locations via API
+- runScript:
+    script: |
+      cd .maestro/helpers
+      # Login multiple users
+      for i in {2..10}; do
+        ./api_login.sh testuser$i testpass123 &
+      done
+      wait
+      
+      # Send friend requests from all users
+      for i in {2..10}; do
+        ./api_send_friend_request.sh testuser$i testuser1 &
+      done
+      wait
+      
+      # All users send locations across NYC area
+      ./api_send_location.sh testuser2 40.7580 -73.9855 &
+      ./api_send_location.sh testuser3 40.7614 -73.9776 &
+      ./api_send_location.sh testuser4 40.7505 -73.9934 &
+      ./api_send_location.sh testuser5 40.7589 -73.9851 &
+      ./api_send_location.sh testuser6 40.7648 -73.9808 &
+      ./api_send_location.sh testuser7 40.7543 -73.9860 &
+      ./api_send_location.sh testuser8 40.7536 -73.9832 &
+      ./api_send_location.sh testuser9 40.7558 -73.9865 &
+      ./api_send_location.sh testuser10 40.7624 -73.9738 &
+      wait
+    timeout: 30000
+
+# Wait for all locations to sync
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify map loads without issues
+- assertVisible: "Map"
+
+# Verify we can see multiple friends (at least a few)
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test map performance - zoom in and out
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pinch to zoom (if supported by simulator)
+- waitForAnimationToEnd
+
+# Pan around map to test with many markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+- delay: 1000
+
+- swipe:
+    start: "30%,30%"  
+    end: "70%,70%"
+    duration: 1000
+- delay: 1000
+
+# Verify map is still responsive
+- assertVisible: "Map"
+
+# Test navigation with many friends loaded
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# App should still be stable with many markers
+- assertVisible: "testuser2"

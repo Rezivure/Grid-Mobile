@@ -1,0 +1,37 @@
+appId: app.mygrid.grid
+---
+# Test: Sign out from the app
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+- swipe:
+    direction: UP
+    duration: 1000
+- waitForAnimationToEnd
+- swipe:
+    direction: UP
+    duration: 1000
+- waitForAnimationToEnd
+- swipe:
+    direction: UP
+    duration: 1000
+- waitForAnimationToEnd
+- assertVisible: "Account Actions"
+# Tap Sign Out card
+- tapOn:
+    point: "50%,75%"
+- waitForAnimationToEnd
+# Dialog should show Cancel and Confirm Sign Out buttons
+- assertVisible: "Cancel"
+- tapOn: "Confirm Sign Out"
+- waitForAnimationToEnd
+# Should return to welcome screen
+- extendedWaitUntil:
+    visible: "Get Started"
+    timeout: 30000

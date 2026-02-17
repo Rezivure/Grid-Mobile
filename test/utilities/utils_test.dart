@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
@@ -203,6 +204,77 @@ void main() {
 
     test('exactly 24 hours = 1d', () {
       expect(timeAgo(DateTime.now().subtract(const Duration(hours: 24))), '1d ago');
+    });
+  });
+
+  group('generateColorFromUsername', () {
+    test('returns consistent color for same username', () {
+      final color1 = generateColorFromUsername('alice');
+      final color2 = generateColorFromUsername('alice');
+      expect(color1.value, color2.value);
+    });
+
+    test('returns different colors for different usernames', () {
+      final color1 = generateColorFromUsername('alice');
+      final color2 = generateColorFromUsername('bob');
+      expect(color1.value, isNot(color2.value));
+    });
+
+    test('returns valid color object', () {
+      final color = generateColorFromUsername('test');
+      expect(color, isA<Color>());
+      expect(color.value, isA<int>());
+    });
+
+    test('handles empty username', () {
+      final color = generateColorFromUsername('');
+      expect(color, isA<Color>());
+    });
+
+    test('handles username with special characters', () {
+      final color1 = generateColorFromUsername('@alice:matrix.org');
+      final color2 = generateColorFromUsername('user_123!@#');
+      expect(color1, isA<Color>());
+      expect(color2, isA<Color>());
+    });
+
+    test('username case sensitivity affects color', () {
+      final color1 = generateColorFromUsername('Alice');
+      final color2 = generateColorFromUsername('alice');
+      expect(color1.value, isNot(color2.value));
+    });
+
+    test('color has consistent opacity (fully opaque)', () {
+      final color = generateColorFromUsername('test');
+      expect(color.opacity, 1.0);
+    });
+
+    test('generates colors within professional range', () {
+      final usernames = ['alice', 'bob', 'charlie', 'diana', 'eve'];
+      for (final username in usernames) {
+        final color = generateColorFromUsername(username);
+        final hsl = HSLColor.fromColor(color);
+        
+        // Generated colors should have the adjusted lightness and saturation
+        expect(hsl.lightness, closeTo(0.6, 0.1)); // Adjusted to 0.6 for professional feel
+        expect(hsl.saturation, closeTo(0.5, 0.1)); // Reduced to 0.5
+      }
+    });
+
+    test('very long username still generates color', () {
+      final longUsername = 'a' * 1000;
+      final color = generateColorFromUsername(longUsername);
+      expect(color, isA<Color>());
+    });
+
+    test('unicode characters in username', () {
+      final color1 = generateColorFromUsername('测试用户');
+      final color2 = generateColorFromUsername('пользователь');
+      final color3 = generateColorFromUsername('ユーザー');
+      
+      expect(color1, isA<Color>());
+      expect(color2, isA<Color>());
+      expect(color3, isA<Color>());
     });
   });
 }

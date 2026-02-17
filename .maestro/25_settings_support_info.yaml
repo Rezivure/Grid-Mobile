@@ -1,0 +1,34 @@
+appId: app.mygrid.grid
+---
+# Test: Verify Support & Information section in settings
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Scroll to Support section
+- swipe:
+    start: "50%,70%"
+    end: "50%,30%"
+    duration: 500
+- waitForAnimationToEnd
+- swipe:
+    start: "50%,70%"
+    end: "50%,30%"
+    duration: 500
+- waitForAnimationToEnd
+- assertVisible: "Support & Information"
+- assertVisible: "About Grid"
+- assertVisible: "Privacy Policy"
+- assertVisible: "Send Feedback"
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd

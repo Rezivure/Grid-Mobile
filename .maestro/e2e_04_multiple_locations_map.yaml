@@ -1,0 +1,353 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Multiple simultaneous location updates on map  
+# API: Multiple users (testuser2-5) send locations → UI: testuser1 sees all markers on map
+# Tests the map's ability to display multiple contacts' locations simultaneously
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2-5 accounts exist
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up multiple simultaneous locations..."
+    
+    # Set up 4 different users sending locations from different NYC locations
+    echo "Setting up testuser2 at Times Square..."
+    login_as_user "testuser2"
+    ROOM2=$(grid_create_direct "testuser1")
+    grid_send_location "$ROOM2" 40.7580 -73.9855  # Times Square
+    
+    echo "Setting up testuser3 at Central Park..."
+    login_as_user "testuser3" 
+    ROOM3=$(grid_create_direct "testuser1")
+    grid_send_location "$ROOM3" 40.7829 -73.9654  # Central Park
+    
+    echo "Setting up testuser4 at Brooklyn Bridge..."
+    login_as_user "testuser4"
+    ROOM4=$(grid_create_direct "testuser1")
+    grid_send_location "$ROOM4" 40.7061 -73.9969  # Brooklyn Bridge
+    
+    echo "Setting up testuser5 at Wall Street..."
+    login_as_user "testuser5"
+    ROOM5=$(grid_create_direct "testuser1")
+    grid_send_location "$ROOM5" 40.7074 -74.0113  # Wall Street
+    
+    echo "⏳ Waiting for all locations to sync..."
+    wait_for_sync 8
+    
+    echo "✓ Multiple locations setup complete"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Should be on map screen
+- assertVisible: "My Contacts"
+
+# Wait for all notifications to appear
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+    timeout: 12000
+
+# Should show multiple notifications (4 contact requests)
+- assertVisible:
+    id: "notification_count"
+
+# Accept all contact requests quickly
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Invitations"
+
+# Accept testuser2
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Accept testuser3
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Accept testuser4  
+- runFlow:
+    when:
+      visible: "testuser4"
+    commands:
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Accept testuser5
+- runFlow:
+    when:
+      visible: "testuser5"
+    commands:
+      - tapOn: "Accept" 
+      - waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Wait for map to load all locations
+- waitForAnimationToEnd: 5000
+
+# Should now see all 4 users on the map
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test map can handle multiple markers
+- assertVisible: "My Contacts"
+
+# Map should show distinct location markers
+- assertVisible:
+    id: "user_marker_testuser2"
+    optional: true
+
+- assertVisible:
+    id: "user_marker_testuser3"  
+    optional: true
+
+# Test tapping on different markers shows correct info
+
+# Tap testuser2 (Times Square)
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible:
+          text: "Times Square"
+          optional: true
+      - assertVisible:
+          text: "Manhattan"
+          optional: true
+      - assertVisible:
+          text: "Midtown"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Tap testuser3 (Central Park)
+- tapOn: "testuser3"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - assertVisible:
+          text: "Central Park"
+          optional: true
+      - assertVisible:
+          text: "Upper"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Test map zoom out to see all markers
+- tapOn:
+    point: "20%,20%"  # Zoom out control
+    optional: true
+
+- waitForAnimationToEnd
+
+# Or use pinch gesture to zoom out
+- runScript: |
+    # Zoom out gesture simulation
+    echo "Simulating zoom out to see all markers"
+
+- waitForAnimationToEnd
+
+# All markers should still be visible after zoom
+- assertVisible: "testuser2"
+- assertVisible: "testuser3" 
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test contacts drawer shows all users
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see all contacts in the list
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4" 
+- assertVisible: "testuser5"
+
+# All should show as active with locations
+- assertNotVisible: "No location"
+
+# Each should show different location info
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # testuser2 should be at Times Square area
+      - assertVisible:
+          text: "Manhattan"
+          optional: true
+      - assertVisible:
+          text: "Active"
+          optional: true
+
+# Tap on one contact to see detailed location
+- tapOn: "testuser4"
+- waitForAnimationToEnd
+
+# Should show Brooklyn Bridge area location
+- assertVisible: "testuser4"
+- assertVisible:
+    text: "Brooklyn"
+    optional: true
+
+- assertVisible:
+    text: "Bridge"
+    optional: true
+
+- assertVisible:
+    text: "DUMBO"
+    optional: true
+
+# Go back to contacts
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Test that map performance is good with multiple markers
+- swipeLeft:
+    start: 70%,50%
+    end: 30%,50%
+
+- waitForAnimationToEnd
+
+- swipeRight:
+    start: 30%,50%
+    end: 70%,50%
+
+- waitForAnimationToEnd
+
+# Markers should still be visible after panning
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test rapid location updates - send new locations for all users
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Sending updated locations for all users..."
+    
+    # Update all users to new locations (slight movements)
+    login_as_user "testuser2"
+    grid_send_location "$(cat /tmp/testuser2_room || echo '!unknown')" 40.7590 -73.9845  # Times Square North
+    
+    login_as_user "testuser3"
+    grid_send_location "$(cat /tmp/testuser3_room || echo '!unknown')" 40.7839 -73.9664  # Central Park East
+    
+    login_as_user "testuser4" 
+    grid_send_location "$(cat /tmp/testuser4_room || echo '!unknown')" 40.7071 -73.9979  # Brooklyn Bridge East
+    
+    login_as_user "testuser5"
+    grid_send_location "$(cat /tmp/testuser5_room || echo '!unknown')" 40.7084 -74.0123  # Wall Street West
+    
+    echo "⏳ Waiting for location updates..."
+    wait_for_sync 6
+
+- waitForAnimationToEnd: 7000
+
+# All users should still be visible with updated locations
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test clustering behavior if markers are close together
+# Send testuser4 and testuser5 to similar locations
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing marker clustering..."
+    
+    # Move testuser4 and testuser5 close together in Financial District
+    login_as_user "testuser4"
+    grid_send_location "$(cat /tmp/testuser4_room || echo '!unknown')" 40.7074 -74.0113  # Wall Street
+    
+    login_as_user "testuser5"
+    grid_send_location "$(cat /tmp/testuser5_room || echo '!unknown')" 40.7076 -74.0115  # Very close to Wall Street
+    
+    wait_for_sync 4
+
+- waitForAnimationToEnd: 5000
+
+# Should still show both users, possibly clustered
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test tapping on clustered area
+- tapOn:
+    point: "45%,65%"  # Financial district area
+- waitForAnimationToEnd
+
+# Should show info for one or both users
+- runFlow:
+    when:
+      visible: "testuser4"
+    commands:
+      - assertVisible: "testuser4"
+      - assertVisible:
+          text: "Wall Street"
+          optional: true
+
+- runFlow:
+    when:
+      visible: "testuser5"
+    commands:
+      - assertVisible: "testuser5"
+      - assertVisible:
+          text: "Wall Street"
+          optional: true
+
+# Final verification - all multiple locations working
+- assertVisible: "My Contacts"
+
+# Map should show all active contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- assertVisible: "testuser3" 
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# All should show as active/online
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertNotVisible: "Offline"

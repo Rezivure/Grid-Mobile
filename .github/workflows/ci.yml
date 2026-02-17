@@ -2,13 +2,13 @@ name: Grid CI
 
 on:
   push:
-    branches: ['**']
-    # Skip push runs when a PR is open (PR trigger handles it)
+    branches:
+      - main
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,10 +34,10 @@ jobs:
           export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
           flutter test --reporter expanded 2>&1
 
-  e2e-tests:
-    name: E2E Tests (Synapse + API + Maestro)
+  core-e2e-tests:
+    name: Core E2E Tests (Fast)
     runs-on: [self-hosted, macOS, ARM64]
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: unit-tests
     steps:
       - uses: actions/checkout@v4
@@ -52,16 +52,28 @@ jobs:
           VERSION_CHECK_URL=https://version.mygrid.app
           EOF
 
-      - name: Run full E2E suite
+      - name: Start test infrastructure
         run: |
           export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          bash test-infra/scripts/run-e2e.sh 2>&1
+          # Start Synapse and create test accounts
+          bash test-infra/scripts/run-e2e.sh --only infra 2>&1
 
-      - name: Upload test report
+      - name: Run core Maestro flows
+        run: |
+          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
+          ./run-maestro.sh core --report-dir test-infra/reports/maestro-core
+
+      - name: Stop test infrastructure
+        if: always()
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          cd test-infra && docker compose down -v 2>&1 || true
+
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-report-${{ github.sha }}
+          name: core-e2e-report-${{ github.sha }}
           path: test-infra/reports/
           retention-days: 30
 
@@ -69,6 +81,39 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-debug-${{ github.sha }}
+          name: maestro-core-debug-${{ github.sha }}
           path: ~/.maestro/tests/
           retention-days: 7
+
+  deploy-testflight:
+    name: Deploy to TestFlight & Play Store
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: [unit-tests, core-e2e-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Build & Upload iOS to TestFlight
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          fastlane ios beta
+
+      - name: Build & Upload Android to Play Store Internal
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          fastlane android beta

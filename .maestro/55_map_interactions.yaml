@@ -1,0 +1,108 @@
+appId: app.mygrid.grid
+---
+# Test: Verify map interactions and controls
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Test basic map interactions
+# Tap on different areas of the map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "60%,50%"
+- waitForAnimationToEnd
+
+# Test map zoom controls if visible
+- assertVisible:
+    id: "zoom_in"
+    optional: true
+
+- assertVisible:
+    id: "zoom_out"
+    optional: true
+
+# Test zoom in functionality
+- tapOn:
+    id: "zoom_in"
+    optional: true
+- waitForAnimationToEnd
+
+# Test zoom out functionality
+- tapOn:
+    id: "zoom_out"
+    optional: true
+- waitForAnimationToEnd
+
+# Test pinch-to-zoom gesture
+- tapOn:
+    point: "50%,40%"
+    longPress: true
+    optional: true
+- waitForAnimationToEnd
+
+# Test map drag/pan
+- swipe:
+    start: "40%,40%"
+    end: "60%,40%"
+- waitForAnimationToEnd
+
+- swipe:
+    start: "60%,40%"
+    end: "40%,40%"
+- waitForAnimationToEnd
+
+# Test vertical map movement
+- swipe:
+    start: "50%,30%"
+    end: "50%,50%"
+- waitForAnimationToEnd
+
+- swipe:
+    start: "50%,50%"
+    end: "50%,30%"
+- waitForAnimationToEnd
+
+# Look for map markers or location indicators
+- assertVisible:
+    id: "location_marker"
+    optional: true
+
+- assertVisible:
+    id: "user_marker"
+    optional: true
+
+# Test tapping on a marker if visible
+- tapOn:
+    id: "location_marker"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for info bubble or popup
+- assertVisible:
+    text: "Location"
+    optional: true
+
+# Test dismissing any popups
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Verify map is still responsive after interactions
+- assertVisible: "My Contacts"
+
+# Test location centering if available
+- assertVisible:
+    id: "center_location"
+    optional: true
+
+- tapOn:
+    id: "center_location"
+    optional: true
+- waitForAnimationToEnd

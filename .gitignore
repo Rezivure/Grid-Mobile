@@ -58,3 +58,10 @@ test-infra/synapse-data/
 
 # Test reports (generated)
 test-infra/reports/
+
+# Fastlane secrets
+*.p8
+fastlane/report.xml
+fastlane/README.md
+google-play-key.json
+fastlane/.env

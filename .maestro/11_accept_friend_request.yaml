@@ -1,0 +1,58 @@
+appId: app.mygrid.grid
+---
+# Test: Accept a friend request from testuser2
+# Prerequisite: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# API: Send friend request from testuser2 to testuser1
+- runScript:
+    file: scripts/api_send_friend_request.js
+    env:
+      FROM_USER: testuser2
+      TO_USER: testuser1
+
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
+
+# Pull to refresh to sync new invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
+
+# Tap the notification bell
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Verify Notifications modal opened
+- assertVisible: "Notifications"
+
+# Tap the first invite card
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+
+# Tap Accept Request button
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Close the notifications modal
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000

@@ -1,0 +1,137 @@
+appId: app.mygrid.grid
+---
+# Test: Decline friend request lifecycle and re-invite capability  
+# API sends request from testuser3 → Maestro declines → verify gone → API sends another → can re-invite
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: API sends friend request from testuser3
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser3 testuser1
+- waitForAnimationToEnd
+- wait: 3000  # Give sync time
+
+# Step 2: Pull to refresh to sync new invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 3: Tap notification bell to see friend request
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Step 4: Verify notification modal opened and decline request
+- assertVisible: "Notifications"
+- tapOn:
+    point: "50%,28%"  # First invite card
+- waitForAnimationToEnd
+- tapOn: "Decline Request"
+- waitForAnimationToEnd
+
+# Step 5: Close notifications modal
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 6: Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Step 7: Verify testuser3 is NOT in contacts list
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Check that testuser3 is not visible in contacts
+- runFlow:
+    when:
+      visible:
+        text: "testuser3"
+    commands:
+      - assertVisible: "This should not be visible - testuser3 was declined"
+
+# Step 8: Close contacts drawer
+- tapOn:
+    point: "70%,45%"  # Tap map area to close drawer
+- waitForAnimationToEnd
+
+# Step 9: Verify no pending notifications
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+
+# Should see empty notifications or "No new notifications"
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - assertVisible: "This should not be visible - invitation should be gone"
+
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 10: API sends ANOTHER friend request from testuser3 (re-invite test)
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ./api_send_friend_request.sh testuser3 testuser1
+- waitForAnimationToEnd  
+- wait: 3000  # Give sync time
+
+# Step 11: Pull to refresh to sync new invite
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 12: Verify new invitation appears
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Should see testuser3 invite again
+- assertVisible: "testuser3"
+
+# Step 13: This time accept the request
+- tapOn:
+    point: "50%,28%"  # First invite card
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Step 14: Close notifications modal  
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Step 15: Verify testuser3 now appears in contacts after acceptance
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+- assertVisible: "testuser3"
+
+# Step 16: Close contacts drawer
+- tapOn:
+    point: "70%,45%"  # Tap map area to close drawer
+- waitForAnimationToEnd
+
+# Step 17: Verify testuser3 can now send location
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser3)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser3 $ROOM_ID 40.7505 -73.9934
+- wait: 5000  # Allow time for location sync
+
+# Step 18: Verify testuser3's location marker appears on map  
+- extendedWaitUntil:
+    visible:
+      text: "testuser3"
+    timeout: 15000
+
+# Final state: Decline/re-invite cycle completed successfully

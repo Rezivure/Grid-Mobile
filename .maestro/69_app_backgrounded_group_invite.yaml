@@ -1,0 +1,55 @@
+appId: app.mygrid.grid
+name: "Pre-Release: App Backgrounded Group Invite"
+tags: [release, background, group_invite]
+
+# Test: background app → API creates group + invites → foreground → group invite visible
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Background the app
+- stopApp
+- delay: 2000
+
+# Create group and invite user via API while app is backgrounded
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser7 testpass123
+      ./api_create_group.sh testuser7 "BackgroundTestGroup" 3600
+      ./api_join_room.sh testuser7 "BackgroundTestGroup"
+    timeout: 15000
+
+# Wait for group invite to propagate
+- delay: 3000
+
+# Foreground app
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Check notification bell for group invite
+- tapOn: "Notifications"
+- waitForAnimationToEnd
+
+# Verify group invite is visible
+- assertVisible: "BackgroundTestGroup"
+- assertVisible:
+    text: "invited you to"
+    optional: true
+
+# Accept the invite to clean up
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Return to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Verify we can see the group in the groups tab
+- tapOn: "Groups"
+- assertVisible: "BackgroundTestGroup"
+- tapOn: "Map"

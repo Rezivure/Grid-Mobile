@@ -1,0 +1,60 @@
+appId: app.mygrid.grid
+name: "Pre-Release: App Kill and Restore"
+tags: [release, lifecycle, persistence]
+
+# Test: stop app completely → relaunch → verify still logged in, friends still there, map loads with markers
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up friends with locations via API
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_login.sh testuser3 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+      ./api_send_location.sh testuser3 40.7590 -73.9865
+    timeout: 15000
+
+# Verify friends and locations are visible
+- waitForAnimationToEnd:
+    timeout: 8000
+- assertVisible: "testuser2"
+
+# Completely kill the app (not just background)
+- stopApp
+
+# Wait longer to simulate app being killed by system
+- delay: 5000
+
+# Relaunch app
+- launchApp
+
+# Wait for full app initialization
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Verify we're still logged in (not at welcome screen)
+- assertNotVisible: 
+    text: "Welcome to Grid"
+    optional: true
+- assertNotVisible:
+    text: "Get Started" 
+    optional: true
+
+# Verify map loads
+- assertVisible: "Map"
+
+# Verify previous friends and their locations are still there
+- assertVisible: "testuser2"
+
+# Test that app is fully functional by navigating to settings
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"

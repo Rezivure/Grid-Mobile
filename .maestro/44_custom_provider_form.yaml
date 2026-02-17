@@ -1,0 +1,33 @@
+appId: app.mygrid.grid
+---
+# Test: Verify custom provider form fields exist
+# Note: Uses clearState — run independently
+
+- clearState
+- launchApp
+- waitForAnimationToEnd
+
+# Tap Custom Provider
+- tapOn: "Custom Provider"
+- waitForAnimationToEnd
+
+# Verify form fields
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- assertVisible: "Homeserver URL"
+
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- assertVisible: "Username"
+
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- assertVisible: "Password"
+
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- assertVisible: "Sign In"

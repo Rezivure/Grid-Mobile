@@ -1,0 +1,118 @@
+appId: app.mygrid.grid
+---
+# Test: API creates group + invites testuser1 → Maestro declines → verify it's gone
+# Multi-user E2E: API group creation + UI decline verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up group invite from testuser2 for decline test..."
+    setup_group_invite "Declined Test Group" 3600
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Wait for invite to propagate
+- waitForAnimationToEnd: 3000
+
+# Check for notification indicating group invite
+- assertVisible:
+    id: "notification_bell"
+    optional: true
+
+# Tap notification bell to see invites
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see the group invitation
+- assertVisible: "Invitations"
+
+# Look for the group invite
+- assertVisible: "testuser2"
+- assertVisible: "Declined Test Group"
+
+# Should see group invite text
+- assertVisible:
+    text: "invited you to join"
+    optional: true
+
+# Should see Accept/Decline buttons
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Decline the group invite
+- tapOn: "Decline"
+- waitForAnimationToEnd
+
+# Look for decline confirmation
+- assertVisible:
+    text: "Invitation declined"
+    optional: true
+
+- assertVisible:
+    text: "Declined"
+    optional: true
+
+# Wait for UI to update after decline
+- waitForAnimationToEnd: 2000
+
+# The invitation should disappear from the list
+- assertNotVisible: "Declined Test Group"
+
+# Close notifications modal
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Alternative close method
+- tapOn:
+    point: "50%,20%"
+- waitForAnimationToEnd
+
+# Verify we're back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 5000
+
+# Verify the group does NOT appear in contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Look for Groups section
+- assertVisible:
+    text: "Groups"
+    optional: true
+
+# Tap on Groups tab if it exists
+- tapOn:
+    text: "Groups"
+    optional: true
+- waitForAnimationToEnd
+
+# The declined group should NOT be visible
+- assertNotVisible: "Declined Test Group"
+
+# Should not see any extra group members or items
+- assertNotVisible:
+    text: "Declined Test Group"
+
+# Go back to map to verify clean state
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification - back on map, no group joined
+- assertVisible: "My Contacts"
+
+# Verify notification badge is cleared (no pending invites)
+- assertNotVisible:
+    id: "notification_badge"
+    optional: true
