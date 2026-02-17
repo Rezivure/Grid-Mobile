@@ -67,7 +67,7 @@ class UserRepository {
           'userId': userId,
           'roomId': roomId,
           'isDirect': isDirect ? 1 : 0,
-          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invited'),
+          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invite'),
         },
       );
     } else {
@@ -76,7 +76,7 @@ class UserRepository {
         'UserRelationships',
         {
           'isDirect': isDirect ? 1 : 0,
-          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invited'),
+          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invite'),
         },
         where: 'userId = ? AND roomId = ?',
         whereArgs: [userId, roomId],
