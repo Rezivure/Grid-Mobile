@@ -183,11 +183,11 @@ class RoomService {
       } catch (e) {
         print("RoomService: User $userId not found in participants, checking if room was just created");
         
-        // If this is a direct room that was just created, the invited user might not appear
+        // If this is a Grid room that was just created, the invited user might not appear
         // in participants yet, so we assume they're invited
         final roomName = room.name ?? '';
-        if (roomName.startsWith('Grid:Direct:')) {
-          print("RoomService: Direct room detected, assuming user $userId is invited");
+        if (roomName.startsWith('Grid:Direct:') || roomName.startsWith('Grid:Group:')) {
+          print("RoomService: Grid room detected, assuming user $userId is invited");
           return 'invite';
         }
         

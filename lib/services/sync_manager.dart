@@ -901,7 +901,7 @@ class SyncManager with ChangeNotifier {
     if (room == null) return;
 
     if (room.isGroup) {
-      final membershipStatus = event.content['membership'] as String? ?? 'invited';
+      final membershipStatus = event.content['membership'] as String? ?? 'invite';
 
       if (event.stateKey != null) {
         await userRepository.updateMembershipStatus(
@@ -1262,7 +1262,9 @@ class SyncManager with ChangeNotifier {
       isGroup: !isDirect,
       lastActivity: DateTime.now().toIso8601String(),
       avatarUrl: room.avatar?.toString(),
-      members: room.getParticipants().map((p) => p.id).toList(),
+      members: isDirect 
+          ? room.getParticipants().map((p) => p.id).toList()
+          : (await room.requestParticipants()).map((p) => p.id).toList(),
       expirationTimestamp: extractExpirationTimestamp(room.name ?? ''),
     );
 
@@ -1298,7 +1300,7 @@ class SyncManager with ChangeNotifier {
 
         String? membershipStatus;
         if (!isDirect) {
-          membershipStatus = await roomService.getUserRoomMembership(room.id, participantId) ?? 'invited';
+          membershipStatus = await roomService.getUserRoomMembership(room.id, participantId) ?? 'invite';
         }
 
         await userRepository.insertUserRelationship(
