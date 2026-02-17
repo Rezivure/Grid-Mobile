@@ -15,11 +15,9 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Wait for modal to fully appear, then switch to Create Group tab
-- extendedWaitUntil:
-    visible: "Add Contact"
-    timeout: 5000
-- tapOn: "Create Group"
+# Switch to Create Group tab (coordinate tap - Flutter tab text not in accessibility tree)
+- tapOn:
+    point: "73%,8%"
 - waitForAnimationToEnd
 
 # Step 0: Enter group name

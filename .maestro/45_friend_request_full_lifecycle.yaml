@@ -1,6 +1,4 @@
 appId: app.mygrid.grid
-env:
-  MAESTRO_DIR: .maestro
 ---
 # Test: Complete friend request lifecycle with location sharing
 # API sends friend request from testuser2 → Maestro accepts → location sharing → movement → stop sharing
@@ -18,21 +16,14 @@ env:
     env:
       FROM_USER: testuser2
       TO_USER: testuser1
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "3000"   # Give sync time
+- wait: 3000
 
 # Step 2: Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "2000"
+- wait: 2000
 
 # Step 3: Tap notification bell to see friend request
 - tapOn:
@@ -61,7 +52,6 @@ env:
     file: scripts/api_get_room.js
     env:
       USER: testuser2
-      MAESTRO_DIR: ${MAESTRO_DIR}
 
 # Step 8: API sends location from testuser2 (Times Square)
 - runScript:
@@ -71,11 +61,7 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "40.7580"
       LON: "-73.9855"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"   # Allow time for Matrix sync and UI update
+- wait: 5000
 
 # Step 9: Verify testuser2's location marker appears on map
 - extendedWaitUntil:
@@ -91,11 +77,7 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "40.7829"
       LON: "-73.9654"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
 # Step 11: Verify marker still visible
 - extendedWaitUntil:
@@ -111,14 +93,11 @@ env:
 
 # Step 13: Close contacts drawer
 - tapOn:
-    point: "70%,45%"  # Tap map area to close drawer
+    point: "70%,45%"
 - waitForAnimationToEnd
 
-# Step 14: Send another location to verify real-time updates
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "2000"
+# Step 14: Send another location
+- wait: 2000
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -126,29 +105,21 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "40.7614"
       LON: "-73.9776"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
-# Step 15: Final verification - location still visible
+# Step 15: Final verification
 - extendedWaitUntil:
     visible:
       text: "testuser2"
     timeout: 15000
 
-# Step 16: API user leaves the room (simulates stop sharing)
+# Step 16: API user leaves the room
 - runScript:
     file: scripts/api_leave_room.js
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
 # Step 17: Verify back on map screen
 - extendedWaitUntil:

@@ -1,15 +1,32 @@
 // Send location update for a user in a room
-// Env: USER, ROOM_ID, LAT, LON, MAESTRO_DIR
-var cmd = 'cd ' + MAESTRO_DIR + '/helpers && ./api_send_location.sh ' + USER + ' ' + ROOM_ID + ' ' + LAT + ' ' + LON
-var process = java.lang.Runtime.getRuntime().exec(['/bin/bash', '-c', cmd])
-process.waitFor()
+var HOMESERVER = 'http://localhost:8008'
 
-var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))
-var errReader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getErrorStream()))
-var result = '', errResult = '', line
-while ((line = reader.readLine()) != null) result += line + '\n'
-while ((line = errReader.readLine()) != null) errResult += line + '\n'
+// Login
+var loginResp = http.post(HOMESERVER + '/_matrix/client/r0/login', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'm.login.password', user: USER, password: 'testpass123' })
+})
+var token = json(loginResp.body).access_token
+if (!token) throw new Error('Login failed for ' + USER)
 
-console.log('api_send_location: ' + result.trim())
-if (errResult.trim()) console.log('STDERR: ' + errResult.trim())
-if (process.exitValue() !== 0) throw new Error('api_send_location failed: ' + errResult.trim())
+// Send location as m.room.message with geo_uri
+var txnId = 'loc_' + Date.now()
+var geoUri = 'geo:' + LAT + ',' + LON
+
+var sendResp = http.put(
+    HOMESERVER + '/_matrix/client/r0/rooms/' + encodeURIComponent(ROOM_ID) + '/send/m.room.message/' + txnId,
+    {
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+            msgtype: 'm.location',
+            body: 'Location: ' + LAT + ', ' + LON,
+            geo_uri: geoUri
+        })
+    }
+)
+
+if (!sendResp.ok) throw new Error('Send location failed: ' + sendResp.body)
+console.log('Location sent by ' + USER + ': ' + geoUri)

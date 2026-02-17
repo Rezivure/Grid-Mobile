@@ -1,15 +1,36 @@
 // Send friend request from FROM_USER to TO_USER via Matrix API
-var cmd = 'cd ' + MAESTRO_DIR + '/helpers && ./api_send_friend_request.sh ' + FROM_USER + ' ' + TO_USER
-var process = java.lang.Runtime.getRuntime().exec(['/bin/bash', '-c', cmd])
-process.waitFor()
+// Uses Maestro's built-in http API
+var HOMESERVER = 'http://localhost:8008'
 
-var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))
-var errReader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getErrorStream()))
-var result = '', errResult = '', line
-while ((line = reader.readLine()) != null) result += line + '\n'
-while ((line = errReader.readLine()) != null) errResult += line + '\n'
+// Login as sender
+var loginResp = http.post(HOMESERVER + '/_matrix/client/r0/login', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        type: 'm.login.password',
+        user: FROM_USER,
+        password: 'testpass123'
+    })
+})
+var token = json(loginResp.body).access_token
+if (!token) throw new Error('Login failed for ' + FROM_USER + ': ' + loginResp.body)
 
-console.log('api_send_friend_request: ' + result.trim())
-if (errResult.trim()) console.log('STDERR: ' + errResult.trim())
-if (process.exitValue() !== 0) throw new Error('api_send_friend_request failed: ' + errResult.trim())
-output.roomId = result.trim()
+// Get TO_USER's full Matrix ID
+var toUserId = '@' + TO_USER + ':localhost'
+
+// Create DM room and invite
+var roomResp = http.post(HOMESERVER + '/_matrix/client/r0/createRoom', {
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({
+        is_direct: true,
+        preset: 'trusted_private_chat',
+        invite: [toUserId]
+    })
+})
+var roomId = json(roomResp.body).room_id
+if (!roomId) throw new Error('Create room failed: ' + roomResp.body)
+
+output.roomId = roomId
+console.log('Friend request sent from ' + FROM_USER + ' to ' + TO_USER + ' in room ' + roomId)

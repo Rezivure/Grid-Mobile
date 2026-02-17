@@ -1,15 +1,20 @@
 // Get first joined room for a user
-// Env: USER, MAESTRO_DIR
-var cmd = 'cd ' + MAESTRO_DIR + '/helpers && TOKEN=$(./api_login.sh ' + USER + ') && curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r ".joined_rooms[0]"'
-var process = java.lang.Runtime.getRuntime().exec(['/bin/bash', '-c', cmd])
-process.waitFor()
+var HOMESERVER = 'http://localhost:8008'
 
-var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))
-var errReader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getErrorStream()))
-var result = '', errResult = '', line
-while ((line = reader.readLine()) != null) result += line + '\n'
-while ((line = errReader.readLine()) != null) errResult += line + '\n'
+// Login
+var loginResp = http.post(HOMESERVER + '/_matrix/client/r0/login', {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'm.login.password', user: USER, password: 'testpass123' })
+})
+var token = json(loginResp.body).access_token
+if (!token) throw new Error('Login failed for ' + USER)
 
-if (process.exitValue() !== 0) throw new Error('api_get_room failed: ' + errResult.trim())
-output.roomId = result.trim()
-console.log('Room ID for ' + USER + ': ' + output.roomId)
+// Get joined rooms
+var roomsResp = http.get(HOMESERVER + '/_matrix/client/r0/joined_rooms', {
+    headers: { 'Authorization': 'Bearer ' + token }
+})
+var rooms = json(roomsResp.body).joined_rooms
+if (!rooms || rooms.length === 0) throw new Error('No rooms found for ' + USER)
+
+output.roomId = rooms[0]
+console.log('Room for ' + USER + ': ' + output.roomId)

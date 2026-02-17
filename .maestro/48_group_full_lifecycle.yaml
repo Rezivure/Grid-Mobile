@@ -1,9 +1,6 @@
 appId: app.mygrid.grid
-env:
-  MAESTRO_DIR: .maestro
 ---
 # Test: Complete group lifecycle with multiple members and location sharing
-# Maestro creates group "Road Trip" → API joins as testuser2 and testuser3 → location sharing → member leaves
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
 
 - launchApp
@@ -12,16 +9,14 @@ env:
     visible: "My Contacts"
     timeout: 10000
 
-# Step 1: Tap the person-add icon to open Add Friend / Create Group modal
+# Step 1: Tap person-add icon
 - tapOn:
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Step 2: Wait for modal, then switch to Create Group tab
-- extendedWaitUntil:
-    visible: "Add Contact"
-    timeout: 5000
-- tapOn: "Create Group"
+# Step 2: Switch to Create Group tab (coordinate tap - Flutter accessibility)
+- tapOn:
+    point: "73%,8%"
 - waitForAnimationToEnd
 
 # Step 3: Enter group name
@@ -31,7 +26,7 @@ env:
 - hideKeyboard
 - waitForAnimationToEnd
 
-# Step 4: Advance to duration selection
+# Step 4: Advance to duration
 - tapOn: "Next"
 - waitForAnimationToEnd
 
@@ -39,18 +34,18 @@ env:
 - tapOn: "24h"
 - waitForAnimationToEnd
 
-# Step 6: Advance to member selection
+# Step 6: Advance to members
 - tapOn: "Next"
 - waitForAnimationToEnd
 
-# Step 7: Add testuser2 as member
+# Step 7: Add testuser2
 - tapOn: "Username"
 - inputText: "testuser2"
 - waitForAnimationToEnd
 - tapOn: "Add Member"
 - waitForAnimationToEnd
 
-# Step 8: Add testuser3 as member
+# Step 8: Add testuser3
 - tapOn: "Username"
 - inputText: "testuser3"
 - waitForAnimationToEnd
@@ -65,21 +60,17 @@ env:
 - tapOn: "Create Group"
 - waitForAnimationToEnd
 
-# Step 11: Verify returned to map screen
+# Step 11: Verify returned to map
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 15000
 
-# Step 12: Get the group room ID (most recently created room for testuser1)
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "3000"
+# Step 12: Get the group room ID
+- wait: 3000
 - runScript:
     file: scripts/api_get_latest_room.js
     env:
       USER: testuser1
-      MAESTRO_DIR: ${MAESTRO_DIR}
 
 # Step 13: API users join the group
 - runScript:
@@ -87,35 +78,27 @@ env:
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
-      MAESTRO_DIR: ${MAESTRO_DIR}
 - runScript:
     file: scripts/api_join_room.js
     env:
       USER: testuser3
       ROOM_ID: ${output.roomId}
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"   # Give sync time
+- wait: 5000
 
 # Step 14: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "2000"
+- wait: 2000
 
-# Step 15: Check Groups tab to verify group created
+# Step 15: Check Groups tab
 - tapOn:
-    point: "85%,62%"  # Groups tab
+    point: "85%,62%"
 - waitForAnimationToEnd
 - assertVisible: "Road Trip"
 
-# Step 16: Tap on Road Trip group to see members
+# Step 16: Tap Road Trip to see members
 - tapOn: "Road Trip"
 - waitForAnimationToEnd
 - assertVisible: "testuser2"
@@ -123,13 +106,13 @@ env:
 
 # Step 17: Go back to map
 - tapOn:
-    point: "20%,10%"  # Back button
+    point: "20%,10%"
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
 
-# Step 18: API sends location from testuser2 (Washington DC)
+# Step 18: API sends location from testuser2
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -137,13 +120,9 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "38.9072"
       LON: "-77.0369"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
-# Step 19: API sends location from testuser3 (NYC)
+# Step 19: API sends location from testuser3
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -151,13 +130,9 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "40.7128"
       LON: "-74.0060"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
-# Step 20: Verify both markers appear on map
+# Step 20: Verify markers
 - extendedWaitUntil:
     visible:
       text: "testuser2"
@@ -167,45 +142,38 @@ env:
       text: "testuser3"
     timeout: 15000
 
-# Step 21: testuser3 leaves the group via API
+# Step 21: testuser3 leaves
 - runScript:
     file: scripts/api_leave_room.js
     env:
       USER: testuser3
       ROOM_ID: ${output.roomId}
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
 # Step 22: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "3000"
+- wait: 3000
 
-# Step 23: Check group member count decreased
+# Step 23: Check group member count
 - tapOn:
-    point: "85%,62%"  # Groups tab
+    point: "85%,62%"
 - waitForAnimationToEnd
 - tapOn: "Road Trip"
 - waitForAnimationToEnd
-- assertVisible: "2"  # Updated member count
+- assertVisible: "2"
 
 # Step 24: Go back to map
 - tapOn:
-    point: "20%,10%"  # Back button
+    point: "20%,10%"
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
 
-# Step 25: testuser2 sends another location to verify still works
+# Step 25: testuser2 sends another location
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -213,11 +181,7 @@ env:
       ROOM_ID: ${output.roomId}
       LAT: "38.8951"
       LON: "-77.0364"
-      MAESTRO_DIR: ${MAESTRO_DIR}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
+- wait: 5000
 
 # Step 26: Verify testuser2 still visible
 - extendedWaitUntil:
