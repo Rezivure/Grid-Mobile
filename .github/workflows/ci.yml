@@ -63,6 +63,12 @@ jobs:
           export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
           ./run-maestro.sh core --report-dir test-infra/reports/maestro-core
 
+      - name: Stop test infrastructure
+        if: always()
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          cd test-infra && docker compose down -v 2>&1 || true
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

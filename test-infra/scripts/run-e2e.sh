@@ -2401,6 +2401,13 @@ main() {
   should_run "edge"          && phase_edge_cases
 
   # ── Full Cleanup ──────────────────────────────────────────────────────────────
+  # Skip cleanup if --only infra (caller wants Synapse left running)
+  if [[ "$ONLY_TEST" == "infra" ]]; then
+    log_phase "Skipping cleanup (--only infra keeps Synapse running)"
+    print_report
+    return
+  fi
+
   log_phase "Cleanup"
 
   # Stop Synapse + remove volumes
