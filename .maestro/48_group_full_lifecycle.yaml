@@ -15,8 +15,15 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Step 2: Switch to Create Group tab (coordinate tap - Flutter accessibility)
+- extendedWaitUntil:
+    visible: "Add Contact"
+    timeout: 5000
 - tapOn:
-    point: "73%,8%"
+    point: "75%,7%"
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "1000"
 - waitForAnimationToEnd
 
 # Step 3: Enter group name

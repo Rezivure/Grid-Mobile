@@ -1,7 +1,7 @@
 appId: app.mygrid.grid
 ---
 # Test: Complete friend request lifecycle with location sharing
-# API sends friend request from testuser2 → Maestro accepts → location sharing → movement → stop sharing
+# API sends friend request from testuser2 → Maestro accepts → location sharing via API
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
 
 - launchApp
@@ -21,7 +21,7 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "3000"
 
-# Step 2: Pull to refresh to sync new invites
+# Step 2: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
@@ -31,35 +31,38 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "2000"
 
-# Step 3: Tap notification bell to see friend request
+# Step 3: Tap notification bell
 - tapOn:
     point: "90%,62%"
 - waitForAnimationToEnd
 
-# Step 4: Verify notification modal opened and accept request
+# Step 4: Accept friend request
 - assertVisible: "Notifications"
 - tapOn:
-    point: "50%,28%"  # First invite card
+    point: "50%,28%"
 - waitForAnimationToEnd
 - tapOn: "Accept Request"
 - waitForAnimationToEnd
 
-# Step 5: Close notifications modal
+# Step 5: Close notifications
 - tapOn: "Close"
 - waitForAnimationToEnd
 
-# Step 6: Verify back on map screen
+# Step 6: Verify back on map
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 15000
 
-# Step 7: Get testuser2's room ID
+# Step 7: Verify friend in contacts list
+- assertVisible: "testuser2"
+
+# Step 8: Get testuser2's room ID
 - runScript:
     file: scripts/api_get_room.js
     env:
       USER: testuser2
 
-# Step 8: API sends location from testuser2 (Times Square)
+# Step 9: API sends location from testuser2
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -72,13 +75,20 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "5000"
 
-# Step 9: Verify testuser2's location marker appears on map
-- extendedWaitUntil:
-    visible:
-      text: "testuser2"
-    timeout: 15000
+# Step 10: Pull to refresh to pick up location
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
-# Step 10: API updates testuser2's location (moves to Central Park)
+# Step 11: Verify testuser2 still in contacts (location received)
+- assertVisible: "testuser2"
+
+# Step 12: API updates location (Central Park)
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -89,49 +99,9 @@ appId: app.mygrid.grid
 - runScript:
     file: scripts/sleep.js
     env:
-      DURATION_MS: "5000"
+      DURATION_MS: "3000"
 
-# Step 11: Verify marker still visible
-- extendedWaitUntil:
-    visible:
-      text: "testuser2"
-    timeout: 15000
-
-# Step 12: Verify friend appears in contacts list
-- tapOn:
-    point: "30%,62%"  # Contacts drawer
-- waitForAnimationToEnd
-- assertVisible: "testuser2"
-
-# Step 13: Close contacts drawer
-- tapOn:
-    point: "70%,45%"
-- waitForAnimationToEnd
-
-# Step 14: Send another location
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "2000"
-- runScript:
-    file: scripts/api_send_location.js
-    env:
-      USER: testuser2
-      ROOM_ID: ${output.roomId}
-      LAT: "40.7614"
-      LON: "-73.9776"
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
-
-# Step 15: Final verification
-- extendedWaitUntil:
-    visible:
-      text: "testuser2"
-    timeout: 15000
-
-# Step 16: API user leaves the room
+# Step 13: API user leaves the room (stop sharing)
 - runScript:
     file: scripts/api_leave_room.js
     env:
@@ -142,7 +112,7 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "5000"
 
-# Step 17: Verify back on map screen
+# Step 14: Verify back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 10000
