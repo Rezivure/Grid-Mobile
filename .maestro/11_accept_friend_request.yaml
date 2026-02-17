@@ -16,14 +16,20 @@ appId: app.mygrid.grid
       FROM_USER: testuser2
       TO_USER: testuser1
 
-- wait: 3000  # Give sync time
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
 # Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- wait: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 
 # Tap the notification bell
 - tapOn:

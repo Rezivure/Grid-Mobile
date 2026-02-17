@@ -16,14 +16,20 @@ appId: app.mygrid.grid
     env:
       FROM_USER: testuser2
       TO_USER: testuser1
-- wait: 3000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
 # Step 2: Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- wait: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 
 # Step 3: Tap notification bell to see friend request
 - tapOn:
@@ -61,7 +67,10 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "40.7580"
       LON: "-73.9855"
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 9: Verify testuser2's location marker appears on map
 - extendedWaitUntil:
@@ -77,7 +86,10 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "40.7829"
       LON: "-73.9654"
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 11: Verify marker still visible
 - extendedWaitUntil:
@@ -97,7 +109,10 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Step 14: Send another location
-- wait: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -105,7 +120,10 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "40.7614"
       LON: "-73.9776"
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 15: Final verification
 - extendedWaitUntil:
@@ -119,7 +137,10 @@ appId: app.mygrid.grid
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 17: Verify back on map screen
 - extendedWaitUntil:
