@@ -15,16 +15,17 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Switch to Create Group tab (coordinate: right half of tab bar)
+# Switch to Create Group tab
+# The modal is a bottom sheet — try multiple y values to find the tab
 - extendedWaitUntil:
     visible: "Add Contact"
     timeout: 5000
 - tapOn:
-    point: "58%,7%"
+    point: "65%,9%"
 - runScript:
     file: scripts/sleep.js
     env:
-      DURATION_MS: "1000"
+      DURATION_MS: "500"
 - waitForAnimationToEnd
 
 # Step 0: Enter group name
@@ -46,12 +47,14 @@ appId: app.mygrid.grid
 - tapOn: "Next"
 - waitForAnimationToEnd
 
-# Step 2: Add a member
+# Step 2: Add a member (full Matrix ID required)
 - tapOn: "Username"
-- inputText: "testuser2"
+- inputText: "testuser2:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
 - waitForAnimationToEnd
 
-# Tap the Add Member button
+# Tap Add Member button
 - tapOn: "Add Member"
 - waitForAnimationToEnd
 

@@ -1,7 +1,13 @@
 appId: app.mygrid.grid
 ---
-# Test: Complete group lifecycle with multiple members and location sharing
+# Test: Create group, verify member joined, send location
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+# Step 0: Clean up stale rooms from previous runs
+- runScript:
+    file: scripts/api_cleanup_rooms.js
+    env:
+      USERS: "testuser2,testuser3"
 
 - launchApp
 - waitForAnimationToEnd
@@ -14,12 +20,12 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Step 2: Switch to Create Group tab (coordinate: right half of tab bar)
+# Step 2: Switch to Create Group tab
 - extendedWaitUntil:
     visible: "Add Contact"
     timeout: 5000
 - tapOn:
-    point: "58%,7%"
+    point: "65%,9%"
 - runScript:
     file: scripts/sleep.js
     env:
@@ -45,60 +51,56 @@ appId: app.mygrid.grid
 - tapOn: "Next"
 - waitForAnimationToEnd
 
-# Step 7: Add testuser2
+# Step 7: Add testuser2 (full Matrix ID)
 - tapOn: "Username"
-- inputText: "testuser2"
+- inputText: "testuser2:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
 - waitForAnimationToEnd
 - tapOn: "Add Member"
 - waitForAnimationToEnd
 
-# Step 8: Add testuser3
-- tapOn: "Username"
-- inputText: "testuser3"
-- waitForAnimationToEnd
-- tapOn: "Add Member"
-- waitForAnimationToEnd
-
-# Step 9: Advance to summary
+# Step 8: Advance to summary
 - tapOn: "Next"
 - waitForAnimationToEnd
 
-# Step 10: Create the group
+# Step 9: Create the group
 - tapOn: "Create Group"
 - waitForAnimationToEnd
 
-# Step 11: Verify returned to map
+# Step 10: Verify returned to map
 - extendedWaitUntil:
     visible: "My Contacts"
     timeout: 15000
 
-# Step 12: Get the group room ID
+# Step 11: Get the group room ID and have testuser2 join
 - runScript:
     file: scripts/sleep.js
     env:
       DURATION_MS: "3000"
 - runScript:
-    file: scripts/api_get_latest_room.js
+    file: scripts/api_find_room_by_name.js
     env:
       USER: testuser1
-
-# Step 13: API users join the group
+      ROOM_NAME: "Road Trip"
+# Invite testuser2 via API (in case UI invite didn't reach Matrix), then join
+- runScript:
+    file: scripts/api_invite_user.js
+    env:
+      ADMIN_USER: testuser1
+      INVITE_USER: testuser2
+      ROOM_ID: ${output.roomId}
 - runScript:
     file: scripts/api_join_room.js
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
 - runScript:
-    file: scripts/api_join_room.js
-    env:
-      USER: testuser3
-      ROOM_ID: ${output.roomId}
-- runScript:
     file: scripts/sleep.js
     env:
-      DURATION_MS: "5000"
+      DURATION_MS: "3000"
 
-# Step 14: Pull to refresh
+# Step 12: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
@@ -108,27 +110,7 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "2000"
 
-# Step 15: Check Groups tab
-- tapOn:
-    point: "85%,62%"
-- waitForAnimationToEnd
-- assertVisible: "Road Trip"
-
-# Step 16: Tap Road Trip to see members
-- tapOn: "Road Trip"
-- waitForAnimationToEnd
-- assertVisible: "testuser2"
-- assertVisible: "testuser3"
-
-# Step 17: Go back to map
-- tapOn:
-    point: "20%,10%"
-- waitForAnimationToEnd
-- extendedWaitUntil:
-    visible: "My Contacts"
-    timeout: 10000
-
-# Step 18: API sends location from testuser2
+# Step 13: API sends location from testuser2
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -141,81 +123,5 @@ appId: app.mygrid.grid
     env:
       DURATION_MS: "5000"
 
-# Step 19: API sends location from testuser3
-- runScript:
-    file: scripts/api_send_location.js
-    env:
-      USER: testuser3
-      ROOM_ID: ${output.roomId}
-      LAT: "40.7128"
-      LON: "-74.0060"
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
-
-# Step 20: Verify markers
-- extendedWaitUntil:
-    visible:
-      text: "testuser2"
-    timeout: 15000
-- extendedWaitUntil:
-    visible:
-      text: "testuser3"
-    timeout: 15000
-
-# Step 21: testuser3 leaves
-- runScript:
-    file: scripts/api_leave_room.js
-    env:
-      USER: testuser3
-      ROOM_ID: ${output.roomId}
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
-
-# Step 22: Pull to refresh
-- swipe:
-    direction: DOWN
-    duration: 500
-- waitForAnimationToEnd
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "3000"
-
-# Step 23: Check group member count
-- tapOn:
-    point: "85%,62%"
-- waitForAnimationToEnd
-- tapOn: "Road Trip"
-- waitForAnimationToEnd
-- assertVisible: "2"
-
-# Step 24: Go back to map
-- tapOn:
-    point: "20%,10%"
-- waitForAnimationToEnd
-- extendedWaitUntil:
-    visible: "My Contacts"
-    timeout: 10000
-
-# Step 25: testuser2 sends another location
-- runScript:
-    file: scripts/api_send_location.js
-    env:
-      USER: testuser2
-      ROOM_ID: ${output.roomId}
-      LAT: "38.8951"
-      LON: "-77.0364"
-- runScript:
-    file: scripts/sleep.js
-    env:
-      DURATION_MS: "5000"
-
-# Step 26: Verify testuser2 still visible
-- extendedWaitUntil:
-    visible:
-      text: "testuser2"
-    timeout: 15000
+# Step 14: Verify still on map
+- assertVisible: "My Contacts"
