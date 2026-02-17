@@ -15,7 +15,10 @@ appId: app.mygrid.grid
     point: "60%,62%"
 - waitForAnimationToEnd
 
-# Switch to Create Group tab
+# Wait for modal to fully appear, then switch to Create Group tab
+- extendedWaitUntil:
+    visible: "Add Contact"
+    timeout: 5000
 - tapOn: "Create Group"
 - waitForAnimationToEnd
 

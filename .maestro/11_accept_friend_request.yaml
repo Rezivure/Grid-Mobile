@@ -19,7 +19,10 @@ env:
       TO_USER: testuser1
       MAESTRO_DIR: ${MAESTRO_DIR}
 
-- wait: 3000  # Give sync time
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"   # Give sync time
 
 # Pull to refresh to sync new invites
 - swipe:

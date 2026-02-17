@@ -19,14 +19,20 @@ env:
       FROM_USER: testuser2
       TO_USER: testuser1
       MAESTRO_DIR: ${MAESTRO_DIR}
-- wait: 3000  # Give sync time
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"   # Give sync time
 
 # Step 2: Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- wait: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 
 # Step 3: Tap notification bell to see friend request
 - tapOn:
@@ -66,7 +72,10 @@ env:
       LAT: "40.7580"
       LON: "-73.9855"
       MAESTRO_DIR: ${MAESTRO_DIR}
-- wait: 5000  # Allow time for Matrix sync and UI update
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"   # Allow time for Matrix sync and UI update
 
 # Step 9: Verify testuser2's location marker appears on map
 - extendedWaitUntil:
@@ -83,7 +92,10 @@ env:
       LAT: "40.7829"
       LON: "-73.9654"
       MAESTRO_DIR: ${MAESTRO_DIR}
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 11: Verify marker still visible
 - extendedWaitUntil:
@@ -103,7 +115,10 @@ env:
 - waitForAnimationToEnd
 
 # Step 14: Send another location to verify real-time updates
-- wait: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 - runScript:
     file: scripts/api_send_location.js
     env:
@@ -112,7 +127,10 @@ env:
       LAT: "40.7614"
       LON: "-73.9776"
       MAESTRO_DIR: ${MAESTRO_DIR}
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 15: Final verification - location still visible
 - extendedWaitUntil:
@@ -127,7 +145,10 @@ env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
       MAESTRO_DIR: ${MAESTRO_DIR}
-- wait: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 17: Verify back on map screen
 - extendedWaitUntil:
