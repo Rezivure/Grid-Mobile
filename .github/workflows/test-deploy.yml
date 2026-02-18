@@ -1,0 +1,44 @@
+name: Test Deploy (temporary)
+
+on:
+  push:
+    branches:
+      - fix/ci-ruby-compat
+
+jobs:
+  test-deploy:
+    name: Test Deploy (Ruby 3.3 fix)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Set up Fastlane secrets
+        run: |
+          mkdir -p fastlane/keys
+          cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
+          cp "$HOME/.fastlane-secrets/.env" fastlane/.env
+
+      - name: Build & Upload iOS to TestFlight
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane ios beta
+
+      - name: Build & Upload Android to Play Store Internal
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane android beta
