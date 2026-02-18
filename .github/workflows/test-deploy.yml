@@ -53,7 +53,8 @@ jobs:
           mkdir -p fastlane/keys
           cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
           cp "$HOME/.fastlane-secrets/.env" fastlane/.env
-
+          cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
+          cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
       - name: Build & Upload iOS to TestFlight
         run: |
           export LC_ALL=en_US.UTF-8
