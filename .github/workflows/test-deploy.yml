@@ -1,0 +1,75 @@
+name: Test Deploy (temporary)
+
+on:
+  push:
+    branches:
+      - fix/ci-ruby-compat
+
+jobs:
+  test-deploy:
+    name: Test Deploy (Ruby 3.3 fix)
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env
+        run: |
+          cat > .env << 'ENVEOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          ENVEOF
+
+      - name: Set up Android signing
+        run: |
+          cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
+          cp "$HOME/.fastlane-secrets/grid-prod-key.jks" android/app/grid-prod-key.jks
+
+      - name: Install signing certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
+
+      - name: Set up Fastlane secrets
+        run: |
+          mkdir -p fastlane/keys
+          cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
+          cp "$HOME/.fastlane-secrets/.env" fastlane/.env
+          cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
+          cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
+      - name: Build & Upload iOS to TestFlight
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane ios beta
+
+      - name: Build & Upload Android to Play Store Internal
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane android beta
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
