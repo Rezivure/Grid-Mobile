@@ -193,6 +193,12 @@ jobs:
             build/app/outputs/
           retention-days: 30
 
+      - name: Set up Fastlane secrets
+        run: |
+          mkdir -p fastlane/keys
+          cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
+          cp "$HOME/.fastlane-secrets/.env" fastlane/.env
+
       - name: Upload to TestFlight (iOS)
         if: success()
         run: |
