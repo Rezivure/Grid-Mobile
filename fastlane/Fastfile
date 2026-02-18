@@ -5,7 +5,7 @@ def api_key
   app_store_connect_api_key(
     key_id: ENV["ASC_KEY_ID"],
     issuer_id: ENV["ASC_ISSUER_ID"],
-    key_filepath: File.join(Dir.pwd, ENV["ASC_KEY_FILE"] || "AuthKey.p8"),
+    key_filepath: File.join(Dir.pwd, ENV["ASC_KEY_FILE"] || "keys/AuthKey.p8"),
     in_house: false
   )
 end
