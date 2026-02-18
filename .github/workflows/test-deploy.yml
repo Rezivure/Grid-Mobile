@@ -23,6 +23,9 @@ jobs:
           VERSION_CHECK_URL=https://version.mygrid.app
           ENVEOF
 
+      - name: Set up Android signing
+        run: cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
+
       - name: Install signing certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
