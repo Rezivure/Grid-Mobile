@@ -114,12 +114,12 @@ jobs:
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
-          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          export PATH="/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane ios beta
 
       - name: Build & Upload Android to Play Store Internal
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
-          export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/bin:$PATH"
+          export PATH="/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane android beta
