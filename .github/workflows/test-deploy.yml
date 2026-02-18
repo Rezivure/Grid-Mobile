@@ -24,7 +24,9 @@ jobs:
           ENVEOF
 
       - name: Set up Android signing
-        run: cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
+        run: |
+          cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
+          cp "$HOME/.fastlane-secrets/grid-prod-key.jks" android/app/grid-prod-key.jks
 
       - name: Install signing certificate
         env:
