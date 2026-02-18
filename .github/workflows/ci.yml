@@ -104,6 +104,12 @@ jobs:
           VERSION_CHECK_URL=https://version.mygrid.app
           EOF
 
+      - name: Set up Fastlane secrets
+        run: |
+          mkdir -p fastlane/keys
+          cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
+          cp "$HOME/.fastlane-secrets/.env" fastlane/.env
+
       - name: Build & Upload iOS to TestFlight
         run: |
           export LC_ALL=en_US.UTF-8
