@@ -11,6 +11,13 @@
     <key>uploadSymbols</key>
     <true/>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>signingCertificate</key>
+    <string>Apple Distribution</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>app.mygrid.grid</key>
+        <string>Grid Appstore (CI)</string>
+    </dict>
 </dict>
 </plist>
