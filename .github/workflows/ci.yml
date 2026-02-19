@@ -134,12 +134,17 @@ jobs:
           # Add to search list
           security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
 
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$HOME/.fastlane-secrets/Grid_Appstore_CI.mobileprovision" \
+            ~/Library/MobileDevice/Provisioning\ Profiles/fafae38f-8ebf-4447-8eb7-ba01d807e6bb.mobileprovision
+
       - name: Set up Fastlane secrets
         run: |
           mkdir -p fastlane/keys
           cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
           cp "$HOME/.fastlane-secrets/.env" fastlane/.env
-          cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
           cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
       - name: Build & Upload iOS to TestFlight
         run: |
