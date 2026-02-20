@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for the incognito state to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Check contacts drawer for testuser2's status
 - tapOn: "My Contacts"

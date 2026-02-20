@@ -33,7 +33,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - assertVisible:
     id: "notification_count"
@@ -109,13 +108,12 @@ appId: app.mygrid.grid
     setup_friend_request_notification
     wait_for_sync 3
 
-- waitForAnimationToEnd: 4000
+- waitForAnimationToEnd
 
 # Notification badge should reappear
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 # Tap notification area again
 - tapOn:
@@ -237,13 +235,12 @@ appId: app.mygrid.grid
     setup_multiple_friend_requests 3
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Should see notification badge with count > 1
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 # Badge should show multiple notifications
 - runFlow:

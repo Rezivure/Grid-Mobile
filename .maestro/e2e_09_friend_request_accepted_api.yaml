@@ -29,7 +29,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 # Should show multiple friend requests
 - assertVisible:
@@ -212,7 +211,7 @@ appId: app.mygrid.grid
     echo "✓ Both accepted contacts sent locations"
 
 # Wait for locations to appear
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Refresh contacts view
 - tapOn:
@@ -237,7 +236,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should see both accepted friends' locations on map
 - assertVisible: "testuser2"
@@ -296,7 +295,7 @@ appId: app.mygrid.grid
     echo "✓ Ongoing relationship verified - contacts can interact freely"
 
 # Wait for updates
-- waitForAnimationToEnd: 6000
+- waitForAnimationToEnd
 
 # Should see location update for testuser3
 - assertVisible: "testuser3"
@@ -314,13 +313,12 @@ appId: app.mygrid.grid
     
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Should see new friend request notification
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - tapOn:
     point: "90%,10%"

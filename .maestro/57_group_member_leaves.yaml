@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for group state changes to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Go to contacts to check group status
 - tapOn: "My Contacts"

@@ -7,10 +7,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for location to load and be visible on map
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # Check that location icon/marker is present on the map
 # This verifies that location sharing is working
@@ -47,7 +46,6 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Verify we're back on the map screen with location visible
 - assertVisible: "My Contacts"

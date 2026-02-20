@@ -31,7 +31,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 - tapOn:
     point: "90%,10%"
@@ -71,7 +70,7 @@ appId: app.mygrid.grid
     echo "✓ Group is active with 4 members sharing locations"
 
 # Wait for group activity to appear
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Verify group is active and visible
 - tapOn: "My Contacts"
@@ -112,7 +111,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should see group members' locations on map
 - assertVisible: "testuser2"
@@ -164,7 +163,7 @@ appId: app.mygrid.grid
     wait_for_sync 8
 
 # Wait for kick to take effect
-- waitForAnimationToEnd: 10000
+- waitForAnimationToEnd
 
 # Group should disappear from map - members' locations should be gone
 - assertNotVisible: "testuser2"
@@ -240,13 +239,12 @@ appId: app.mygrid.grid
     
     wait_for_sync 5
 
-- waitForAnimationToEnd: 6000
+- waitForAnimationToEnd
 
 # Should see notification for direct contact
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 # Accept direct contact
 - tapOn:
@@ -261,7 +259,7 @@ appId: app.mygrid.grid
     point: "30,100"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should now see testuser2 as individual contact on map
 - assertVisible: "testuser2"
@@ -309,13 +307,12 @@ appId: app.mygrid.grid
     
     wait_for_sync 5
 
-- waitForAnimationToEnd: 6000
+- waitForAnimationToEnd
 
 # Should see group invitation again
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - tapOn:
     point: "90%,10%"
@@ -348,7 +345,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should see group members again
 - assertVisible: "testuser2"
@@ -380,7 +377,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Group should disappear again
 - tapOn: "My Contacts"

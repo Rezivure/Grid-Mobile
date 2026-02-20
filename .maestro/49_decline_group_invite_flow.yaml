@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for invite to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Check for notification indicating group invite
 - assertVisible:
@@ -61,7 +60,7 @@ appId: app.mygrid.grid
     optional: true
 
 # Wait for UI to update after decline
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # The invitation should disappear from the list
 - assertNotVisible: "Declined Test Group"
@@ -80,7 +79,6 @@ appId: app.mygrid.grid
 # Verify we're back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Verify the group does NOT appear in contacts
 - tapOn: "My Contacts"

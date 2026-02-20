@@ -28,7 +28,7 @@ appId: app.mygrid.grid
 
 # Ensure we're on the map screen
 - assertVisible: "My Contacts"
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # Should see notification badge indicating new contact/location
 - runFlow:
@@ -54,12 +54,11 @@ appId: app.mygrid.grid
           point: "30,100"  # Close notifications
 
 # Wait for location to appear on map
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should now see testuser2's location marker on the map
 - assertVisible:
     text: "testuser2"
-    timeout: 10000
 
 # Look for the user's location marker/pin
 - assertVisible:
@@ -178,4 +177,3 @@ appId: app.mygrid.grid
 # Marker should still be visible after map interaction
 - assertVisible:
     text: "testuser2"
-    timeout: 5000

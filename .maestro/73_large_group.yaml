@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Large Group"
-tags: [release, stress, groups]
-
-# Test: create group with 10 members via API → all send locations → verify all markers, scroll member list
 ---
 
 # Ensure app is running and logged in
@@ -43,11 +39,9 @@ tags: [release, stress, groups]
       ./api_send_location.sh testuser10 40.7589 -73.9846 &
       ./api_send_location.sh testuser11 40.7590 -73.9845 &
       wait
-    timeout: 45000
 
 # Wait for group and locations to sync
-- waitForAnimationToEnd:
-    timeout: 20000
+- waitForAnimationToEnd
 
 # Verify map can handle large group
 - assertVisible: "Map"

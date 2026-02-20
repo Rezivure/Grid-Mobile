@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Rapid App Switching"
-tags: [release, lifecycle, stability]
-
-# Test: foreground/background 5 times rapidly → app still stable, map still correct
 ---
 
 # Ensure app is running and logged in
@@ -17,47 +13,40 @@ tags: [release, lifecycle, stability]
       ./api_login.sh testuser2 testpass123
       ./api_send_friend_request.sh testuser2 testuser1
       ./api_send_location.sh testuser2 40.7580 -73.9855
-    timeout: 10000
 
 # Wait for location to appear
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Rapid switching sequence - 5 cycles
 - stopApp
 - delay: 500
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp  
 - delay: 500
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
 - delay: 500  
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
 - delay: 500
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
 - delay: 500
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 
 # Verify app is still stable and functional
 - assertVisible: "Map"

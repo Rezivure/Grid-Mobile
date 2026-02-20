@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Location Persistence Across Restart"
-tags: [release, persistence, location]
-
-# Test: friends share locations → kill app → relaunch → last known locations still shown
 ---
 
 # Ensure app is running and logged in
@@ -22,11 +18,9 @@ tags: [release, persistence, location]
       # Send specific locations we'll verify after restart
       ./api_send_location.sh testuser2 40.7580 -73.9855
       ./api_send_location.sh testuser3 40.7614 -73.9776
-    timeout: 15000
 
 # Wait for locations to sync and appear
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 - assertVisible: "testuser3"
 
@@ -42,8 +36,7 @@ tags: [release, persistence, location]
 
 # Relaunch app
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify we're still logged in
 - assertVisible: "Map"
@@ -73,11 +66,9 @@ tags: [release, persistence, location]
     script: |
       cd .maestro/helpers
       ./api_send_location.sh testuser2 40.7590 -73.9865
-    timeout: 10000
 
 # Verify new location update is received
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Final verification that persistence + live updates both work

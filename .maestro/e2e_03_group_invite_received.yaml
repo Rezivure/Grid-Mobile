@@ -33,7 +33,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 - assertVisible:
     id: "notification_count"
@@ -118,13 +117,12 @@ appId: app.mygrid.grid
     setup_group_invite "Movie Night Group" 1800
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Should see notification badge again
 - extendedWaitUntil:
     visible:
       id: "notification_badge"  
-    timeout: 8000
 
 # Tap notification
 - tapOn:
@@ -271,7 +269,7 @@ appId: app.mygrid.grid
     fi
 
 # Wait for group location to appear
-- waitForAnimationToEnd: 4000
+- waitForAnimationToEnd
 
 # Should see group members' locations
 - assertVisible:

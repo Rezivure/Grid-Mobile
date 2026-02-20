@@ -49,7 +49,6 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 15000
 
 # Accept friend requests from API setup
 - tapOn:
@@ -166,7 +165,6 @@ appId: app.mygrid.grid
 # Back to map - Marcus should see he's in private mode
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Check for privacy indicator on main screen
 - assertVisible:
@@ -192,7 +190,7 @@ appId: app.mygrid.grid
 
 # Step 41-50: Simulate weekend passing - privacy maintained
 # Simulate time passage and Marcus enjoying private weekend
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Marcus can optionally check that friends are still active without revealing himself
 - runFlow:
@@ -271,7 +269,6 @@ appId: app.mygrid.grid
 # Back to map - privacy indicator should be gone
 - extendedWaitUntil:
     visible: "My Contacts" 
-    timeout: 5000
 
 - assertNotVisible:
     text: "Private"

@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Rapid Location Updates"
-tags: [release, stress, location]
-
-# Test: API sends 20+ location updates for one user in quick succession → app doesn't crash, shows latest position
 ---
 
 # Ensure app is running and logged in
@@ -17,11 +13,9 @@ tags: [release, stress, location]
       ./api_login.sh testuser2 testpass123
       ./api_send_friend_request.sh testuser2 testuser1
       ./api_send_location.sh testuser2 40.7580 -73.9855
-    timeout: 10000
 
 # Wait for friend to appear
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Send rapid burst of location updates simulating movement
@@ -58,11 +52,9 @@ tags: [release, stress, location]
       
       # Final position
       ./api_send_location.sh testuser2 40.7600 -73.9835
-    timeout: 20000
 
 # Wait for rapid updates to process
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Verify app didn't crash and is still functional
 - assertVisible: "Map"

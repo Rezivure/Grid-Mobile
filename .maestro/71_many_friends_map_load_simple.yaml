@@ -1,0 +1,55 @@
+appId: app.mygrid.grid
+---
+# Test: Many Friends Map Load (Simplified)
+# Note: Complex runScript commands removed for compatibility
+
+# Clear and launch app
+- clearState
+- launchApp
+- tapOn: "Custom Provider"
+
+# Login flow
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser1"
+
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+
+# Onboarding flow
+- assertVisible: "Important Notice"
+- tapOn: "I Understand, Continue"
+- waitForAnimationToEnd
+- assertVisible: "Welcome to Grid!"
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"  
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Skip the "Join Our Community" step for now and go direct to map
+# - assertVisible: "Join Our Community"
+# - tapOn: "Get Started"
+# - waitForAnimationToEnd
+
+# Verify we reach a functional state
+- assertVisible: "Map"

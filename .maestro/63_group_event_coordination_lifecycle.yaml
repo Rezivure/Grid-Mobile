@@ -53,7 +53,6 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 15000
 
 # Accept Alex as friend first
 - tapOn:
@@ -106,7 +105,6 @@ appId: app.mygrid.grid
 # Step 26-35: Sarah checks group status and coordinates
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 - tapOn: "My Contacts"
 - waitForAnimationToEnd
@@ -163,7 +161,7 @@ appId: app.mygrid.grid
     wait_for_sync 3
 
 # Sarah sees group membership update (now 4 people)
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 - assertVisible:
     text: "4 members"
     optional: true
@@ -179,7 +177,7 @@ appId: app.mygrid.grid
     wait_for_sync 3
 
 # Group stays at 4 (Tom, Mike, Emma, Sarah) - Jake is out
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Sarah can message the group to coordinate
 - assertVisible: "Message Group"
@@ -267,7 +265,7 @@ appId: app.mygrid.grid
 
 # Step 61-65: Event completion and expiry handling
 # Wait and simulate time passing (group event winds down)
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Check group one more time to see final attendees
 - tapOn: "My Contacts"

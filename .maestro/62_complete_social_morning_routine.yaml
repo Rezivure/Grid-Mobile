@@ -49,7 +49,6 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 15000
 
 # Accept any pending friend requests first (Jake, Mike, Sarah from API setup)
 - tapOn:
@@ -76,7 +75,7 @@ appId: app.mygrid.grid
     point: "30,100"
     optional: true
 - waitForAnimationToEnd
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Step 11-18: User analyzes friend locations for social planning
 - tapOn: "My Contacts"
@@ -223,7 +222,6 @@ appId: app.mygrid.grid
 # Back to map, check for group invitation notification
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 - tapOn:
     point: "90%,10%"
@@ -258,7 +256,6 @@ appId: app.mygrid.grid
 # Step 46-50: User verifies all changes are reflected
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Check contacts to see status updates
 - tapOn: "My Contacts"

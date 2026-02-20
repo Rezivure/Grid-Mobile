@@ -29,7 +29,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 - tapOn:
     point: "90%,10%"
@@ -44,7 +43,7 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Wait for initial status to settle
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Check initial presence status (should be online/active)
 - tapOn: "My Contacts"
@@ -84,7 +83,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Force refresh of contacts list
 - tapOn:
@@ -161,7 +160,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # On map, should still see location but with different status
 - assertVisible: "testuser2"
@@ -208,7 +207,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 8
 
-- waitForAnimationToEnd: 10000
+- waitForAnimationToEnd
 
 # Check offline status in contacts
 - tapOn: "My Contacts"
@@ -261,7 +260,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 8
 
-- waitForAnimationToEnd: 10000
+- waitForAnimationToEnd
 
 # Refresh contacts view
 - tapOn:
@@ -328,7 +327,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should see updated location on map
 - assertVisible: "testuser2"
@@ -370,13 +369,12 @@ appId: app.mygrid.grid
     
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Accept group invitation
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - tapOn:
     point: "90%,10%"
@@ -437,7 +435,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Navigate away and back to refresh
 - tapOn:

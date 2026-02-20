@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for notification to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Check notification bell at top right (should show badge/number)
 # The bell icon should have a notification indicator
@@ -94,7 +93,6 @@ appId: app.mygrid.grid
 # Verify we're back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Check if notification badge is cleared after accepting
 - assertNotVisible:

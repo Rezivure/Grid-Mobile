@@ -29,7 +29,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - tapOn:
     point: "90%,10%"
@@ -94,11 +93,11 @@ appId: app.mygrid.grid
     echo "✓ Display name change should have propagated"
 
 # Wait for the display name change to propagate
-- waitForAnimationToEnd: 10000
+- waitForAnimationToEnd
 
 # Force a refresh by navigating and coming back
 - tapOn: "My Contacts"
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # Should now see the updated display name in contacts
 - assertVisible: "Pizza Lover"
@@ -136,7 +135,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # If location is visible on map, should show new display name
 - runFlow:
@@ -159,13 +158,12 @@ appId: app.mygrid.grid
     
     wait_for_sync 5
 
-- waitForAnimationToEnd: 6000
+- waitForAnimationToEnd
 
 # Should see group invitation with updated display name
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 8000
 
 - tapOn:
     point: "90%,10%"
@@ -227,7 +225,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 8
 
-- waitForAnimationToEnd: 10000
+- waitForAnimationToEnd
 
 # Force refresh by navigating away and back
 - tapOn:
@@ -269,7 +267,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Should see updated name on map marker
 - runFlow:
@@ -347,7 +345,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Navigate away and back to force refresh
 - tapOn:
@@ -390,7 +388,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Final refresh
 - tapOn:

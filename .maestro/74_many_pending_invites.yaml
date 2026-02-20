@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Many Pending Invites"
-tags: [release, stress, notifications]
-
-# Test: API sends 8+ friend requests + 3 group invites → notification handling, scrolling invite list
 ---
 
 # Ensure app is running and logged in
@@ -43,16 +39,13 @@ tags: [release, stress, notifications]
       ./api_join_room.sh testuser1 "InviteGroup2" &
       ./api_join_room.sh testuser1 "InviteGroup3" &
       wait
-    timeout: 30000
 
 # Wait for all invites to sync
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Check notification bell - should show many pending invites
 - tapOn: "Notifications"
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 
 # Verify we can see multiple friend requests
 - assertVisible: "testuser2"

@@ -20,7 +20,6 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Accept the friend request first
 - tapOn:
@@ -42,7 +41,7 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Wait for location trail data to load
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Go to contacts to see location history
 - tapOn: "My Contacts"

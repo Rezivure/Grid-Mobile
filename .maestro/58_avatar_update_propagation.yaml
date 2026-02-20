@@ -20,10 +20,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for avatar changes to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Accept the friend request first to establish contact
 - tapOn:

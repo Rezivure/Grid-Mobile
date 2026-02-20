@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Slow Sync"
-tags: [release, network, sync]
-
-# Test: API sends many events while app is open → verify they all arrive eventually
 ---
 
 # Ensure app is running and logged in
@@ -27,11 +23,9 @@ tags: [release, network, sync]
       ./api_send_location.sh testuser2 40.7580 -73.9855
       ./api_send_location.sh testuser3 40.7590 -73.9865
       ./api_send_location.sh testuser4 40.7600 -73.9875
-    timeout: 20000
 
 # Wait for initial sync
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Now flood the system with events while app is open
@@ -53,7 +47,6 @@ tags: [release, network, sync]
         sleep 18; ./api_send_location.sh testuser4 40.7603 -73.9878
         sleep 20; ./api_send_location.sh testuser2 40.7584 -73.9859
       ) &
-    timeout: 30000
 
 # While events are being sent, interact with app to test responsiveness
 - delay: 3000
@@ -114,11 +107,9 @@ tags: [release, network, sync]
     script: |
       cd .maestro/helpers
       ./api_send_location.sh testuser2 40.7590 -73.9870
-    timeout: 10000
 
 # Should eventually receive the final update
-- waitForAnimationToEnd:
-    timeout: 12000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Final verification that app is stable after slow sync test

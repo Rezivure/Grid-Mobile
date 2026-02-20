@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: App Backgrounded Friend Request"
-tags: [release, background, friend_request]
-
-# Test: background app → API sends friend request → foreground → notification/invite visible
 ---
 
 # Ensure app is running and logged in
@@ -20,15 +16,13 @@ tags: [release, background, friend_request]
       cd .maestro/helpers
       ./api_login.sh testuser6 testpass123
       ./api_send_friend_request.sh testuser6 testuser1
-    timeout: 10000
 
 # Wait for notification to propagate
 - delay: 3000
 
 # Foreground app
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Check notification bell for friend request
 - tapOn: "Notifications"

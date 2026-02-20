@@ -1,15 +1,9 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Full Regression Journey"
-tags: [release, regression, comprehensive]
-
-# THE definitive "does Grid work" test
-# Test: 50+ step mega-flow: login → add friend → create group → receive invite → accept → share locations → verify map → change display name → toggle incognito → sign out → sign back in → verify state
 ---
 
 # PART 1: Fresh Start and Login
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # If we see welcome screen, complete onboarding
 - tapOn: 
@@ -36,8 +30,7 @@ tags: [release, regression, comprehensive]
 - waitForAnimationToEnd
 - inputText: "testpass123"  
 - tapOn: "Sign In"
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Should reach map
 - assertVisible: "Map"
@@ -47,8 +40,7 @@ tags: [release, regression, comprehensive]
 - waitForAnimationToEnd
 - inputText: "testuser2"
 - tapOn: "Send Request"
-- waitForAnimationToEnd:
-    timeout: 5000
+- waitForAnimationToEnd
 
 # Close modal
 - tapOn: "Cancel"
@@ -60,11 +52,9 @@ tags: [release, regression, comprehensive]
       cd .maestro/helpers
       ./api_login.sh testuser3 testpass123
       ./api_send_friend_request.sh testuser3 testuser1
-    timeout: 15000
 
 # Wait for friend request
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 
 # Check notifications
 - tapOn: "Notifications"
@@ -91,8 +81,7 @@ tags: [release, regression, comprehensive]
 # Select friend to invite
 - tapOn: "testuser3"
 - tapOn: "Create"
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 
 # Should return to map
 - assertVisible: "Map"
@@ -104,11 +93,9 @@ tags: [release, regression, comprehensive]
       ./api_login.sh testuser4 testpass123
       ./api_create_group.sh testuser4 "InviteTestGroup" 7200
       ./api_join_room.sh testuser1 "InviteTestGroup"
-    timeout: 15000
 
 # Wait for group invite
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 
 # Check notifications for group invite
 - tapOn: "Notifications"
@@ -130,11 +117,9 @@ tags: [release, regression, comprehensive]
       # Multiple friends send locations
       ./api_send_location.sh testuser3 40.7580 -73.9855
       ./api_send_location.sh testuser4 40.7590 -73.9865
-    timeout: 15000
 
 # Wait for locations to appear
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Verify markers on map
 - assertVisible: "testuser3"
@@ -206,11 +191,9 @@ tags: [release, regression, comprehensive]
       cd .maestro/helpers
       ./api_send_location.sh testuser3 40.7585 -73.9860
       ./api_send_location.sh testuser4 40.7595 -73.9870
-    timeout: 10000
 
 # Should still receive locations in incognito
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser3"
 - assertVisible: "testuser4"
 
@@ -227,8 +210,7 @@ tags: [release, regression, comprehensive]
 
 # Confirm sign out
 - tapOn: "Sign Out"
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Should return to welcome screen
 - assertVisible: "Welcome to Grid"
@@ -248,8 +230,7 @@ tags: [release, regression, comprehensive]
 - waitForAnimationToEnd
 - inputText: "testpass123"
 - tapOn: "Sign In"
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # PART 13: Verify State After Re-login
 - assertVisible: "Map"
@@ -292,11 +273,9 @@ tags: [release, regression, comprehensive]
       cd .maestro/helpers
       ./api_send_location.sh testuser3 40.7600 -73.9880
       ./api_send_location.sh testuser4 40.7610 -73.9890
-    timeout: 10000
 
 # Should receive new locations
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser3"
 - assertVisible: "testuser4"
 

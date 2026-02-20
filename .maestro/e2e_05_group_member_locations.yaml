@@ -34,7 +34,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 10000
 
 # Accept the group invitation
 - tapOn:
@@ -78,7 +77,7 @@ appId: app.mygrid.grid
     echo "✓ Group location sharing setup complete"
 
 # Wait for locations to appear on map
-- waitForAnimationToEnd: 8000
+- waitForAnimationToEnd
 
 # Should now see group members' locations on map
 - assertVisible: "testuser2"
@@ -235,7 +234,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 6
 
-- waitForAnimationToEnd: 7000
+- waitForAnimationToEnd
 
 # Should see updated locations on map
 - assertVisible: "testuser2"
@@ -279,7 +278,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # testuser4 should disappear from map
 - assertNotVisible: "testuser4"
@@ -334,7 +333,7 @@ appId: app.mygrid.grid
     point: "50%,40%"
 - waitForAnimationToEnd
 
-- waitForAnimationToEnd: 6000
+- waitForAnimationToEnd
 
 # Should see the new member on map
 - assertVisible: "testuser5"

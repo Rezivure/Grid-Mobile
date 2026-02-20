@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for invite to propagate
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Check for notification bell badge indicating group invite
 - assertVisible:
@@ -65,7 +64,7 @@ appId: app.mygrid.grid
     optional: true
 
 # Wait for UI to update after acceptance
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # Close notifications modal
 - tapOn:
@@ -81,7 +80,6 @@ appId: app.mygrid.grid
 # Verify we're back on map screen
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Now verify the group appears in contacts drawer
 - tapOn: "My Contacts"

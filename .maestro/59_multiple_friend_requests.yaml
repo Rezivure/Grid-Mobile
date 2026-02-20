@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for all invites to propagate
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Check notification bell should show multiple pending invites
 - assertVisible:
@@ -83,7 +82,7 @@ appId: app.mygrid.grid
     optional: true
 
 # The accepted invite should be removed from the list or marked as accepted
-- waitForAnimationToEnd: 2000
+- waitForAnimationToEnd
 
 # Test declining one invite
 - tapOn: "Decline"
@@ -121,7 +120,6 @@ appId: app.mygrid.grid
 # Back on map, notification badge should be reduced or gone
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 5000
 
 # Should not show the original high number anymore
 - assertNotVisible: "4"

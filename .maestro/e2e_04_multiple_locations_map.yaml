@@ -50,7 +50,6 @@ appId: app.mygrid.grid
 - extendedWaitUntil:
     visible:
       id: "notification_badge"
-    timeout: 12000
 
 # Should show multiple notifications (4 contact requests)
 - assertVisible:
@@ -101,7 +100,7 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Wait for map to load all locations
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Should now see all 4 users on the map
 - assertVisible: "testuser2"
@@ -279,7 +278,7 @@ appId: app.mygrid.grid
     echo "⏳ Waiting for location updates..."
     wait_for_sync 6
 
-- waitForAnimationToEnd: 7000
+- waitForAnimationToEnd
 
 # All users should still be visible with updated locations
 - assertVisible: "testuser2"
@@ -303,7 +302,7 @@ appId: app.mygrid.grid
     
     wait_for_sync 4
 
-- waitForAnimationToEnd: 5000
+- waitForAnimationToEnd
 
 # Should still show both users, possibly clustered
 - assertVisible: "testuser4"

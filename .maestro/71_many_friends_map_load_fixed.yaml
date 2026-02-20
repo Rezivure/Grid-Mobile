@@ -1,0 +1,55 @@
+appId: app.mygrid.grid
+---
+# Test: Many Friends Map Load (Fixed)
+# First get app to logged in state, then test many friends
+
+- clearState
+- launchApp
+- tapOn: "Custom Provider"
+
+# Fill in local server
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+# Username  
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser1"
+
+# Password
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+# Sign in
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+
+# Handle onboarding flow
+- assertVisible: "Important Notice"
+- tapOn: "I Understand, Continue"
+- waitForAnimationToEnd
+- assertVisible: "Welcome to Grid!"
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- assertVisible: "Join Our Community"
+- tapOn: "Get Started"
+- waitForAnimationToEnd
+
+# Now we should be on the map screen
+- assertVisible: "Map"

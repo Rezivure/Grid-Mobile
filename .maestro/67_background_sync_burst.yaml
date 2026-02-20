@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Background Sync Burst"
-tags: [release, sync, performance]
-
-# Test: background app → API sends 5+ location updates from different users → foreground → verify ALL markers appear immediately
 ---
 
 # Ensure app is running and logged in
@@ -22,11 +18,9 @@ tags: [release, sync, performance]
       ./api_send_friend_request.sh testuser3 testuser1  
       ./api_send_friend_request.sh testuser4 testuser1
       ./api_send_friend_request.sh testuser5 testuser1
-    timeout: 20000
 
 # Wait for initial sync
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 
 # Background the app
 - stopApp
@@ -44,7 +38,6 @@ tags: [release, sync, performance]
       ./api_send_location.sh testuser2 40.7585 -73.9860 &
       ./api_send_location.sh testuser3 40.7595 -73.9870 &
       wait
-    timeout: 15000
 
 # Wait for sync to propagate
 - delay: 3000
@@ -53,8 +46,7 @@ tags: [release, sync, performance]
 - launchApp
 
 # Wait for sync to complete
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify all markers appear immediately (all friends should be visible)
 - assertVisible: "Map"

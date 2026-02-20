@@ -16,10 +16,9 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - extendedWaitUntil:
     visible: "My Contacts"
-    timeout: 10000
 
 # Wait for location data to appear
-- waitForAnimationToEnd: 3000
+- waitForAnimationToEnd
 
 # Look for contact/friend marker on map
 # First check if contact appears in contacts drawer

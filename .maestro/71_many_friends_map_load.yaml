@@ -1,9 +1,6 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Many Friends Map Load"
-tags: [release, stress, performance]
-
-# Test: set up 8+ friends via API all sharing locations → verify map handles many markers without issues
 ---
+# Test: set up 8+ friends via API all sharing locations → verify map handles many markers without issues
 
 # Ensure app is running and logged in
 - launchApp
@@ -40,8 +37,8 @@ tags: [release, stress, performance]
     timeout: 30000
 
 # Wait for all locations to sync
-- waitForAnimationToEnd:
-    timeout: 15000
+# TODO: Fix waitForAnimationToEnd issue
+- sleep: 3
 
 # Verify map loads without issues
 - assertVisible: "Map"

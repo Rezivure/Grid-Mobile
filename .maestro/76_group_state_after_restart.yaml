@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Group State After Restart"
-tags: [release, persistence, groups]
-
-# Test: in groups, have activity → kill app → relaunch → groups intact with correct member counts
 ---
 
 # Ensure app is running and logged in
@@ -30,11 +26,9 @@ tags: [release, persistence, groups]
       ./api_send_location.sh testuser2 40.7580 -73.9855
       ./api_send_location.sh testuser3 40.7590 -73.9865
       ./api_send_location.sh testuser4 40.7600 -73.9875
-    timeout: 25000
 
 # Wait for group to sync
-- waitForAnimationToEnd:
-    timeout: 12000
+- waitForAnimationToEnd
 
 # Verify group exists and has activity
 - tapOn: "Groups" 
@@ -62,8 +56,7 @@ tags: [release, persistence, groups]
 
 # Relaunch app
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify we're still logged in
 - assertVisible: "Map"
@@ -97,11 +90,9 @@ tags: [release, persistence, groups]
     script: |
       cd .maestro/helpers
       ./api_send_location.sh testuser2 40.7585 -73.9860
-    timeout: 10000
 
 # Verify group still receives new updates
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Final verification

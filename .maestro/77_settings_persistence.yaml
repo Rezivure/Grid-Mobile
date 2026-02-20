@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Settings Persistence"
-tags: [release, persistence, settings]
-
-# Test: change every setting → kill app → relaunch → all settings preserved
 ---
 
 # Ensure app is running and logged in
@@ -75,8 +71,7 @@ tags: [release, persistence, settings]
 
 # Relaunch app
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify we're still logged in
 - assertVisible: "Map"

@@ -1,9 +1,4 @@
 appId: app.mygrid.grid  
-name: "Pre-Release: Offline Queue"
-tags: [release, network, offline]
-
-# Test: if possible: simulate offline → user tries actions → reconnect → actions complete
-# Note: This test has limited capabilities on simulator, but tests what we can
 ---
 
 # Ensure app is running and logged in
@@ -18,11 +13,9 @@ tags: [release, network, offline]
       ./api_login.sh testuser2 testpass123
       ./api_send_friend_request.sh testuser2 testuser1
       ./api_send_location.sh testuser2 40.7580 -73.9855
-    timeout: 15000
 
 # Wait for friend to appear
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # Try to simulate network interruption by rapid app backgrounding
@@ -33,8 +26,7 @@ tags: [release, network, offline]
 # Try to perform actions that would queue if offline
 # Launch app in potentially degraded network state
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Attempt navigation which tests local caching
 - tapOn: "Settings"
@@ -73,8 +65,7 @@ tags: [release, network, offline]
 - stopApp
 - delay: 2000
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify app recovered and actions completed
 - assertVisible: "Map"
@@ -103,11 +94,9 @@ tags: [release, network, offline]
     script: |
       cd .maestro/helpers
       ./api_send_location.sh testuser2 40.7590 -73.9865
-    timeout: 10000
 
 # Should receive new location (proving connectivity restored)
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 - assertVisible: "testuser2"
 
 # App should be fully functional

@@ -1,8 +1,4 @@
 appId: app.mygrid.grid
-name: "Pre-Release: Incognito Survives Restart"
-tags: [release, persistence, incognito]
-
-# Test: enable incognito → kill app → relaunch → still incognito
 ---
 
 # Ensure app is running and logged in
@@ -51,11 +47,9 @@ tags: [release, persistence, incognito]
       cd .maestro/helpers
       ./api_login.sh testuser2 testpass123
       ./api_send_friend_request.sh testuser2 testuser1
-    timeout: 10000
 
 # Wait for friend to be available
-- waitForAnimationToEnd:
-    timeout: 8000
+- waitForAnimationToEnd
 
 # In incognito mode, we shouldn't be sharing location
 # (This is just setup, actual incognito behavior test)
@@ -66,8 +60,7 @@ tags: [release, persistence, incognito]
 
 # Relaunch app
 - launchApp
-- waitForAnimationToEnd:
-    timeout: 15000
+- waitForAnimationToEnd
 
 # Verify we're still logged in
 - assertVisible: "Map"
