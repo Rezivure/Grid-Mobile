@@ -1,0 +1,1719 @@
+[ {
+  "command" : {
+    "runScriptCommand" : {
+      "script" : "// Send friend request from FROM_USER to TO_USER via Matrix API\nvar cmd = 'cd ' + MAESTRO_DIR + '/helpers && ./api_send_friend_request.sh ' + FROM_USER + ' ' + TO_USER\nvar process = java.lang.Runtime.getRuntime().exec(['/bin/bash', '-c', cmd])\nprocess.waitFor()\n\nvar reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))\nvar errReader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getErrorStream()))\nvar result = '', errResult = '', line\nwhile ((line = reader.readLine()) != null) result += line + '\\n'\nwhile ((line = errReader.readLine()) != null) errResult += line + '\\n'\n\nconsole.log('api_send_friend_request: ' + result.trim())\nif (errResult.trim()) console.log('STDERR: ' + errResult.trim())\nif (process.exitValue() !== 0) throw new Error('api_send_friend_request failed: ' + errResult.trim())\noutput.roomId = result.trim()\n",
+      "env" : {
+        "FROM_USER" : "testuser2",
+        "TO_USER" : "testuser1",
+        "MAESTRO_DIR" : "${MAESTRO_DIR}"
+      },
+      "sourceDescription" : "/Users/rezivure/actions-runner/_work/Grid-Mobile/Grid-Mobile/.maestro/scripts/api_send_friend_request.js",
+      "optional" : false
+    }
+  },
+  "metadata" : {
+    "status" : "FAILED",
+    "timestamp" : 1771332242040,
+    "duration" : 571,
+    "error" : {
+      "stackTrace" : [ {
+        "methodName" : ":program",
+        "fileName" : "/Users/rezivure/actions-runner/_work/Grid-Mobile/Grid-Mobile/.maestro/scripts/api_send_friend_request.js",
+        "lineNumber" : 3,
+        "className" : "<js>",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "eval",
+        "fileName" : "Context.java",
+        "lineNumber" : 402,
+        "className" : "org.graalvm.polyglot.Context",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "evaluateScript",
+        "fileName" : "GraalJsEngine.kt",
+        "lineNumber" : 89,
+        "className" : "maestro.js.GraalJsEngine",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "evaluateScript",
+        "fileName" : "GraalJsEngine.kt",
+        "lineNumber" : 26,
+        "className" : "maestro.js.GraalJsEngine",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runScriptCommand",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 535,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeCommand",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 359,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeCommands",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 252,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runFlow",
+        "fileName" : "Orchestra.kt",
+        "lineNumber" : 170,
+        "className" : "maestro.orchestra.Orchestra",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runCommands",
+        "fileName" : "MaestroCommandRunner.kt",
+        "lineNumber" : 196,
+        "className" : "maestro.cli.runner.MaestroCommandRunner",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "invokeSuspend",
+        "fileName" : "TestRunner.kt",
+        "lineNumber" : 75,
+        "className" : "maestro.cli.runner.TestRunner$runSingle$result$1$1",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "resumeWith",
+        "fileName" : "ContinuationImpl.kt",
+        "lineNumber" : 34,
+        "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "DispatchedTask.kt",
+        "lineNumber" : 104,
+        "className" : "kotlinx.coroutines.DispatchedTask",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "processNextEvent",
+        "fileName" : "EventLoop.common.kt",
+        "lineNumber" : 277,
+        "className" : "kotlinx.coroutines.EventLoopImplBase",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "joinBlocking",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 95,
+        "className" : "kotlinx.coroutines.BlockingCoroutine",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 69,
+        "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking",
+        "lineNumber" : 1,
+        "className" : "kotlinx.coroutines.BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking$default",
+        "fileName" : "Builders.kt",
+        "lineNumber" : 48,
+        "className" : "kotlinx.coroutines.BuildersKt__BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runBlocking$default",
+        "lineNumber" : 1,
+        "className" : "kotlinx.coroutines.BuildersKt",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runSingle$lambda$0",
+        "fileName" : "TestRunner.kt",
+        "lineNumber" : 74,
+        "className" : "maestro.cli.runner.TestRunner",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runCatching-ta8aW1Q",
+        "fileName" : "TestRunner.kt",
+        "lineNumber" : 200,
+        "className" : "maestro.cli.runner.TestRunner",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runSingle",
+        "fileName" : "TestRunner.kt",
+        "lineNumber" : 65,
+        "className" : "maestro.cli.runner.TestRunner",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runSingleFlow",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 531,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runShardSuite$lambda$10",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 500,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "newSession",
+        "fileName" : "MaestroSessionManager.kt",
+        "lineNumber" : 129,
+        "className" : "maestro.cli.session.MaestroSessionManager",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "newSession$default",
+        "fileName" : "MaestroSessionManager.kt",
+        "lineNumber" : 65,
+        "className" : "maestro.cli.session.MaestroSessionManager",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runShardSuite",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 465,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "access$runShardSuite",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 80,
+        "className" : "maestro.cli.command.TestCommand",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "invokeSuspend",
+        "fileName" : "TestCommand.kt",
+        "lineNumber" : 424,
+        "className" : "maestro.cli.command.TestCommand$handleSessions$1$results$1$1",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "resumeWith",
+        "fileName" : "ContinuationImpl.kt",
+        "lineNumber" : 34,
+        "className" : "kotlin.coroutines.jvm.internal.BaseContinuationImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "DispatchedTask.kt",
+        "lineNumber" : 104,
+        "className" : "kotlinx.coroutines.DispatchedTask",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "LimitedDispatcher.kt",
+        "lineNumber" : 111,
+        "className" : "kotlinx.coroutines.internal.LimitedDispatcher$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "Tasks.kt",
+        "lineNumber" : 99,
+        "className" : "kotlinx.coroutines.scheduling.TaskImpl",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runSafely",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 585,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "executeTask",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 802,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "runWorker",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 706,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      }, {
+        "classLoaderName" : "app",
+        "methodName" : "run",
+        "fileName" : "CoroutineScheduler.kt",
+        "lineNumber" : 693,
+        "className" : "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker",
+        "nativeMethod" : false
+      } ],
+      "message" : "TypeError: Cannot read property 'lang' of undefined",
+      "interrupted" : false,
+      "cancelled" : false,
+      "internalError" : false,
+      "exit" : false,
+      "exitStatus" : 0,
+      "syntaxError" : false,
+      "incompleteSource" : false,
+      "guestObject" : {
+        "context" : {
+          "engine" : {
+            "version" : "Development Build",
+            "languages" : {
+              "js" : {
+                "name" : "JavaScript",
+                "id" : "js",
+                "version" : "Development Build",
+                "website" : "https://www.graalvm.org/javascript/",
+                "mimeTypes" : [ "application/javascript", "application/javascript+module", "text/javascript" ],
+                "defaultMimeType" : "application/javascript",
+                "interactive" : true,
+                "options" : [ {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.agent-can-block",
+                  "help" : "Determines whether agents can block or not. (default:true)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.allow-eval",
+                  "help" : "Allow or disallow code generation from strings, e.g. using eval(). (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.allow-narrow-spaces-in-date-format",
+                  "help" : "Allow narrow spaces when formatting dates. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.annex-b",
+                  "help" : "Enable ECMAScript Annex B features. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.async-context",
+                  "help" : "Enable AsyncContext proposal. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.async-iterator-helpers",
+                  "help" : "Enable JavaScript Async Iterator Helpers API. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.async-stack-traces",
+                  "help" : "Include async function frames in stack traces. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.atomics",
+                  "help" : "Enable ECMAScript Atomics. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.atomics-wait-async",
+                  "help" : "Enable Atomics.waitAsync. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.await-optimization",
+                  "help" : "Use PromiseResolve for Await. (default:true)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.bigint",
+                  "help" : "Provide an implementation of the BigInt proposal. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.bind-member-functions",
+                  "help" : "Bind functions returned by Value.getMember to the receiver object. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "CharsetName"
+                    }
+                  },
+                  "name" : "js.charset",
+                  "help" : "Charset used for decoding/encoding of the input/output streams. (default:)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "UTF-8|UTF-32|<name>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.class-fields",
+                  "help" : "Enable the class public and private fields proposal. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "commonjs-require-globals"
+                    }
+                  },
+                  "name" : "js.commonjs-core-modules-replacements",
+                  "help" : "Npm packages used to replace global Node.js builtins. (default:{})",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<name>:<module>,...",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.commonjs-require",
+                  "help" : "Enable CommonJS require emulation. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "String"
+                    }
+                  },
+                  "name" : "js.commonjs-require-cwd",
+                  "help" : "CommonJS default current working directory. (default:)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<path>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.console",
+                  "help" : "Provide 'console' global property. (default:true)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.const-as-var",
+                  "help" : "Parse const declarations as a var (legacy compatibility option). (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.debug-builtin",
+                  "help" : "Provide a non-API Debug builtin. Behaviour will likely change. Don't depend on this in production code. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "String"
+                    },
+                    "defaultValue" : "Debug"
+                  },
+                  "name" : "js.debug-property-name",
+                  "help" : "The name used for the Graal.js debug builtin. (default:Debug)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<name>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.direct-byte-buffer",
+                  "help" : "Use direct (off-heap) byte buffer for typed arrays. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.disable-eval",
+                  "help" : "Disallow code generation from strings, e.g. using eval(). (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.disable-with",
+                  "help" : "User code is not allowed to use the 'with' statement. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "ecmascript-version"
+                    },
+                    "defaultValue" : 15
+                  },
+                  "name" : "js.ecmascript-version",
+                  "help" : "ECMAScript version to be compatible with. Default is 'latest' (latest supported version), staged features are in 'staging'. (default:15)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "latest|staging|[5, 15]|[2015, 2024]",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.error-cause",
+                  "help" : "Enable the error cause proposal. Allows an error to be chained with a cause using the optional options parameter. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.esm-bare-specifier-relative-lookup",
+                  "help" : "Resolve ESM bare specifiers relative to the importing module's path instead of attempting an absolute path lookup. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.esm-eval-returns-exports",
+                  "help" : "Eval of an ES module through the polyglot API returns its exported symbols. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.foreign-hash-properties",
+                  "help" : "Allow getting/setting non-JS hash entries using the `[]` and `.` operators. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.foreign-object-prototype",
+                  "help" : "Non-JS objects have prototype (Object/Function/Array.prototype) set. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 5
+                  },
+                  "name" : "js.frequency-based-property-cache-limit",
+                  "help" : "Maximum size of high-frequency-key property cache. (default:5)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Long"
+                    },
+                    "defaultValue" : 65535
+                  },
+                  "name" : "js.function-arguments-limit",
+                  "help" : "Maximum number of arguments for functions. (default:65535)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 4
+                  },
+                  "name" : "js.function-cache-limit",
+                  "help" : "Maximum allowed size of a function cache. (default:4)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 256
+                  },
+                  "name" : "js.function-constructor-cache-size",
+                  "help" : "Maximum size of the parsing cache used by the Function constructor to avoid re-parsing known sources. (default:256)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.function-statement-error",
+                  "help" : "Treat hoistable function statements in blocks as an error (in ES5 mode). (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.global-arguments",
+                  "help" : "Provide 'arguments' global property. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.global-property",
+                  "help" : "Provide 'global' global property. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.graal-builtin",
+                  "help" : "Provide 'Graal' global property. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.import-attributes",
+                  "help" : "Enable import attributes (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.interop-complete-promises",
+                  "help" : "Resolve promises when crossing a polyglot language boundary. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.intl-402",
+                  "help" : "Enable ECMAScript Internationalization API. (default:true)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.iterator-helpers",
+                  "help" : "Enable JavaScript Iterator Helpers API. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.java-package-globals",
+                  "help" : "Provide Java package globals: Packages, java, javafx, javax, com, org, edu. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.json-modules",
+                  "help" : "Enable loading of json modules (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.lazy-translation",
+                  "help" : "Translate function bodies lazily. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.load",
+                  "help" : "Provide 'load' global function. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.load-from-classpath",
+                  "help" : "Allow 'load' to access 'classpath:' URLs. Do not use with untrusted code. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.load-from-url",
+                  "help" : "Allow 'load' to access URLs. Do not use with untrusted code. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "String"
+                    }
+                  },
+                  "name" : "js.locale",
+                  "help" : "Use a specific default locale for locale-sensitive operations. (default:)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<locale>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 10000000
+                  },
+                  "name" : "js.max-apply-argument-length",
+                  "help" : "Maximum allowed number of arguments allowed in an apply function. (default:10000000)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 32766
+                  },
+                  "name" : "js.max-prototype-chain-length",
+                  "help" : "Maximum allowed length of a prototype chain. (default:32766)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 2147483639
+                  },
+                  "name" : "js.max-typed-array-length",
+                  "help" : "Maximum allowed length for TypedArrays. (default:2147483639)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.mle-mode",
+                  "help" : "Provide a non-API MLE builtin. Behaviour will likely change. Don't depend on this in production code. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.nashorn-compat",
+                  "help" : "Provide compatibility with the OpenJDK Nashorn engine. Do not use with untrusted code. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.new-set-methods",
+                  "help" : "Enable new Set methods. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.operator-overloading",
+                  "help" : "Enable operator overloading (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.parse-only",
+                  "help" : "Only parse source code, do not run it. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.performance",
+                  "help" : "Provide 'performance' global property. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.polyglot-builtin",
+                  "help" : "Provide 'Polyglot' global property. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.polyglot-evalfile",
+                  "help" : "Provide 'Polyglot.evalFile' function. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.print",
+                  "help" : "Provide 'print' global function. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.print-no-newline",
+                  "help" : "Print function will not print new line char. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.private-fields-in",
+                  "help" : "Enable private field in in operator (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.profile-time",
+                  "help" : "Enable time profiling. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.profile-time-print-cumulative",
+                  "help" : "Print cumulative time when time profiling is enabled. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 5
+                  },
+                  "name" : "js.property-cache-limit",
+                  "help" : "Maximum allowed size of a property cache. (default:5)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 128
+                  },
+                  "name" : "js.regex-cache-size",
+                  "help" : "Maximum size of the regex cache used by the RegExp constructor to avoid re-parsing known sources. (default:128)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<int>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regex-regression-test-mode",
+                  "help" : "Test mode for TRegex. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regex.always-eager",
+                  "help" : "Always match capture groups eagerly. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regex.dump-automata",
+                  "help" : "Produce ASTs and automata in JSON, DOT (GraphViz) and LaTeX formats. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regex.step-execution",
+                  "help" : "Trace the execution of automata in JSON files. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regexp-match-indices",
+                  "help" : "Enable RegExp Match Indices property. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.regexp-static-result",
+                  "help" : "Provide last RegExp match in RegExp global var, e.g. RegExp.$1. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.regexp-unicode-sets",
+                  "help" : "Enable RegExp Unicode sets proposal (v flag). (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.scope-optimization",
+                  "help" : "Allow scope optimizations around closures. (default:true)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.script-engine-global-scope-import",
+                  "help" : "Enable ScriptEngine-specific global scope import function. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.scripting",
+                  "help" : "Enable scripting features (Nashorn compatibility option). (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.shadow-realm",
+                  "help" : "Enable ShadowRealm API. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.shared-array-buffer",
+                  "help" : "Enable ECMAScript SharedArrayBuffer. (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.shebang",
+                  "help" : "Allow parsing files starting with #!. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.shell",
+                  "help" : "Provide global functions for js shell. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.stack-trace-api",
+                  "help" : "Enable Stack Trace API (Error.captureStackTrace/prepareStackTrace/stackTraceLimit). (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 10
+                  },
+                  "name" : "js.stack-trace-limit",
+                  "help" : "Number of stack frames to capture. (default:10)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "[0, inf)",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.strict",
+                  "help" : "Enforce strict mode. (default:false)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.string-lazy-substrings",
+                  "help" : "Allow lazy substrings. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Integer"
+                    },
+                    "defaultValue" : 1073741799
+                  },
+                  "name" : "js.string-length-limit",
+                  "help" : "Maximum string length. (default:1073741799)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<chars>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.syntax-extensions",
+                  "help" : "Enable Nashorn syntax extensions. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.temporal",
+                  "help" : "Enable JavaScript Temporal API. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.test-clone-uninitialized",
+                  "help" : "Test uninitialized cloning. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.test262-mode",
+                  "help" : "Expose global property $262 needed to run the Test262 harness. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.testV8-mode",
+                  "help" : "Expose internals needed to run the TestV8 harness. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Long"
+                    },
+                    "defaultValue" : 1000000
+                  },
+                  "name" : "js.timer-resolution",
+                  "help" : "Resolution of timers (performance.now() and Date built-ins) in nanoseconds. Fuzzy time is used when set to 0. (default:1000000)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "<nanoseconds>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "ZoneId"
+                    }
+                  },
+                  "name" : "js.timezone",
+                  "help" : "Set custom time zone ID. (default:)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "<TimeZoneID>",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.top-level-await",
+                  "help" : "Enable top-level-await. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "UnhandledRejectionsTrackingMode"
+                    },
+                    "defaultValue" : "NONE"
+                  },
+                  "name" : "js.unhandled-rejections",
+                  "help" : "Configure unhandled promise rejections tracking. Accepted values: 'none', unhandled rejections are not tracked. 'warn', a warning is printed to stderr when an unhandled rejection is detected. 'throw', an exception is thrown when an unhandled rejection is detected. 'handler', the handler function set with Graal.setUnhandledPromiseRejectionHandler will be called with the rejection value and promise respectively as arguments. (default:none)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "none|warn|throw|handler",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.use-utc-for-legacy-dates",
+                  "help" : "Determines what time zone (UTC or local time zone) should be used when UTC offset is absent in a parsed date. (default:true)",
+                  "category" : "EXPERT",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.v8-compat",
+                  "help" : "Provide compatibility with the Google V8 engine. (default:false)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.v8-intrinsics",
+                  "help" : "Enable parsing of V8 intrinsics. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.v8-realm-builtin",
+                  "help" : "Provide Realm builtin compatible with V8's d8 shell. (default:false)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.validate-regexp-literals",
+                  "help" : "Validate regexp literals at parse time. (default:true)",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "js.wasm-bigint",
+                  "help" : "Enable wasm i64 to javascript BigInt support (default:true)",
+                  "category" : "USER",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.webassembly",
+                  "help" : "Enable WebAssembly JavaScript API. (default:false)",
+                  "category" : "USER",
+                  "stability" : "STABLE",
+                  "deprecated" : false,
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : false
+                  },
+                  "name" : "js.zone-rules-based-time-zones",
+                  "help" : "Use ZoneRulesProvider instead of time-zone data from ICU4J. (default:false)",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "optionMap" : false
+                } ],
+                "implementationName" : "GraalVM JavaScript"
+              }
+            },
+            "instruments" : {
+              "debugger" : {
+                "name" : "Debugger",
+                "id" : "debugger",
+                "version" : "Development Build"
+              },
+              "sandbox" : {
+                "name" : "Sandbox",
+                "id" : "sandbox",
+                "version" : "Development Build",
+                "website" : "https://www.graalvm.org/dev/reference-manual/embed-languages/sandbox-resource-limits/",
+                "options" : [ {
+                  "key" : {
+                    "type" : {
+                      "name" : "Boolean"
+                    },
+                    "defaultValue" : true
+                  },
+                  "name" : "sandbox.AllocatedBytesCheckEnabled",
+                  "help" : "Specifies whether checking of allocated bytes for an execution context is enabled. Is set to 'true' by default.",
+                  "category" : "INTERNAL",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "true|false",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "Double"
+                    },
+                    "defaultValue" : 1.0
+                  },
+                  "name" : "sandbox.AllocatedBytesCheckFactor",
+                  "help" : "Specifies a factor of MaxHeapMemory the allocation of which triggers retained heap memory computation. When allocated bytes for an execution context reach the specified factor, computation of bytes retained in the heap by the context is initiated. Is set to '1.0' by default.",
+                  "category" : "EXPERT",
+                  "stability" : "EXPERIMENTAL",
+                  "deprecated" : false,
+                  "usageSyntax" : "[0.0, inf)",
+                  "optionMap" : false
+                }, {
+                  "key" : {
+                    "type" : {
+                      "name" : "time"
+                    },
+                    "defaultValue"

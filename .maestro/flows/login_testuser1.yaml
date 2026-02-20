@@ -1,0 +1,67 @@
+appId: app.mygrid.grid
+---
+# Reusable login flow for testuser1
+# Gets the app from fresh state to logged in on map screen
+
+- clearState
+- launchApp
+- tapOn: "Custom Provider"
+
+# Fill in local server
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+# Username  
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser1"
+
+# Password
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+# Sign in
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+
+# Handle onboarding flow
+- assertVisible: "Important Notice"
+- tapOn: "I Understand, Continue"
+- waitForAnimationToEnd
+
+- assertVisible: "Welcome to Grid!"
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Handle permissions screen (current state)
+- assertVisible: "Grant Permissions"
+# The Next button is currently disabled, we might need to grant location permission
+# For now, let's try to skip past this
+- delay: 2000
+# Check if Next becomes enabled or handle system permission dialog
+
+# Try tapping Next even if disabled to see what happens
+- tapOn: "Next"
+- delay: 1000
+
+# If we reach a map screen or other expected state
+- assertVisible: "Map"
