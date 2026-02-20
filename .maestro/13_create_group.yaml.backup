@@ -4,10 +4,6 @@ appId: app.mygrid.grid
 # Prerequisite: testuser1 logged in on map screen, testuser2 is a contact
 # Group creation is a 4-step wizard: Name → Duration → Members → Summary
 
-
-# Start with fresh login
-- runFlow: flows/login_testuser1.yaml
-
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:
@@ -26,8 +22,10 @@ appId: app.mygrid.grid
     timeout: 5000
 - tapOn:
     point: "65%,9%"
-- delay: 500
-
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "500"
 - waitForAnimationToEnd
 
 # Step 0: Enter group name

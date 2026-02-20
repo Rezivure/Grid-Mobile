@@ -4,10 +4,6 @@ appId: app.mygrid.grid
 # API sends friend request from testuser2 → Maestro accepts → location sharing via API
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
 
-
-# Start with fresh login
-- runFlow: flows/login_testuser1.yaml
-
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:
@@ -16,17 +12,24 @@ appId: app.mygrid.grid
 
 # Step 1: API sends friend request from testuser2
 - runScript:
-    script: cd .maestro/helpers && ./setup_friend_with_location.sh testuser2
-    timeout: 10000
-
-- delay: 3000
+    file: scripts/api_send_friend_request.js
+    env:
+      FROM_USER: testuser2
+      TO_USER: testuser1
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
 # Step 2: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 2000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "2000"
 
 # Step 3: Tap notification bell
 - tapOn:
@@ -67,14 +70,20 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "40.7580"
       LON: "-73.9855"
-- delay: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 10: Pull to refresh to pick up location
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 3000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
 # Step 11: Verify still on map screen (location received)
 - assertVisible: "My Contacts"
@@ -87,7 +96,10 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "40.7829"
       LON: "-73.9654"
-- delay: 3000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
 
 # Step 13: API user leaves the room (stop sharing)
 - runScript:
@@ -95,7 +107,10 @@ appId: app.mygrid.grid
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
-- delay: 5000
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
 
 # Step 14: Verify back on map screen
 - extendedWaitUntil:

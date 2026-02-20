@@ -4,10 +4,6 @@ appId: app.mygrid.grid
 # API creates group "Beach Day" and invites testuser1 → Maestro accepts → API sends locations for 2 members → verify markers
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
 
-
-# Start with fresh login
-- runFlow: flows/login_testuser1.yaml
-
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:

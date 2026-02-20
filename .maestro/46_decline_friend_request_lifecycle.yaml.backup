@@ -4,10 +4,6 @@ appId: app.mygrid.grid
 # API sends request from testuser3 → Maestro declines → verify gone → API sends another → can re-invite
 # Prerequisites: testuser1 logged in on map screen, local Synapse server running
 
-
-# Start with fresh login
-- runFlow: flows/login_testuser1.yaml
-
 - launchApp
 - waitForAnimationToEnd
 - extendedWaitUntil:

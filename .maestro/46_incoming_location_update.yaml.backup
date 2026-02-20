@@ -5,10 +5,6 @@ appId: app.mygrid.grid
 
 # Requires: testuser1 logged in on map screen, Docker running
 
-
-# Start with fresh login
-- runFlow: flows/login_testuser1.yaml
-
 - runScript: |
     cd test-infra/scripts
     source api-helpers.sh
