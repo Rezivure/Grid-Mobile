@@ -1,0 +1,55 @@
+appId: app.mygrid.grid
+---
+# Test: set up 8+ friends via API all sharing locations → verify map handles many markers without issues
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Set up many friends with locations via helper script
+- runScript:
+    script: cd .maestro/helpers && ./setup_many_friends.sh 2 10
+    timeout: 30000
+
+# Wait for all locations to sync
+- delay: 3000
+
+# Verify map loads without issues
+- assertVisible: "Map"
+
+# Verify we can see multiple friends (at least a few)
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test map performance - zoom in and out
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pinch to zoom (if supported by simulator)
+- waitForAnimationToEnd
+
+# Pan around map to test with many markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+- delay: 1000
+
+- swipe:
+    start: "30%,30%"  
+    end: "70%,70%"
+    duration: 1000
+- delay: 1000
+
+# Verify map is still responsive
+- assertVisible: "Map"
+
+# Test navigation with many friends loaded
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# App should still be stable with many markers
+- assertVisible: "testuser2"

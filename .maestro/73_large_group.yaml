@@ -10,7 +10,7 @@ appId: app.mygrid.grid
     timeout: 30000
 
 # Wait for group and locations to sync
-- delay: 3000
+- wait: 3000
 
 # Verify map can handle large group
 - assertVisible: "Map"
@@ -54,7 +54,7 @@ appId: app.mygrid.grid
 # Test map performance with large group
 - tapOn:
     point: "50%,50%"
-- delay: 1000
+- wait: 1000
 
 # Pan around to see more markers
 - swipe:

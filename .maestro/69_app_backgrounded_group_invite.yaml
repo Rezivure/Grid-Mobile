@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -8,7 +12,7 @@ appId: app.mygrid.grid
 
 # Background the app
 - stopApp
-- delay: 2000
+- wait: 2000
 
 # Create group and invite user via API while app is backgrounded
 - runScript:
@@ -19,7 +23,7 @@ appId: app.mygrid.grid
       ./api_join_room.sh testuser7 "BackgroundTestGroup"
 
 # Wait for group invite to propagate
-- delay: 3000
+- wait: 3000
 
 # Foreground app
 - launchApp

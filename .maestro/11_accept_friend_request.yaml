@@ -12,14 +12,14 @@ appId: app.mygrid.grid
     timeout: 10000
 
 # Wait for friend request to sync
-- delay: 3000
+- wait: 3000
 
 # Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 2000
+- wait: 2000
 
 # Tap the notification bell
 - tapOn:

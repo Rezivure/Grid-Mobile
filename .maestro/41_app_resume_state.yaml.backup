@@ -1,0 +1,28 @@
+appId: app.mygrid.grid
+---
+# Test: Verify app resumes to map screen after relaunch (no clearState)
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Relaunch app (simulates backgrounding)
+- launchApp
+- waitForAnimationToEnd
+
+# Should resume to map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Verify map elements present
+- assertVisible: "Search Contacts"

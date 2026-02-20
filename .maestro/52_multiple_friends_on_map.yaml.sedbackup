@@ -1,0 +1,77 @@
+appId: app.mygrid.grid
+---
+# Test: Multiple friends sharing locations simultaneously on map
+# Set up 3 friends (testuser2, testuser3, testuser4) all sharing locations at different coordinates → verify 3 distinct markers → tap one → verify profile/info shown
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Set up multiple friends with locations using helper script
+- runScript:
+    script: cd .maestro/helpers && ./setup_many_friends.sh 2 4
+    timeout: 30000
+
+# Wait for all friends and locations to sync
+- delay: 5000
+
+# Pull to refresh to ensure everything is loaded
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 3000
+
+# Verify map shows all friends
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3" 
+- assertVisible: "testuser4"
+
+# Test: Tap on first friend marker
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show user profile or location info
+- delay: 2000
+
+# Navigate around the map to see other markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,40%"
+    duration: 1000
+- delay: 1000
+
+# Verify other friends still visible
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test tapping another friend
+- tapOn: "testuser3"
+- waitForAnimationToEnd
+- delay: 2000
+
+# Test map zoom with multiple friends
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pan to show different area of map
+- swipe:
+    start: "40%,40%"
+    end: "60%,60%"
+    duration: 1500
+- delay: 1000
+
+# Verify map performance is good with multiple markers
+- assertVisible: "Map"
+
+# All friends should still be visible or discoverable by panning
+- swipe:
+    start: "60%,60%"
+    end: "40%,40%"
+    duration: 1000
+- delay: 1000
+
+# Final verification - at least 2 friends visible
+- assertVisible: "testuser2"

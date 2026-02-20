@@ -1,0 +1,43 @@
+appId: app.mygrid.grid
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Background the app
+- stopApp
+- delay: 2000
+
+# Send friend request via API while app is backgrounded
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser6 testpass123
+      ./api_send_friend_request.sh testuser6 testuser1
+
+# Wait for notification to propagate
+- delay: 3000
+
+# Foreground app
+- launchApp
+- waitForAnimationToEnd
+
+# Check notification bell for friend request
+- tapOn: "Notifications"
+- waitForAnimationToEnd
+
+# Verify friend request is visible
+- assertVisible: "testuser6"
+- assertVisible: 
+    text: "wants to be friends"
+    optional: true
+
+# Accept the request to clean up
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Return to map
+- tapOn: "Back"
+- assertVisible: "Map"

@@ -1,0 +1,403 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Display name change propagation
+# API: testuser2 changes display name → UI: testuser1 sees updated name everywhere
+# Tests display name synchronization across contacts, groups, and map
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2 account exists
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up initial contact relationship..."
+    
+    # Establish contact relationship first
+    setup_friend_request_notification
+    wait_for_sync 3
+    
+    echo "✓ Contact relationship ready"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Accept the contact request first
+- assertVisible: "My Contacts"
+
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Verify initial display name
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Note the original display name (should be "testuser2" or similar)
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Go back to contacts
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Change display name via API
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 testuser2 changing display name..."
+    
+    # testuser2 changes their display name
+    login_as_user "testuser2"
+    
+    # Use Matrix API to set display name
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/profile/@testuser2:localhost/displayname" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"displayname": "Pizza Lover 🍕"}'
+    
+    echo "✓ Display name changed to 'Pizza Lover 🍕'"
+    
+    # Also send a location so there's activity to trigger sync
+    ROOM_ID=$(grid_create_direct "testuser1" 2>/dev/null || echo "existing")
+    if [ "$ROOM_ID" != "existing" ]; then
+      grid_send_location "$ROOM_ID" 40.7580 -73.9855  # Times Square
+    fi
+    
+    wait_for_sync 8
+    
+    echo "✓ Display name change should have propagated"
+
+# Wait for the display name change to propagate
+- waitForAnimationToEnd
+
+# Force a refresh by navigating and coming back
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should now see the updated display name in contacts
+- assertVisible: "Pizza Lover"
+
+- assertVisible: "🍕"
+
+# Original username should not be visible as display name
+- assertNotVisible:
+    text: "testuser2"
+    optional: true
+
+# Tap on contact to see profile details
+- tapOn: "Pizza Lover"
+- waitForAnimationToEnd
+
+# Profile should show updated display name prominently
+- assertVisible: "Pizza Lover 🍕"
+
+# Should still show matrix ID in profile details
+- assertVisible:
+    text: "@testuser2"
+    optional: true
+
+- assertVisible:
+    text: "testuser2"
+    optional: true
+
+# Go back to contacts
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map to check name on location markers
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# If location is visible on map, should show new display name
+- runFlow:
+    when:
+      visible: "Pizza Lover"
+    commands:
+      - assertVisible: "Pizza Lover"
+      - assertVisible: "🍕"
+
+# Test display name in group context
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Creating group to test display name in group context..."
+    
+    # testuser2 creates a group and invites testuser1
+    login_as_user "testuser2"
+    GROUP_ID=$(grid_create_group "Name Change Test Group" 3600 "testuser1")
+    echo "$GROUP_ID" > /tmp/test_group_room_id
+    
+    wait_for_sync 5
+
+- waitForAnimationToEnd
+
+# Should see group invitation with updated display name
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Invitations"
+
+# Group invite should show updated display name
+- assertVisible: "Pizza Lover"
+- assertVisible: "🍕"
+
+# Should not show old username in invitation
+- assertNotVisible:
+    text: "testuser2"
+    optional: true
+
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Check group member list shows updated name
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "Name Change Test Group"
+- tapOn: "Name Change Test Group"
+- waitForAnimationToEnd
+
+# Group member list should show updated display name
+- assertVisible: "Pizza Lover 🍕"
+
+# Should not show old username
+- assertNotVisible:
+    text: "testuser2"
+    optional: true
+
+# Test another display name change while in group
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 testuser2 changing display name again..."
+    
+    # Change to another display name
+    login_as_user "testuser2"
+    
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/profile/@testuser2:localhost/displayname" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"displayname": "Taco Master 🌮"}'
+    
+    echo "✓ Display name changed to 'Taco Master 🌮'"
+    
+    # Send activity to trigger sync
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    grid_send_location "$GROUP_ID" 40.7424 -74.0061  # Chelsea Market
+    
+    wait_for_sync 8
+
+- waitForAnimationToEnd
+
+# Force refresh by navigating away and back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- tapOn: "Name Change Test Group"
+- waitForAnimationToEnd
+
+# Should now show the newest display name
+- assertVisible: "Taco Master"
+- assertVisible: "🌮"
+
+# Old display names should not be visible
+- assertNotVisible: "Pizza Lover"
+- assertNotVisible: "🍕"
+
+# Go back and check contacts list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# In main contacts list, should also show updated name
+- assertVisible: "Taco Master"
+- assertVisible: "🌮"
+
+- assertNotVisible: "Pizza Lover"
+- assertNotVisible: "testuser2"
+
+# Test display name in map location marker
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should see updated name on map marker
+- runFlow:
+    when:
+      visible: "Taco Master"
+    commands:
+      - assertVisible: "Taco Master"
+      - assertVisible: "🌮"
+
+# Test tapping on marker shows updated name in popup
+- runFlow:
+    when:
+      visible: "Taco Master"
+    commands:
+      - tapOn: "Taco Master"
+      - waitForAnimationToEnd
+      - assertVisible: "Taco Master 🌮"
+      - assertVisible:
+          text: "Chelsea"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+# Test display name change propagation to message history
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 testuser2 sending a message to test name in chat..."
+    
+    # Send a test message to ensure the name shows correctly in any message context
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    login_as_user "testuser2"
+    
+    # Send a text message to the group
+    curl -s -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${GROUP_ID}/send/m.room.message" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "msgtype": "m.text",
+        "body": "Testing display name in messages!"
+      }'
+    
+    wait_for_sync 5
+
+# Check if there's any chat/message interface that would show the updated name
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- tapOn: "Name Change Test Group"
+- waitForAnimationToEnd
+
+# Any message-related UI should show updated display name
+- assertVisible: "Taco Master"
+
+# Test edge case: empty display name (should fall back to username)
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing empty display name fallback..."
+    
+    # Clear display name (set to empty)
+    login_as_user "testuser2"
+    
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/profile/@testuser2:localhost/displayname" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"displayname": ""}'
+    
+    echo "✓ Display name cleared"
+    
+    # Send activity
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    grid_send_location "$GROUP_ID" 40.7580 -73.9855
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd
+
+# Navigate away and back to force refresh
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should fall back to showing the Matrix username
+- assertVisible: "testuser2"
+
+# Should not show empty name or placeholder
+- assertNotVisible: "Taco Master"
+- assertNotVisible: "Unknown User"
+- assertNotVisible: "[No Name]"
+
+# Final verification - display name changes propagate correctly
+- assertVisible: "testuser2"
+
+# Test restoring a proper display name
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Restoring display name for final test..."
+    
+    login_as_user "testuser2"
+    
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/profile/@testuser2:localhost/displayname" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"displayname": "Final Test User ✅"}'
+    
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    grid_send_location "$GROUP_ID" 40.7829 -73.9654
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd
+
+# Final refresh
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should show final display name
+- assertVisible: "Final Test User"
+- assertVisible: "✅"

@@ -1,0 +1,84 @@
+appId: app.mygrid.grid
+---
+# Test: API posts location as testuser2 → Verify marker/avatar appears on testuser1's map
+# Multi-user E2E: API-driven setup + UI verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up incoming location from testuser2..."
+    setup_incoming_location 40.7580 -73.9855
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Wait for location data to appear
+- waitForAnimationToEnd
+
+# Look for contact/friend marker on map
+# First check if contact appears in contacts drawer
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see testuser2 as a contact now
+- assertVisible:
+    text: "testuser2"
+    optional: true
+
+# Check for location status/timestamp  
+- assertVisible:
+    text: "ago"
+    optional: true
+
+# Close contacts drawer and check map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Look for map markers/avatars
+# testuser2's location should appear on the map
+- assertVisible:
+    id: "user_location_marker"
+    optional: true
+
+# Alternative: Look for avatar/marker elements
+- assertVisible:
+    id: "contact_marker"
+    optional: true
+
+# Test map interaction with the marker
+- tapOn:
+    point: "45%,35%"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for info bubble/popup showing contact info
+- assertVisible:
+    text: "testuser2"
+    optional: true
+
+- assertVisible:
+    text: "Current location"
+    optional: true
+
+# Verify we can see location details
+- assertVisible:
+    text: "now"
+    optional: true
+
+# Close any popups by tapping elsewhere
+- tapOn:
+    point: "50%,60%"
+- waitForAnimationToEnd
+
+# Final verification - we're still on map screen
+- assertVisible: "My Contacts"

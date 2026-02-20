@@ -1,0 +1,160 @@
+appId: app.mygrid.grid
+---
+# Test: API sends 3+ friend requests → Verify all appear in invite list
+# Multi-user E2E: Multiple notification handling verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up multiple friend requests to testuser1..."
+    setup_multiple_friend_requests 4
+    wait_for_sync 8
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Wait for all invites to propagate
+- waitForAnimationToEnd
+
+# Check notification bell should show multiple pending invites
+- assertVisible:
+    id: "notification_bell"
+    optional: true
+
+# Look for notification badge with number > 1
+- assertVisible:
+    text: "4"
+    optional: true
+
+- assertVisible:
+    text: "3"
+    optional: true
+
+# Should show some number indicating multiple notifications
+- assertVisible:
+    id: "notification_count"
+    optional: true
+
+# Tap notification bell to see all invites
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see Invitations modal with multiple entries
+- assertVisible: "Invitations"
+
+# Should see multiple testuser entries
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Each should have friend request text
+- assertVisible:
+    text: "wants to be friends"
+
+# All should have Accept/Decline options
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Test scrolling if the list is long
+- swipe:
+    start: "50%,70%"
+    end: "50%,30%"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify we can still see friend requests after scrolling
+- assertVisible:
+    text: "testuser"
+
+# Test accepting one invite
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Look for acceptance confirmation
+- assertVisible:
+    text: "accepted"
+    optional: true
+
+# The accepted invite should be removed from the list or marked as accepted
+- waitForAnimationToEnd
+
+# Test declining one invite
+- tapOn: "Decline"
+- waitForAnimationToEnd
+
+# Look for decline confirmation
+- assertVisible:
+    text: "declined"
+    optional: true
+
+# Check that we still have remaining invites
+- assertVisible: "testuser"
+
+# Test accepting multiple invites
+- tapOn: "Accept"
+- waitForAnimationToEnd
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# After processing some invites, notification count should decrease
+- assertVisible:
+    text: "Invitations"
+
+# Close the invitations modal
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+
+# Alternative close method
+- tapOn:
+    point: "50%,20%"
+- waitForAnimationToEnd
+
+# Back on map, notification badge should be reduced or gone
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Should not show the original high number anymore
+- assertNotVisible: "4"
+
+# Check contacts drawer for accepted friends
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see some of the accepted testusers
+- assertVisible: "testuser"
+
+# Should see multiple contacts now
+- assertVisible:
+    text: "testuser2"
+    optional: true
+
+- assertVisible:
+    text: "testuser3"
+    optional: true
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification
+- assertVisible: "My Contacts"
+
+# Check if there are still pending notifications
+- runFlow:
+    when:
+      visible:
+        id: "notification_bell"
+    commands:
+      - tapOn:
+          point: "90%,10%"
+      - waitForAnimationToEnd
+      - assertVisible: "Invitations"

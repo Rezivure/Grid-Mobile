@@ -15,14 +15,14 @@ appId: app.mygrid.grid
     timeout: 15000
 
 # Wait for friend request to be sent
-- delay: 3000
+- wait: 3000
 
 # Pull to refresh to sync new invites
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 3000
+- wait: 3000
 
 # Check notifications for friend request
 - tapOn:
@@ -51,7 +51,7 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 - tapOn:
     point: "65%,9%"   # Create Group tab
-- delay: 500
+- wait: 500
 - waitForAnimationToEnd
 
 # Enter group details
@@ -93,7 +93,7 @@ appId: app.mygrid.grid
     timeout: 10000
 
 # Wait for location update
-- delay: 5000
+- wait: 5000
 
 # Verify location marker updated
 - assertVisible: "testuser3"
@@ -140,20 +140,20 @@ appId: app.mygrid.grid
     timeout: 10000
 
 # Wait and verify final update
-- delay: 5000
+- wait: 5000
 - assertVisible: "testuser3"
 
 # PART 9: Test app remains stable
 - tapOn:
     point: "50%,50%"
-- delay: 1000
+- wait: 1000
 
 # Pan around map
 - swipe:
     start: "50%,50%"
     end: "30%,30%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 # Final verification - app should be stable and responsive
 - assertVisible: "Map"

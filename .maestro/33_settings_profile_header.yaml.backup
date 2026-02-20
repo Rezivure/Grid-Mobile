@@ -1,0 +1,27 @@
+appId: app.mygrid.grid
+---
+# Test: Verify settings profile header shows username and Matrix ID
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+
+# Verify profile header
+- assertVisible: "Settings"
+- assertVisible: "@testuser1:localhost"
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

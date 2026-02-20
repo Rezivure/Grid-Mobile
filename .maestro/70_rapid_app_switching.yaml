@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -20,31 +24,31 @@ appId: app.mygrid.grid
 
 # Rapid switching sequence - 5 cycles
 - stopApp
-- delay: 500
+- wait: 500
 - launchApp
 - waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp  
-- delay: 500
+- wait: 500
 - launchApp
 - waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
-- delay: 500  
+- wait: 500  
 - launchApp
 - waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
-- delay: 500
+- wait: 500
 - launchApp
 - waitForAnimationToEnd
 - assertVisible: "Map"
 
 - stopApp
-- delay: 500
+- wait: 500
 - launchApp
 - waitForAnimationToEnd
 
@@ -61,5 +65,5 @@ appId: app.mygrid.grid
 # Test map interaction
 - tapOn:
     point: "50%,50%"
-- delay: 500
+- wait: 500
 - assertVisible: "Map"

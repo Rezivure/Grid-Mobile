@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -63,7 +67,7 @@ appId: app.mygrid.grid
 # Test that we can still interact with the map
 - tapOn:
     point: "50%,50%"
-- delay: 500
+- wait: 500
 
 # Test navigation to verify app stability
 - tapOn: "Settings"
@@ -76,6 +80,6 @@ appId: app.mygrid.grid
 
 # Test one more interaction to ensure responsiveness
 - tapOn: "Notifications"
-- delay: 500
+- wait: 500
 - tapOn: "Back"
 - assertVisible: "Map"

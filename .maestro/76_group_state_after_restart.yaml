@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -52,7 +56,7 @@ appId: app.mygrid.grid
 
 # Kill app completely
 - stopApp
-- delay: 5000
+- wait: 5000
 
 # Relaunch app
 - launchApp

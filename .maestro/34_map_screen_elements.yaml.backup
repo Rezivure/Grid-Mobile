@@ -1,0 +1,17 @@
+appId: app.mygrid.grid
+---
+# Test: Verify all map screen UI elements are present
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Verify main screen elements
+- assertVisible: "My Contacts"
+- assertVisible: "Search Contacts"
+
+# Verify the map is loaded (screen should not show loading indicators)
+- waitForAnimationToEnd

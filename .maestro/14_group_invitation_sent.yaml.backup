@@ -1,0 +1,111 @@
+appId: app.mygrid.grid
+---
+# Test: Verify "Invitation Sent" appears in group member list after creating a group
+# Prerequisite: testuser1 logged in on map screen
+
+# Clean up stale rooms from previous runs
+- runScript:
+    file: scripts/api_cleanup_rooms.js
+    env:
+      USERS: "testuser2,testuser3"
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap person-add icon to open Add Friend / Create Group modal
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Switch to Create Group tab
+- extendedWaitUntil:
+    visible: "Add Contact"
+    timeout: 5000
+- tapOn:
+    point: "65%,9%"
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "1000"
+- waitForAnimationToEnd
+
+# Step 0: Enter group name
+- tapOn: "Group Name"
+- inputText: "InviteTest"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Advance to Step 1: Duration
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 1: Select duration - tap "24h"
+- tapOn: "24h"
+- waitForAnimationToEnd
+
+# Advance to Step 2: Members
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 2: Add a member (full Matrix ID required)
+- tapOn: "Username"
+- inputText: "testuser2:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Tap Add Member button
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+
+# Advance to Step 3: Summary
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 3: Create the group
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+
+# Should return to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "5000"
+
+# After group creation, the dropdown auto-expands showing groups
+# The accessibility text includes the timer badge: "23h\nInviteTest"
+- extendedWaitUntil:
+    visible: ".*InviteTest.*"
+    timeout: 15000
+
+# Select the InviteTest group
+- tapOn: ".*InviteTest.*"
+- waitForAnimationToEnd
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
+
+# Pull to refresh to ensure member data is loaded
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- runScript:
+    file: scripts/sleep.js
+    env:
+      DURATION_MS: "3000"
+
+# Assert "Invitation Sent" is visible in the group member list
+# Accessibility text combines username and status: "testuser2\n@testuser2:localhost\nInvitation Sent"
+- extendedWaitUntil:
+    visible: ".*Invitation Sent.*"
+    timeout: 15000

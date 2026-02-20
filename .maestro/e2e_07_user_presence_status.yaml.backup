@@ -1,0 +1,469 @@
+appId: app.mygrid.grid
+---
+# E2E Test: User presence/online status updates
+# API: testuser2 changes presence status → UI: testuser1 sees status indicators update
+# Tests online/offline/unavailable presence propagation
+
+# Prerequisites:
+# - testuser1 logged in and on map screen  
+# - Docker Synapse running on localhost:8008
+# - testuser2 account exists
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up contact and initial presence..."
+    
+    # Establish contact relationship with location
+    setup_incoming_location 40.7580 -73.9855
+    wait_for_sync 5
+    
+    echo "✓ Contact established with active location"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Accept contact and establish baseline
+- assertVisible: "My Contacts"
+
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Wait for initial status to settle
+- waitForAnimationToEnd
+
+# Check initial presence status (should be online/active)
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show as online/active initially  
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertNotVisible: "Offline"
+
+# Test setting user to unavailable/away status
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting testuser2 presence to unavailable..."
+    
+    login_as_user "testuser2"
+    
+    # Set presence to unavailable using Matrix API
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/presence/@testuser2:localhost/status" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "presence": "unavailable",
+        "status_msg": "Away from keyboard"
+      }'
+    
+    echo "✓ testuser2 set to unavailable"
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd
+
+# Force refresh of contacts list
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should now show as unavailable/away
+- assertVisible: "testuser2"
+
+- runFlow:
+    when:
+      visible:
+        text: "Away"
+    commands:
+      - assertVisible: "Away"
+
+- runFlow:
+    when:
+      visible:
+        text: "Unavailable"
+    commands:
+      - assertVisible: "Unavailable"
+
+# Should not show as Active/Online
+- assertNotVisible: "Active"
+- assertNotVisible: "Online"
+
+# Check status message if shown
+- runFlow:
+    when:
+      visible:
+        text: "Away from keyboard"
+    commands:
+      - assertVisible: "Away from keyboard"
+
+# Test status in contact details
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show away status in profile
+- assertVisible:
+    text: "Away"
+    optional: true
+
+- assertVisible:
+    text: "Unavailable"
+    optional: true
+
+- assertVisible:
+    text: "Away from keyboard"
+    optional: true
+
+# Should still show last known location
+- assertVisible:
+    text: "Last seen"
+    optional: true
+
+- assertVisible:
+    text: "Times Square"
+    optional: true
+
+# Go back to contacts
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go to map to check status indicators there
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# On map, should still see location but with different status
+- assertVisible: "testuser2"
+
+# Tap on map marker to check status
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Away"
+          optional: true
+      - assertVisible:
+          text: "Unavailable"
+          optional: true
+      - assertVisible:
+          text: "Away from keyboard"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+# Test setting user completely offline
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting testuser2 presence to offline..."
+    
+    login_as_user "testuser2"
+    
+    # Set presence to offline
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/presence/@testuser2:localhost/status" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "presence": "offline"
+      }'
+    
+    echo "✓ testuser2 set to offline"
+    
+    wait_for_sync 8
+
+- waitForAnimationToEnd
+
+# Check offline status in contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show as offline
+- assertVisible:
+    text: "Offline"
+    optional: true
+
+- assertNotVisible: "Active"
+- assertNotVisible: "Online"
+- assertNotVisible: "Away"
+
+# Location might show as stale or "last seen"
+- assertVisible:
+    text: "Last seen"
+    optional: true
+
+- assertVisible:
+    text: "ago"
+    optional: true
+
+# Test going back online with different status message
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting testuser2 back online with status message..."
+    
+    login_as_user "testuser2"
+    
+    # Set presence to online with status message
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/presence/@testuser2:localhost/status" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "presence": "online",
+        "status_msg": "Ready for food adventure! 🍕"
+      }'
+    
+    # Send fresh location update
+    ROOM_ID=$(grid_create_direct "testuser1" 2>/dev/null || echo "existing")
+    if [ "$ROOM_ID" != "existing" ]; then
+      grid_send_location "$ROOM_ID" 40.7424 -74.0061  # Chelsea Market
+    fi
+    
+    echo "✓ testuser2 back online with status"
+    
+    wait_for_sync 8
+
+- waitForAnimationToEnd
+
+# Refresh contacts view
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should show as online again
+- assertVisible: "testuser2"
+
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertNotVisible: "Offline"
+
+# Should show custom status message
+- assertVisible:
+    text: "Ready for food adventure"
+    optional: true
+
+- assertVisible:
+    text: "🍕"
+    optional: true
+
+# Test status in contact profile
+- tapOn: "testuser2" 
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+
+# Should show online status and message
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertVisible:
+    text: "Ready for food adventure"
+    optional: true
+
+- assertVisible:
+    text: "🍕"
+    optional: true
+
+# Should show fresh location
+- assertVisible:
+    text: "Chelsea"
+    optional: true
+
+- assertNotVisible: "Last seen"
+
+# Go back and test on map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should see updated location on map
+- assertVisible: "testuser2"
+
+# Test tapping marker shows online status
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Online"
+          optional: true
+      - assertVisible:
+          text: "Ready for food adventure"
+          optional: true
+      - assertVisible:
+          text: "🍕"
+          optional: true
+      - assertVisible:
+          text: "Chelsea"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+# Test presence in group context
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Creating group to test presence in group context..."
+    
+    login_as_user "testuser2"
+    GROUP_ID=$(grid_create_group "Status Test Group" 3600 "testuser1")
+    echo "$GROUP_ID" > /tmp/test_group_room_id
+    
+    wait_for_sync 4
+
+- waitForAnimationToEnd
+
+# Accept group invitation
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Check presence in group member list
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "Status Test Group"
+- tapOn: "Status Test Group"
+- waitForAnimationToEnd
+
+# Group member list should show online status
+- assertVisible: "testuser2"
+
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertVisible:
+    text: "Ready for food adventure"
+    optional: true
+
+- assertVisible:
+    text: "🍕"
+    optional: true
+
+# Test rapid presence changes
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing rapid presence changes..."
+    
+    login_as_user "testuser2"
+    
+    # Away
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/presence/@testuser2:localhost/status" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"presence": "unavailable", "status_msg": "Quick break"}'
+    
+    sleep 2
+    
+    # Back online  
+    curl -s -X PUT "${SYNAPSE_URL}/_matrix/client/v3/presence/@testuser2:localhost/status" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"presence": "online", "status_msg": "Back at desk! 💻"}'
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd
+
+# Navigate away and back to refresh
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should show final online status
+- assertVisible: "testuser2"
+
+- assertVisible:
+    text: "Online"
+    optional: true
+
+- assertVisible:
+    text: "Back at desk"
+    optional: true
+
+- assertVisible:
+    text: "💻"
+    optional: true
+
+# Final verification - presence system working
+- assertNotVisible: "Away"
+- assertNotVisible: "Offline"

@@ -1,100 +1,111 @@
 appId: app.mygrid.grid
 ---
 
-# Ensure app is running and logged in
-- launchApp
-- waitForAnimationToEnd
-- assertVisible: "Map"
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
 
-# Create many pending invites via API
+# Create many pending friend requests and group invites using helper
 - runScript:
-    script: |
-      cd .maestro/helpers
-      
-      # Login many users for friend requests
-      for i in {2..10}; do
-        ./api_login.sh testuser$i testpass123 &
-      done
-      wait
-      
-      # Send many friend requests
-      ./api_send_friend_request.sh testuser2 testuser1 &
-      ./api_send_friend_request.sh testuser3 testuser1 &
-      ./api_send_friend_request.sh testuser4 testuser1 &
-      ./api_send_friend_request.sh testuser5 testuser1 &
-      ./api_send_friend_request.sh testuser6 testuser1 &
-      ./api_send_friend_request.sh testuser7 testuser1 &
-      ./api_send_friend_request.sh testuser8 testuser1 &
-      ./api_send_friend_request.sh testuser9 testuser1 &
-      wait
-      
-      # Create multiple groups and invite user1
-      ./api_create_group.sh testuser2 "InviteGroup1" 3600 &
-      ./api_create_group.sh testuser3 "InviteGroup2" 3600 &
-      ./api_create_group.sh testuser4 "InviteGroup3" 3600 &
-      wait
-      
-      # Invite user1 to all groups (this simulates pending group invites)
-      ./api_join_room.sh testuser1 "InviteGroup1" &
-      ./api_join_room.sh testuser1 "InviteGroup2" &
-      ./api_join_room.sh testuser1 "InviteGroup3" &
-      wait
+    script: cd .maestro/helpers && ./setup_many_friends.sh 2 9
+    timeout: 45000
+
+# Give extra time for many API calls to complete
+- wait: 5000
+
+# Create additional group invites
+- runScript:
+    script: cd .maestro/helpers && ./setup_large_group.sh InviteGroup1 2 5 3600
+    timeout: 30000
+
+- runScript:
+    script: cd .maestro/helpers && ./setup_large_group.sh InviteGroup2 6 8 3600
+    timeout: 30000
 
 # Wait for all invites to sync
+- wait: 8000
+
+# Pull to refresh notifications
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 3000
+
+# Check notifications - should have many pending invites
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Should see multiple pending friend requests and group invites
+- scrollUntilVisible:
+    element: "testuser2"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser3"
+    direction: DOWN
+
+# Test accepting one friend request
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
 - waitForAnimationToEnd
 
-# Check notification bell - should show many pending invites
-- tapOn: "Notifications"
+# Scroll to see more invites
+- scrollUntilVisible:
+    element: "testuser4"
+    direction: DOWN
+
+# Test declining a friend request
+- tapOn: "testuser4"
+- waitForAnimationToEnd
+- tapOn: "Decline"
 - waitForAnimationToEnd
 
-# Verify we can see multiple friend requests
-- assertVisible: "testuser2"
-- assertVisible: "testuser3"
-- assertVisible: "testuser4"
-
-# Scroll down through invite list to see more
-- scrollUntilVisible:
-    element: "testuser6"
-    direction: DOWN
-    
-- scrollUntilVisible:
-    element: "testuser8"
-    direction: DOWN
-
-# Verify group invites are also visible
+# Look for group invites
 - scrollUntilVisible:
     element: "InviteGroup1"
     direction: DOWN
 
-- scrollUntilVisible:
-    element: "InviteGroup2" 
-    direction: DOWN
-
-# Test accepting one friend request
+# Accept one group invite
+- tapOn: "InviteGroup1"
+- waitForAnimationToEnd
 - tapOn: "Accept"
 - waitForAnimationToEnd
 
-# Test declining one friend request
-- scrollUntilVisible:
-    element: "testuser3"
-    direction: UP
-
-- tapOn:
-    text: "Decline"
-    optional: true
+# Close notifications
+- tapOn: "Close"
 - waitForAnimationToEnd
 
-# Verify we can still scroll and interact with remaining invites
+# Verify back on map with accepted friend
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+
+# Test that notifications still show remaining invites
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Should still see remaining pending invites
 - scrollUntilVisible:
-    element: "testuser5"
+    element: "testuser3"
     direction: DOWN
 
-# Go back to map
-- tapOn: "Back"
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify app handles many pending invites gracefully
 - assertVisible: "Map"
 
-# Verify notification handling didn't break the app
-- tapOn: "Settings"
-- assertVisible: "Display Name"
-- tapOn: "Back"
+# Test Groups tab shows accepted group
+- tapOn: "Groups"
+- waitForAnimationToEnd
+- assertVisible: "InviteGroup1"
+
+# Return to map
+- tapOn: "Map"
+- waitForAnimationToEnd
 - assertVisible: "Map"

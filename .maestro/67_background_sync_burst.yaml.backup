@@ -1,0 +1,62 @@
+appId: app.mygrid.grid
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up multiple friends via API
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_login.sh testuser3 testpass123  
+      ./api_login.sh testuser4 testpass123
+      ./api_login.sh testuser5 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_friend_request.sh testuser3 testuser1  
+      ./api_send_friend_request.sh testuser4 testuser1
+      ./api_send_friend_request.sh testuser5 testuser1
+
+# Wait for initial sync
+- waitForAnimationToEnd
+
+# Background the app
+- stopApp
+- delay: 2000
+
+# Burst of location updates from multiple users while app is backgrounded
+- runScript:
+    script: |
+      cd .maestro/helpers
+      # Send multiple rapid location updates
+      ./api_send_location.sh testuser2 40.7580 -73.9855 &
+      ./api_send_location.sh testuser3 40.7590 -73.9865 & 
+      ./api_send_location.sh testuser4 40.7600 -73.9875 &
+      ./api_send_location.sh testuser5 40.7610 -73.9885 &
+      ./api_send_location.sh testuser2 40.7585 -73.9860 &
+      ./api_send_location.sh testuser3 40.7595 -73.9870 &
+      wait
+
+# Wait for sync to propagate
+- delay: 3000
+
+# Foreground app 
+- launchApp
+
+# Wait for sync to complete
+- waitForAnimationToEnd
+
+# Verify all markers appear immediately (all friends should be visible)
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3" 
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test map interaction to ensure it's responsive with multiple markers
+- tapOn: 
+    point: "50%,50%"
+- delay: 500
+- assertVisible: "Map"

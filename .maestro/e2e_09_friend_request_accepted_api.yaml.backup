@@ -1,0 +1,427 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Friend request accepted (verified from API side)  
+# UI: testuser1 accepts friend request → API: testuser2 sees acceptance and can interact
+# Tests the reverse flow - UI action triggering API-verifiable state changes
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2-3 accounts exist
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up multiple friend requests for acceptance testing..."
+    
+    # Send friend requests from multiple users
+    setup_multiple_friend_requests 2  # testuser2 and testuser3
+    wait_for_sync 5
+    
+    echo "✓ Friend requests sent and ready for acceptance"
+
+- launchApp
+- waitForAnimationToEnd
+
+# Should see friend request notifications
+- assertVisible: "My Contacts"
+
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+# Should show multiple friend requests
+- assertVisible:
+    id: "notification_count"
+
+# Badge should indicate multiple invites (2)
+- runFlow:
+    when:
+      visible: "2"
+    commands:
+      - assertVisible: "2"
+
+# Open invitations
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Invitations"
+
+# Should see both friend requests
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Both should show Accept/Decline options
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Accept testuser2's request
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Find Accept button near testuser2
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Verify acceptance confirmation
+- assertVisible:
+    text: "Added to contacts"
+    optional: true
+
+- assertVisible:
+    text: "Contact added"
+    optional: true
+
+- assertVisible:
+    text: "Connected"
+    optional: true
+
+# testuser2 should be removed from invitations or marked as accepted
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible:
+          text: "Accepted"
+          optional: true
+      - assertVisible:
+          text: "Connected"
+          optional: true
+
+# testuser3 should still be pending
+- assertVisible: "testuser3"
+
+# Accept testuser3's request as well
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - tapOn: "Accept"
+      - waitForAnimationToEnd
+
+# Close invitations screen
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Notification badge should be cleared
+- assertVisible: "My Contacts"
+- assertNotVisible:
+    id: "notification_badge"
+
+# Verify API side sees the acceptances
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Verifying friend request acceptances from API side..."
+    
+    # Check testuser2's perspective
+    login_as_user "testuser2"
+    echo "Checking testuser2's rooms and relationships..."
+    
+    # Get testuser2's rooms - should include direct room with testuser1
+    ROOMS=$(curl -s -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      "${SYNAPSE_URL}/_matrix/client/v3/joined_rooms" | jq -r '.joined_rooms[]' | head -5)
+    
+    echo "testuser2's rooms: $ROOMS"
+    
+    # Look for direct room with testuser1
+    for ROOM in $ROOMS; do
+      ROOM_NAME=$(curl -s -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+        "${SYNAPSE_URL}/_matrix/client/v3/rooms/${ROOM}/state/m.room.name" | jq -r '.name // empty')
+      
+      if echo "$ROOM_NAME" | grep -q "testuser1"; then
+        echo "✓ Found direct room with testuser1: $ROOM ($ROOM_NAME)"
+        TESTUSER2_ROOM="$ROOM"
+        break
+      fi
+    done
+    
+    # Check testuser3's perspective
+    login_as_user "testuser3"
+    echo "Checking testuser3's rooms and relationships..."
+    
+    ROOMS=$(curl -s -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      "${SYNAPSE_URL}/_matrix/client/v3/joined_rooms" | jq -r '.joined_rooms[]' | head -5)
+    
+    for ROOM in $ROOMS; do
+      ROOM_NAME=$(curl -s -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+        "${SYNAPSE_URL}/_matrix/client/v3/rooms/${ROOM}/state/m.room.name" | jq -r '.name // empty')
+      
+      if echo "$ROOM_NAME" | grep -q "testuser1"; then
+        echo "✓ Found direct room with testuser1: $ROOM ($ROOM_NAME)"
+        TESTUSER3_ROOM="$ROOM"
+        break
+      fi
+    done
+    
+    echo "✓ API verification complete - both users can see accepted relationships"
+    
+    # Store room IDs for later tests
+    echo "$TESTUSER2_ROOM" > /tmp/testuser2_room
+    echo "$TESTUSER3_ROOM" > /tmp/testuser3_room
+
+# Verify contacts appear in contacts list
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see both accepted contacts
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Both should show as contacts (not invitations)
+- assertNotVisible:
+    text: "Pending"
+
+# Both should show offline initially (no locations yet)
+- assertVisible:
+    text: "Offline"
+    optional: true
+
+- assertVisible:
+    text: "No location"
+    optional: true
+
+# Test that accepted contacts can now send locations
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing location sharing from accepted contacts..."
+    
+    # testuser2 sends location to testuser1
+    TESTUSER2_ROOM=$(cat /tmp/testuser2_room)
+    if [ -n "$TESTUSER2_ROOM" ]; then
+      login_as_user "testuser2"
+      echo "testuser2 sending location to accepted friend..."
+      grid_send_location "$TESTUSER2_ROOM" 40.7580 -73.9855  # Times Square
+    fi
+    
+    # testuser3 sends location to testuser1
+    TESTUSER3_ROOM=$(cat /tmp/testuser3_room)
+    if [ -n "$TESTUSER3_ROOM" ]; then
+      login_as_user "testuser3"
+      echo "testuser3 sending location to accepted friend..."
+      grid_send_location "$TESTUSER3_ROOM" 40.7829 -73.9654  # Central Park
+    fi
+    
+    wait_for_sync 8
+    
+    echo "✓ Both accepted contacts sent locations"
+
+# Wait for locations to appear
+- waitForAnimationToEnd
+
+# Refresh contacts view
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- tapOn: "My Contacts" 
+- waitForAnimationToEnd
+
+# Both contacts should now show as active with locations
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertNotVisible: "Offline"
+
+# Go to map to see locations
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should see both accepted friends' locations on map
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test interaction with accepted contacts' locations
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Times Square"
+          optional: true
+      - assertVisible:
+          text: "Contact"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+# Test that API can verify the ongoing relationship
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 API verification of ongoing contact relationship..."
+    
+    # testuser2 can send a message to testuser1
+    TESTUSER2_ROOM=$(cat /tmp/testuser2_room)
+    if [ -n "$TESTUSER2_ROOM" ]; then
+      login_as_user "testuser2"
+      echo "testuser2 sending test message..."
+      
+      curl -s -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${TESTUSER2_ROOM}/send/m.room.message" \
+        -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "msgtype": "m.text",
+          "body": "Hello from accepted friend testuser2!"
+        }'
+    fi
+    
+    # testuser3 can also send location updates
+    TESTUSER3_ROOM=$(cat /tmp/testuser3_room)
+    if [ -n "$TESTUSER3_ROOM" ]; then
+      login_as_user "testuser3"
+      echo "testuser3 sending updated location..."
+      grid_send_location "$TESTUSER3_ROOM" 40.7851 -73.9683  # Central Park Reservoir
+    fi
+    
+    wait_for_sync 5
+    
+    echo "✓ Ongoing relationship verified - contacts can interact freely"
+
+# Wait for updates
+- waitForAnimationToEnd
+
+# Should see location update for testuser3
+- assertVisible: "testuser3"
+
+# Test that rejection also works properly
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing friend request rejection flow..."
+    
+    # testuser4 sends friend request
+    login_as_user "testuser4"
+    REJECT_ROOM=$(grid_create_direct "testuser1")
+    echo "testuser4 sent friend request: $REJECT_ROOM"
+    
+    wait_for_sync 4
+
+- waitForAnimationToEnd
+
+# Should see new friend request notification
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see testuser4's request
+- assertVisible: "testuser4"
+
+# Decline this request
+- runFlow:
+    when:
+      visible: "testuser4"
+    commands:
+      - tapOn: "Decline"
+      - waitForAnimationToEnd
+
+# Should show decline confirmation
+- assertVisible:
+    text: "Declined"
+    optional: true
+
+- assertVisible:
+    text: "Request declined"
+    optional: true
+
+# testuser4 should be removed from invitations
+- assertNotVisible: "testuser4"
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Verify API side sees the rejection
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Verifying rejection from API side..."
+    
+    # testuser4 should see that their invitation was declined
+    login_as_user "testuser4"
+    
+    # Check if testuser4 can still send to the room (should fail or be blocked)
+    ROOMS=$(curl -s -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      "${SYNAPSE_URL}/_matrix/client/v3/joined_rooms" | jq -r '.joined_rooms[]' | head -5)
+    
+    echo "testuser4's rooms after rejection: $ROOMS"
+    
+    # testuser4 should not have access to send messages to testuser1
+    # (they might still be in the room but testuser1 won't see their messages)
+    
+    echo "✓ Rejection verified from API side"
+
+# Verify testuser4 does NOT appear in contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should NOT see testuser4 in contacts
+- assertNotVisible: "testuser4"
+
+# Should still see accepted contacts
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Final verification - test contact management
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Should show contact options
+- assertVisible: "testuser2"
+
+- assertVisible:
+    text: "Message"
+    optional: true
+
+- assertVisible:
+    text: "Remove Contact"
+    optional: true
+
+- assertVisible:
+    text: "Block"
+    optional: true
+
+# Should show location info
+- assertVisible:
+    text: "Times Square"
+    optional: true
+
+# Go back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Final state verification
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertNotVisible: "testuser4"
+
+# Map should show accepted contacts' locations
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertNotVisible: "testuser4"

@@ -11,7 +11,7 @@ appId: app.mygrid.grid
     timeout: 30000
 
 # Wait for all locations to sync
-- delay: 3000
+- wait: 3000
 
 # Verify map loads without issues
 - assertVisible: "Map"
@@ -24,7 +24,7 @@ appId: app.mygrid.grid
 # Test map performance - zoom in and out
 - tapOn:
     point: "50%,50%"
-- delay: 1000
+- wait: 1000
 
 # Pinch to zoom (if supported by simulator)
 - waitForAnimationToEnd
@@ -34,13 +34,13 @@ appId: app.mygrid.grid
     start: "50%,50%"
     end: "30%,30%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 - swipe:
     start: "30%,30%"  
     end: "70%,70%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 # Verify map is still responsive
 - assertVisible: "Map"

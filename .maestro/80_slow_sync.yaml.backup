@@ -1,0 +1,119 @@
+appId: app.mygrid.grid
+---
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up multiple friends for slow sync testing
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_login.sh testuser3 testpass123
+      ./api_login.sh testuser4 testpass123
+      
+      # Send friend requests
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_friend_request.sh testuser3 testuser1
+      ./api_send_friend_request.sh testuser4 testuser1
+      
+      # Initial locations
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+      ./api_send_location.sh testuser3 40.7590 -73.9865
+      ./api_send_location.sh testuser4 40.7600 -73.9875
+
+# Wait for initial sync
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Now flood the system with events while app is open
+- runScript:
+    script: |
+      cd .maestro/helpers
+      
+      # Send many events in background while app runs
+      # Stagger them to simulate real-world usage
+      (
+        sleep 2; ./api_send_location.sh testuser2 40.7581 -73.9856
+        sleep 4; ./api_send_location.sh testuser3 40.7591 -73.9866
+        sleep 6; ./api_send_location.sh testuser4 40.7601 -73.9876
+        sleep 8; ./api_send_location.sh testuser2 40.7582 -73.9857
+        sleep 10; ./api_send_location.sh testuser3 40.7592 -73.9867
+        sleep 12; ./api_send_location.sh testuser4 40.7602 -73.9877
+        sleep 14; ./api_send_location.sh testuser2 40.7583 -73.9858
+        sleep 16; ./api_send_location.sh testuser3 40.7593 -73.9868
+        sleep 18; ./api_send_location.sh testuser4 40.7603 -73.9878
+        sleep 20; ./api_send_location.sh testuser2 40.7584 -73.9859
+      ) &
+
+# While events are being sent, interact with app to test responsiveness
+- delay: 3000
+- tapOn:
+    point: "50%,50%"
+- delay: 2000
+
+# Navigate to settings and back
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- delay: 2000
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Check notifications
+- delay: 3000
+- tapOn: "Notifications"
+- delay: 2000
+- tapOn: "Back"
+
+# Go to groups tab and back
+- delay: 3000
+- tapOn: "Groups"
+- delay: 2000
+- tapOn: "Map"
+
+# Wait for all background events to complete
+- delay: 15000
+
+# Verify all friends are still visible (sync eventually completed)
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test one more interaction to ensure sync didn't break app responsiveness
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pan around map to verify all markers are responsive
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+- delay: 1000
+
+- swipe:
+    start: "30%,30%"
+    end: "70%,70%"
+    duration: 1000
+
+# App should still be responsive
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+
+# Send one final location to verify sync is still working
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7590 -73.9870
+
+# Should eventually receive the final update
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Final verification that app is stable after slow sync test
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"

@@ -1,0 +1,342 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Group invitation received and handled
+# API: testuser2 creates group and invites testuser1 → UI: testuser1 sees invite notification
+# Tests the group invitation flow end-to-end
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008  
+# - testuser2 account exists
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up group invitation from testuser2..."
+    
+    # testuser2 creates group and invites testuser1
+    # Group will be active for 1 hour (3600 seconds)
+    setup_group_invite "Weekend Pizza Party" 3600
+    
+    echo "⏳ Waiting for group invite to propagate..."
+    wait_for_sync 5
+    
+    echo "✓ Group invite sent - testuser1 should see notification"
+
+- launchApp  
+- waitForAnimationToEnd
+
+# Should be on map screen
+- assertVisible: "My Contacts"
+
+# Check for notification badge indicating new invite
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- assertVisible:
+    id: "notification_count"
+
+# Tap notification area
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should open invitations screen
+- assertVisible: "Invitations"
+
+# Should see the group invitation
+- assertVisible: "Weekend Pizza Party"
+
+# Should show it's from testuser2
+- assertVisible: "testuser2"
+
+# Should indicate it's a group invitation
+- assertVisible:
+    text: "invited you to"
+    optional: true
+
+- assertVisible:
+    text: "group"
+    optional: true
+
+- assertVisible:
+    text: "Group:"
+    optional: true
+
+# Should show group duration/expiry info
+- assertVisible:
+    text: "1 hour"
+    optional: true
+
+- assertVisible:
+    text: "60 minutes"
+    optional: true
+
+- assertVisible:
+    text: "expires"
+    optional: true
+
+# Should see Accept and Decline buttons
+- assertVisible: "Accept"
+- assertVisible: "Decline"
+
+# Test declining the group invite first
+- tapOn: "Decline"
+- waitForAnimationToEnd
+
+# Should remove the group invitation
+- assertNotVisible: "Weekend Pizza Party"
+
+# Should show decline confirmation
+- assertVisible:
+    text: "Declined"
+    optional: true
+
+- assertVisible:
+    text: "Group invite declined"
+    optional: true
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Back on map - notification should be cleared
+- assertVisible: "My Contacts"
+- assertNotVisible:
+    id: "notification_badge"
+
+# Test accepting a group invite - create another group
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Creating second group for accept test..."
+    
+    # Create another group invitation
+    setup_group_invite "Movie Night Group" 1800
+    wait_for_sync 4
+
+- waitForAnimationToEnd
+
+# Should see notification badge again
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"  
+
+# Tap notification
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see new group invitation
+- assertVisible: "Invitations"
+- assertVisible: "Movie Night Group"
+- assertVisible: "testuser2"
+
+# Accept this group invite
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Should show acceptance confirmation
+- assertVisible:
+    text: "Joined group"
+    optional: true
+
+- assertVisible:
+    text: "Group joined"
+    optional: true
+
+- assertVisible:
+    text: "Welcome to"
+    optional: true
+
+# Group should appear in groups list
+- assertVisible: "Movie Night Group"
+
+# Or invitation should show as accepted
+- runFlow:
+    when:
+      visible: "Movie Night Group"
+    commands:
+      - assertVisible:
+          text: "Joined"
+          optional: true
+      - assertVisible:
+          text: "Member"
+          optional: true
+
+# Close notifications
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Back on map - should now see group in drawer
+- assertVisible: "My Contacts"
+
+# Open contacts/groups drawer
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Should see groups section
+- assertVisible:
+    text: "Groups"
+    optional: true
+
+- assertVisible:
+    text: "Active Groups"
+    optional: true
+
+# Should see the joined group
+- assertVisible: "Movie Night Group"
+
+# Group should show as active
+- assertNotVisible:
+    text: "Expired"
+
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "30 min"
+    optional: true
+
+- assertVisible:
+    text: "expires"
+    optional: true
+
+# Tap on the group to see details
+- tapOn: "Movie Night Group"
+- waitForAnimationToEnd
+
+# Should show group details screen
+- assertVisible: "Movie Night Group"
+
+# Should show group info
+- assertVisible: "testuser2"
+
+# Should show member list
+- assertVisible:
+    text: "Members"
+    optional: true
+
+- assertVisible:
+    text: "2 members"
+    optional: true
+
+# Should show both testuser1 and testuser2
+- assertVisible: "testuser1"
+- assertVisible: "testuser2"
+
+# Should show group expiry countdown
+- assertVisible:
+    text: "expires in"
+    optional: true
+
+- assertVisible:
+    text: "minutes"
+    optional: true
+
+# Should have option to leave group
+- assertVisible:
+    text: "Leave Group"
+    optional: true
+
+- assertVisible:
+    text: "Exit Group"
+    optional: true
+
+# Test group location sharing preparation
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Preparing group for location sharing..."
+    
+    # Get the room ID from the test file (saved by setup_group_invite)
+    if [ -f /tmp/test_group_room_id ]; then
+      ROOM_ID=$(cat /tmp/test_group_room_id)
+      echo "Using room ID: $ROOM_ID"
+      
+      # testuser2 sends location to the group
+      login_as_user "testuser2"
+      grid_send_location "$ROOM_ID" 40.7614 -73.9776  # Central Park
+      wait_for_sync 3
+      
+      echo "✓ Location sent to group"
+    else
+      echo "⚠ No room ID found, skipping location test"
+    fi
+
+# Wait for group location to appear
+- waitForAnimationToEnd
+
+# Should see group members' locations
+- assertVisible:
+    text: "testuser2"
+    optional: true
+
+# Should show location sharing is active
+- assertVisible:
+    text: "Location shared"
+    optional: true
+
+- assertVisible:
+    text: "Sharing location"  
+    optional: true
+
+# Go back to groups list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Should now see group members on map
+- assertVisible: "My Contacts"
+
+# Should see testuser2's location on map (from group)
+- assertVisible: "testuser2"
+
+# Tap on testuser2's marker
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+# Location popup should show they're in a group
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible:
+          text: "Movie Night Group"
+          optional: true
+      - assertVisible:
+          text: "Group member"
+          optional: true
+      - assertVisible:
+          text: "Central Park"
+          optional: true
+
+# Close popup
+- tapOn:
+    point: "50%,70%"
+- waitForAnimationToEnd
+
+# Final verification - group flow completed successfully
+- assertVisible: "My Contacts"
+
+# Open contacts drawer to verify group is still there
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "Movie Night Group"
+
+# Group should show active status and countdown
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertNotVisible: "Expired"

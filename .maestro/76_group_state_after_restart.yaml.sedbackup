@@ -1,0 +1,106 @@
+appId: app.mygrid.grid
+---
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up group with multiple members and activity
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_login.sh testuser3 testpass123
+      ./api_login.sh testuser4 testpass123
+      
+      # Create group with specific name we can verify
+      ./api_create_group.sh testuser2 "PersistenceTestGroup" 7200
+      
+      # Multiple members join
+      ./api_join_room.sh testuser1 "PersistenceTestGroup"
+      ./api_join_room.sh testuser3 "PersistenceTestGroup" 
+      ./api_join_room.sh testuser4 "PersistenceTestGroup"
+      
+      # Generate some group activity (locations)
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+      ./api_send_location.sh testuser3 40.7590 -73.9865
+      ./api_send_location.sh testuser4 40.7600 -73.9875
+
+# Wait for group to sync
+- waitForAnimationToEnd
+
+# Verify group exists and has activity
+- tapOn: "Groups" 
+- waitForAnimationToEnd
+- assertVisible: "PersistenceTestGroup"
+
+# Check group details before restart
+- tapOn: "PersistenceTestGroup"
+- waitForAnimationToEnd
+- assertVisible: "Members"
+
+# Note member count (should be 4 members total)
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Go to map view to see group locations
+- tapOn: "Map"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Kill app completely
+- stopApp
+- delay: 5000
+
+# Relaunch app
+- launchApp
+- waitForAnimationToEnd
+
+# Verify we're still logged in
+- assertVisible: "Map"
+
+# Check that group still exists with correct state
+- tapOn: "Groups"
+- waitForAnimationToEnd
+
+# Verify group is still there
+- assertVisible: "PersistenceTestGroup"
+
+# Check group member count is preserved
+- tapOn: "PersistenceTestGroup"
+- waitForAnimationToEnd
+- assertVisible: "Members"
+
+# Verify members are still there (persistence of group membership)
+- assertVisible: "testuser2"
+- scrollUntilVisible:
+    element: "testuser3"
+    direction: DOWN
+
+# Go back to map and verify group locations persisted
+- tapOn: "Map"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test that group functionality still works after restart
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7585 -73.9860
+
+# Verify group still receives new updates
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Final verification
+- tapOn: "Groups"
+- assertVisible: "PersistenceTestGroup"
+- tapOn: "Map"
+- assertVisible: "Map"

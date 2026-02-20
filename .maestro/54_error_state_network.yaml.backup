@@ -1,0 +1,91 @@
+appId: app.mygrid.grid
+---
+# Test: Verify error state handling for network issues
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Try to access a feature that requires network
+# Navigate to settings where network errors might occur
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Try to access subscription info which requires network
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+
+# Look for any error messages that might appear
+- assertVisible:
+    text: "Error"
+    optional: true
+
+- assertVisible:
+    text: "Network error"
+    optional: true
+
+- assertVisible:
+    text: "Connection failed"
+    optional: true
+
+- assertVisible:
+    text: "Unable to connect"
+    optional: true
+
+- assertVisible:
+    text: "Retry"
+    optional: true
+
+# If retry button is present, test it
+- tapOn:
+    text: "Retry"
+    optional: true
+- waitForAnimationToEnd
+
+# Try accessing avatar/profile which might trigger network calls
+- tapOn:
+    id: "user_avatar"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for loading states or error states
+- assertVisible:
+    text: "Loading"
+    optional: true
+
+- assertVisible:
+    text: "Failed to load"
+    optional: true
+
+# Navigate back to main screen
+- tapOn:
+    point: "30,100"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Verify app remains stable despite potential network errors
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Test map functionality still works
+- assertVisible: "My Contacts"
+
+# Try to interact with map to ensure it's responsive
+- tapOn:
+    point: "50%,50%"
+- waitForAnimationToEnd

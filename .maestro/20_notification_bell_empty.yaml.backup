@@ -1,0 +1,27 @@
+appId: app.mygrid.grid
+---
+# Test: Verify notification bell opens modal and shows empty state when no invites
+# Prerequisite: testuser1 logged in on map screen, no pending invites
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap the notification bell
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Verify Notifications modal opened
+- assertVisible: "Notifications"
+
+# Close the notifications modal
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

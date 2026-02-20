@@ -30,7 +30,7 @@ appId: app.mygrid.grid
     timeout: 5000
 - tapOn:
     point: "65%,9%"
-- delay: 1000
+- wait: 1000
 
 - waitForAnimationToEnd
 
@@ -76,7 +76,7 @@ appId: app.mygrid.grid
     timeout: 15000
 
 # Step 11: Get the group room ID and have testuser2 join
-- delay: 3000
+- wait: 3000
 
 - runScript:
     file: scripts/api_find_room_by_name.js
@@ -95,14 +95,14 @@ appId: app.mygrid.grid
     env:
       USER: testuser2
       ROOM_ID: ${output.roomId}
-- delay: 3000
+- wait: 3000
 
 # Step 12: Pull to refresh
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 2000
+- wait: 2000
 
 # Step 13: API sends location from testuser2
 - runScript:
@@ -112,7 +112,7 @@ appId: app.mygrid.grid
       ROOM_ID: ${output.roomId}
       LAT: "38.9072"
       LON: "-77.0369"
-- delay: 5000
+- wait: 5000
 
 # Step 14: Verify still on map
 - assertVisible: "My Contacts"

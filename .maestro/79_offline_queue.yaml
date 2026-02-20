@@ -1,6 +1,10 @@
 appId: app.mygrid.grid  
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -21,7 +25,7 @@ appId: app.mygrid.grid
 # Try to simulate network interruption by rapid app backgrounding
 # (This simulates intermittent connectivity)
 - stopApp
-- delay: 1000
+- wait: 1000
 
 # Try to perform actions that would queue if offline
 # Launch app in potentially degraded network state
@@ -55,7 +59,7 @@ appId: app.mygrid.grid
 # Try to send request
 - tapOn: "Send Request"
 - waitForAnimationToEnd
-- delay: 2000
+- wait: 2000
 
 # Close modal
 - tapOn: "Cancel"
@@ -63,7 +67,7 @@ appId: app.mygrid.grid
 
 # Background and relaunch to simulate network restoration
 - stopApp
-- delay: 2000
+- wait: 2000
 - launchApp
 - waitForAnimationToEnd
 
@@ -80,7 +84,7 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Look for any processed requests or confirmations
-- delay: 2000
+- wait: 2000
 
 # Go back to map
 - tapOn: "Back"

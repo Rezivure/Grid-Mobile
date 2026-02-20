@@ -1,0 +1,110 @@
+appId: app.mygrid.grid  
+---
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
+# Ensure app is running and logged in
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# Set up a friend first (while online)
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_login.sh testuser2 testpass123
+      ./api_send_friend_request.sh testuser2 testuser1
+      ./api_send_location.sh testuser2 40.7580 -73.9855
+
+# Wait for friend to appear
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# Try to simulate network interruption by rapid app backgrounding
+# (This simulates intermittent connectivity)
+- stopApp
+- delay: 1000
+
+# Try to perform actions that would queue if offline
+# Launch app in potentially degraded network state
+- launchApp
+- waitForAnimationToEnd
+
+# Attempt navigation which tests local caching
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+
+# Try changing display name (might queue if offline)
+- tapOn: "Display Name"
+- waitForAnimationToEnd
+- clearText
+- inputText: "OfflineTest"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Go back to map
+- tapOn: "Back"
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Try to add a friend request (would queue if offline)
+- tapOn: "Add Contact"
+- waitForAnimationToEnd
+
+# Try searching for testuser3
+- inputText: "testuser3"
+
+# Try to send request
+- tapOn: "Send Request"
+- waitForAnimationToEnd
+- delay: 2000
+
+# Close modal
+- tapOn: "Cancel"
+- waitForAnimationToEnd
+
+# Background and relaunch to simulate network restoration
+- stopApp
+- delay: 2000
+- launchApp
+- waitForAnimationToEnd
+
+# Verify app recovered and actions completed
+- assertVisible: "Map"
+
+# Check if display name change took effect
+- tapOn: "Settings"
+- assertVisible: "OfflineTest"
+
+# Check notifications to see if friend request was processed
+- tapOn: "Back"
+- tapOn: "Notifications"
+- waitForAnimationToEnd
+
+# Look for any processed requests or confirmations
+- delay: 2000
+
+# Go back to map
+- tapOn: "Back"
+- assertVisible: "Map"
+
+# Verify friend from initial setup is still there
+- assertVisible: "testuser2"
+
+# Final connectivity test - try sending new API request
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7590 -73.9865
+
+# Should receive new location (proving connectivity restored)
+- waitForAnimationToEnd
+- assertVisible: "testuser2"
+
+# App should be fully functional
+- tapOn: "Settings"
+- assertVisible: "Display Name"
+- tapOn: "Back"
+- assertVisible: "Map"

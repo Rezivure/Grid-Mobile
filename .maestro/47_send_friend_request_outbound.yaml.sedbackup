@@ -1,0 +1,149 @@
+appId: app.mygrid.grid
+---
+# Test: Send outbound friend request to testuser4 and verify complete flow
+# Maestro searches for testuser4 → sends request → API accepts → API sends location → verify on map
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Tap the person-add icon to open Add Contact modal
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Step 2: Verify Add Contact modal opened
+- assertVisible: "Add Contact"
+
+# Step 3: Enter testuser4's Matrix ID
+- tapOn: "john:homeserver.io"  # Placeholder text field
+- inputText: "testuser4:localhost"
+- waitForAnimationToEnd
+
+# Step 4: Dismiss keyboard
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Step 5: Send the friend request
+- tapOn: "Send Request"
+- waitForAnimationToEnd
+
+# Step 6: Verify returned to map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+- assertVisible: "Search Contacts"
+
+# Step 7: Wait a moment then have API accept the request as testuser4
+- wait: 3000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser1)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[] | select(. | contains("testuser4"))' | head -1) && if [ -n "$ROOM_ID" ]; then ./api_join_room.sh testuser4 "$ROOM_ID"; fi
+- waitForAnimationToEnd
+- wait: 3000  # Give sync time for acceptance
+
+# Step 8: Pull to refresh to sync the acceptance 
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- wait: 2000
+
+# Step 9: Verify testuser4 appears in contacts list
+- tapOn:
+    point: "30%,62%"  # Contacts drawer
+- waitForAnimationToEnd
+
+# Wait for contacts to load and check for testuser4
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# Step 10: Close contacts drawer
+- tapOn:
+    point: "70%,45%"  # Tap map area to close drawer
+- waitForAnimationToEnd
+
+# Step 11: API sends location from testuser4 (Brooklyn Bridge)
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser4)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser4 "$ROOM_ID" 40.7061 -73.9969
+- wait: 5000  # Allow time for Matrix sync and UI update
+
+# Step 12: Verify testuser4's location marker appears on map
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# Step 13: Test interaction with testuser4's marker
+- runFlow:
+    when:
+      visible:
+        text: "testuser4"
+    commands:
+      # Tap on testuser4's location  
+      - tapOn:
+          text: "testuser4"
+      - waitForAnimationToEnd
+      # Check if profile/info dialog appears
+      - runFlow:
+          when:
+            visible: "testuser4"
+          commands:
+            - wait: 2000
+            # Close profile if it opened
+            - tapOn:
+                point: "70%,30%"
+            - waitForAnimationToEnd
+
+# Step 14: Send another location to test real-time updates
+- wait: 2000
+- runScript:
+    script: cd .maestro/helpers && ROOM_ID=$(curl -s -H "Authorization: Bearer $(./api_login.sh testuser4)" "http://localhost:8008/_matrix/client/r0/joined_rooms" | jq -r '.joined_rooms[0]') && ./api_send_location.sh testuser4 "$ROOM_ID" 40.7128 -74.0060
+- wait: 5000
+
+# Step 15: Verify location still visible after update
+- extendedWaitUntil:
+    visible:
+      text: "testuser4"
+    timeout: 15000
+
+# Step 16: Test search functionality with new friend
+- tapOn: "Search Contacts"
+- waitForAnimationToEnd
+- inputText: "testuser4"
+- waitForAnimationToEnd
+
+# Should see testuser4 in search results
+- assertVisible: "testuser4"
+
+# Clear search
+- tapOn: "Search Contacts"
+- inputText: ""
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Step 17: Final verification - check notifications are clear
+- tapOn:
+    point: "90%,62%"  # Notification bell
+- waitForAnimationToEnd
+
+# Should not see any pending friend requests
+- runFlow:
+    when:
+      visible: "friend request"  
+    commands:
+      - assertVisible: "This should not be visible - no pending requests"
+
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Final state: Outbound friend request successfully sent, accepted, and location sharing established

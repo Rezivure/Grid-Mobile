@@ -1,0 +1,124 @@
+appId: app.mygrid.grid
+---
+# Test: Full login flow against local Synapse + complete onboarding
+# Requires: docker compose up in test-infra/
+- clearState
+- launchApp
+- tapOn: "Custom Provider"
+
+# Fill in local server
+- scrollUntilVisible:
+    element: "Homeserver URL"
+    direction: DOWN
+- tapOn: "Homeserver URL"
+- inputText: "http://localhost:8008"
+
+# Username
+- scrollUntilVisible:
+    element: "Username"
+    direction: DOWN
+- tapOn: "Username"
+- inputText: "testuser1"
+
+# Password
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn: "Password"
+- inputText: "testpass123"
+
+# Sign In
+- scrollUntilVisible:
+    element: "Sign In"
+    direction: DOWN
+- tapOn: "Sign In"
+
+# Warning dialog appears
+- assertVisible: "Important Notice"
+- tapOn: "I Understand, Continue"
+
+# Wait for login to process and onboarding modal to appear
+- waitForAnimationToEnd
+
+# ═══════════════════════════════════════════════════════════════
+# ONBOARDING: Walk through all 8 pages
+# ═══════════════════════════════════════════════════════════════
+
+# Page 1: Welcome to Grid!
+- assertVisible: "Welcome to Grid!"
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Page 2: Grant Permissions
+- assertVisible: "Grant Permissions"
+- waitForAnimationToEnd
+
+# Tap Location Always permission card (using percentage coordinates
+# since text matching is unreliable in modal with wrapped text)
+- tapOn:
+    point: "50%,62%"
+- waitForAnimationToEnd
+
+# Handle iOS location permission dialogs (may appear in various forms)
+- runFlow:
+    when:
+      visible: "Allow While Using App"
+    commands:
+      - tapOn: "Allow While Using App"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Change to Always Allow"
+    commands:
+      - tapOn: "Change to Always Allow"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Always Allow"
+    commands:
+      - tapOn: "Always Allow"
+      - waitForAnimationToEnd
+
+# Scroll down in modal to reveal Motion & Fitness card
+- swipe:
+    start: "50%,70%"
+    end: "50%,50%"
+- waitForAnimationToEnd
+
+# Tap Motion & Fitness permission card
+- tapOn:
+    point: "50%,70%"
+- waitForAnimationToEnd
+
+# Handle motion permission dialog
+- runFlow:
+    when:
+      visible: "OK"
+    commands:
+      - tapOn: "OK"
+      - waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Now Next should be enabled
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Pages 3-7: tap Next through each info page
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Page 8: Join Our Community
+- assertVisible: "Join Our Community"
+- tapOn: "Get Started"
+- waitForAnimationToEnd
+
+# Should now be on the map screen

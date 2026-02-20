@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -49,32 +53,32 @@ appId: app.mygrid.grid
       ) &
 
 # While events are being sent, interact with app to test responsiveness
-- delay: 3000
+- wait: 3000
 - tapOn:
     point: "50%,50%"
-- delay: 2000
+- wait: 2000
 
 # Navigate to settings and back
 - tapOn: "Settings"
 - assertVisible: "Display Name"
-- delay: 2000
+- wait: 2000
 - tapOn: "Back"
 - assertVisible: "Map"
 
 # Check notifications
-- delay: 3000
+- wait: 3000
 - tapOn: "Notifications"
-- delay: 2000
+- wait: 2000
 - tapOn: "Back"
 
 # Go to groups tab and back
-- delay: 3000
+- wait: 3000
 - tapOn: "Groups"
-- delay: 2000
+- wait: 2000
 - tapOn: "Map"
 
 # Wait for all background events to complete
-- delay: 15000
+- wait: 15000
 
 # Verify all friends are still visible (sync eventually completed)
 - assertVisible: "testuser2"
@@ -84,14 +88,14 @@ appId: app.mygrid.grid
 # Test one more interaction to ensure sync didn't break app responsiveness
 - tapOn:
     point: "50%,50%"
-- delay: 1000
+- wait: 1000
 
 # Pan around map to verify all markers are responsive
 - swipe:
     start: "50%,50%"
     end: "30%,30%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 - swipe:
     start: "30%,30%"

@@ -13,14 +13,14 @@ appId: app.mygrid.grid
     timeout: 30000
 
 # Wait for all friends and locations to sync
-- delay: 5000
+- wait: 5000
 
 # Pull to refresh to ensure everything is loaded
 - swipe:
     direction: DOWN
     duration: 500
 - waitForAnimationToEnd
-- delay: 3000
+- wait: 3000
 
 # Verify map shows all friends
 - assertVisible: "Map"
@@ -33,14 +33,14 @@ appId: app.mygrid.grid
 - waitForAnimationToEnd
 
 # Should show user profile or location info
-- delay: 2000
+- wait: 2000
 
 # Navigate around the map to see other markers
 - swipe:
     start: "50%,50%"
     end: "30%,40%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 # Verify other friends still visible
 - assertVisible: "testuser3"
@@ -49,19 +49,19 @@ appId: app.mygrid.grid
 # Test tapping another friend
 - tapOn: "testuser3"
 - waitForAnimationToEnd
-- delay: 2000
+- wait: 2000
 
 # Test map zoom with multiple friends
 - tapOn:
     point: "50%,50%"
-- delay: 1000
+- wait: 1000
 
 # Pan to show different area of map
 - swipe:
     start: "40%,40%"
     end: "60%,60%"
     duration: 1500
-- delay: 1000
+- wait: 1000
 
 # Verify map performance is good with multiple markers
 - assertVisible: "Map"
@@ -71,7 +71,7 @@ appId: app.mygrid.grid
     start: "60%,60%"
     end: "40%,40%"
     duration: 1000
-- delay: 1000
+- wait: 1000
 
 # Final verification - at least 2 friends visible
 - assertVisible: "testuser2"

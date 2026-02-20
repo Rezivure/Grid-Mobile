@@ -1,0 +1,48 @@
+appId: app.mygrid.grid
+---
+# Test: Toggle battery saver mode ON and OFF, verify persistence
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Navigate to settings
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+- assertVisible: "Battery Saver Mode"
+
+# Toggle Battery Saver ON
+- tapOn:
+    point: "85%,65%"
+- waitForAnimationToEnd
+
+# Navigate back and return to verify persistence
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Battery Saver Mode"
+
+# Toggle Battery Saver OFF
+- tapOn:
+    point: "85%,65%"
+- waitForAnimationToEnd
+
+# Navigate back
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000

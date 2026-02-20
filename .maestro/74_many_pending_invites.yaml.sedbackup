@@ -1,0 +1,111 @@
+appId: app.mygrid.grid
+---
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Create many pending friend requests and group invites using helper
+- runScript:
+    script: cd .maestro/helpers && ./setup_many_friends.sh 2 9
+    timeout: 45000
+
+# Give extra time for many API calls to complete
+- delay: 5000
+
+# Create additional group invites
+- runScript:
+    script: cd .maestro/helpers && ./setup_large_group.sh InviteGroup1 2 5 3600
+    timeout: 30000
+
+- runScript:
+    script: cd .maestro/helpers && ./setup_large_group.sh InviteGroup2 6 8 3600
+    timeout: 30000
+
+# Wait for all invites to sync
+- delay: 8000
+
+# Pull to refresh notifications
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 3000
+
+# Check notifications - should have many pending invites
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Should see multiple pending friend requests and group invites
+- scrollUntilVisible:
+    element: "testuser2"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser3"
+    direction: DOWN
+
+# Test accepting one friend request
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Scroll to see more invites
+- scrollUntilVisible:
+    element: "testuser4"
+    direction: DOWN
+
+# Test declining a friend request
+- tapOn: "testuser4"
+- waitForAnimationToEnd
+- tapOn: "Decline"
+- waitForAnimationToEnd
+
+# Look for group invites
+- scrollUntilVisible:
+    element: "InviteGroup1"
+    direction: DOWN
+
+# Accept one group invite
+- tapOn: "InviteGroup1"
+- waitForAnimationToEnd
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify back on map with accepted friend
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+
+# Test that notifications still show remaining invites
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Should still see remaining pending invites
+- scrollUntilVisible:
+    element: "testuser3"
+    direction: DOWN
+
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify app handles many pending invites gracefully
+- assertVisible: "Map"
+
+# Test Groups tab shows accepted group
+- tapOn: "Groups"
+- waitForAnimationToEnd
+- assertVisible: "InviteGroup1"
+
+# Return to map
+- tapOn: "Map"
+- waitForAnimationToEnd
+- assertVisible: "Map"

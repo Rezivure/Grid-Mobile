@@ -1,0 +1,74 @@
+appId: app.mygrid.grid
+---
+# Test: Create a group with testuser2
+# Prerequisite: testuser1 logged in on map screen, testuser2 is a contact
+# Group creation is a 4-step wizard: Name → Duration → Members → Summary
+
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Tap the person-add icon to open Add Friend / Create Group modal
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Switch to Create Group tab
+# The modal is a bottom sheet — try multiple y values to find the tab
+- extendedWaitUntil:
+    visible: "Add Contact"
+    timeout: 5000
+- tapOn:
+    point: "65%,9%"
+- delay: 500
+
+- waitForAnimationToEnd
+
+# Step 0: Enter group name
+- tapOn: "Group Name"
+- inputText: "TestSquad"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Advance to Step 1: Duration
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 1: Select duration - tap "24h" quick button
+- tapOn: "24h"
+- waitForAnimationToEnd
+
+# Advance to Step 2: Members
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 2: Add a member (full Matrix ID required)
+- tapOn: "Username"
+- inputText: "testuser2:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Tap Add Member button
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+
+# Advance to Step 3: Summary
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 3: Create the group
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+
+# Should return to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000

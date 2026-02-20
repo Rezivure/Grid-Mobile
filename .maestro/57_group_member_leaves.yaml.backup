@@ -1,0 +1,114 @@
+appId: app.mygrid.grid
+---
+# Test: API has testuser2 leave group → Verify member count updates in UI
+# Multi-user E2E: Group membership change verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up group where testuser2 leaves..."
+    setup_group_member_leaves "Abandonment Test Group"
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Wait for group state changes to propagate
+- waitForAnimationToEnd
+
+# Go to contacts to check group status
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Look for Groups section
+- assertVisible:
+    text: "Groups"
+    optional: true
+
+# Tap on Groups tab
+- tapOn:
+    text: "Groups"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for the test group
+- assertVisible: "Abandonment Test Group"
+
+# The member count should be reduced (was 2, now 1 after testuser2 left)
+- assertVisible:
+    text: "1"
+    optional: true
+
+- assertVisible:
+    text: "member"
+    optional: true
+
+# Should NOT show "2 members" anymore
+- assertNotVisible: "2 members"
+
+# Tap on the group to see member details
+- tapOn: "Abandonment Test Group"
+- waitForAnimationToEnd
+
+# Should see group details
+- assertVisible: "Abandonment Test Group"
+
+# testuser2 should no longer be in the members list
+- assertNotVisible: "testuser2"
+
+# testuser1 should still be there
+- assertVisible: "testuser1"
+
+# Look for "member left" notification or status
+- assertVisible:
+    text: "left"
+    optional: true
+
+- assertVisible:
+    text: "Member left the group"
+    optional: true
+
+# Look for updated member count in group details
+- assertVisible:
+    text: "1 member"
+    optional: true
+
+# Check for group admin status (testuser1 might now be admin)
+- assertVisible:
+    text: "Admin"
+    optional: true
+
+- assertVisible:
+    text: "Owner"
+    optional: true
+
+# Look for options to manage the group
+- assertVisible:
+    text: "Leave"
+    optional: true
+
+- assertVisible:
+    text: "Delete"
+    optional: true
+
+# Go back to groups list
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# The group should still be visible but with reduced member count
+- assertVisible: "Abandonment Test Group"
+- assertVisible:
+    text: "1"
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Final verification
+- assertVisible: "My Contacts"

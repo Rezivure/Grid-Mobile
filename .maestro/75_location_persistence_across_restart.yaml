@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -27,12 +31,12 @@ appId: app.mygrid.grid
 # Record that we can see both friends on map
 - tapOn:
     point: "50%,50%"
-- delay: 500
+- wait: 500
 - assertVisible: "Map"
 
 # Completely kill the app
 - stopApp
-- delay: 3000
+- wait: 3000
 
 # Relaunch app
 - launchApp
@@ -49,7 +53,7 @@ appId: app.mygrid.grid
 # Test that map is functional with persisted locations
 - tapOn:
     point: "50%,50%"
-- delay: 500
+- wait: 500
 
 # Verify we can navigate with persisted state
 - tapOn: "Settings"

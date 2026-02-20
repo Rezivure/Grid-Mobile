@@ -1,0 +1,162 @@
+appId: app.mygrid.grid
+---
+# FULL REGRESSION JOURNEY - End-to-end comprehensive test
+# Tests complete user journey: login → friends → groups → locations → settings → logout
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# PART 1: Verify we're on map screen
+- assertVisible: "Map"
+
+# PART 2: Add Friend Request (using helper)
+- runScript:
+    script: cd .maestro/helpers && ./setup_friend_with_location.sh testuser3
+    timeout: 15000
+
+# Wait for friend request to be sent
+- delay: 3000
+
+# Pull to refresh to sync new invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 3000
+
+# Check notifications for friend request
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+- assertVisible: "Notifications"
+
+# Accept the friend request
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Close notifications
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# PART 3: Verify friend appears on map
+- assertVisible: "Map"
+- assertVisible: "testuser3"
+
+# PART 4: Create a group
+- tapOn:
+    point: "60%,62%"  # Add contact button
+- waitForAnimationToEnd
+- tapOn:
+    point: "65%,9%"   # Create Group tab
+- delay: 500
+- waitForAnimationToEnd
+
+# Enter group details
+- tapOn: "Group Name"
+- inputText: "RegressionGroup"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Set duration
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "24h"
+- waitForAnimationToEnd
+
+# Add member
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Username"
+- inputText: "testuser3:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+
+# Create the group
+- tapOn: "Next"
+- waitForAnimationToEnd
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+
+# Should return to map
+- assertVisible: "Map"
+
+# PART 5: Test location updates
+- runScript:
+    script: cd .maestro/helpers && ./api_send_location.sh testuser3 40.7590 -73.9865
+    timeout: 10000
+
+# Wait for location update
+- delay: 5000
+
+# Verify location marker updated
+- assertVisible: "testuser3"
+
+# PART 6: Test Settings Access
+- tapOn: "Settings"
+- waitForAnimationToEnd
+- assertVisible: "Display Name"
+
+# Test display name change
+- tapOn: "Display Name"
+- waitForAnimationToEnd
+- inputText: "RegressionTester"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Test incognito toggle
+- tapOn: "Incognito Mode"
+- waitForAnimationToEnd
+
+# Return to map
+- tapOn: "Back"
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# PART 7: Test Groups tab
+- tapOn: "Groups"
+- waitForAnimationToEnd
+- assertVisible: "RegressionGroup"
+
+# View group details
+- tapOn: "RegressionGroup"
+- waitForAnimationToEnd
+- assertVisible: "Members"
+
+# Return to map
+- tapOn: "Map"
+- waitForAnimationToEnd
+- assertVisible: "Map"
+
+# PART 8: Final location update test
+- runScript:
+    script: cd .maestro/helpers && ./api_send_location.sh testuser3 40.7600 -73.9880
+    timeout: 10000
+
+# Wait and verify final update
+- delay: 5000
+- assertVisible: "testuser3"
+
+# PART 9: Test app remains stable
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pan around map
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+- delay: 1000
+
+# Final verification - app should be stable and responsive
+- assertVisible: "Map"
+- assertVisible: "testuser3"
+
+# End of regression journey - app should be stable and functional

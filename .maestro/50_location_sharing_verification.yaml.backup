@@ -1,0 +1,51 @@
+appId: app.mygrid.grid
+---
+# Test: Verify location sharing functionality and map marker display
+# Prerequisite: testuser1 logged in on map screen
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Wait for location to load and be visible on map
+- waitForAnimationToEnd
+
+# Check that location icon/marker is present on the map
+# This verifies that location sharing is working
+- assertVisible: 
+    id: "user_location_marker"
+    optional: true
+
+# Alternative: Look for map controls that indicate location is active
+- assertVisible:
+    id: "map_view"
+    optional: true
+
+# Verify location sharing toggle is enabled in quick settings
+# Tap on user avatar or settings to access location controls
+- tapOn:
+    point: "16,100"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+
+# Scroll to location/privacy section
+- swipe:
+    start: "50%,70%"
+    end: "50%,40%"
+- waitForAnimationToEnd
+
+# Look for location-related settings
+- assertVisible:
+    text: "Location"
+    optional: true
+
+# Return to map
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Verify we're back on the map screen with location visible
+- assertVisible: "My Contacts"

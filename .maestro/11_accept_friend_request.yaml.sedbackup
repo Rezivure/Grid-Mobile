@@ -1,0 +1,49 @@
+appId: app.mygrid.grid
+---
+# Test: Accept a friend request from testuser2
+# Prerequisite: testuser1 logged in on map screen, local Synapse server running
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Setup friend request via helper script (simpler approach)
+- runScript:
+    script: cd .maestro/helpers && ./setup_friend_with_location.sh testuser2
+    timeout: 10000
+
+# Wait for friend request to sync
+- delay: 3000
+
+# Pull to refresh to sync new invites
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 2000
+
+# Tap the notification bell
+- tapOn:
+    point: "90%,62%"
+- waitForAnimationToEnd
+
+# Verify Notifications modal opened
+- assertVisible: "Notifications"
+
+# Tap the first invite card
+- tapOn:
+    point: "50%,28%"
+- waitForAnimationToEnd
+
+# Tap Accept Request button
+- tapOn: "Accept Request"
+- waitForAnimationToEnd
+
+# Close the notifications modal
+- tapOn: "Close"
+- waitForAnimationToEnd
+
+# Verify back on map screen
+- assertVisible: "Map"
+
+# Verify the friend appears on map
+- assertVisible: "testuser2"

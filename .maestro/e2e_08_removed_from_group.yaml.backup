@@ -1,0 +1,424 @@
+appId: app.mygrid.grid
+---
+# E2E Test: User removed from group (kicked/banned)
+# API: testuser2 kicks testuser1 from group → UI: testuser1 sees group disappear
+# Tests group removal/kick functionality and UI cleanup
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2-4 accounts exist
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Setting up group with multiple members..."
+    
+    # testuser2 creates group and invites testuser1, testuser3, testuser4
+    login_as_user "testuser2"
+    GROUP_ID=$(grid_create_group "Test Kick Group" 7200 "testuser1" "testuser3" "testuser4")
+    echo "$GROUP_ID" > /tmp/test_group_room_id
+    
+    echo "✓ Group created for kick test"
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+
+# Accept group invitation
+- assertVisible: "My Contacts"
+
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "Test Kick Group"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Set up other members to join and be active
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 Other members joining and becoming active..."
+    
+    # testuser3 joins and sends location
+    login_as_user "testuser3"
+    grid_accept_invite "$GROUP_ID"
+    grid_send_location "$GROUP_ID" 40.7829 -73.9654  # Central Park
+    
+    # testuser4 joins and sends location
+    login_as_user "testuser4"
+    grid_accept_invite "$GROUP_ID" 
+    grid_send_location "$GROUP_ID" 40.6892 -73.9442  # Brooklyn Heights
+    
+    # testuser2 sends location
+    login_as_user "testuser2"
+    grid_send_location "$GROUP_ID" 40.7580 -73.9855  # Times Square
+    
+    wait_for_sync 8
+    
+    echo "✓ Group is active with 4 members sharing locations"
+
+# Wait for group activity to appear
+- waitForAnimationToEnd
+
+# Verify group is active and visible
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "Test Kick Group"
+
+# Should show 4 members
+- assertVisible:
+    text: "4 members"
+    optional: true
+
+# Tap on group to see member list
+- tapOn: "Test Kick Group"
+- waitForAnimationToEnd
+
+# Should see all members
+- assertVisible: "testuser1"  # Myself
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Members should be active with locations
+- assertVisible:
+    text: "Active"
+    optional: true
+
+- assertVisible:
+    text: "Sharing location"
+    optional: true
+
+# Go back to map to see locations
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should see group members' locations on map
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+- assertVisible: "testuser4"
+
+# Test tapping on member location shows group context
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Test Kick Group"
+          optional: true
+      - assertVisible:
+          text: "Group member"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+- waitForAnimationToEnd
+
+# Now test being kicked from the group
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 testuser2 is kicking testuser1 from the group..."
+    
+    # testuser2 kicks testuser1
+    login_as_user "testuser2"
+    
+    # Use Matrix API to kick testuser1
+    curl -s -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${GROUP_ID}/kick" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "user_id": "@testuser1:localhost", 
+        "reason": "Testing kick functionality"
+      }'
+    
+    echo "✓ testuser1 has been kicked from the group"
+    
+    wait_for_sync 8
+
+# Wait for kick to take effect
+- waitForAnimationToEnd
+
+# Group should disappear from map - members' locations should be gone
+- assertNotVisible: "testuser2"
+- assertNotVisible: "testuser3"
+- assertNotVisible: "testuser4"
+
+# Check that group is removed from contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+# Group should no longer be visible in groups list
+- assertNotVisible: "Test Kick Group"
+
+# Test trying to access group details (should not be possible)
+- runFlow:
+    when:
+      visible: "Test Kick Group"
+    commands:
+      # If somehow still visible, tapping should show error or removal notice
+      - tapOn: "Test Kick Group"
+      - waitForAnimationToEnd
+      - assertVisible:
+          text: "Removed"
+          optional: true
+      - assertVisible:
+          text: "Kicked"
+          optional: true
+      - assertVisible:
+          text: "No longer a member"
+          optional: true
+
+# Test notification/indication of being removed
+- runFlow:
+    when:
+      visible:
+        id: "notification_badge"
+    commands:
+      # Might show notification about being removed
+      - tapOn:
+          point: "90%,10%"
+      - waitForAnimationToEnd
+      - assertVisible:
+          text: "Removed from group"
+          optional: true
+      - assertVisible:
+          text: "Kicked from"
+          optional: true
+      - assertVisible:
+          text: "Test Kick Group"
+          optional: true
+
+# Go back to map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Map should be clean - no group member locations
+- assertVisible: "My Contacts"
+- assertNotVisible: "testuser2"
+- assertNotVisible: "testuser3"
+- assertNotVisible: "testuser4"
+
+# Test that individual direct contacts still work (if established)
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing individual contact still works after group kick..."
+    
+    # testuser2 sends direct location to testuser1 (not in group context)
+    login_as_user "testuser2"
+    DIRECT_ROOM=$(grid_create_direct "testuser1")
+    grid_send_location "$DIRECT_ROOM" 40.7424 -74.0061  # Chelsea Market
+    
+    wait_for_sync 5
+
+- waitForAnimationToEnd
+
+# Should see notification for direct contact
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+# Accept direct contact
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+- assertVisible: "testuser2"
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should now see testuser2 as individual contact on map
+- assertVisible: "testuser2"
+
+# Tap on location to verify it's NOT showing group context
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      - assertVisible: "testuser2"
+      - assertVisible:
+          text: "Chelsea"
+          optional: true
+      # Should NOT show group context anymore
+      - assertNotVisible: "Test Kick Group"
+      - assertNotVisible: "Group member"
+      # Should show as direct contact
+      - assertVisible:
+          text: "Contact"
+          optional: true
+      # Close popup
+      - tapOn:
+          point: "50%,70%"
+
+# Test rejoining the same group (if re-invited)
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "🚀 Testing re-invitation to same group..."
+    
+    # testuser2 re-invites testuser1 to the same group
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    login_as_user "testuser2"
+    
+    # Re-invite to the same group
+    curl -s -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${GROUP_ID}/invite" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{"user_id": "@testuser1:localhost"}'
+    
+    echo "✓ testuser1 re-invited to Test Kick Group"
+    
+    wait_for_sync 5
+
+- waitForAnimationToEnd
+
+# Should see group invitation again
+- extendedWaitUntil:
+    visible:
+      id: "notification_badge"
+
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see group invitation
+- assertVisible: "Test Kick Group"
+
+# Should be able to rejoin
+- tapOn: "Accept"
+- waitForAnimationToEnd
+
+- tapOn:
+    point: "30,100"
+- waitForAnimationToEnd
+
+# Group should reappear in contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertVisible: "Test Kick Group"
+
+# Should now show fewer members (some might have left)
+- assertVisible:
+    text: "members"
+    optional: true
+
+# Test that locations reappear on map
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+- waitForAnimationToEnd
+
+# Should see group members again
+- assertVisible: "testuser2"
+
+# Other members might still be there
+- runFlow:
+    when:
+      visible: "testuser3"
+    commands:
+      - assertVisible: "testuser3"
+
+# Test ban/kick with reason display
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    GROUP_ID=$(cat /tmp/test_group_room_id)
+    echo "🚀 Testing kick with reason..."
+    
+    # testuser2 kicks testuser1 again with a specific reason
+    login_as_user "testuser2"
+    
+    curl -s -X POST "${SYNAPSE_URL}/_matrix/client/v3/rooms/${GROUP_ID}/kick" \
+      -H "Authorization: Bearer ${GRID_ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "user_id": "@testuser1:localhost",
+        "reason": "Testing removal with custom reason message"
+      }'
+    
+    wait_for_sync 6
+
+- waitForAnimationToEnd
+
+# Group should disappear again
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+
+- assertNotVisible: "Test Kick Group"
+
+# Check for notification with reason
+- runFlow:
+    when:
+      visible:
+        id: "notification_badge"
+    commands:
+      - tapOn:
+          point: "90%,10%"
+      - waitForAnimationToEnd
+      # Might show kick reason
+      - assertVisible:
+          text: "custom reason"
+          optional: true
+      - assertVisible:
+          text: "Removed"
+          optional: true
+
+# Final verification - clean state after removal
+- tapOn:
+    point: "50%,40%"
+- waitForAnimationToEnd
+
+# Map should be clean of group members
+- assertVisible: "My Contacts"
+- assertNotVisible: "testuser3"
+- assertNotVisible: "testuser4"
+
+# Individual contact (testuser2) might still be visible if direct room exists
+- runFlow:
+    when:
+      visible: "testuser2"
+    commands:
+      # Should show as individual contact, not group member
+      - tapOn: "testuser2"
+      - waitForAnimationToEnd
+      - assertVisible: "testuser2"
+      - assertNotVisible: "Test Kick Group"

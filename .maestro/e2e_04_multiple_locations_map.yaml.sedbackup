@@ -1,0 +1,131 @@
+appId: app.mygrid.grid
+---
+# E2E Test: Multiple simultaneous location updates on map  
+# API: Multiple users (testuser2-5) send locations → UI: testuser1 sees all markers on map
+# Tests the map's ability to display multiple contacts' locations simultaneously
+
+# Prerequisites:
+# - testuser1 logged in and on map screen
+# - Docker Synapse running on localhost:8008
+# - testuser2-5 accounts exist
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Set up multiple friends at different NYC locations using helper script
+- runScript:
+    script: cd .maestro/helpers && ./setup_many_friends.sh 2 5
+    timeout: 45000
+
+# Wait for all locations to sync
+- delay: 8000
+
+# Pull to refresh to ensure all locations are loaded
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 5000
+
+# Test 1: Verify all friends appear on map
+- assertVisible: "Map"
+- assertVisible: "testuser2"
+- assertVisible: "testuser3" 
+- assertVisible: "testuser4"
+- assertVisible: "testuser5"
+
+# Test 2: Tap on first friend marker
+- tapOn: "testuser2"
+- waitForAnimationToEnd
+- delay: 2000
+
+# Test 3: Pan around map to see different markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1500
+- delay: 2000
+
+# Verify other markers still visible or accessible
+- swipe:
+    start: "30%,30%"
+    end: "70%,70%"
+    duration: 1500
+- delay: 2000
+
+# Test 4: Zoom out to see more markers
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Test 5: Send new simultaneous location updates
+- runScript:
+    script: |
+      cd .maestro/helpers
+      ./api_send_location.sh testuser2 40.7590 -73.9865 &
+      ./api_send_location.sh testuser3 40.7839 -73.9664 &
+      ./api_send_location.sh testuser4 40.7071 -73.9979 &
+      ./api_send_location.sh testuser5 40.7084 -74.0123 &
+      wait
+    timeout: 30000
+
+# Wait for location updates to sync
+- delay: 10000
+
+# Test 6: Verify updated locations are reflected
+- swipe:
+    start: "60%,60%"
+    end: "40%,40%"
+    duration: 1000
+- delay: 2000
+
+# Verify markers are still present (may have moved)
+- assertVisible: "testuser2"
+- assertVisible: "testuser3"
+
+# Test 7: Test map performance with multiple active markers
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+- swipe:
+    start: "50%,50%"
+    end: "25%,25%"
+    duration: 2000
+- delay: 1000
+
+- swipe:
+    start: "25%,25%"
+    end: "75%,75%"
+    duration: 2000
+- delay: 1000
+
+# Test 8: Final verification - app should be responsive
+- assertVisible: "Map"
+
+# Try to find at least 2 friends on current map view
+- assertVisible: "testuser2"
+
+# Test 9: Verify contact drawer shows all friends
+- tapOn: "My Contacts"  
+- waitForAnimationToEnd
+- delay: 2000
+
+# Should see multiple contacts listed
+- scrollUntilVisible:
+    element: "testuser2"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser3" 
+    direction: DOWN
+
+# Close contacts drawer
+- swipe:
+    start: "50%,80%"
+    end: "50%,20%"
+    duration: 500
+- waitForAnimationToEnd
+
+# Final verification
+- assertVisible: "Map"

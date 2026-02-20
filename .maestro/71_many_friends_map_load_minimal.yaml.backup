@@ -1,0 +1,5 @@
+appId: app.mygrid.grid
+---
+# Minimal test to verify basic functionality
+- launchApp
+- assertVisible: "Map"

@@ -1,0 +1,66 @@
+appId: app.mygrid.grid
+---
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+# Create large group with many members via helper script
+- runScript:
+    script: cd .maestro/helpers && ./setup_large_group.sh LargeTestGroup 1 11 7200
+    timeout: 30000
+
+# Wait for group and locations to sync
+- delay: 3000
+
+# Verify map can handle large group
+- assertVisible: "Map"
+
+# Go to groups tab to see the large group
+- tapOn: "Groups"
+- waitForAnimationToEnd
+
+# Verify large group is visible
+- assertVisible: "LargeTestGroup"
+
+# Tap on group to see members
+- tapOn: "LargeTestGroup"
+- waitForAnimationToEnd
+
+# Should see member count and member list
+- assertVisible: "Members"
+
+# Scroll through member list to verify all members are there
+- scrollUntilVisible:
+    element: "testuser2"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser5"
+    direction: DOWN
+
+- scrollUntilVisible:
+    element: "testuser8"
+    direction: DOWN
+
+# Go back to map view
+- tapOn: "Map"
+- waitForAnimationToEnd
+
+# Verify multiple markers are visible on map
+- assertVisible: "Map"
+- assertVisible: "testuser1"
+- assertVisible: "testuser2"
+
+# Test map performance with large group
+- tapOn:
+    point: "50%,50%"
+- delay: 1000
+
+# Pan around to see more markers
+- swipe:
+    start: "50%,50%"
+    end: "30%,30%"
+    duration: 1000
+
+# App should still be responsive
+- assertVisible: "Map"

@@ -1,0 +1,118 @@
+appId: app.mygrid.grid
+---
+# Test: Create group, verify member joined, send location
+# Prerequisites: testuser1 logged in on map screen, local Synapse server running
+
+# Step 0: Clean up stale rooms from previous runs
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+- runScript:
+    file: scripts/api_cleanup_rooms.js
+    env:
+      USERS: "testuser2,testuser3"
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 10000
+
+# Step 1: Tap person-add icon
+- tapOn:
+    point: "60%,62%"
+- waitForAnimationToEnd
+
+# Step 2: Switch to Create Group tab
+- extendedWaitUntil:
+    visible: "Add Contact"
+    timeout: 5000
+- tapOn:
+    point: "65%,9%"
+- delay: 1000
+
+- waitForAnimationToEnd
+
+# Step 3: Enter group name
+- tapOn: "Group Name"
+- inputText: "Road Trip"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+
+# Step 4: Advance to duration
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 5: Select 24h duration
+- tapOn: "24h"
+- waitForAnimationToEnd
+
+# Step 6: Advance to members
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 7: Add testuser2 (full Matrix ID)
+- tapOn: "Username"
+- inputText: "testuser2:localhost"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+
+# Step 8: Advance to summary
+- tapOn: "Next"
+- waitForAnimationToEnd
+
+# Step 9: Create the group
+- tapOn: "Create Group"
+- waitForAnimationToEnd
+
+# Step 10: Verify returned to map
+- extendedWaitUntil:
+    visible: "My Contacts"
+    timeout: 15000
+
+# Step 11: Get the group room ID and have testuser2 join
+- delay: 3000
+
+- runScript:
+    file: scripts/api_find_room_by_name.js
+    env:
+      USER: testuser1
+      ROOM_NAME: "Road Trip"
+# Invite testuser2 via API (in case UI invite didn't reach Matrix), then join
+- runScript:
+    file: scripts/api_invite_user.js
+    env:
+      ADMIN_USER: testuser1
+      INVITE_USER: testuser2
+      ROOM_ID: ${output.roomId}
+- runScript:
+    file: scripts/api_join_room.js
+    env:
+      USER: testuser2
+      ROOM_ID: ${output.roomId}
+- delay: 3000
+
+# Step 12: Pull to refresh
+- swipe:
+    direction: DOWN
+    duration: 500
+- waitForAnimationToEnd
+- delay: 2000
+
+# Step 13: API sends location from testuser2
+- runScript:
+    file: scripts/api_send_location.js
+    env:
+      USER: testuser2
+      ROOM_ID: ${output.roomId}
+      LAT: "38.9072"
+      LON: "-77.0369"
+- delay: 5000
+
+# Step 14: Verify still on map
+- assertVisible: "My Contacts"

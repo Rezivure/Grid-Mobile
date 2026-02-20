@@ -1,0 +1,109 @@
+appId: app.mygrid.grid
+---
+# Test: API sends friend request as testuser2 → Verify notification bell shows badge
+# Multi-user E2E: API-driven notification + UI verification
+
+# Requires: testuser1 logged in on map screen, Docker running
+
+
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+- runScript: |
+    cd test-infra/scripts
+    source api-helpers.sh
+    echo "Setting up friend request notification from testuser2..."
+    setup_friend_request_notification
+    wait_for_sync 5
+
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Wait for notification to propagate
+- waitForAnimationToEnd
+
+# Check notification bell at top right (should show badge/number)
+# The bell icon should have a notification indicator
+- assertVisible:
+    id: "notification_bell"
+    optional: true
+
+# Alternative ways to check for notification badge
+- assertVisible:
+    id: "notification_badge"
+    optional: true
+
+# Look for red dot or number indicator
+- assertVisible:
+    text: "1"
+    optional: true
+
+# Tap the notification bell to open invitations
+- tapOn:
+    point: "90%,10%"
+- waitForAnimationToEnd
+
+# Should see notifications/invitations modal
+- assertVisible: 
+    text: "Invitations"
+    optional: true
+
+- assertVisible:
+    text: "Notifications"  
+    optional: true
+
+# Should see the friend request from testuser2
+- assertVisible: "testuser2"
+
+# Should see friend request actions
+- assertVisible: 
+    text: "Accept"
+    optional: true
+
+- assertVisible:
+    text: "Decline" 
+    optional: true
+
+# Verify it's a friend request type
+- assertVisible:
+    text: "wants to be friends"
+    optional: true
+
+# Test accept button is functional (don't actually accept yet)
+- tapOn:
+    text: "Accept"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for confirmation or success message
+- assertVisible:
+    text: "Friend request accepted"
+    optional: true
+
+# Close the modal by tapping outside or back
+- tapOn:
+    point: "20%,20%"
+    optional: true
+- waitForAnimationToEnd
+
+# Alternative close method
+- tapOn:
+    point: "30,100"  
+    optional: true
+- waitForAnimationToEnd
+
+# Verify we're back on map screen
+- extendedWaitUntil:
+    visible: "My Contacts"
+
+# Check if notification badge is cleared after accepting
+- assertNotVisible:
+    text: "1"
+    optional: true
+
+# Verify testuser2 now appears in contacts
+- tapOn: "My Contacts"
+- waitForAnimationToEnd
+- assertVisible: "testuser2"

@@ -1,6 +1,10 @@
 appId: app.mygrid.grid
 ---
 
+# Start with fresh login
+- runFlow: flows/login_testuser1.yaml
+
+
 # Ensure app is running and logged in
 - launchApp
 - waitForAnimationToEnd
@@ -24,7 +28,7 @@ appId: app.mygrid.grid
 
 # Background the app
 - stopApp
-- delay: 2000
+- wait: 2000
 
 # Burst of location updates from multiple users while app is backgrounded
 - runScript:
@@ -40,7 +44,7 @@ appId: app.mygrid.grid
       wait
 
 # Wait for sync to propagate
-- delay: 3000
+- wait: 3000
 
 # Foreground app 
 - launchApp
@@ -58,5 +62,5 @@ appId: app.mygrid.grid
 # Test map interaction to ensure it's responsive with multiple markers
 - tapOn: 
     point: "50%,50%"
-- delay: 500
+- wait: 500
 - assertVisible: "Map"
