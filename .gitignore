@@ -66,3 +66,10 @@ fastlane/README.md
 google-play-key.json
 fastlane/.env
 fastlane/keys/
+
+# Editor/sed backups
+*.backup
+*.sedbackup
+
+# Maestro debug artifacts
+maestro-core-debug-*/
