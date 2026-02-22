@@ -93,6 +93,29 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-bump build number
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          PUBSPEC="pubspec.yaml"
+          CURRENT=$(grep '^version:' "$PUBSPEC" | sed 's/version: *//')
+          VERSION_NAME="${CURRENT%%+*}"
+          BUILD_NUMBER="${CURRENT##*+}"
+          NEW_BUILD=$((BUILD_NUMBER + 1))
+          NEW_VERSION="${VERSION_NAME}+${NEW_BUILD}"
+          sed -i '' "s/^version: .*/version: ${NEW_VERSION}/" "$PUBSPEC"
+          echo "📦 Version bump: ${CURRENT} → ${NEW_VERSION}"
+          echo "BUILD_NUMBER=${NEW_BUILD}" >> $GITHUB_ENV
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+
+          # Commit and push the version bump
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$PUBSPEC"
+          git commit -m "chore: bump build number to ${NEW_BUILD} [skip ci]"
+          git push origin main
 
       - name: Create .env
         run: |
