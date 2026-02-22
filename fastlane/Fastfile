@@ -15,33 +15,11 @@ platform :ios do
   lane :beta do |options|
     api_key
 
-    # Read current pubspec version
+    # Version is already bumped by CI — just read it
     pubspec_path = File.join(Dir.pwd, "..", "pubspec.yaml")
     pubspec = File.read(pubspec_path)
     current_version = pubspec.match(/version:\s*(\S+)/)[1]
-    version_name, build_number = current_version.split("+")
-    
-    # Always increment build number
-    new_build = build_number.to_i + 1
-    
-    # Version bumps only on release builds, not regular beta/TestFlight uploads
-    # Pass version:1.2.0 explicitly OR release:true to auto-bump patch
-    if options[:version]
-      new_version = options[:version]
-    elsif options[:release]
-      parts = version_name.split(".")
-      parts[2] = parts[2].to_i + 1
-      new_version = parts.join(".")
-    else
-      new_version = version_name
-    end
-    
-    new_full = "#{new_version}+#{new_build}"
-    UI.message("📦 Bumping: #{current_version} → #{new_full}")
-    
-    # Write back to pubspec.yaml
-    pubspec.gsub!(/version:\s*\S+/, "version: #{new_full}")
-    File.write(pubspec_path, pubspec)
+    UI.message("📦 Building version: #{current_version}")
 
     # Build the Flutter IPA
     sh("cd #{File.join(Dir.pwd, '..')} && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist")
