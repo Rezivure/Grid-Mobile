@@ -91,6 +91,8 @@ jobs:
     needs: [unit-tests, core-e2e-tests]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
