@@ -2,8 +2,8 @@ name: Grid Release
 
 on:
   schedule:
-    - cron: '0 2 * * 0'  # Sunday 2am EST
-  workflow_dispatch:  # Manual trigger
+    - cron: '0 7 * * 0'  # Every Sunday 2am EST (7am UTC)
+  workflow_dispatch:  # Or trigger manually anytime
 
 concurrency:
   group: release
@@ -15,8 +15,6 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64]
     outputs:
       should_release: ${{ steps.changes.outputs.should_release }}
-      last_tag: ${{ steps.changes.outputs.last_tag }}
-      new_version: ${{ steps.changes.outputs.new_version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,75 +23,45 @@ jobs:
       - name: Check for changes since last release
         id: changes
         run: |
-          # Get the latest release tag
           LAST_TAG=$(git tag -l "v*" | sort -V | tail -1)
-          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
-          
           if [ -z "$LAST_TAG" ]; then
-            echo "No previous release tags found, proceeding with release"
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
-            # Check if there are commits since the last tag
-            COMMITS_SINCE=$(git rev-list ${LAST_TAG}..HEAD --count)
-            echo "Commits since $LAST_TAG: $COMMITS_SINCE"
-            
-            if [ "$COMMITS_SINCE" -gt "0" ]; then
+            COMMITS=$(git rev-list ${LAST_TAG}..HEAD --count)
+            echo "Commits since $LAST_TAG: $COMMITS"
+            if [ "$COMMITS" -gt "0" ]; then
               echo "should_release=true" >> $GITHUB_OUTPUT
-              echo "Found $COMMITS_SINCE commits since last release"
             else
               echo "should_release=false" >> $GITHUB_OUTPUT
               echo "No changes since last release, skipping"
             fi
           fi
-          
-          # Generate new version
-          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
-          echo "new_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
 
   release:
-    name: Build and Test Release
+    name: Promote & Release
     runs-on: [self-hosted, macOS, ARM64]
     needs: check-changes
     if: needs.check-changes.outputs.should_release == 'true'
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Create release .env
+      - name: Verify build artifacts exist
         run: |
-          cat > .env << 'EOF'
-          MATRIX_SERVER_URL=https://matrix.mygrid.app
-          GAUTH_URL=https://gauth.mygrid.app
-          HOMESERVER=matrix.mygrid.app
-          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
-          VERSION_CHECK_URL=https://version.mygrid.app
-          EOF
+          echo "Checking for existing build artifacts from CI..."
+          ls -la build/ios/ipa/Grid.ipa
+          ls -la build/app/outputs/bundle/release/app-release.aab
+          ls -la build/app/outputs/flutter-apk/app-release.apk
+          echo "✅ All artifacts found"
 
-      - name: Bump build number
+      - name: Read version
+        id: version
         run: |
-          # Extract current version and build number
           CURRENT=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
-          VERSION=$(echo $CURRENT | cut -d+ -f1)
-          BUILD_NUM=$(echo $CURRENT | cut -d+ -f2)
-          NEW_BUILD_NUM=$((BUILD_NUM + 1))
-          NEW_VERSION="${VERSION}+${NEW_BUILD_NUM}"
-          
-          echo "Bumping version from $CURRENT to $NEW_VERSION"
-          sed -i '' "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
-          
-          # Commit version bump
-          git config user.name "Grid Release Bot"
-          git config user.email "release@mygrid.app"
-          git add pubspec.yaml
-          git commit -m "Release: bump version to $NEW_VERSION"
-          
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-
-      - name: Set up Android signing
-        run: |
-          cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
-          cp "$HOME/.fastlane-secrets/grid-prod-key.jks" android/app/grid-prod-key.jks
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "📦 Releasing version: $CURRENT"
 
       - name: Install signing certificate
         env:
@@ -103,126 +71,13 @@ jobs:
         run: |
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
           security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
-
-      - name: Build release binaries
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          
-          echo "Building iOS release..."
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
-          
-          echo "Building Android AAB..."
-          flutter build appbundle --release
-          
-          echo "Building Android APK..."
-          flutter build apk --release
-          
-          # Verify builds exist
-          ls -la build/ios/ipa/
-          ls -la build/app/outputs/bundle/release/
-          ls -la build/app/outputs/flutter-apk/
-
-      - name: Run unit tests
-        run: |
-          echo "Running unit tests..."
-          flutter test --reporter expanded
-
-      - name: Start test infrastructure
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          echo "Starting test infrastructure..."
-          bash test-infra/scripts/run-e2e.sh --only infra
-
-      - name: Run all Maestro flows (release tier)
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          echo "Running complete release test suite..."
-          ./run-maestro.sh release --report-dir test-infra/reports/maestro-release
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Generate changelog since last tag
-          LAST_TAG="${{ needs.check-changes.outputs.last_tag }}"
-          
-          if [ -n "$LAST_TAG" ]; then
-            echo "Generating changelog since $LAST_TAG"
-            CHANGELOG=$(git log ${LAST_TAG}..HEAD --oneline --pretty=format:"- %s" | head -20)
-          else
-            echo "Generating changelog for initial release"
-            CHANGELOG=$(git log --oneline --pretty=format:"- %s" | head -20)
-          fi
-          
-          # Save changelog to file
-          cat > CHANGELOG.md << 'EOF'
-          # Release ${{ env.NEW_VERSION }}
-          
-          ## Changes
-          $CHANGELOG
-          
-          ## Full Release Validation
-          - ✅ All unit tests passed
-          - ✅ Complete Maestro test suite passed (81 flows)
-          - ✅ iOS release build completed
-          - ✅ Android release build completed
-          EOF
-          
-          echo "changelog_file=CHANGELOG.md" >> $GITHUB_OUTPUT
-
-      - name: Create release tag and GitHub release
-        run: |
-          # Create and push tag
-          git tag "v${{ env.NEW_VERSION }}"
-          git push origin "v${{ env.NEW_VERSION }}"
-          git push origin HEAD
-          
-          # Create GitHub release
-          gh release create "v${{ env.NEW_VERSION }}" \
-            --title "Grid v${{ env.NEW_VERSION }}" \
-            --notes-file CHANGELOG.md \
-            --draft=false \
-            --prerelease=false \
-            build/ios/ipa/Grid.ipa \
-            build/app/outputs/bundle/release/app-release.aab \
-            build/app/outputs/flutter-apk/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-test-report-${{ env.NEW_VERSION }}
-          path: test-infra/reports/
-          retention-days: 90
-
-      - name: Upload debug artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-debug-${{ env.NEW_VERSION }}
-          path: |
-            ~/.maestro/tests/
-            build/ios/ipa/
-            build/app/outputs/
-          retention-days: 30
-
-      - name: Install provisioning profile
-        run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$HOME/.fastlane-secrets/Grid_Appstore_CI.mobileprovision" \
-            ~/Library/MobileDevice/Provisioning\ Profiles/fafae38f-8ebf-4447-8eb7-ba01d807e6bb.mobileprovision
 
       - name: Set up Fastlane secrets
         run: |
@@ -230,47 +85,48 @@ jobs:
           cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
           cp "$HOME/.fastlane-secrets/.env" fastlane/.env
           cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
-      - name: Upload to TestFlight (iOS)
-        if: success()
+
+      - name: Submit iOS to App Store Review
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
-          cd fastlane && fastlane ios beta
+          fastlane ios release
 
-      - name: Upload to Play Store Internal (Android)
-        if: success()
+      - name: Promote Android to Production
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
-          cd fastlane && fastlane android beta
+          fastlane android release
 
-  notify-failure:
-    name: Notify on Failure
-    runs-on: [self-hosted, macOS, ARM64]
-    needs: [check-changes, release]
-    if: failure() && needs.check-changes.outputs.should_release == 'true'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create failure issue
+      - name: Create GitHub Release
         run: |
-          TITLE="Release Pipeline Failed - $(date '+%Y-%m-%d')"
-          BODY="The automated release pipeline failed during the weekly release process.
-          
-          **Failed Job:** ${{ github.job }}
-          **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          **Commit:** ${{ github.sha }}
-          
-          Please investigate the failure and retry the release manually if needed.
-          
-          /cc @Grid-Mobile-Team"
-          
-          gh issue create \
-            --title "$TITLE" \
-            --body "$BODY" \
-            --label "release-failure" \
-            --label "bug"
+          VERSION="${{ steps.version.outputs.version }}"
+          LAST_TAG=$(git tag -l "v*" | sort -V | tail -1)
+
+          if [ -n "$LAST_TAG" ]; then
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --oneline --pretty=format:"- %s" | head -30)
+          else
+            CHANGELOG=$(git log --oneline --pretty=format:"- %s" | head -30)
+          fi
+
+          gh release create "v${VERSION}" \
+            --title "Grid v${VERSION}" \
+            --notes "## Changes
+          ${CHANGELOG}
+
+          ## Release
+          - 📱 iOS: Submitted to App Store Review
+          - 🤖 Android: Promoted to Production
+          - 📦 Binaries attached below" \
+            build/ios/ipa/Grid.ipa \
+            build/app/outputs/bundle/release/app-release.aab \
+            build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true

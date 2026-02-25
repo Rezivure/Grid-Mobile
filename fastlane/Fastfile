@@ -32,6 +32,17 @@ platform :ios do
     )
   end
 
+  desc "Upload to TestFlight and wait for processing"
+  lane :beta_release do
+    api_key
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: File.join(Dir.pwd, "..", "build", "ios", "ipa", "Grid.ipa"),
+      skip_waiting_for_build_processing: false
+    )
+  end
+
   desc "Submit to App Store (from latest TestFlight build)"
   lane :release do
     api_key
