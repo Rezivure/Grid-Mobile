@@ -1,0 +1,61 @@
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  changelog:
+    name: Changelog Entry
+    runs-on: [self-hosted, macOS, ARM64]
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse PR body and create changelog
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Parse which checkbox is checked
+          TYPE=""
+          if echo "$PR_BODY" | grep -q '\[x\] `skip`'; then
+            echo "✅ Changelog skipped"
+            # Remove any existing change file for this PR
+            rm -f "changes/pr-${PR_NUMBER}.md"
+            exit 0
+          elif echo "$PR_BODY" | grep -q '\[x\] `feature`'; then
+            TYPE="feature"
+          elif echo "$PR_BODY" | grep -q '\[x\] `fix`'; then
+            TYPE="fix"
+          elif echo "$PR_BODY" | grep -q '\[x\] `improvement`'; then
+            TYPE="improvement"
+          else
+            echo "::error::No changelog type selected. Check a box in the PR description."
+            exit 1
+          fi
+
+          # Extract release note line
+          NOTE=$(echo "$PR_BODY" | sed -n '/\*\*Release note:\*\*/,/^$/p' | grep -v '^\*\*Release note' | grep -v '^<!--' | grep -v '^$' | head -1 | xargs)
+
+          if [ -z "$NOTE" ]; then
+            echo "::error::Release note is empty. Add a one-liner under **Release note:** in the PR description."
+            exit 1
+          fi
+
+          # Create the change file
+          CHANGE_FILE="changes/pr-${PR_NUMBER}.md"
+          echo "[${TYPE}] ${NOTE}" > "$CHANGE_FILE"
+          echo "📝 Created ${CHANGE_FILE}: [${TYPE}] ${NOTE}"
+
+          # Commit if changed
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$CHANGE_FILE"
+          git diff --cached --quiet || git commit -m "changelog: add entry for PR #${PR_NUMBER} [skip ci]"
+          git push
