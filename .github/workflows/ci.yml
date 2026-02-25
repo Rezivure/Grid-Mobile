@@ -69,21 +69,7 @@ jobs:
           export PATH="/opt/homebrew/bin:$PATH"
           cd test-infra && docker compose down -v 2>&1 || true
 
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-e2e-report-${{ github.sha }}
-          path: test-infra/reports/
-          retention-days: 30
-
-      - name: Upload Maestro debug artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: maestro-core-debug-${{ github.sha }}
-          path: ~/.maestro/tests/
-          retention-days: 7
+      # Artifact uploads removed — storage quota was full and they're not needed for a solo project
 
   deploy-testflight:
     name: Deploy to TestFlight & Play Store
