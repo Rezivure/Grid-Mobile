@@ -86,11 +86,26 @@ jobs:
           cp "$HOME/.fastlane-secrets/.env" fastlane/.env
           cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
 
+      - name: Build release notes
+        id: notes
+        run: |
+          STORE_NOTES=$(bash scripts/build-release-notes.sh)
+          echo "store_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$STORE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "📝 Release notes:"
+          echo "$STORE_NOTES"
+
       - name: Submit iOS to App Store Review
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+
+          # Write release notes for deliver
+          mkdir -p fastlane/metadata/en-US
+          echo "${{ steps.notes.outputs.store_notes }}" > fastlane/metadata/en-US/release_notes.txt
+
           fastlane ios release
 
       - name: Promote Android to Production
@@ -98,33 +113,42 @@ jobs:
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+
+          # Write release notes for Play Store
+          mkdir -p fastlane/metadata/android/en-US/changelogs
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD_NUMBER="${VERSION##*+}"
+          echo "${{ steps.notes.outputs.store_notes }}" > "fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
+
           fastlane android release
 
       - name: Create GitHub Release
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          LAST_TAG=$(git tag -l "v*" | sort -V | tail -1)
-
-          if [ -n "$LAST_TAG" ]; then
-            CHANGELOG=$(git log ${LAST_TAG}..HEAD --oneline --pretty=format:"- %s" | head -30)
-          else
-            CHANGELOG=$(git log --oneline --pretty=format:"- %s" | head -30)
-          fi
+          STORE_NOTES="${{ steps.notes.outputs.store_notes }}"
 
           gh release create "v${VERSION}" \
             --title "Grid v${VERSION}" \
-            --notes "## Changes
-          ${CHANGELOG}
+            --notes "## Release Notes
+          ${STORE_NOTES}
 
-          ## Release
+          ---
           - 📱 iOS: Submitted to App Store Review
-          - 🤖 Android: Promoted to Production
-          - 📦 Binaries attached below" \
+          - 🤖 Android: Promoted to Production" \
             build/ios/ipa/Grid.ipa \
             build/app/outputs/bundle/release/app-release.aab \
             build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up change files
+        run: |
+          rm -f changes/pr-*.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add changes/
+          git diff --cached --quiet || git commit -m "chore: clear release notes after v${VERSION} [skip ci]"
+          git push origin HEAD:main || echo "⚠️ Could not push cleanup (branch protection). Clean up manually."
 
       - name: Clean up keychain
         if: always()
