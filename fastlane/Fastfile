@@ -47,8 +47,17 @@ platform :ios do
   lane :release do
     api_key
 
+    # Read version from pubspec
+    pubspec_path = File.join(Dir.pwd, "..", "pubspec.yaml")
+    pubspec = File.read(pubspec_path)
+    current_version = pubspec.match(/version:\s*(\S+)/)[1]
+    version_name = current_version.split("+").first
+    build_number = current_version.split("+").last
+
     deliver(
       api_key: api_key,
+      app_version: version_name,
+      build_number: build_number,
       submit_for_review: true,
       automatic_release: false, # Manual release after review
       skip_binary_upload: true, # Use the TestFlight build
