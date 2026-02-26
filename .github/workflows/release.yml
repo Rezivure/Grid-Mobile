@@ -38,30 +38,42 @@ jobs:
           fi
 
   release:
-    name: Promote & Release
+    name: Build, Publish & Release
     runs-on: [self-hosted, macOS, ARM64]
     needs: check-changes
     if: needs.check-changes.outputs.should_release == 'true'
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verify build artifacts exist
-        run: |
-          echo "Checking for existing build artifacts from CI..."
-          ls -la build/ios/ipa/Grid.ipa
-          ls -la build/app/outputs/bundle/release/app-release.aab
-          ls -la build/app/outputs/flutter-apk/app-release.apk
-          echo "✅ All artifacts found"
-
-      - name: Read version
+      - name: Set version
         id: version
         run: |
-          CURRENT=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)
-          echo "version=$CURRENT" >> $GITHUB_OUTPUT
-          echo "📦 Releasing version: $CURRENT"
+          export PATH="/opt/homebrew/bin:$PATH"
+          VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 500 ))
+          sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
+          echo "📦 Release version: ${VERSION_NAME}+${BUILD_NUMBER}"
+          echo "version=${VERSION_NAME}+${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+          echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "build_number=${BUILD_NUMBER}" >> $GITHUB_OUTPUT
+
+      - name: Create .env
+        run: |
+          cat > .env << 'EOF'
+          MATRIX_SERVER_URL=https://matrix.mygrid.app
+          GAUTH_URL=https://gauth.mygrid.app
+          HOMESERVER=matrix.mygrid.app
+          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          VERSION_CHECK_URL=https://version.mygrid.app
+          EOF
+
+      - name: Set up Android signing
+        run: |
+          cp "$HOME/.fastlane-secrets/local.properties" android/local.properties
+          cp "$HOME/.fastlane-secrets/grid-prod-key.jks" android/app/grid-prod-key.jks
 
       - name: Install signing certificate
         env:
@@ -79,6 +91,12 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
 
+      - name: Install provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$HOME/.fastlane-secrets/Grid_Appstore_CI.mobileprovision" \
+            ~/Library/MobileDevice/Provisioning\ Profiles/fafae38f-8ebf-4447-8eb7-ba01d807e6bb.mobileprovision
+
       - name: Set up Fastlane secrets
         run: |
           mkdir -p fastlane/keys
@@ -86,15 +104,23 @@ jobs:
           cp "$HOME/.fastlane-secrets/.env" fastlane/.env
           cp "$HOME/.fastlane-secrets/google-play-key.json" fastlane/google-play-key.json
 
-      - name: Build release notes
-        id: notes
+      - name: Build iOS
         run: |
-          STORE_NOTES=$(bash scripts/build-release-notes.sh)
-          echo "store_notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$STORE_NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "📝 Release notes:"
-          echo "$STORE_NOTES"
+          export PATH="/opt/homebrew/bin:$PATH"
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Build Android
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          flutter build appbundle --release
+          flutter build apk --release
+
+      - name: Upload iOS to TestFlight
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane ios beta
 
       - name: Submit iOS to App Store Review
         run: |
@@ -104,9 +130,16 @@ jobs:
 
           # Write release notes for deliver
           mkdir -p fastlane/metadata/en-US
-          echo "${{ steps.notes.outputs.store_notes }}" > fastlane/metadata/en-US/release_notes.txt
+          bash scripts/build-release-notes.sh > fastlane/metadata/en-US/release_notes.txt
 
           fastlane ios release
+
+      - name: Upload Android to Play Store Internal
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+          fastlane android beta
 
       - name: Promote Android to Production
         run: |
@@ -115,17 +148,16 @@ jobs:
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
 
           # Write release notes for Play Store
+          BUILD_NUMBER="${{ steps.version.outputs.build_number }}"
           mkdir -p fastlane/metadata/android/en-US/changelogs
-          VERSION="${{ steps.version.outputs.version }}"
-          BUILD_NUMBER="${VERSION##*+}"
-          echo "${{ steps.notes.outputs.store_notes }}" > "fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
+          bash scripts/build-release-notes.sh > "fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
 
           fastlane android release
 
       - name: Create GitHub Release
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          STORE_NOTES="${{ steps.notes.outputs.store_notes }}"
+          STORE_NOTES=$(bash scripts/build-release-notes.sh)
 
           gh release create "v${VERSION}" \
             --title "Grid v${VERSION}" \
@@ -147,7 +179,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add changes/
-          git diff --cached --quiet || git commit -m "chore: clear release notes after v${VERSION} [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: clear release notes after v${{ steps.version.outputs.version }} [skip ci]"
           git push origin HEAD:main || echo "⚠️ Could not push cleanup (branch protection). Clean up manually."
 
       - name: Clean up keychain
