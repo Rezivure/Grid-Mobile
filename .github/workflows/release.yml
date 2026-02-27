@@ -37,12 +37,16 @@ jobs:
             fi
           fi
 
-  release:
-    name: Build, Publish & Release
+  build-upload:
+    name: Build & Upload
     runs-on: [self-hosted, macOS, ARM64]
     needs: check-changes
     if: needs.check-changes.outputs.should_release == 'true'
-    timeout-minutes: 45
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_name: ${{ steps.version.outputs.version_name }}
+      build_number: ${{ steps.version.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,18 +126,6 @@ jobs:
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane ios beta
 
-      - name: Submit iOS to App Store Review
-        run: |
-          export LC_ALL=en_US.UTF-8
-          export LANG=en_US.UTF-8
-          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
-
-          # Write release notes for deliver
-          mkdir -p fastlane/metadata/en-US
-          bash scripts/build-release-notes.sh > fastlane/metadata/en-US/release_notes.txt
-
-          fastlane ios release
-
       - name: Upload Android to Play Store Internal
         run: |
           export LC_ALL=en_US.UTF-8
@@ -147,7 +139,6 @@ jobs:
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
 
-          # Write release notes for Play Store
           BUILD_NUMBER="${{ steps.version.outputs.build_number }}"
           mkdir -p fastlane/metadata/android/en-US/changelogs
           bash scripts/build-release-notes.sh > "fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
@@ -165,7 +156,7 @@ jobs:
           ${STORE_NOTES}
 
           ---
-          - 📱 iOS: Submitted to App Store Review
+          - 📱 iOS: Uploaded to TestFlight (pending App Store submission)
           - 🤖 Android: Promoted to Production" \
             build/ios/ipa/Grid.ipa \
             build/app/outputs/bundle/release/app-release.aab \
@@ -186,3 +177,84 @@ jobs:
         if: always()
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+
+  submit-ios-review:
+    name: Submit iOS to App Store
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: build-upload
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Fastlane secrets
+        run: |
+          mkdir -p fastlane/keys
+          cp "$HOME/.fastlane-secrets/AuthKey.p8" fastlane/keys/AuthKey.p8
+          cp "$HOME/.fastlane-secrets/.env" fastlane/.env
+
+      - name: Set version in pubspec
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          VERSION="${{ needs.build-upload.outputs.version }}"
+          sed -i '' "s/^version: .*/version: ${VERSION}/" pubspec.yaml
+
+      - name: Wait for build processing
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+
+          BUILD_NUMBER="${{ needs.build-upload.outputs.build_number }}"
+          VERSION_NAME="${{ needs.build-upload.outputs.version_name }}"
+
+          echo "⏳ Waiting for build ${VERSION_NAME} (${BUILD_NUMBER}) to finish processing..."
+
+          # Source ASC credentials from fastlane .env
+          export $(cat fastlane/.env | xargs)
+
+          for i in $(seq 1 60); do
+            RESULT=$(ruby -e "
+              require 'spaceship'
+              key = Spaceship::ConnectAPI::Token.create(
+                key_id: ENV['ASC_KEY_ID'],
+                issuer_id: ENV['ASC_ISSUER_ID'],
+                filepath: File.join('fastlane', ENV['ASC_KEY_FILE'] || 'keys/AuthKey.p8')
+              )
+              Spaceship::ConnectAPI.token = key
+              app = Spaceship::ConnectAPI::App.find('app.mygrid.grid')
+              builds = app.get_builds(filter: { version: '${BUILD_NUMBER}' })
+              if builds.any?
+                puts builds.first.processing_state
+              else
+                puts 'NOT_FOUND'
+              end
+            " 2>/dev/null || echo "ERROR")
+
+            echo "  Attempt ${i}/60: Build status = ${RESULT}"
+
+            if [ "$RESULT" = "VALID" ]; then
+              echo "✅ Build ${BUILD_NUMBER} is ready!"
+              break
+            elif [ "$RESULT" = "INVALID" ]; then
+              echo "❌ Build ${BUILD_NUMBER} is invalid!"
+              exit 1
+            fi
+
+            if [ "$i" -eq 60 ]; then
+              echo "❌ Timed out waiting for build processing (30 min)"
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+      - name: Submit to App Store Review
+        run: |
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
+
+          mkdir -p fastlane/metadata/en-US
+          bash scripts/build-release-notes.sh > fastlane/metadata/en-US/release_notes.txt
+
+          fastlane ios release
