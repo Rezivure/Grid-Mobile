@@ -51,7 +51,7 @@ dependencies:
   in_app_purchase: ^3.2.0
   font_awesome_flutter: ^10.7.0
   share_plus: ^10.1.2
-  passkeys: ^2.0.5
+  passkeys: ^2.17.0
   webview_flutter: ^4.10.0
 
 

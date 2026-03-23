@@ -2,120 +2,62 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:passkeys/passkey_auth.dart';
-import 'package:passkeys/relying_party_server/relying_party_server.dart';
-import 'package:passkeys/relying_party_server/types/types.dart';
+import 'package:passkeys/authenticator.dart';
+import 'package:passkeys/types.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
-
-/// Custom relying party server that talks to our gauth middleware
-class GridRelyingPartyServer implements RelyingPartyServerInterface {
-  final String _baseUrl;
-  String? _jwt;
-
-  GridRelyingPartyServer()
-      : _baseUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app';
-
-  void setJwt(String jwt) {
-    _jwt = jwt;
-  }
-
-  Map<String, String> get _authHeaders => {
-        'Content-Type': 'application/json',
-        if (_jwt != null) 'Authorization': 'Bearer $_jwt',
-      };
-
-  @override
-  Future<RegistrationInitResponse> initRegister(String email) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/passkey/register/options'),
-      headers: _authHeaders,
-      body: jsonEncode({'email': email}),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to get registration options: ${response.body}');
-    }
-
-    final data = jsonDecode(response.body);
-    return RegistrationInitResponse.fromJson(data);
-  }
-
-  @override
-  Future<String> completeRegister(
-      RegistrationCompleteRequest request) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/passkey/register/verify'),
-      headers: _authHeaders,
-      body: jsonEncode(request.toJson()),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to verify registration: ${response.body}');
-    }
-
-    return response.body;
-  }
-
-  @override
-  Future<AuthenticationInitResponse> initAuthenticate(String email) async {
-    final body = <String, dynamic>{};
-    if (email.isNotEmpty) {
-      body['phone_number'] = email; // The server uses phone_number field
-    }
-
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/passkey/login/options'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to get login options: ${response.body}');
-    }
-
-    final data = jsonDecode(response.body);
-    return AuthenticationInitResponse.fromJson(data);
-  }
-
-  @override
-  Future<String> completeAuthenticate(
-      AuthenticationCompleteRequest request) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/passkey/login/verify'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(request.toJson()),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to verify login: ${response.body}');
-    }
-
-    return response.body;
-  }
-}
 
 /// High-level passkey service for Grid
 class PasskeyService {
   final String _baseUrl;
-  late final PasskeyAuth<GridRelyingPartyServer> _passkeyAuth;
-  late final GridRelyingPartyServer _relyingParty;
+  final PasskeyAuthenticator _authenticator;
 
   PasskeyService()
-      : _baseUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app' {
-    _relyingParty = GridRelyingPartyServer();
-    _passkeyAuth = PasskeyAuth<GridRelyingPartyServer>(_relyingParty);
-  }
+      : _baseUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app',
+        _authenticator = PasskeyAuthenticator();
 
   /// Login with passkey. Returns JWT on success.
   Future<String> loginWithPasskey({String? phoneNumber}) async {
     try {
-      final result =
-          await _passkeyAuth.authenticate(phoneNumber ?? '');
-      final data = jsonDecode(result);
+      // Step 1: Get authentication options from our server
+      final body = <String, dynamic>{};
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        body['phone_number'] = phoneNumber;
+      }
+
+      final optionsResponse = await http.post(
+        Uri.parse('$_baseUrl/auth/passkey/login/options'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+
+      if (optionsResponse.statusCode != 200) {
+        throw Exception(
+            'Failed to get login options: ${optionsResponse.body}');
+      }
+
+      final optionsData = jsonDecode(optionsResponse.body);
+
+      // Step 2: Ask the platform authenticator to sign the challenge
+      final request = AuthenticateRequestType.fromJson(
+        optionsData as Map<String, dynamic>,
+      );
+      final credential = await _authenticator.authenticate(request);
+
+      // Step 3: Send the signed credential to our server for verification
+      final verifyResponse = await http.post(
+        Uri.parse('$_baseUrl/auth/passkey/login/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(credential.toJson()),
+      );
+
+      if (verifyResponse.statusCode != 200) {
+        throw Exception('Failed to verify login: ${verifyResponse.body}');
+      }
+
+      final data = jsonDecode(verifyResponse.body);
       return data['jwt'] as String;
     } catch (e) {
-      print('Passkey login error: $e');
+      debugPrint('Passkey login error: $e');
       rethrow;
     }
   }
@@ -126,7 +68,7 @@ class PasskeyService {
     required String turnstileToken,
   }) async {
     try {
-      // First get signup options from our custom endpoint
+      // Step 1: Get signup/registration options from our server
       final optionsResponse = await http.post(
         Uri.parse('$_baseUrl/auth/passkey/signup/options'),
         headers: {'Content-Type': 'application/json'},
@@ -141,26 +83,76 @@ class PasskeyService {
             'Failed to get signup options: ${optionsResponse.body}');
       }
 
-      // Use the passkey auth to create credential
-      final result = await _passkeyAuth.register(username);
+      final optionsData = jsonDecode(optionsResponse.body);
 
-      // The register flow goes through our relying party server which will
-      // call signup/verify. Parse the JWT from the result.
-      final data = jsonDecode(result);
+      // Step 2: Ask the platform authenticator to create a new credential
+      final request = RegisterRequestType.fromJson(
+        optionsData as Map<String, dynamic>,
+      );
+      final credential = await _authenticator.register(request);
+
+      // Step 3: Send the new credential to our server for verification
+      final verifyResponse = await http.post(
+        Uri.parse('$_baseUrl/auth/passkey/signup/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(credential.toJson()),
+      );
+
+      if (verifyResponse.statusCode != 200) {
+        throw Exception(
+            'Failed to verify signup: ${verifyResponse.body}');
+      }
+
+      final data = jsonDecode(verifyResponse.body);
       return data['jwt'] as String;
     } catch (e) {
-      print('Passkey signup error: $e');
+      debugPrint('Passkey signup error: $e');
       rethrow;
     }
   }
 
   /// Register a new passkey for an already-authenticated user.
   Future<void> registerPasskey(String jwt) async {
-    _relyingParty.setJwt(jwt);
     try {
-      await _passkeyAuth.register('');
+      // Step 1: Get registration options from our server
+      final optionsResponse = await http.post(
+        Uri.parse('$_baseUrl/auth/passkey/register/options'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt',
+        },
+        body: jsonEncode({}),
+      );
+
+      if (optionsResponse.statusCode != 200) {
+        throw Exception(
+            'Failed to get registration options: ${optionsResponse.body}');
+      }
+
+      final optionsData = jsonDecode(optionsResponse.body);
+
+      // Step 2: Ask the platform authenticator to create a new credential
+      final request = RegisterRequestType.fromJson(
+        optionsData as Map<String, dynamic>,
+      );
+      final credential = await _authenticator.register(request);
+
+      // Step 3: Send the new credential to our server for verification
+      final verifyResponse = await http.post(
+        Uri.parse('$_baseUrl/auth/passkey/register/verify'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt',
+        },
+        body: jsonEncode(credential.toJson()),
+      );
+
+      if (verifyResponse.statusCode != 200) {
+        throw Exception(
+            'Failed to verify registration: ${verifyResponse.body}');
+      }
     } catch (e) {
-      print('Passkey registration error: $e');
+      debugPrint('Passkey registration error: $e');
       rethrow;
     }
   }
