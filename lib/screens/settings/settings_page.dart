@@ -38,6 +38,7 @@ import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
+import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -2160,6 +2161,32 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             SizedBox(height: 24),
+
+            // Passkeys Section (only for default homeserver)
+            if (!isCustomHomeserver()) ...[
+              _buildSectionCard(
+                theme: theme,
+                colorScheme: colorScheme,
+                title: 'Authentication',
+                children: [
+                  _buildMenuOption(
+                    icon: Icons.fingerprint,
+                    title: 'Passkeys',
+                    subtitle: 'Manage passkey login credentials',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PasskeyManagementScreen(),
+                        ),
+                      );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+              SizedBox(height: 24),
+            ],
 
             // Subscriptions Section (only for default homeserver)
             if (!isCustomHomeserver()) ...[

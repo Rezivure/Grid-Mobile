@@ -6,6 +6,10 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/services/passkey_service.dart';
+import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
+import 'package:grid_frontend/widgets/turnstile_widget.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
@@ -34,6 +38,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   Timer? _debounce;
   String _fullPhoneNumber = '';
   bool _hasAttemptedAutoSubmit = false;
+
+  // Passkey state
+  final PasskeyService _passkeyService = PasskeyService();
+  bool _isPasskeyLoading = false;
+  String? _turnstileToken;
 
   @override
   void initState() {
@@ -517,7 +526,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         const SizedBox(height: 40),
         
         _buildModernButton(
-          text: 'Continue',
+          text: 'Continue with SMS',
           onPressed: (_usernameStatusMessage == 'Username is available') && !_isLoading
               ? () {
                   setState(() {
@@ -530,6 +539,52 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isLoading: _isLoading,
           icon: Icons.arrow_forward,
         ),
+
+        const SizedBox(height: 12),
+
+        // Passkey signup option
+        if (_usernameStatusMessage == 'Username is available') ...[
+          if (_turnstileToken == null) ...[
+            // Show Turnstile challenge before allowing passkey signup
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  Text(
+                    'Or sign up with a passkey:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TurnstileWidget(
+                    siteKey: '0x4AAAAAACuoM-Fe6MODnKzk',
+                    onTokenReceived: (token) {
+                      setState(() => _turnstileToken = token);
+                    },
+                    onError: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Verification failed. Please try again.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            _buildModernButton(
+              text: 'Sign up with Passkey',
+              onPressed: _isPasskeyLoading ? null : _signupWithPasskey,
+              isPrimary: false,
+              isLoading: _isPasskeyLoading,
+              icon: Icons.fingerprint,
+            ),
+          ],
+        ],
         
         const SizedBox(height: 16),
         
@@ -545,7 +600,18 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isPrimary: false,
           icon: Icons.login,
         ),
-        
+
+        const SizedBox(height: 16),
+
+        // Passkey login button (default homeserver only)
+        _buildModernButton(
+          text: 'Sign in with Passkey',
+          onPressed: _isPasskeyLoading ? null : _loginWithPasskey,
+          isPrimary: false,
+          isLoading: _isPasskeyLoading,
+          icon: Icons.fingerprint,
+        ),
+
         const SizedBox(height: 40),
       ],
     );
@@ -825,6 +891,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        // Show passkey setup prompt (non-blocking, then navigate)
+        await _maybeShowPasskeyPrompt();
         // Navigate to main app
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -839,6 +907,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        // Show passkey setup prompt
+        await _maybeShowPasskeyPrompt();
         // Navigate to main app
         Navigator.pushNamed(context, '/main');
       }
@@ -850,6 +920,89 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loginWithPasskey() async {
+    setState(() => _isPasskeyLoading = true);
+    try {
+      final jwt = await _passkeyService.loginWithPasskey();
+      await Provider.of<AuthProvider>(context, listen: false)
+          .authenticateWithJWT(jwt);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main',
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      _showErrorDialog('Passkey login failed. Please try again or use SMS.');
+    } finally {
+      if (mounted) setState(() => _isPasskeyLoading = false);
+    }
+  }
+
+  Future<void> _signupWithPasskey() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty || _turnstileToken == null) return;
+
+    setState(() => _isPasskeyLoading = true);
+    try {
+      final jwt = await _passkeyService.signupWithPasskey(
+        username: username,
+        turnstileToken: _turnstileToken!,
+      );
+      await Provider.of<AuthProvider>(context, listen: false)
+          .authenticateWithJWT(jwt);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main',
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      _showErrorDialog('Passkey signup failed. Please try SMS verification.');
+    } finally {
+      if (mounted) setState(() => _isPasskeyLoading = false);
+    }
+  }
+
+  /// Show passkey setup prompt after SMS login, only once
+  Future<void> _maybeShowPasskeyPrompt() async {
+    if (await PasskeyService.hasShownPasskeyPrompt()) return;
+    await PasskeyService.markPasskeyPromptShown();
+
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const PasskeyPromptDialog(),
+    );
+
+    if (result == true && mounted) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final jwt = prefs.getString('loginToken');
+        if (jwt != null) {
+          await _passkeyService.registerPasskey(jwt);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Passkey set up successfully!'),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Could not set up passkey. You can add one later in Settings.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     }
   }
 
