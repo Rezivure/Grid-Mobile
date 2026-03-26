@@ -105,7 +105,7 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
           },
         ),
       )
-      ..loadHtmlString(html);
+      ..loadHtmlString(html, baseUrl: 'https://mygrid.app');
   }
 
   @override

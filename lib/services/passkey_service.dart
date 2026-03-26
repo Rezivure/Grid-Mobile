@@ -15,6 +15,25 @@ class PasskeyService {
       : _baseUrl = dotenv.env['GAUTH_URL'] ?? 'https://gauth.mygrid.app',
         _authenticator = PasskeyAuthenticator();
 
+  /// Extract set-cookie headers to forward between options and verify calls.
+  String? _extractCookies(http.Response response) {
+    return response.headers['set-cookie'];
+  }
+
+  /// Ensure credential entries have a transports list (package crashes on null).
+  void _sanitizeCredentialTransports(Map<String, dynamic> options) {
+    for (final key in ['excludeCredentials', 'allowCredentials']) {
+      final creds = options[key];
+      if (creds is List) {
+        for (final c in creds) {
+          if (c is Map<String, dynamic>) {
+            c['transports'] ??= <String>[];
+          }
+        }
+      }
+    }
+  }
+
   /// Login with passkey. Returns JWT on success.
   Future<String> loginWithPasskey({String? phoneNumber}) async {
     try {
@@ -35,19 +54,28 @@ class PasskeyService {
             'Failed to get login options: ${optionsResponse.body}');
       }
 
-      final optionsData = jsonDecode(optionsResponse.body);
+      final optionsData =
+          jsonDecode(optionsResponse.body) as Map<String, dynamic>;
+      final challengeId = optionsData['challenge_id'] as String?;
+      _sanitizeCredentialTransports(optionsData);
 
       // Step 2: Ask the platform authenticator to sign the challenge
       final request = AuthenticateRequestType.fromJson(
-        optionsData as Map<String, dynamic>,
+        optionsData,
+        preferImmediatelyAvailableCredentials: false,
       );
       final credential = await _authenticator.authenticate(request);
 
       // Step 3: Send the signed credential to our server for verification
+      final verifyBody = <String, dynamic>{
+        'credential': credential.toJson(),
+      };
+      if (challengeId != null) verifyBody['challenge_id'] = challengeId;
+
       final verifyResponse = await http.post(
         Uri.parse('$_baseUrl/auth/passkey/login/verify'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(credential.toJson()),
+        body: jsonEncode(verifyBody),
       );
 
       if (verifyResponse.statusCode != 200) {
@@ -83,19 +111,26 @@ class PasskeyService {
             'Failed to get signup options: ${optionsResponse.body}');
       }
 
-      final optionsData = jsonDecode(optionsResponse.body);
+      final optionsData =
+          jsonDecode(optionsResponse.body) as Map<String, dynamic>;
+      final challengeId = optionsData['challenge_id'] as String?;
+      _sanitizeCredentialTransports(optionsData);
 
       // Step 2: Ask the platform authenticator to create a new credential
-      final request = RegisterRequestType.fromJson(
-        optionsData as Map<String, dynamic>,
-      );
+      final request = RegisterRequestType.fromJson(optionsData);
       final credential = await _authenticator.register(request);
 
       // Step 3: Send the new credential to our server for verification
+      final verifyBody = <String, dynamic>{
+        'username': username,
+        'credential': credential.toJson(),
+      };
+      if (challengeId != null) verifyBody['challenge_id'] = challengeId;
+
       final verifyResponse = await http.post(
         Uri.parse('$_baseUrl/auth/passkey/signup/verify'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(credential.toJson()),
+        body: jsonEncode(verifyBody),
       );
 
       if (verifyResponse.statusCode != 200) {
@@ -129,22 +164,28 @@ class PasskeyService {
             'Failed to get registration options: ${optionsResponse.body}');
       }
 
-      final optionsData = jsonDecode(optionsResponse.body);
+      final optionsData =
+          jsonDecode(optionsResponse.body) as Map<String, dynamic>;
+      final challengeId = optionsData['challenge_id'] as String?;
+      _sanitizeCredentialTransports(optionsData);
 
       // Step 2: Ask the platform authenticator to create a new credential
-      final request = RegisterRequestType.fromJson(
-        optionsData as Map<String, dynamic>,
-      );
+      final request = RegisterRequestType.fromJson(optionsData);
       final credential = await _authenticator.register(request);
 
       // Step 3: Send the new credential to our server for verification
+      final verifyBody = <String, dynamic>{
+        'credential': credential.toJson(),
+      };
+      if (challengeId != null) verifyBody['challenge_id'] = challengeId;
+
       final verifyResponse = await http.post(
         Uri.parse('$_baseUrl/auth/passkey/register/verify'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $jwt',
         },
-        body: jsonEncode(credential.toJson()),
+        body: jsonEncode(verifyBody),
       );
 
       if (verifyResponse.statusCode != 200) {
@@ -172,6 +213,7 @@ class PasskeyService {
     }
 
     final data = jsonDecode(response.body);
+    debugPrint('Passkey list response: ${response.body}');
     final List<dynamic> passkeys = data['passkeys'] ?? [];
     return passkeys.map((p) => PasskeyInfo.fromJson(p)).toList();
   }
@@ -188,6 +230,22 @@ class PasskeyService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to delete passkey: ${response.body}');
+    }
+  }
+
+  /// Rename a passkey.
+  Future<void> renamePasskey(String jwt, String credentialId, String name) async {
+    final response = await http.patch(
+      Uri.parse('$_baseUrl/auth/passkey/${Uri.encodeComponent(credentialId)}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $jwt',
+      },
+      body: jsonEncode({'device_name': name}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to rename passkey: ${response.body}');
     }
   }
 
@@ -209,24 +267,27 @@ class PasskeyInfo {
   final String? name;
   final DateTime? createdAt;
   final DateTime? lastUsedAt;
+  final bool backedUp;
 
   PasskeyInfo({
     required this.credentialId,
     this.name,
     this.createdAt,
     this.lastUsedAt,
+    this.backedUp = false,
   });
 
   factory PasskeyInfo.fromJson(Map<String, dynamic> json) {
     return PasskeyInfo(
-      credentialId: json['credential_id'] as String,
-      name: json['name'] as String?,
+      credentialId: json['id'] as String,
+      name: json['device_name'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'])
           : null,
       lastUsedAt: json['last_used_at'] != null
           ? DateTime.tryParse(json['last_used_at'])
           : null,
+      backedUp: json['backed_up'] as bool? ?? false,
     );
   }
 }
