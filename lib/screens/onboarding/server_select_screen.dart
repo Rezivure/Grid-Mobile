@@ -923,8 +923,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _codeController.text,
         );
         FocusScope.of(context).unfocus();
-        // Show passkey setup prompt (non-blocking, then navigate)
-        await _maybeShowPasskeyPrompt();
         // Navigate to main app
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -940,8 +938,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _codeController.text,
         );
         FocusScope.of(context).unfocus();
-        // Show passkey setup prompt
-        await _maybeShowPasskeyPrompt();
         // Navigate to main app
         Navigator.pushNamed(context, '/main');
       }
