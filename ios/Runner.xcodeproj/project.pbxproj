@@ -66,6 +66,7 @@
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C2902D066D03750EA657A31F /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
 		CB1110F42E49234000D501E9 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
+		CB2090EB2F70DA4600D7B87F /* RunnerProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerProfile.entitlements; sourceTree = "<group>"; };
 		CB701D6B2C75853F005A3751 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		E61F61E83E4CA900C31D3A83 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -144,6 +145,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				CB2090EB2F70DA4600D7B87F /* RunnerProfile.entitlements */,
 				CB701D6B2C75853F005A3751 /* Runner.entitlements */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
@@ -475,9 +477,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Distribution";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_ENTITLEMENTS = Runner/RunnerProfile.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = 45NCU5QA4S;
 				ENABLE_BITCODE = NO;
@@ -488,7 +490,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.mygrid.grid;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Grid Appstore (CI)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -700,8 +702,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Distribution";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = 45NCU5QA4S;
 				ENABLE_BITCODE = NO;
@@ -712,7 +714,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.mygrid.grid;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Grid Appstore (CI)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

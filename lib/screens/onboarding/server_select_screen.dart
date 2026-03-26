@@ -6,6 +6,10 @@ import 'package:random_avatar/random_avatar.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/services/passkey_service.dart';
+import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
+import 'package:grid_frontend/widgets/turnstile_widget.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
@@ -34,6 +38,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   Timer? _debounce;
   String _fullPhoneNumber = '';
   bool _hasAttemptedAutoSubmit = false;
+
+  // Passkey state
+  final PasskeyService _passkeyService = PasskeyService();
+  bool _isPasskeyLoading = false;
+  String? _turnstileToken;
 
   @override
   void initState() {
@@ -306,7 +315,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
-            'STEP ${_currentStep + 1} OF 3',
+            'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} OF ${_isLoginFlow ? 3 : 1}',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -386,6 +395,18 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   }
 
   Widget _buildCurrentStep() {
+    if (_isLoginFlow) {
+      switch (_currentStep) {
+        case 1:
+          return _buildPasskeyLoginStep();
+        case 2:
+          return _buildPhoneNumberStep();
+        case 3:
+          return _buildVerifySmsStep();
+        default:
+          return _buildUsernameStep();
+      }
+    }
     switch (_currentStep) {
       case 0:
         return _buildUsernameStep();
@@ -396,6 +417,65 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
       default:
         return Container();
     }
+  }
+
+  Widget _buildPasskeyLoginStep() {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        _buildStepHeader(
+          title: 'Welcome Back!',
+          subtitle: 'Sign in with your passkey',
+          illustration: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.1),
+                  colorScheme.primary.withOpacity(0.05),
+                  Colors.transparent,
+                ],
+                stops: const [0.3, 0.7, 1.0],
+              ),
+            ),
+            child: Icon(
+              Icons.fingerprint,
+              size: 48,
+              color: colorScheme.primary,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 40),
+
+        _buildModernButton(
+          text: 'Sign in with Passkey',
+          onPressed: _isPasskeyLoading ? null : _loginWithPasskey,
+          isPrimary: true,
+          isLoading: _isPasskeyLoading,
+          icon: Icons.fingerprint,
+        ),
+
+        const SizedBox(height: 16),
+
+        _buildModernButton(
+          text: 'Sign in with SMS instead',
+          onPressed: () {
+            setState(() {
+              _currentStep = 2;
+            });
+            _animateToNextStep();
+          },
+          isPrimary: false,
+          icon: Icons.sms,
+        ),
+
+        const SizedBox(height: 40),
+      ],
+    );
   }
 
   Widget _buildUsernameStep() {
@@ -515,24 +595,41 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         ],
         
         const SizedBox(height: 40),
-        
+
+        // Show Turnstile when username is available
+        if (_usernameStatusMessage == 'Username is available' &&
+            _turnstileToken == null) ...[
+          TurnstileWidget(
+            siteKey: '0x4AAAAAACuoM-Fe6MODnKzk',
+            onTokenReceived: (token) {
+              setState(() => _turnstileToken = token);
+            },
+            onError: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Verification failed. Please try again.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+
         _buildModernButton(
-          text: 'Continue',
-          onPressed: (_usernameStatusMessage == 'Username is available') && !_isLoading
-              ? () {
-                  setState(() {
-                    _currentStep = 1;
-                  });
-                  _animateToNextStep();
-                }
+          text: 'Sign up with Passkey',
+          onPressed: (_usernameStatusMessage == 'Username is available' &&
+                  _turnstileToken != null &&
+                  !_isPasskeyLoading)
+              ? _signupWithPasskey
               : null,
           isPrimary: true,
-          isLoading: _isLoading,
-          icon: Icons.arrow_forward,
+          isLoading: _isPasskeyLoading,
+          icon: Icons.fingerprint,
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         _buildModernButton(
           text: 'Already have an account? Sign In',
           onPressed: () {
@@ -545,7 +642,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isPrimary: false,
           icon: Icons.login,
         ),
-        
+
         const SizedBox(height: 40),
       ],
     );
@@ -643,7 +740,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
                       );
                     }
                     setState(() {
-                      _currentStep = 2;
+                      _currentStep = _isLoginFlow ? 3 : 2;
                     });
                     _animateToNextStep();
                   } catch (e) {
@@ -825,6 +922,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        FocusScope.of(context).unfocus();
         // Navigate to main app
         Navigator.pushNamedAndRemoveUntil(
           context,
@@ -839,6 +937,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           _fullPhoneNumber,
           _codeController.text,
         );
+        FocusScope.of(context).unfocus();
         // Navigate to main app
         Navigator.pushNamed(context, '/main');
       }
@@ -853,52 +952,226 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     }
   }
 
+  Future<void> _loginWithPasskey() async {
+    setState(() => _isPasskeyLoading = true);
+    try {
+      final jwt = await _passkeyService.loginWithPasskey();
+      await Provider.of<AuthProvider>(context, listen: false)
+          .authenticateWithJWT(jwt);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main',
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      _showErrorDialog('Passkey login failed. Please try again or use SMS.');
+    } finally {
+      if (mounted) setState(() => _isPasskeyLoading = false);
+    }
+  }
+
+  Future<void> _signupWithPasskey() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty || _turnstileToken == null) return;
+
+    setState(() => _isPasskeyLoading = true);
+    try {
+      final jwt = await _passkeyService.signupWithPasskey(
+        username: username,
+        turnstileToken: _turnstileToken!,
+      );
+      await Provider.of<AuthProvider>(context, listen: false)
+          .authenticateWithJWT(jwt);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/main',
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      _showErrorDialog('Passkey signup failed. Please try SMS verification.');
+    } finally {
+      if (mounted) setState(() => _isPasskeyLoading = false);
+    }
+  }
+
+  /// Show passkey setup prompt after SMS login, only once
+  Future<void> _maybeShowPasskeyPrompt() async {
+    if (await PasskeyService.hasShownPasskeyPrompt()) return;
+    await PasskeyService.markPasskeyPromptShown();
+
+    if (!mounted) return;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => const PasskeyPromptDialog(),
+    );
+
+    if (result == true && mounted) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final jwt = prefs.getString('loginToken');
+        if (jwt != null) {
+          await _passkeyService.registerPasskey(jwt);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Passkey set up successfully!'),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Could not set up passkey. You can add one later in Settings.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) {
         final colorScheme = Theme.of(context).colorScheme;
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Error',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.background,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
                 ),
-              ),
-            ],
-          ),
-          content: Text(
-            message,
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.05),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: colorScheme.outline.withOpacity(0.1),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        'Something went wrong',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onBackground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceVariant.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colorScheme.outline.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colorScheme.primary.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          'OK',
+                          style: TextStyle(
+                            color: colorScheme.onPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: colorScheme.primary,
-              ),
-              child: Text(
-                'OK',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
         );
       },
     );

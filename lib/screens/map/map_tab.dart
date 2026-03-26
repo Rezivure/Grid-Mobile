@@ -52,6 +52,8 @@ import 'package:grid_frontend/widgets/map_icon_info_bubble.dart';
 import 'package:grid_frontend/widgets/app_review_prompt.dart';
 import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
+import 'package:grid_frontend/services/passkey_service.dart';
+import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -190,14 +192,270 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             _hasCompletedOnboarding = true;
           });
           _startLocationTracking();
+
+          // Check if user needs passkey migration warning (default homeserver only)
+          _checkPasskeyWarning();
         },
-      );
+      ).then((_) {
+        // For existing users who already completed onboarding,
+        // the onComplete callback won't fire — check here instead
+        if (!mounted) return;
+        OnboardingModal.shouldShowOnboarding().then((shouldShow) {
+          if (!shouldShow) _checkPasskeyWarning();
+        });
+      });
 
       // Schedule review prompt check for later (after user has used the app for a bit)
       _scheduleReviewPromptCheck();
     });
   }
   
+  Future<void> _checkPasskeyWarning() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Only for default homeserver users
+      final customHomeserver = prefs.getString('custom_homeserver');
+      if (customHomeserver != null) return;
+
+      // Don't show if dismissed today
+      final lastDismissed = prefs.getString('passkey_warning_dismissed');
+      if (lastDismissed != null) {
+        final dismissed = DateTime.tryParse(lastDismissed);
+        if (dismissed != null &&
+            DateTime.now().difference(dismissed).inHours < 24) {
+          return;
+        }
+      }
+
+      // Check if user has any passkeys
+      final jwt = prefs.getString('loginToken');
+      if (jwt == null) return;
+
+      final passkeyService = PasskeyService();
+      final passkeys = await passkeyService.listPasskeys(jwt);
+      if (passkeys.isNotEmpty) return;
+
+      if (!mounted) return;
+
+      final colorScheme = Theme.of(context).colorScheme;
+      showDialog(
+        context: context,
+        builder: (context) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+              ),
+              decoration: BoxDecoration(
+                color: colorScheme.background,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.05),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: colorScheme.outline.withOpacity(0.1),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'SMS Login Ending Soon',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.onBackground,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Action required before June 2026',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colorScheme.onBackground
+                                      .withOpacity(0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceVariant.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.outline.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: colorScheme.onSurfaceVariant,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'We are phasing out SMS login by the end of May 2026. Please add a passkey to your account to keep access.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      colorScheme.primary.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const PasskeyManagementScreen(),
+                                  ),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.fingerprint,
+                                      color: colorScheme.onPrimary,
+                                      size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Add Passkey Now',
+                                    style: TextStyle(
+                                      color: colorScheme.onPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: () async {
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              await prefs.setString(
+                                'passkey_warning_dismissed',
+                                DateTime.now().toIso8601String(),
+                              );
+                              Navigator.pop(context);
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              'Remind Me Later',
+                              style: TextStyle(
+                                color:
+                                    colorScheme.onSurface.withOpacity(0.6),
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      // Silently fail — don't block the app for a warning
+      debugPrint('Passkey warning check failed: $e');
+    }
+  }
+
   Future<void> _checkAndInitialize() async {
     // Always just do normal initialization now that avatar issue is fixed
     // Defer to next frame to avoid build phase conflicts
