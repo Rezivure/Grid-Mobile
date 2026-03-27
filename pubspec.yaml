@@ -43,7 +43,9 @@ dependencies:
   collection: ^1.18.0
   equatable: ^2.0.7
   libre_location:
-    path: packages/libre_location
+    git:
+      url: git@github.com:Rezivure/libre-location.git
+      ref: main
   hive: ^2.2.3
   qr_code_scanner_plus: ^2.0.6
   package_info_plus: ^8.1.2

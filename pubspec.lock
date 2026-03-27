@@ -962,9 +962,11 @@ packages:
   libre_location:
     dependency: "direct main"
     description:
-      path: "/Users/rezivure/.openclaw/workspace/libre-location-r3"
-      relative: false
-    source: path
+      path: "."
+      ref: main
+      resolved-ref: d8a9c0d21ff8e90dfa9296918e9494f9c4f5a071
+      url: "git@github.com:Rezivure/libre-location.git"
+    source: git
     version: "0.1.0"
   lints:
     dependency: transitive
