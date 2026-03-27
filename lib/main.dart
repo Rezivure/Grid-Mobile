@@ -51,7 +51,7 @@ import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:libre_location/libre_location.dart';
 
 
 
@@ -59,7 +59,7 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
+  LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
 
   // Load .env file
   await dotenv.load(fileName: ".env");

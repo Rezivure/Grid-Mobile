@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:libre_location/libre_location.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -183,32 +183,24 @@ class _OnboardingModalState extends State<OnboardingModal>
     print('[Onboarding] Location permission tap - starting request');
 
     try {
-      // IMPORTANT: Configure BackgroundGeolocation FIRST before requesting permission
-      // Otherwise it will show the default "[CHANGEME]" placeholder text
-      await bg.BackgroundGeolocation.ready(bg.Config(
-        locationAuthorizationRequest: 'Always',
-        backgroundPermissionRationale: bg.PermissionRationale(
-          title: "Allow background location?",
-          message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
-          positiveAction: "Allow",
-          negativeAction: "Cancel",
-        ),
-        reset: false, // Don't reset existing config
-      ));
+      // Request permission using libre_location
+      final permission = await LibreLocation.requestPermission();
+      print('[Onboarding] LibreLocation permission result: $permission');
 
-      // Now request permission after config is set
-      final status = await bg.BackgroundGeolocation.requestPermission();
-      print('[Onboarding] BackgroundGeolocation permission result: $status');
-
-      // Status codes: 0 = not determined, 1 = restricted, 2 = denied, 3 = always, 4 = whenInUse
-      if (status == 2) {
-        // Denied - need to go to settings
-        print('[Onboarding] Permission denied, opening settings');
-        await _showSettingsDialog('Location');
-        return;
+      bool locationGranted = false;
+      switch (permission) {
+        case LocationPermission.always:
+        case LocationPermission.whileInUse:
+          locationGranted = true;
+          break;
+        case LocationPermission.denied:
+        case LocationPermission.deniedForever:
+          // Denied - need to go to settings
+          print('[Onboarding] Permission denied, opening settings');
+          await _showSettingsDialog('Location');
+          return;
       }
 
-      final locationGranted = status >= 3;
       print('[Onboarding] Final permission granted: $locationGranted');
 
       setState(() {
@@ -225,30 +217,28 @@ class _OnboardingModalState extends State<OnboardingModal>
 
     try {
       if (Platform.isIOS) {
-        // Configure BackgroundGeolocation first
-        await bg.BackgroundGeolocation.ready(bg.Config(
-          locationAuthorizationRequest: 'Always',
-          backgroundPermissionRationale: bg.PermissionRationale(
+        // Create a minimal config and start tracking briefly to trigger motion permission request
+        final config = LocationConfig(
+          accuracy: Accuracy.balanced,
+          enableMotionDetection: true,
+          disableMotionActivityUpdates: false,
+          motionTriggerDelay: 0,
+          backgroundPermissionRationale: PermissionRationale(
             title: "Allow background location?",
             message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
             positiveAction: "Allow",
             negativeAction: "Cancel",
           ),
-          reset: false,
-          // Enable motion tracking which should trigger motion permission
-          disableMotionActivityUpdates: false,
-          motionTriggerDelay: 0,
-        ));
+        );
 
         // Start the service briefly to trigger motion permission request
-        // This is what happens after onboarding that makes it request motion
-        await bg.BackgroundGeolocation.start();
+        await LibreLocation.startTracking(config);
 
         // Give it a moment to request permission
         await Future.delayed(const Duration(milliseconds: 500));
 
         // Stop it again since we're just in onboarding
-        await bg.BackgroundGeolocation.stop();
+        await LibreLocation.stopTracking();
 
         setState(() {
           _activityRecognitionGranted = true;
@@ -293,27 +283,24 @@ class _OnboardingModalState extends State<OnboardingModal>
     print('[Onboarding] ============ CHECKING PERMISSION STATUS ============');
 
     try {
-      // Configure FIRST before checking permission status
-      await bg.BackgroundGeolocation.ready(bg.Config(
-        locationAuthorizationRequest: 'Always',
-        backgroundPermissionRationale: bg.PermissionRationale(
-          title: "Allow background location?",
-          message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
-          positiveAction: "Allow",
-          negativeAction: "Cancel",
-        ),
-        reset: false, // Don't reset existing config
-      ));
+      // Check permission status using libre_location
+      final permission = await LibreLocation.checkPermission();
+      print('[Onboarding] LibreLocation permission status: $permission');
 
-      // Call requestPermission which checks status without showing dialog if already granted/denied
-      final status = await bg.BackgroundGeolocation.requestPermission();
-      print('[Onboarding] BackgroundGeolocation permission status: $status');
+      bool locationGranted = false;
+      switch (permission) {
+        case LocationPermission.always:
+        case LocationPermission.whileInUse:
+          locationGranted = true;
+          break;
+        case LocationPermission.denied:
+        case LocationPermission.deniedForever:
+          locationGranted = false;
+          break;
+      }
+      print('[Onboarding]   - FINAL DECISION: locationGranted = $locationGranted (permission: $permission)');
 
-      // Status values: 0 = not determined, 1 = restricted, 2 = denied, 3 = always, 4 = whenInUse
-      final locationGranted = status >= 3; // 3 = always, 4 = whenInUse
-      print('[Onboarding]   - FINAL DECISION: locationGranted = $locationGranted (status code: $status)');
-
-      // Motion/activity permission is handled by flutter_background_geolocation after onboarding
+      // Motion/activity permission is handled by libre_location after onboarding
       // We just mark it as true for UI purposes (to show users it will be requested)
       bool activityGranted = true;
 

@@ -42,7 +42,8 @@ dependencies:
   flutter_bloc: ^8.1.6
   collection: ^1.18.0
   equatable: ^2.0.7
-  flutter_background_geolocation: ^4.18.1
+  libre_location:
+    path: /Users/rezivure/.openclaw/workspace/libre-location-r3
   hive: ^2.2.3
   qr_code_scanner_plus: ^2.0.6
   package_info_plus: ^8.1.2

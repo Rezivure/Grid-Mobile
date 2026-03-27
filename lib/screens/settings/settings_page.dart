@@ -14,7 +14,6 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -206,13 +205,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (value) {
       locationManager.stopTracking();
-      await bg.BackgroundGeolocation.stop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is no longer being shared.')),
       );
     } else {
       locationManager.startTracking();
-      await bg.BackgroundGeolocation.start();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is being shared with trusted contacts.')),
       );
