@@ -104,7 +104,7 @@ class LibreLocationService implements LocationService {
       // Listen for activity changes (still/walking/driving/cycling)
       _activitySubscription = libre.LibreLocation.onActivityChange.listen((event) {
         DebugLogService.instance.log('activity_change', {
-          'activity': event.type,
+          'activity': event.activity,
           'confidence': event.confidence,
         });
       });
