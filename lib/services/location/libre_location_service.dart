@@ -127,6 +127,21 @@ class LibreLocationService implements LocationService {
         });
       });
 
+      // Log battery optimization status on Android (Doze mode kills background tracking)
+      if (Platform.isAndroid) {
+        try {
+          final isOptimized = await libre.LibreLocation.checkBatteryOptimization();
+          DebugLogService.instance.log('battery_optimization', {
+            'isOptimized': isOptimized,
+            'message': isOptimized
+                ? 'WARNING: Battery optimization ON — background tracking will be unreliable'
+                : 'Battery optimization disabled — background tracking should work',
+          });
+        } catch (e) {
+          // Ignore — not critical
+        }
+      }
+
       _isTracking = true;
       print("✓ Location tracking started successfully (preset: $preset)");
     } catch (e) {
