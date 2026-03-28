@@ -217,28 +217,24 @@ class _OnboardingModalState extends State<OnboardingModal>
 
     try {
       if (Platform.isIOS) {
-        // Create a minimal config and start tracking briefly to trigger motion permission request
-        final config = LocationConfig(
-          accuracy: Accuracy.balanced,
-          enableMotionDetection: true,
-          disableMotionActivityUpdates: false,
-          motionTriggerDelay: 0,
-          backgroundPermissionRationale: PermissionRationale(
-            title: "Allow background location?",
-            message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
-            positiveAction: "Allow",
-            negativeAction: "Cancel",
+        // Start tracking briefly with a preset to trigger motion permission request
+        await LibreLocation.start(
+          preset: TrackingPreset.balanced,
+          config: LocationConfig(
+            backgroundPermissionRationale: PermissionRationale(
+              title: "Allow background location?",
+              message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
+              positiveAction: "Allow",
+              negativeAction: "Cancel",
+            ),
           ),
         );
-
-        // Start the service briefly to trigger motion permission request
-        await LibreLocation.startTracking(config);
 
         // Give it a moment to request permission
         await Future.delayed(const Duration(milliseconds: 500));
 
         // Stop it again since we're just in onboarding
-        await LibreLocation.stopTracking();
+        await LibreLocation.stop();
 
         setState(() {
           _activityRecognitionGranted = true;
