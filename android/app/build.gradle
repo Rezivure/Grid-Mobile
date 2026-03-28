@@ -26,9 +26,6 @@ if (keyPropertiesFile.exists()) {
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode', '1')
 def flutterVersionName = localProperties.getProperty('flutter.versionName', '1.0')
 
-// flutter_background_geolocation
-Project background_geolocation = project(':flutter_background_geolocation')
-apply from: "${background_geolocation.projectDir}/background_geolocation.gradle"
 
 android {
     namespace "app.mygrid.grid"
@@ -57,9 +54,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
-        manifestPlaceholders = [applicationName: "android.app.Application",
-                                transistorsoftKey: localProperties.getProperty('transistorsoft.key', '')
-                                ]
+        manifestPlaceholders = [applicationName: "android.app.Application"]
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
