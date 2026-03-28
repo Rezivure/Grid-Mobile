@@ -104,6 +104,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         _isLoading = false;
       });
 
+      // Persist the Synapse access token for session restoration
+      if (client.accessToken != null) {
+        await prefs.setString('token', client.accessToken!);
+      }
+
       // Store the custom homeserver URL for restoration
       await prefs.setString('custom_homeserver', homeserver);
       await prefs.setString('maps_url_type', _useDefaultMapsUrl ? 'default' : 'custom');

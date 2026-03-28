@@ -55,6 +55,13 @@ class AuthProvider with ChangeNotifier {
         token: jwt,
       );
 
+      // Persist the Synapse access token so splash_screen can restore the session.
+      // The JWT in 'loginToken' is a one-time token; the long-lived credential
+      // is the Synapse access token stored here as 'token'.
+      if (client.accessToken != null) {
+        await prefs.setString('token', client.accessToken!);
+      }
+
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
     } catch (e) {
