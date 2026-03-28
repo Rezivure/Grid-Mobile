@@ -6,6 +6,10 @@ import 'location_update.dart';
 import 'location_service_config.dart';
 
 /// Implementation of LocationService using the libre_location plugin.
+///
+/// Uses the preset-based API (`LibreLocation.start(preset:, config:)`) so the
+/// plugin's AutoAdapter handles iOS foreground/background lifecycle transitions
+/// and activity-based adaptation automatically.
 class LibreLocationService implements LocationService {
   final StreamController<LocationUpdate> _locationStreamController = StreamController.broadcast();
   final StreamController<bool> _motionChangeStreamController = StreamController.broadcast();
@@ -32,8 +36,11 @@ class LibreLocationService implements LocationService {
     print("====== STARTING LIBRE LOCATION TRACKING ======");
 
     try {
-      // Start location tracking with the current config
-      await libre.LibreLocation.startTracking(_buildLocationConfig(_config));
+      final preset = _presetForMode(_config.mode);
+      final locationConfig = _buildStartConfig(_config);
+
+      // Use preset API so AutoAdapter manages iOS background survival
+      await libre.LibreLocation.start(preset: preset, config: locationConfig);
       
       // Listen for location updates
       _positionSubscription = libre.LibreLocation.positionStream.listen((position) {
@@ -52,7 +59,7 @@ class LibreLocationService implements LocationService {
       });
 
       _isTracking = true;
-      print("✓ Location tracking started successfully");
+      print("✓ Location tracking started successfully (preset: $preset)");
     } catch (e) {
       print("✗ Error starting location tracking: $e");
       throw e;
@@ -66,7 +73,7 @@ class LibreLocationService implements LocationService {
     print("====== STOPPING LIBRE LOCATION TRACKING ======");
 
     try {
-      await libre.LibreLocation.stopTracking();
+      await libre.LibreLocation.stop();
       
       await _positionSubscription?.cancel();
       await _motionSubscription?.cancel();
@@ -130,13 +137,49 @@ class LibreLocationService implements LocationService {
     
     if (_isTracking) {
       try {
-        await libre.LibreLocation.setConfig(_buildLocationConfig(config));
-        print("✓ Location config updated");
+        final preset = _presetForMode(config.mode);
+        await libre.LibreLocation.setPreset(preset);
+        print("✓ Location preset updated to $preset");
       } catch (e) {
-        print("✗ Error updating location config: $e");
+        print("✗ Error updating location preset: $e");
         throw e;
       }
     }
+  }
+
+  /// Maps a TrackingMode to the corresponding libre_location preset.
+  libre.TrackingPreset _presetForMode(TrackingMode mode) {
+    switch (mode) {
+      case TrackingMode.batterySaver:
+        return libre.TrackingPreset.low;
+      default:
+        return libre.TrackingPreset.balanced;
+    }
+  }
+
+  /// Builds the LocationConfig for `LibreLocation.start()`.
+  ///
+  /// Only sets platform/notification options — the preset controls all
+  /// accuracy, interval, and motion-detection parameters via AutoAdapter.
+  libre.LocationConfig _buildStartConfig(LocationServiceConfig config) {
+    return libre.LocationConfig(
+      stopOnTerminate: false,
+      startOnBoot: config.startOnBoot,
+      enableHeadless: config.enableHeadless,
+      notification: libre.NotificationConfig(
+        title: "Location Sharing",
+        text: "Active",
+        sticky: true,
+        priority: libre.NotificationPriority.low,
+      ),
+      backgroundPermissionRationale: libre.PermissionRationale(
+        title: "Allow background location?",
+        message: "This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.",
+        positiveAction: "Allow",
+        negativeAction: "Cancel",
+      ),
+      debug: false,
+    );
   }
 
   /// Maps libre_location Position to our platform-agnostic LocationUpdate.
@@ -151,79 +194,6 @@ class LibreLocationService implements LocationService {
       timestamp: position.timestamp,
       isMoving: position.isMoving,
     );
-  }
-
-  /// Builds the libre_location LocationConfig from our simplified config.
-  libre.LocationConfig _buildLocationConfig(LocationServiceConfig config) {
-    // Create notification config for persistent tracking
-    final notificationConfig = libre.NotificationConfig(
-      title: "Location Sharing",
-      text: "Active",
-      sticky: true,
-      priority: libre.NotificationPriority.low,
-    );
-
-    // Create background permission rationale
-    final permissionRationale = libre.PermissionRationale(
-      title: "Allow background location?",
-      message: "This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.",
-      positiveAction: "Allow",
-      negativeAction: "Cancel",
-    );
-
-    if (config.mode == TrackingMode.batterySaver) {
-      // Battery saver config - balanced between battery and reliability
-      return libre.LocationConfig(
-        accuracy: libre.Accuracy.balanced,
-        distanceFilter: 200,
-        mode: libre.TrackingMode.balanced,
-        intervalMs: 120000, // 2 minutes
-        stopTimeout: 10,
-        stationaryRadius: 75,
-        heartbeatInterval: 1200, // 20 minutes
-        activityRecognitionInterval: 20000,
-        minimumActivityRecognitionConfidence: 80,
-        stopDetectionDelay: 10,
-        stopOnTerminate: false,
-        startOnBoot: config.startOnBoot,
-        enableHeadless: config.enableHeadless,
-        enableMotionDetection: true,
-        disableStopDetection: false,
-        locationAuthorizationRequest: libre.LocationAuthorizationRequest.always,
-        notification: notificationConfig,
-        backgroundPermissionRationale: permissionRationale,
-        debug: false,
-        logLevel: libre.LogLevel.error,
-        maxDaysToPersist: 1,
-        maxRecordsToPersist: 20,
-      );
-    } else {
-      // Normal config - more aggressive to prevent stopping
-      return libre.LocationConfig(
-        accuracy: libre.Accuracy.high,
-        distanceFilter: 50,
-        mode: libre.TrackingMode.active,
-        intervalMs: 60000, // 1 minute
-        stopTimeout: 5,
-        stationaryRadius: 50,
-        heartbeatInterval: 1200, // 20 minutes (works in background)
-        activityRecognitionInterval: 15000,
-        minimumActivityRecognitionConfidence: 75,
-        stopDetectionDelay: 5,
-        stopOnTerminate: false,
-        startOnBoot: config.startOnBoot,
-        enableHeadless: config.enableHeadless,
-        enableMotionDetection: true,
-        disableStopDetection: false,
-        locationAuthorizationRequest: libre.LocationAuthorizationRequest.always,
-        notification: notificationConfig,
-        backgroundPermissionRationale: permissionRationale,
-        debug: false,
-        logLevel: libre.LogLevel.error,
-        maxDaysToPersist: 1,
-        maxRecordsToPersist: 20,
-      );
-    }
   }
 
   void dispose() {
