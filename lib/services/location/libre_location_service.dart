@@ -17,6 +17,10 @@ class LibreLocationService implements LocationService {
 
   StreamSubscription<libre.Position>? _positionSubscription;
   StreamSubscription<libre.Position>? _motionSubscription;
+  StreamSubscription<libre.HeartbeatEvent>? _heartbeatSubscription;
+  StreamSubscription<libre.ActivityEvent>? _activitySubscription;
+  StreamSubscription<libre.ProviderEvent>? _providerSubscription;
+  StreamSubscription<bool>? _powerSaveSubscription;
   
   bool _isTracking = false;
   LocationServiceConfig _config = const LocationServiceConfig();
@@ -58,13 +62,15 @@ class LibreLocationService implements LocationService {
         final locationUpdate = _mapPositionToLocationUpdate(position);
         _locationStreamController.add(locationUpdate);
         DebugLogService.instance.log('location', {
-          'lat': position.latitude,
-          'lng': position.longitude,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
           'accuracy': position.accuracy,
           'speed': position.speed,
           'heading': position.heading,
           'altitude': position.altitude,
           'isMoving': position.isMoving,
+          'batteryLevel': position.battery != null ? (position.battery!.level * 100).round() : null,
+          'isCharging': position.battery?.isCharging,
           'source': 'stream',
         });
       });
@@ -81,6 +87,43 @@ class LibreLocationService implements LocationService {
           'isMoving': position.isMoving,
           'lat': position.latitude,
           'lng': position.longitude,
+        });
+      });
+
+      // Listen for heartbeat events (periodic pings when stationary)
+      _heartbeatSubscription = libre.LibreLocation.onHeartbeat.listen((event) {
+        DebugLogService.instance.log('heartbeat', {
+          'latitude': event.position.latitude,
+          'longitude': event.position.longitude,
+          'accuracy': event.position.accuracy,
+          'speed': event.position.speed,
+          'isMoving': event.position.isMoving,
+        });
+      });
+
+      // Listen for activity changes (still/walking/driving/cycling)
+      _activitySubscription = libre.LibreLocation.onActivityChange.listen((event) {
+        DebugLogService.instance.log('activity_change', {
+          'activity': event.type,
+          'confidence': event.confidence,
+        });
+      });
+
+      // Listen for provider changes (GPS on/off, permissions)
+      _providerSubscription = libre.LibreLocation.onProviderChange.listen((event) {
+        DebugLogService.instance.log('provider_change', {
+          'enabled': event.enabled,
+          'status': event.status,
+          'gps': event.gps,
+          'network': event.network,
+        });
+      });
+
+      // Listen for power save mode changes
+      _powerSaveSubscription = libre.LibreLocation.onPowerSaveChange.listen((isPowerSave) {
+        DebugLogService.instance.log('power_save_change', {
+          'isPowerSaveMode': isPowerSave,
+          'message': isPowerSave ? 'LOW POWER MODE ENABLED — may affect tracking' : 'Low power mode disabled',
         });
       });
 
@@ -104,8 +147,16 @@ class LibreLocationService implements LocationService {
       
       await _positionSubscription?.cancel();
       await _motionSubscription?.cancel();
+      await _heartbeatSubscription?.cancel();
+      await _activitySubscription?.cancel();
+      await _providerSubscription?.cancel();
+      await _powerSaveSubscription?.cancel();
       _positionSubscription = null;
       _motionSubscription = null;
+      _heartbeatSubscription = null;
+      _activitySubscription = null;
+      _providerSubscription = null;
+      _powerSaveSubscription = null;
       
       _isTracking = false;
       DebugLogService.instance.log('lifecycle_stop', {});
@@ -132,13 +183,15 @@ class LibreLocationService implements LocationService {
       final locationUpdate = _mapPositionToLocationUpdate(position);
       print("Manual location ping completed: ${locationUpdate.latitude}, ${locationUpdate.longitude}");
       DebugLogService.instance.log('location', {
-        'lat': locationUpdate.latitude,
-        'lng': locationUpdate.longitude,
-        'accuracy': locationUpdate.accuracy,
-        'speed': locationUpdate.speed,
-        'heading': locationUpdate.heading,
-        'altitude': locationUpdate.altitude,
-        'isMoving': locationUpdate.isMoving,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'speed': position.speed,
+        'heading': position.heading,
+        'altitude': position.altitude,
+        'isMoving': position.isMoving,
+        'batteryLevel': position.battery != null ? (position.battery!.level * 100).round() : null,
+        'isCharging': position.battery?.isCharging,
         'source': 'manual',
       });
       return locationUpdate;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import '../services/avatar_cache_service.dart';
+import '../services/debug_log_service.dart';
 import '../blocs/avatar/avatar_bloc.dart';
 import '../blocs/avatar/avatar_event.dart';
 import '../blocs/map/map_bloc.dart';
@@ -41,20 +42,49 @@ class _AppLifecycleWrapperState extends State<AppLifecycleWrapper> with WidgetsB
   void didChangeAppLifecycleState(AppLifecycleState state) {
     print('[AppLifecycle] State changed to: $state');
     
+    // Log ALL lifecycle transitions for debug
+    DebugLogService.instance.log('lifecycle', {
+      'state': state.name,
+      'pausedAt': _pausedTime?.toIso8601String(),
+      'pauseDurationMs': _pausedTime != null ? DateTime.now().difference(_pausedTime!).inMilliseconds : null,
+    });
+    
     switch (state) {
       case AppLifecycleState.paused:
         _pausedTime = DateTime.now();
+        DebugLogService.instance.log('app_backgrounded', {
+          'pausedAt': _pausedTime!.toIso8601String(),
+        });
         print('[AppLifecycle] App paused at $_pausedTime');
+        break;
+      
+      case AppLifecycleState.inactive:
+        DebugLogService.instance.log('app_inactive', {
+          'message': 'App transitioning (e.g. phone call, control center, app switcher)',
+        });
+        break;
+      
+      case AppLifecycleState.detached:
+        DebugLogService.instance.log('app_detached', {
+          'message': 'App detached from engine — may be terminated soon',
+        });
         break;
         
       case AppLifecycleState.resumed:
+        DebugLogService.instance.log('app_foregrounded', {
+          'pauseDurationMs': _pausedTime != null ? DateTime.now().difference(_pausedTime!).inMilliseconds : null,
+          'pauseDurationMin': _pausedTime != null ? DateTime.now().difference(_pausedTime!).inMinutes : null,
+        });
         if (!_isResuming) {
           _isResuming = true;
           _handleAppResume();
         }
         break;
         
-      default:
+      case AppLifecycleState.hidden:
+        DebugLogService.instance.log('app_hidden', {
+          'message': 'App hidden (all views not visible)',
+        });
         break;
     }
   }
