@@ -4,6 +4,7 @@ import 'package:libre_location/libre_location.dart' as libre;
 import 'location_service.dart';
 import 'location_update.dart';
 import 'location_service_config.dart';
+import 'package:grid_frontend/services/debug_log_service.dart';
 
 /// Implementation of LocationService using the libre_location plugin.
 ///
@@ -42,10 +43,30 @@ class LibreLocationService implements LocationService {
       // Use preset API so AutoAdapter manages iOS background survival
       await libre.LibreLocation.start(preset: preset, config: locationConfig);
       
+      DebugLogService.instance.log('lifecycle_start', {
+        'preset': preset.toString(),
+        'config': {
+          'stopOnTerminate': false,
+          'startOnBoot': _config.startOnBoot,
+          'enableHeadless': _config.enableHeadless,
+          'mode': _config.mode.toString(),
+        },
+      });
+
       // Listen for location updates
       _positionSubscription = libre.LibreLocation.positionStream.listen((position) {
         final locationUpdate = _mapPositionToLocationUpdate(position);
         _locationStreamController.add(locationUpdate);
+        DebugLogService.instance.log('location', {
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'accuracy': position.accuracy,
+          'speed': position.speed,
+          'heading': position.heading,
+          'altitude': position.altitude,
+          'isMoving': position.isMoving,
+          'source': 'stream',
+        });
       });
 
       // Listen for motion changes
@@ -56,12 +77,18 @@ class LibreLocationService implements LocationService {
         // Also emit location update on motion change
         final locationUpdate = _mapPositionToLocationUpdate(position);
         _locationStreamController.add(locationUpdate);
+        DebugLogService.instance.log('motion_change', {
+          'isMoving': position.isMoving,
+          'lat': position.latitude,
+          'lng': position.longitude,
+        });
       });
 
       _isTracking = true;
       print("✓ Location tracking started successfully (preset: $preset)");
     } catch (e) {
       print("✗ Error starting location tracking: $e");
+      DebugLogService.instance.log('error', {'message': 'Error starting location: $e'});
       throw e;
     }
   }
@@ -81,9 +108,11 @@ class LibreLocationService implements LocationService {
       _motionSubscription = null;
       
       _isTracking = false;
+      DebugLogService.instance.log('lifecycle_stop', {});
       print("✓ Location tracking stopped successfully");
     } catch (e) {
       print("✗ Error stopping location tracking: $e");
+      DebugLogService.instance.log('error', {'message': 'Error stopping location: $e'});
       throw e;
     }
   }
@@ -102,9 +131,20 @@ class LibreLocationService implements LocationService {
       
       final locationUpdate = _mapPositionToLocationUpdate(position);
       print("Manual location ping completed: ${locationUpdate.latitude}, ${locationUpdate.longitude}");
+      DebugLogService.instance.log('location', {
+        'lat': locationUpdate.latitude,
+        'lng': locationUpdate.longitude,
+        'accuracy': locationUpdate.accuracy,
+        'speed': locationUpdate.speed,
+        'heading': locationUpdate.heading,
+        'altitude': locationUpdate.altitude,
+        'isMoving': locationUpdate.isMoving,
+        'source': 'manual',
+      });
       return locationUpdate;
     } catch (e) {
       print("Error getting current position: $e");
+      DebugLogService.instance.log('error', {'message': 'Error getting current position: $e'});
       throw e;
     }
   }
@@ -116,6 +156,7 @@ class LibreLocationService implements LocationService {
       final permission = await libre.LibreLocation.requestPermission();
       print("Permission status: $permission");
       
+      DebugLogService.instance.log('permission', {'status': permission.toString()});
       switch (permission) {
         case libre.LocationPermission.always:
         case libre.LocationPermission.whileInUse:
@@ -127,6 +168,7 @@ class LibreLocationService implements LocationService {
       }
     } catch (e) {
       print("Error requesting permissions: $e");
+      DebugLogService.instance.log('error', {'message': 'Error requesting permissions: $e'});
       return false;
     }
   }
@@ -139,9 +181,11 @@ class LibreLocationService implements LocationService {
       try {
         final preset = _presetForMode(config.mode);
         await libre.LibreLocation.setPreset(preset);
+        DebugLogService.instance.log('config_change', {'preset': preset.toString(), 'mode': config.mode.toString()});
         print("✓ Location preset updated to $preset");
       } catch (e) {
         print("✗ Error updating location preset: $e");
+        DebugLogService.instance.log('error', {'message': 'Error updating preset: $e'});
         throw e;
       }
     }
