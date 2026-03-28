@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -190,8 +191,14 @@ class SyncManager with ChangeNotifier {
       }
       print('[SyncManager] Token valid for user: ${tokenOwner.userId}');
     } catch (e) {
-      print('[SyncManager] Token invalid or device deleted: $e');
-      await _handleAuthenticationFailure();
+      if (_isAuthenticationError(e)) {
+        print('[SyncManager] Token invalid or device deleted: $e');
+        await _handleAuthenticationFailure();
+      } else {
+        print('[SyncManager] Network error during token validation, will retry: $e');
+        _setSyncState(SyncState.error);
+        // Don't wipe credentials on network errors
+      }
       return;
     }
 
@@ -1759,9 +1766,16 @@ class SyncManager with ChangeNotifier {
       // Clear all local state
       await clearAllState();
       
-      // Clear stored credentials
+      // Clear stored credentials only — preserve user preferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      await prefs.remove('token');
+      await prefs.remove('loginToken');
+      await prefs.remove('accessToken');
+      await prefs.remove('refreshToken');
+      await prefs.remove('userId');
+      await prefs.remove('deviceId');
+      await prefs.remove('homeserver');
+      await prefs.remove('syncSinceToken');
       
       // Force logout from matrix client
       if (client.isLogged()) {
