@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/services/push_notification_service.dart';
 
 class AuthProvider with ChangeNotifier {
   bool _isLoggedIn = false;
@@ -64,6 +65,14 @@ class AuthProvider with ChangeNotifier {
 
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
+
+      // Register push notifications
+      try {
+        final pushService = PushNotificationService(client: client);
+        await pushService.register();
+      } catch (e) {
+        print('Error registering push notifications: $e');
+      }
     } catch (e) {
       print('Error initializing Matrix client with JWT: $e');
     }
@@ -72,6 +81,14 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // Unregister push notifications before clearing credentials
+    try {
+      final pushService = PushNotificationService(client: client);
+      await pushService.unregister();
+    } catch (e) {
+      print('Error unregistering push notifications: $e');
+    }
+
     _isLoggedIn = false;
     _token = null;
     _userId = null;

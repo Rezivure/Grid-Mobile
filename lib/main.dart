@@ -53,6 +53,8 @@ import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
+import 'package:grid_frontend/services/push_notification_service.dart';
+import 'package:grid_frontend/services/push/notification_channels.dart';
 
 
 
@@ -97,10 +99,19 @@ void main() async {
   if (token != null && token.isNotEmpty) {
     try {
       client.accessToken = token;
+
+      // Register push notifications on session restore
+      if (client.isLogged()) {
+        final pushService = PushNotificationService(client: client);
+        await pushService.register();
+      }
     } catch (e) {
       print('Error restoring session with token: $e');
     }
   }
+
+  // Initialize notification channels (Android)
+  await NotificationChannels.createAll();
 
 
   // Initialize repositories
