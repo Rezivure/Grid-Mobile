@@ -48,6 +48,10 @@ app.*.map.json
 ios/build
 ios/build*
 
+# Firebase (contains API keys)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
 #Android Builds
 android/build/*
 android/build
