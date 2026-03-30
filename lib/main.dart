@@ -55,6 +55,8 @@ import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
 import 'package:grid_frontend/services/push/notification_channels.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 
 
@@ -63,6 +65,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
+
+  // Initialize Firebase (for push notifications)
+  try {
+    await Firebase.initializeApp();
+    debugPrint('[Push] Firebase initialized');
+  } catch (e) {
+    debugPrint('[Push] Firebase init failed (ok if no config): $e');
+  }
 
   // Load .env file
   await dotenv.load(fileName: ".env");

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 /// Service responsible for registering/unregistering Matrix push notification
 /// pushers with Synapse via the Matrix SDK's built-in `postPusher` /
@@ -160,75 +161,59 @@ class PushNotificationService {
   // ---------------------------------------------------------------------------
 
   /// Get APNs device token (iOS).
-  ///
-  /// Uses `firebase_messaging` which, on iOS, returns the raw APNs token when
-  /// configured with an APNs key/cert in Sygnal.
   Future<String> _getApnsToken() async {
-    // NOTE: Requires firebase_messaging to be added to pubspec.yaml
-    // and FirebaseApp.configure() called in main.dart.
-    //
-    // Implementation:
-    //   import 'package:firebase_messaging/firebase_messaging.dart';
-    //   final messaging = FirebaseMessaging.instance;
-    //   await messaging.requestPermission();
-    //   final token = await messaging.getAPNSToken();
-    //   // Fallback to FCM token if APNs token not available directly
-    //   return token ?? (await messaging.getToken())!;
-
-    throw UnimplementedError(
-      'APNs token retrieval not yet wired. '
-      'See comments above for firebase_messaging integration.',
+    final messaging = FirebaseMessaging.instance;
+    // Request permission first
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
     );
+    debugPrint('[Push] iOS permission status: ${settings.authorizationStatus}');
+    
+    // Wait a moment for APNs token to become available
+    String? apnsToken;
+    for (int i = 0; i < 10; i++) {
+      apnsToken = await messaging.getAPNSToken();
+      if (apnsToken != null) break;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    if (apnsToken != null) {
+      debugPrint('[Push] Got APNs token: ${apnsToken.substring(0, 20)}...');
+      return apnsToken;
+    }
+    // Fallback to FCM token which wraps APNs
+    final fcmToken = await messaging.getToken();
+    if (fcmToken != null) {
+      debugPrint('[Push] Got FCM token (fallback): ${fcmToken.substring(0, 20)}...');
+      return fcmToken;
+    }
+    throw Exception('Could not obtain APNs or FCM token');
   }
 
   /// Get FCM registration token (Android with GMS).
   Future<String> _getFcmToken() async {
-    // NOTE: Requires firebase_messaging to be added to pubspec.yaml.
-    //
-    // Implementation:
-    //   import 'package:firebase_messaging/firebase_messaging.dart';
-    //   final messaging = FirebaseMessaging.instance;
-    //   final token = await messaging.getToken();
-    //   return token!;
-
-    throw UnimplementedError(
-      'FCM token retrieval not yet wired. '
-      'See comments above for firebase_messaging integration.',
-    );
+    final messaging = FirebaseMessaging.instance;
+    final token = await messaging.getToken();
+    if (token == null) throw Exception('Could not obtain FCM token');
+    return token;
   }
 
   /// Check for Google Play Services availability on Android.
   Future<bool> _hasGooglePlayServices() async {
-    // NOTE: Requires google_api_availability package or a method channel.
-    //
-    // Implementation:
-    //   import 'package:google_api_availability/google_api_availability.dart';
-    //   final availability = await GoogleApiAvailability.instance
-    //       .checkGooglePlayServicesAvailability();
-    //   return availability == GooglePlayServicesAvailability.success;
-
-    // Default: assume GMS present. Override once package is added.
-    return true;
+    try {
+      // Try getting FCM token — if it works, GMS is available
+      final token = await FirebaseMessaging.instance.getToken();
+      return token != null;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Get UnifiedPush / ntfy endpoint URL (Android without GMS).
   Future<String> _getUnifiedPushEndpoint() async {
-    // NOTE: Requires unifiedpush package.
-    //
-    // Implementation:
-    //   import 'package:unifiedpush/unifiedpush.dart';
-    //   final completer = Completer<String>();
-    //   UnifiedPush.initialize(
-    //     onNewEndpoint: (endpoint, _) => completer.complete(endpoint),
-    //     onRegistrationFailed: (_) => completer.completeError('UP registration failed'),
-    //   );
-    //   await UnifiedPush.registerAppWithDialog();
-    //   return await completer.future;
-
-    throw UnimplementedError(
-      'UnifiedPush endpoint retrieval not yet wired. '
-      'See comments above for unifiedpush integration.',
-    );
+    // TODO: Wire up unifiedpush package when testing on degoogled device
+    throw UnimplementedError('UnifiedPush not yet wired for testing');
   }
 
   Future<String> _deviceDisplayName() async {
