@@ -171,24 +171,34 @@ class PushNotificationService {
     );
     debugPrint('[Push] iOS permission status: ${settings.authorizationStatus}');
     
-    // Wait a moment for APNs token to become available
+    // Wait for APNs token — can take several seconds on first run
     String? apnsToken;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 30; i++) {
       apnsToken = await messaging.getAPNSToken();
       if (apnsToken != null) break;
-      await Future.delayed(const Duration(milliseconds: 500));
+      debugPrint('[Push] Waiting for APNs token... attempt ${i + 1}/30');
+      await Future.delayed(const Duration(seconds: 1));
     }
     if (apnsToken != null) {
       debugPrint('[Push] Got APNs token: ${apnsToken.substring(0, 20)}...');
       return apnsToken;
     }
-    // Fallback to FCM token which wraps APNs
-    final fcmToken = await messaging.getToken();
-    if (fcmToken != null) {
-      debugPrint('[Push] Got FCM token (fallback): ${fcmToken.substring(0, 20)}...');
-      return fcmToken;
+    
+    // Try FCM token as fallback (wraps APNs)
+    debugPrint('[Push] No APNs token after 30s, trying FCM token...');
+    for (int i = 0; i < 5; i++) {
+      try {
+        final fcmToken = await messaging.getToken();
+        if (fcmToken != null) {
+          debugPrint('[Push] Got FCM token (fallback): ${fcmToken.substring(0, 20)}...');
+          return fcmToken;
+        }
+      } catch (e) {
+        debugPrint('[Push] FCM token attempt ${i + 1} failed: $e');
+      }
+      await Future.delayed(const Duration(seconds: 2));
     }
-    throw Exception('Could not obtain APNs or FCM token');
+    throw Exception('Could not obtain APNs or FCM token after 40s');
   }
 
   /// Get FCM registration token (Android with GMS).
