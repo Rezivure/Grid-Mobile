@@ -1,5 +1,3 @@
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
-import 'package:path_provider/path_provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/backwards_compatibility_service.dart';
@@ -17,34 +15,42 @@ DatabaseService? _cachedDatabaseService;
 DatabaseApi? _cachedDatabase;
 
 @pragma('vm:entry-point')
-void headlessTask(bg.HeadlessEvent headlessEvent) async {
-  print('[BackgroundGeolocation HeadlessTask]: $headlessEvent');
+void headlessDispatcher() async {
+  print('[LibreLocation HeadlessDispatcher]: Initializing headless isolate');
+  // Initialize the headless isolate if needed
+}
 
-  switch (headlessEvent.name) {
-    case bg.Event.LOCATION:
-      if (headlessEvent.event is bg.Location) {
-        bg.Location location = headlessEvent.event as bg.Location;
-        print('- Location: $location');
-        await processBackgroundLocation(location);
-      }
-      break;
-    case bg.Event.HEARTBEAT:
-      if (headlessEvent.event is bg.HeartbeatEvent) {
-        final bg.HeartbeatEvent hbEvent = headlessEvent.event as bg.HeartbeatEvent;
-        final bg.Location? location = hbEvent.location;
-        print('- Heartbeat location: $location');
-
-        if (location != null) {
-          await processBackgroundLocation(location);
-        } else {
-          print('[HeadlessTask] ⚠️  Heartbeat location is null, skipping');
-        }
-      }
-      break;
+@pragma('vm:entry-point')
+void onHeadlessLocation(Map<String, dynamic> data) async {
+  print('[LibreLocation HeadlessTask]: $data');
+  
+  // Parse the location data from libre_location
+  final double? latitude = data['latitude']?.toDouble();
+  final double? longitude = data['longitude']?.toDouble();
+  final double? accuracy = data['accuracy']?.toDouble();
+  final int? timestamp = data['timestamp']?.toInt();
+  final bool? isMoving = data['isMoving'] as bool?;
+  
+  if (latitude != null && longitude != null) {
+    await processBackgroundLocation(
+      latitude, 
+      longitude, 
+      accuracy ?? 0.0,
+      DateTime.fromMillisecondsSinceEpoch(timestamp ?? DateTime.now().millisecondsSinceEpoch),
+      isMoving ?? false,
+    );
+  } else {
+    print('[HeadlessTask] ⚠️  Invalid location data received');
   }
 }
 
-Future<void> processBackgroundLocation(bg.Location location) async {
+Future<void> processBackgroundLocation(
+  double latitude, 
+  double longitude, 
+  double accuracy,
+  DateTime timestamp,
+  bool isMoving,
+) async {
   try {
     // Reuse cached instances if available
     if (_cachedClient == null) {
@@ -107,7 +113,7 @@ Future<void> processBackgroundLocation(bg.Location location) async {
         if (joinedMembers.length > 1) {
           if (!await _checkSharingWindow(room, joinedMembers, _cachedClient!, userService)) continue;
 
-          await _sendLocationUpdate(room, location);
+          await _sendLocationUpdate(room, latitude, longitude, accuracy);
         } else {
           print("Grid: Skipping room ${room.id} - insufficient members");
         }
@@ -184,9 +190,8 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
   return true;
 }
 
-Future<void> _sendLocationUpdate(Room room, bg.Location location) async {
+Future<void> _sendLocationUpdate(Room room, double latitude, double longitude, double accuracy) async {
   // Filter out low-accuracy locations to save battery and improve quality
-  final accuracy = location.coords.accuracy;
   if (accuracy > 100) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
     return;
@@ -195,7 +200,7 @@ Future<void> _sendLocationUpdate(Room room, bg.Location location) async {
   final eventContent = {
     'msgtype': 'm.location',
     'body': 'Current location',
-    'geo_uri': 'geo:${location.coords.latitude},${location.coords.longitude}',
+    'geo_uri': 'geo:$latitude,$longitude',
     'description': 'Current location',
     'timestamp': DateTime.now().toUtc().toIso8601String(),
   };

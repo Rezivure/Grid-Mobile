@@ -16,11 +16,6 @@
         android:roundIcon="@mipmap/ic_launcher"
         tools:replace="android:label">
 
-        <!-- Transistorsoft License Key -->
-        <meta-data
-            android:name="com.transistorsoft.locationmanager.license"
-            android:value="${transistorsoftKey}" />
-
         <!-- Background Location Permission Rationale -->
         <meta-data
             android:name="com.google.android.gms.permission.AD_ID"

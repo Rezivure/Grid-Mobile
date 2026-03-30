@@ -65,14 +65,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.11.0"
-  background_fetch:
-    dependency: transitive
-    description:
-      name: background_fetch
-      sha256: "6f0cec85480eac151f3971f883180d8c0acf6b40001153f1cf7c2c453df4f851"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.0"
   base58check:
     dependency: transitive
     description:
@@ -446,14 +438,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_background_geolocation:
-    dependency: "direct main"
-    description:
-      name: flutter_background_geolocation
-      sha256: a7c01238f681bc617bd798fcbc443a4a6f314101441450e7ab7d11939702de20
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.18.1"
   flutter_bloc:
     dependency: "direct main"
     description:
@@ -975,6 +959,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  libre_location:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: main
+      resolved-ref: d8a9c0d21ff8e90dfa9296918e9494f9c4f5a071
+      url: "git@github.com:Rezivure/libre-location.git"
+    source: git
+    version: "0.1.0"
   lints:
     dependency: transitive
     description:
