@@ -57,7 +57,7 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^18.0.0
   unifiedpush: ^6.0.1
-  google_api_availability: ^6.0.0
+  google_api_availability: ^5.0.1
 
 
 3flutter_launcher_icons:
