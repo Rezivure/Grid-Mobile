@@ -42,7 +42,7 @@ class PushNotificationService {
 
   PushNotificationService({
     required this.client,
-    this.sygnalUrl = 'https://sygnal.internal.mygrid.app/_matrix/push/v1/notify',
+    this.sygnalUrl = 'http://sygnal.matrix.svc.cluster.local:5000/_matrix/push/v1/notify',
   });
 
   // ---------------------------------------------------------------------------
