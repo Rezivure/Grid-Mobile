@@ -14,7 +14,6 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -39,6 +38,7 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/screens/settings/developer_settings_screen.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -206,13 +206,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (value) {
       locationManager.stopTracking();
-      await bg.BackgroundGeolocation.stop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is no longer being shared.')),
       );
     } else {
       locationManager.startTracking();
-      await bg.BackgroundGeolocation.start();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Your location is being shared with trusted contacts.')),
       );
@@ -2264,6 +2262,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: 'Report Abuse',
                   subtitle: 'Report inappropriate behavior',
                   onTap: () => _launchURL('https://mygrid.app/report'),
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ),
+            SizedBox(height: 24),
+
+            // Developer Section
+            _buildSectionCard(
+              theme: theme,
+              colorScheme: colorScheme,
+              title: 'Developer',
+              children: [
+                _buildMenuOption(
+                  icon: Icons.bug_report_outlined,
+                  title: 'Debug Logging',
+                  subtitle: 'Configure remote debug logging',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DeveloperSettingsScreen()),
+                    );
+                  },
                   colorScheme: colorScheme,
                 ),
               ],

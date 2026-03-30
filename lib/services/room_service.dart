@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:math';
 
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
@@ -19,6 +18,7 @@ import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
+import 'location/location_update.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 
 class RoomService {
@@ -37,16 +37,16 @@ class RoomService {
   final int _maxMessageHistory = 50;
 
   // Distance-based duplicate prevention
-  final Map<String, bg.Location> _lastSentLocationByRoom = {};
+  final Map<String, LocationUpdate> _lastSentLocationByRoom = {};
 
   // Offline queue for failed location sends
   final List<Map<String, dynamic>> _offlineQueue = [];
   static const int _maxOfflineQueueSize = 50;
 
-  bg.Location? _currentLocation;
+  LocationUpdate? _currentLocation;
   DateTime? _lastUpdateTime;
   
-  bg.Location? get currentLocation => _currentLocation;
+  LocationUpdate? get currentLocation => _currentLocation;
 
 
 
@@ -71,16 +71,16 @@ class RoomService {
     });
   }
   
-  void _handleLocationUpdate(bg.Location location) {
+  void _handleLocationUpdate(LocationUpdate location) {
     // Queue location updates intelligently
     // They will be processed when appropriate
     _queueLocationUpdate(location);
   }
   
   Timer? _locationUpdateTimer;
-  bg.Location? _pendingLocation;
+  LocationUpdate? _pendingLocation;
   
-  void _queueLocationUpdate(bg.Location location) {
+  void _queueLocationUpdate(LocationUpdate location) {
     _pendingLocation = location;
 
     // Cancel any existing timer
@@ -642,16 +642,16 @@ class RoomService {
     }
   }
 
-  void sendLocationEvent(String roomId, bg.Location location) async {
+  void sendLocationEvent(String roomId, LocationUpdate location) async {
     final room = client.getRoomById(roomId);
     if (room == null || room.membership != Membership.join) {
       print("Skipping location update for room $roomId - no longer a member");
       return;
     }
     if (room != null) {
-      final latitude = location.coords.latitude;
-      final longitude = location.coords.longitude;
-      final accuracy = location.coords.accuracy;
+      final latitude = location.latitude;
+      final longitude = location.longitude;
+      final accuracy = location.accuracy;
 
       // Filter out low-accuracy locations to save battery and improve quality
       if (accuracy > 100) {
@@ -659,23 +659,22 @@ class RoomService {
         return;
       }
 
-      if (latitude != null && longitude != null) {
-        // Distance-based duplicate prevention
-        final lastLocation = _lastSentLocationByRoom[roomId];
-        if (lastLocation != null) {
-          final distance = _calculateDistance(
-            lastLocation.coords.latitude,
-            lastLocation.coords.longitude,
-            latitude,
-            longitude,
-          );
+      // Distance-based duplicate prevention
+      final lastLocation = _lastSentLocationByRoom[roomId];
+      if (lastLocation != null) {
+        final distance = _calculateDistance(
+          lastLocation.latitude,
+          lastLocation.longitude,
+          latitude,
+          longitude,
+        );
 
-          if (distance < 10) {
-            print("⚠️  Skipping - only moved ${distance.toStringAsFixed(1)}m (threshold: 10m)");
-            return;
-          }
-          print("📍 Moved ${distance.toStringAsFixed(1)}m since last update");
+        if (distance < 10) {
+          print("⚠️  Skipping - only moved ${distance.toStringAsFixed(1)}m (threshold: 10m)");
+          return;
         }
+        print("📍 Moved ${distance.toStringAsFixed(1)}m since last update");
+      }
 
         // Create a unique hash for the location message (legacy fallback)
         var timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -751,11 +750,6 @@ class RoomService {
             });
           }
         }
-      } else {
-        print("Latitude or Longitude is null");
-      }
-    } else {
-      print("Room $roomId not found");
     }
   }
 
@@ -771,7 +765,7 @@ class RoomService {
         .length;
   }
 
-  Future<void> updateRooms(bg.Location location) async {
+  Future<void> updateRooms(LocationUpdate location) async {
     // Prevent rapid duplicate updates
     final now = DateTime.now();
     if (_lastUpdateTime != null && 

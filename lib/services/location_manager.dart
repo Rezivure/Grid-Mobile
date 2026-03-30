@@ -1,18 +1,21 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'location/location_service.dart';
+import 'location/location_update.dart';
+import 'location/location_service_config.dart';
+import 'location/libre_location_service.dart';
 
 /// A simpler location manager relying on the plugin's own stop-detection.
 /// Battery Saver Mode slightly changes the config, otherwise we let
 /// the plugin handle moving vs stationary. Includes a `grabLocationAndPing`
 /// method for manual location fetch/ping.
 class LocationManager with ChangeNotifier {
-  final StreamController<bg.Location> _locationStreamController = StreamController.broadcast();
+  final StreamController<LocationUpdate> _locationStreamController = StreamController.broadcast();
+  final LocationService _locationService = LibreLocationService();
 
-  bg.Location? _lastPosition;
+  LocationUpdate? _lastPosition;
   bool _isTracking = false;
   bool _isInForeground = true;
   bool _batterySaverEnabled = false;
@@ -20,10 +23,13 @@ class LocationManager with ChangeNotifier {
   DateTime? _lastLocationUpdate;
 
   late final AppLifecycleListener _lifecycleListener;
+  StreamSubscription<LocationUpdate>? _locationSubscription;
+  StreamSubscription<bool>? _motionSubscription;
 
   LocationManager() {
     _initializeLifecycleListener();
     _loadBatterySaverState();
+    _setupLocationService();
   }
 
   // Listen for app foreground/background changes
@@ -63,145 +69,10 @@ class LocationManager with ChangeNotifier {
     notifyListeners();
   }
 
-  // Apply the appropriate config based on battery-saver + foreground/background
-  void _updateTrackingConfig() {
-    if (!_isTracking) return;
-
-    if (_batterySaverEnabled) {
-      // Battery saver config - balanced between battery and reliability
-      bg.BackgroundGeolocation.setConfig(bg.Config(
-        desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM, // Medium accuracy for balance
-        distanceFilter: 200, // Reduced from 500 to 200m
-        stopTimeout: 10, // Increased from 5 to 10 minutes
-        disableStopDetection: false,
-        pausesLocationUpdatesAutomatically: true,
-        stationaryRadius: 75, // Reduced from 100 to 75m
-        heartbeatInterval: 1200, // 20 minutes (works in background)
-        activityRecognitionInterval: 20000, // Check activity less frequently (20s)
-        minimumActivityRecognitionConfidence: 80, // Higher confidence required
-        disableMotionActivityUpdates: false,
-        stopDetectionDelay: 10, // Increased from 5 to 10 minutes
-      ));
-    } else {
-      // Normal config - more aggressive to prevent stopping
-      if (_isInForeground) {
-        bg.BackgroundGeolocation.setConfig(bg.Config(
-          desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
-          distanceFilter: 10,
-          disableStopDetection: false,
-          pausesLocationUpdatesAutomatically: true,
-          stopTimeout: 5, // Increased from 2 to 5 minutes
-          heartbeatInterval: 300, // 5 minutes in foreground
-          activityRecognitionInterval: 10000, // 10s in foreground
-          minimumActivityRecognitionConfidence: 70,
-          stopDetectionDelay: 2, // Increased from 1 to 2 minutes
-        ));
-      } else {
-        bg.BackgroundGeolocation.setConfig(bg.Config(
-          desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // HIGH accuracy even in background
-          distanceFilter: 50, // Reduced from 100 to 50m for more frequent updates
-          stopTimeout: 5, // Increased from 3 to 5 minutes
-          disableStopDetection: false,
-          pausesLocationUpdatesAutomatically: true,
-          stationaryRadius: 50, // Reduced from 75 to 50m
-          heartbeatInterval: 1200, // 20 minutes in background (works even when app suspended)
-          activityRecognitionInterval: 15000, // 15s in background
-          minimumActivityRecognitionConfidence: 75,
-          stopDetectionDelay: 5, // Increased from 3 to 5 minutes
-          disableMotionActivityUpdates: false,
-        ));
-      }
-    }
-  }
-
-  // Stream for listening to location updates in your UI
-  Stream<bg.Location> get locationStream => _locationStreamController.stream;
-
-  // Simple helper to get the last known LatLng
-  LatLng? get currentLatLng {
-    if (_lastPosition == null) return null;
-    return LatLng(_lastPosition!.coords.latitude, _lastPosition!.coords.longitude);
-  }
-
-  bool get isTracking => _isTracking;
-  bool get batterySaverEnabled => _batterySaverEnabled;
-  bool get isMoving => _isMoving;
-  DateTime? get lastLocationUpdate => _lastLocationUpdate;
-  
-  // Check if location data is stale
-  bool get isLocationStale {
-    if (_lastLocationUpdate == null) return true;
-    final age = DateTime.now().difference(_lastLocationUpdate!);
-    return age > const Duration(minutes: 10);
-  }
-  
-  // Get age of last location update
-  Duration? get locationAge {
-    if (_lastLocationUpdate == null) return null;
-    return DateTime.now().difference(_lastLocationUpdate!);
-  }
-
-  // Start tracking. Let the plugin handle moving vs stationary automatically.
-  Future<void> startTracking() async {
-    if (_isTracking) return;
-
-    print("====== STARTING LOCATION TRACKING ======");
-
-    // Request permissions for both iOS and Android
-    if (Platform.isIOS || Platform.isAndroid) {
-      print("Requesting location permissions...");
-      final status = await bg.BackgroundGeolocation.requestPermission();
-      print("Permission status: $status");
-
-      if (status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED ||
-          status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_RESTRICTED) {
-        print("✗ ERROR: Location permission denied or restricted!");
-        print("  → Please enable location permissions in device settings");
-        return;
-      }
-    }
-
-    // Configure plugin one time with more aggressive defaults to prevent stopping
-    await bg.BackgroundGeolocation.ready(bg.Config(
-      desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
-      stopOnTerminate: false,
-      startOnBoot: true,
-      enableHeadless: true,
-      disableStopDetection: false,
-      activityType: bg.Config.ACTIVITY_TYPE_OTHER,
-      stopTimeout: 5, // Increased from 2 to 5 minutes
-      stopDetectionDelay: 2, // Increased from 1 to 2 minutes
-      // Motion detection optimizations
-      isMoving: false, // Start in stationary mode
-      motionTriggerDelay: 0, // No delay for motion trigger
-      disableMotionActivityUpdates: false,
-      useSignificantChangesOnly: false,
-      // Heartbeat for stationary updates (this works in background on iOS/Android)
-      heartbeatInterval: 1200, // 20 minutes - guaranteed update even when stationary and backgrounded
-      // Power optimizations
-      preventSuspend: false, // Allow OS to suspend when possible
-      disableLocationAuthorizationAlert: false,
-      locationAuthorizationRequest: 'Always',
-      backgroundPermissionRationale: bg.PermissionRationale(
-        title: "Allow background location?",
-        message: "This app utilizes location data which is end-to-end encrypted and only shared with your chosen contacts.",
-        positiveAction: "Allow",
-        negativeAction: "Cancel",
-      ),
-      notification: bg.Notification(
-        title: "Location Sharing",
-        text: "Active",
-        sticky: true,
-        priority: bg.Config.NOTIFICATION_PRIORITY_LOW, // Lower priority notification
-      ),
-      debug: false,
-      logLevel: bg.Config.LOG_LEVEL_ERROR, // Reduce logging overhead
-      maxDaysToPersist: 1, // Reduce storage
-      maxRecordsToPersist: 20, // Reduce storage
-    ));
-
-    // Location updates - always keep position fresh
-    bg.BackgroundGeolocation.onLocation((bg.Location location) {
+  // Setup location service listeners
+  void _setupLocationService() {
+    // Listen for location updates
+    _locationSubscription = _locationService.locationStream.listen((location) {
       final now = DateTime.now();
       
       // Always update our internal position to keep it fresh
@@ -228,91 +99,71 @@ class LocationManager with ChangeNotifier {
       notifyListeners();
     });
 
-    // Motion-detection updates
-    bg.BackgroundGeolocation.onMotionChange((bg.Location location) {
-      print(">>> onMotionChange: isMoving = ${location.isMoving}");
-      _isMoving = location.isMoving ?? false;
-
-      // Always update position from motion change event
-      _lastPosition = location;
-
-      // If started moving, immediately broadcast the update
-      if (_isMoving) {
-        _lastLocationUpdate = DateTime.now();
-        _locationStreamController.add(location);
-        notifyListeners();
-      }
+    // Listen for motion changes
+    _motionSubscription = _locationService.motionChangeStream.listen((isMoving) {
+      print(">>> Motion change: isMoving = $isMoving");
+      _isMoving = isMoving;
+      notifyListeners();
     });
+  }
 
-    // Provider change listener (GPS on/off, permission changes)
-    bg.BackgroundGeolocation.onProviderChange((bg.ProviderChangeEvent event) {
-      print(">>> onProviderChange: ${event.toMap()}");
+  // Apply the appropriate config based on battery-saver mode
+  void _updateTrackingConfig() {
+    if (!_isTracking) return;
 
-      if (!event.enabled) {
-        print("⚠️  Location services disabled!");
-        // Could notify user or update UI state
-      }
+    final mode = _batterySaverEnabled ? TrackingMode.batterySaver : TrackingMode.normal;
+    final config = LocationServiceConfig(
+      mode: mode,
+      enableHeadless: true,
+      startOnBoot: true,
+    );
+    
+    _locationService.setConfig(config);
+  }
 
-      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_DENIED) {
-        print("⚠️  Location permission denied!");
-        // Could show permission request dialog
-      }
+  // Stream for listening to location updates in your UI
+  Stream<LocationUpdate> get locationStream => _locationStreamController.stream;
 
-      if (event.status == bg.ProviderChangeEvent.AUTHORIZATION_STATUS_ALWAYS) {
-        print("✓ Location permission: Always (best for background tracking)");
-      }
-    });
+  // Simple helper to get the last known LatLng
+  LatLng? get currentLatLng {
+    if (_lastPosition == null) return null;
+    return LatLng(_lastPosition!.latitude, _lastPosition!.longitude);
+  }
 
-    // Activity-based tracking adjustment for battery optimization
-    bg.BackgroundGeolocation.onActivityChange((bg.ActivityChangeEvent event) {
-      print("🏃 Activity changed: ${event.activity} (confidence: ${event.confidence}%)");
+  bool get isTracking => _isTracking;
+  bool get batterySaverEnabled => _batterySaverEnabled;
+  bool get isMoving => _isMoving;
+  DateTime? get lastLocationUpdate => _lastLocationUpdate;
+  
+  // Check if location data is stale
+  bool get isLocationStale {
+    if (_lastLocationUpdate == null) return true;
+    final age = DateTime.now().difference(_lastLocationUpdate!);
+    return age > const Duration(minutes: 10);
+  }
+  
+  // Get age of last location update
+  Duration? get locationAge {
+    if (_lastLocationUpdate == null) return null;
+    return DateTime.now().difference(_lastLocationUpdate!);
+  }
 
-      // Only adjust if high confidence
-      if (event.confidence < 75) {
-        print("   Low confidence, keeping current config");
-        return;
-      }
+  // Start tracking. Let the plugin handle moving vs stationary automatically.
+  Future<void> startTracking() async {
+    if (_isTracking) return;
 
-      switch (event.activity) {
-        case 'in_vehicle':
-          // Driving - more frequent updates, medium accuracy OK
-          print("   🚗 Driving mode: frequent updates, medium accuracy");
-          bg.BackgroundGeolocation.setConfig(bg.Config(
-            distanceFilter: 100,  // Update every 100m
-            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
-            heartbeatInterval: 600, // 10 min when stopped
-          ));
-          break;
+    print("====== STARTING LOCATION TRACKING ======");
 
-        case 'on_bicycle':
-        case 'running':
-        case 'walking':
-          // Moving but slower - balanced frequency
-          print("   🚶 Moving mode: balanced updates");
-          bg.BackgroundGeolocation.setConfig(bg.Config(
-            distanceFilter: 50,
-            desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH,
-            heartbeatInterval: 900, // 15 min
-          ));
-          break;
+    // Request permissions
+    final permissionGranted = await _locationService.requestPermission();
+    if (!permissionGranted) {
+      print("✗ ERROR: Location permission denied!");
+      print("  → Please enable location permissions in device settings");
+      return;
+    }
 
-        case 'still':
-          // Stationary - minimal updates to save battery
-          print("   🛑 Stationary mode: minimal updates");
-          bg.BackgroundGeolocation.setConfig(bg.Config(
-            distanceFilter: 200,
-            desiredAccuracy: bg.Config.DESIRED_ACCURACY_MEDIUM,
-            heartbeatInterval: 1200, // 20 min
-          ));
-          break;
-
-        default:
-          print("   ❓ Unknown activity: ${event.activity}");
-      }
-    });
-
-    // Start tracking
-    await bg.BackgroundGeolocation.start();
+    // Start the location service
+    await _locationService.start();
     _isTracking = true;
 
     // Apply battery-saver/foreground/background config
@@ -324,14 +175,7 @@ class LocationManager with ChangeNotifier {
   // This ALWAYS gets a fresh location, bypassing any throttling
   Future<void> grabLocationAndPing() async {
     try {
-      print("Manually requesting current location...");
-      final currentPos = await bg.BackgroundGeolocation.getCurrentPosition(
-        samples: 3, // Take multiple samples for better accuracy on manual ping
-        timeout: 30,
-        maximumAge: 0, // Force fresh location
-        persist: false,
-        desiredAccuracy: bg.Config.DESIRED_ACCURACY_HIGH, // Force high accuracy for manual ping
-      );
+      final currentPos = await _locationService.getCurrentPosition();
       
       // Always update position and timestamp for manual requests
       _lastPosition = currentPos;
@@ -339,7 +183,7 @@ class LocationManager with ChangeNotifier {
       _locationStreamController.add(currentPos);
       notifyListeners();
       
-      print("Manual location ping completed: ${currentPos.coords.latitude}, ${currentPos.coords.longitude}");
+      print("Manual location ping completed: ${currentPos.latitude}, ${currentPos.longitude}");
     } catch (e) {
       print("Error getting current position: $e");
     }
@@ -348,8 +192,7 @@ class LocationManager with ChangeNotifier {
   // Stop tracking and remove listeners
   Future<void> stopTracking() async {
     if (!_isTracking) return;
-    await bg.BackgroundGeolocation.removeListeners();
-    await bg.BackgroundGeolocation.stop();
+    await _locationService.stop();
     _isTracking = false;
     notifyListeners();
   }
@@ -357,10 +200,15 @@ class LocationManager with ChangeNotifier {
   @override
   void dispose() {
     _lifecycleListener.dispose();
+    _locationSubscription?.cancel();
+    _motionSubscription?.cancel();
     if (_isTracking) {
-      bg.BackgroundGeolocation.removeListeners();
-      bg.BackgroundGeolocation.stop();
+      _locationService.stop();
       _isTracking = false;
+    }
+    final service = _locationService;
+    if (service is LibreLocationService) {
+      service.dispose();
     }
     _locationStreamController.close();
     super.dispose();

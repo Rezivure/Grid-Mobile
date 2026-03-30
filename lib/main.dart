@@ -51,7 +51,8 @@ import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:libre_location/libre_location.dart';
+import 'package:grid_frontend/services/debug_log_service.dart';
 
 
 
@@ -59,7 +60,7 @@ import 'package:flutter_background_geolocation/flutter_background_geolocation.da
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  bg.BackgroundGeolocation.registerHeadlessTask(headlessTask);
+  LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
 
   // Load .env file
   await dotenv.load(fileName: ".env");
@@ -84,6 +85,9 @@ void main() async {
     shareKeysWith: ShareKeysWith.all,
   );
   await client.init();
+
+  // Initialize debug logging service
+  await DebugLogService.instance.init();
 
   // Attempt to restore session
   // TODO: this code chunk may do nothing actually
