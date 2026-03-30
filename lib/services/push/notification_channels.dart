@@ -15,7 +15,12 @@ class NotificationChannels {
   /// Create all notification channels. Call once at app startup.
   static Future<void> createAll() async {
     const initAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: initAndroid);
+    const initIOS = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(android: initAndroid, iOS: initIOS);
 
     await _plugin.initialize(
       initSettings,
