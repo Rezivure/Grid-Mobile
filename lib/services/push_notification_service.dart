@@ -142,7 +142,37 @@ class PushNotificationService {
       ),
     );
 
+    final pushkeyPreview = config.pushkey.length > 20
+        ? '${config.pushkey.substring(0, 20)}...'
+        : config.pushkey;
+    debugPrint(
+      '[Push] About to post pusher: '
+      'appId=${config.appId}, '
+      'pushkey=$pushkeyPreview, '
+      'url=${config.dataUrl}',
+    );
+
     await client.postPusher(pusher, append: false);
+
+    debugPrint('[Push] postPusher completed without exception');
+
+    try {
+      final pushers = await client.getPushers();
+      debugPrint('[Push] Synapse returned ${pushers.pushers.length} pushers');
+
+      for (final existing in pushers.pushers) {
+        final existingPreview = existing.pushkey.length > 20
+            ? '${existing.pushkey.substring(0, 20)}...'
+            : existing.pushkey;
+        debugPrint(
+          '[Push] Existing pusher: '
+          'appId=${existing.appId}, '
+          'pushkey=$existingPreview',
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[Push] Failed to fetch pushers after registration: $e\n$st');
+    }
   }
 
   Future<void> _persistConfig(PusherConfig config) async {
