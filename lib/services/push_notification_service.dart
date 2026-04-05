@@ -157,10 +157,10 @@ class PushNotificationService {
     debugPrint('[Push] postPusher completed without exception');
 
     try {
-      final pushers = await client.getPushers();
-      debugPrint('[Push] Synapse returned ${pushers.pushers.length} pushers');
+      final pushers = await client.getPushers() ?? <Pusher>[];
+      debugPrint('[Push] Synapse returned ${pushers.length} pushers');
 
-      for (final existing in pushers.pushers) {
+      for (final existing in pushers) {
         final existingPreview = existing.pushkey.length > 20
             ? '${existing.pushkey.substring(0, 20)}...'
             : existing.pushkey;
