@@ -53,6 +53,10 @@ import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
+import 'package:grid_frontend/services/push_notification_service.dart';
+import 'package:grid_frontend/services/push/notification_channels.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 
 
@@ -61,6 +65,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
+
+  // Initialize Firebase (for push notifications)
+  try {
+    await Firebase.initializeApp();
+    debugPrint('[Push] Firebase initialized');
+  } catch (e) {
+    debugPrint('[Push] Firebase init failed (ok if no config): $e');
+  }
 
   // Load .env file
   await dotenv.load(fileName: ".env");
@@ -97,10 +109,19 @@ void main() async {
   if (token != null && token.isNotEmpty) {
     try {
       client.accessToken = token;
+
+      // Register push notifications on session restore
+      if (client.isLogged()) {
+        final pushService = PushNotificationService(client: client);
+        await pushService.register();
+      }
     } catch (e) {
       print('Error restoring session with token: $e');
     }
   }
+
+  // Initialize notification channels (Android)
+  await NotificationChannels.createAll();
 
 
   // Initialize repositories
