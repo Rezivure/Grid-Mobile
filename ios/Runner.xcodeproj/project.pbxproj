@@ -16,8 +16,6 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		9D642FEE4AD1523EE2F420E4 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 35FD13841D8ED8CB53CA887F /* Pods_RunnerTests.framework */; };
 		CB1110F52E49234000D501E9 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1110F42E49234000D501E9 /* StoreKit.framework */; };
-		CB71D5272F79FEB7005C8116 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CB71D5262F79FEB7005C8116 /* GoogleService-Info.plist */; };
-		CB71D5282F79FEB7005C8116 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CB71D5262F79FEB7005C8116 /* GoogleService-Info.plist */; };
 		ECFCA6962F79F39300386C62 /* GridNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ECFCA68F2F79F39300386C62 /* GridNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FD4B62FB5672D7B2CB70A143 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3737650B9FFA0C466F929C91 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -89,7 +87,6 @@
 		CB1110F42E49234000D501E9 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		CB2090EB2F70DA4600D7B87F /* RunnerProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerProfile.entitlements; sourceTree = "<group>"; };
 		CB701D6B2C75853F005A3751 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
-		CB71D5262F79FEB7005C8116 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E61F61E83E4CA900C31D3A83 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		ECFCA68F2F79F39300386C62 /* GridNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GridNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -168,7 +165,6 @@
 		97C146E51CF9000F007C117D = {
 			isa = PBXGroup;
 			children = (
-				CB71D5262F79FEB7005C8116 /* GoogleService-Info.plist */,
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
 				ECFCA6902F79F39300386C62 /* GridNotificationService */,
@@ -343,7 +339,6 @@
 			files = (
 				97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */,
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
-				CB71D5272F79FEB7005C8116 /* GoogleService-Info.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 			);
@@ -353,7 +348,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CB71D5282F79FEB7005C8116 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
