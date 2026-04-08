@@ -50,6 +50,7 @@ ios/build*
 
 # Firebase (contains API keys)
 android/app/google-services.json
+ios/GoogleService-Info.plist
 ios/Runner/GoogleService-Info.plist
 
 #Android Builds
