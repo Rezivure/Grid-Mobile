@@ -147,7 +147,7 @@ jobs:
 
       - name: Restore Firebase iOS config
         run: |
-          cp "$HOME/.fastlane-secrets/GoogleService-Info.plist" ios/Runner/GoogleService-Info.plist
+          cp "$HOME/.fastlane-secrets/GoogleService-Info.plist" ios/GoogleService-Info.plist
 
       - name: Build & Upload iOS to TestFlight
         run: |
