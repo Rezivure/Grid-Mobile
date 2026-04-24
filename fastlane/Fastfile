@@ -132,9 +132,14 @@ platform :android do
   lane :beta do
     sh("cd #{File.join(Dir.pwd, '..')} && flutter build appbundle --release")
 
+    # Upload as draft: Play Console gates full rollout on manual
+    # declarations (exact-alarm usage, data safety, etc.) that can't
+    # be set via API. Draft uploads bypass rollout validation; the
+    # user promotes drafts to internal/production manually.
     upload_to_play_store(
       track: "internal",
       aab: File.join(Dir.pwd, "..", "build", "app", "outputs", "bundle", "release", "app-release.aab"),
+      release_status: "draft",
       skip_upload_metadata: true,
       skip_upload_images: true,
       skip_upload_screenshots: true
