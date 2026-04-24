@@ -68,6 +68,37 @@ class PushNotificationService {
     } catch (e, st) {
       debugPrint('[Push] Failed to register pusher: $e\n$st');
     }
+
+    // Override the default `.m.rule.member_event` so member-join events
+    // actually push. NSE filters out the user's own joins client-side
+    // (we can't express "state_key != self" as a server-side push rule
+    // condition).
+    await _ensureGroupJoinPushRule();
+  }
+
+  /// PUT an override push rule that fires on `m.room.member` events with
+  /// `membership == "join"`. Idempotent — safe to call on every login.
+  Future<void> _ensureGroupJoinPushRule() async {
+    try {
+      await client.request(
+        RequestType.PUT,
+        '/client/v3/pushrules/global/override/grid.member.join',
+        data: {
+          'actions': ['notify'],
+          'conditions': [
+            {'kind': 'event_match', 'key': 'type', 'pattern': 'm.room.member'},
+            {
+              'kind': 'event_match',
+              'key': 'content.membership',
+              'pattern': 'join',
+            },
+          ],
+        },
+      );
+      debugPrint('[Push] Override rule grid.member.join set');
+    } catch (e) {
+      debugPrint('[Push] Failed to set grid.member.join rule: $e');
+    }
   }
 
   /// Call on logout to remove this device's pusher from Synapse.
