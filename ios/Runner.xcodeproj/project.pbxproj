@@ -871,8 +871,9 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_ENTITLEMENTS = GridNotificationService/GridNotificationService.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				PROVISIONING_PROFILE_SPECIFIER = "app.mygrid.grid.GridNotificationService AppStore";
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 45NCU5QA4S;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
