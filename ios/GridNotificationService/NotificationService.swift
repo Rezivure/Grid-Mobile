@@ -110,10 +110,40 @@ class NotificationService: UNNotificationServiceExtension {
                     self.suppressNotification(contentHandler: contentHandler)
                 }
             } catch {
-                os_log("suppress: fetchEvent threw %{public}@",
+                os_log("fetchEvent threw %{public}@ — trying member-state fallback",
                        log: nseLog, type: .error,
                        String(describing: error))
-                self.suppressNotification(contentHandler: contentHandler)
+
+                // Synapse rejects /rooms/{id}/event/{eid} for invitees who
+                // aren't members yet (typical 404). For invite pushes the
+                // current-member state still works because invitees own a
+                // m.room.member state event with membership=invite. Render
+                // the invite banner from that.
+                if let me = currentUserID,
+                   let member = try? await client.fetchRoomMember(
+                       roomID: roomID, userID: me),
+                   member.membership == "invite" {
+                    os_log("member fallback: invite confirmed", log: nseLog, type: .info)
+                    let inviterDisplay = member.displayname ?? "Someone"
+                    let isDirect = member.isDirect == true
+                    let body: String
+                    if isDirect {
+                        body = "\(inviterDisplay) wants to share location with you"
+                    } else if let name = await client.fetchRoomName(roomID: roomID),
+                              !name.isEmpty {
+                        body = "\(inviterDisplay) invited you to \(name)"
+                    } else {
+                        body = "\(inviterDisplay) invited you"
+                    }
+                    bestAttemptContent.title = "Grid"
+                    bestAttemptContent.body = body
+                    bestAttemptContent.sound = .default
+                    contentHandler(bestAttemptContent)
+                } else {
+                    os_log("member fallback: not an invite, suppress",
+                           log: nseLog, type: .info)
+                    self.suppressNotification(contentHandler: contentHandler)
+                }
             }
         }
     }
