@@ -51,6 +51,16 @@ final class EventClassifier {
     /// decidable cases (invite with matching state_key). For join-vs-direct
     /// disambiguation see `classifyWithContext`.
     static func classify(event: MatrixEvent, currentUserID: String?) -> NotificationAction {
+        // Synthetic Grid system message ("X joined room") posted by the
+        // joining user's app. Allowlisted because Matrix's default push
+        // rules don't notify on m.room.member joins and we can't easily
+        // override them server-side.
+        if event.type == "m.room.message",
+           event.content?.msgtype == "grid.member.join" {
+            let body = event.content?.body ?? "Someone joined a group"
+            return .showMessage(title: "Grid", body: body)
+        }
+
         guard event.type == "m.room.member" else {
             // Messages, encrypted events, location updates, etc. — all suppressed.
             return .suppress
@@ -91,6 +101,13 @@ final class EventClassifier {
         currentUserID: String?,
         client: MatrixAPIClient
     ) async -> NotificationAction {
+        // Synthetic Grid join message — render the body directly.
+        if event.type == "m.room.message",
+           event.content?.msgtype == "grid.member.join" {
+            let body = event.content?.body ?? "Someone joined a group"
+            return .showMessage(title: "Grid", body: body)
+        }
+
         // `roomID` is passed explicitly because the CS API
         // `/rooms/{roomId}/event/{eventId}` response often omits `room_id`
         // from the body (it's already in the URL), so `event.roomId` is

@@ -69,56 +69,36 @@ class PushNotificationService {
       debugPrint('[Push] Failed to register pusher: $e\n$st');
     }
 
-    // Override the default `.m.rule.member_event` so member-join events
-    // actually push. NSE filters out the user's own joins client-side
-    // (we can't express "state_key != self" as a server-side push rule
-    // condition).
-    await _ensureGroupJoinPushRule();
+    // Reset any push rule overrides we previously installed when we
+    // tried to gate joins server-side. We now use synthetic
+    // `grid.member.join` messages instead, which push via the
+    // standard `.m.rule.message` rule and are gated by the NSE.
+    await _resetCustomPushRules();
   }
 
-  /// Add an override rule that notifies on member-join events, AND
-  /// disable the spec-default `.m.rule.member_event` (which would
-  /// otherwise dont_notify all member events, including ours).
-  ///
-  /// Both calls are idempotent — safe to run on every login.
-  ///
-  /// Why disable the default instead of inserting before it: Synapse
-  /// rejects `?before=.m.rule.*` (default rules can't be used as a
-  /// before/after anchor in this version). Disabling the default
-  /// removes its dont_notify entirely; non-join member events
-  /// (leaves, profile changes) then match no override rule and
-  /// silently fall through, which matches the allowlist policy.
-  Future<void> _ensureGroupJoinPushRule() async {
+  /// Idempotently undo PR #222/#223:
+  /// - delete the `grid.member.join` override rule (no longer needed)
+  /// - re-enable `.m.rule.member_event` (we no longer want every member
+  ///   event to fire; the spec default of suppressing them is correct)
+  Future<void> _resetCustomPushRules() async {
     try {
       await client.request(
-        RequestType.PUT,
+        RequestType.DELETE,
         '/client/v3/pushrules/global/override/grid.member.join',
-        data: {
-          'actions': ['notify'],
-          'conditions': [
-            {'kind': 'event_match', 'key': 'type', 'pattern': 'm.room.member'},
-            {
-              'kind': 'event_match',
-              'key': 'content.membership',
-              'pattern': 'join',
-            },
-          ],
-        },
       );
-      debugPrint('[Push] Override rule grid.member.join set');
-    } catch (e) {
-      debugPrint('[Push] Failed to set grid.member.join rule: $e');
+      debugPrint('[Push] Removed override rule grid.member.join');
+    } catch (_) {
+      // 404 if it never existed for this user — fine.
     }
-
     try {
       await client.request(
         RequestType.PUT,
         '/client/v3/pushrules/global/override/.m.rule.member_event/enabled',
-        data: {'enabled': false},
+        data: {'enabled': true},
       );
-      debugPrint('[Push] Disabled default .m.rule.member_event');
+      debugPrint('[Push] Re-enabled default .m.rule.member_event');
     } catch (e) {
-      debugPrint('[Push] Failed to disable .m.rule.member_event: $e');
+      debugPrint('[Push] Failed to re-enable .m.rule.member_event: $e');
     }
   }
 
@@ -181,23 +161,20 @@ class PushNotificationService {
   Future<void> _setPusher(PusherConfig config) async {
     final deviceName = await _deviceDisplayName();
 
-    // `default_payload` is a sygnal feature: it is merged into every APNs
-    // payload Sygnal generates. With `format: event_id_only` Sygnal by default
-    // emits a payload with **no `aps` dict**, which makes iOS drop the push
-    // silently (the NSE never even runs). We force `mutable-content: 1` so the
-    // NSE gets a chance to classify and either fill in or suppress the alert.
+    // `default_payload` is a sygnal feature merged into every APNs payload.
+    // With `format: event_id_only` Sygnal by default emits a payload with no
+    // `aps` dict, so iOS drops the push silently (NSE never runs). We force
+    // `mutable-content: 1` so the NSE gets invoked.
     //
-    // The placeholder body is overwritten by the NSE on every push the user
-    // should see, and suppressed to empty for every other push. It is only
-    // visible if the NSE fails to run (hard OS-level failure) and iOS falls
-    // back to rendering the raw APNs payload — which we prefer to silence
-    // than to surface as a leak.
+    // We deliberately do NOT include an `alert` here. Without an alert, iOS
+    // only renders a banner if the NSE actively *adds* one. That's exactly
+    // what we want under the allowlist policy: events the NSE classifier
+    // approves get a banner; everything else is silent. (When we did set
+    // a placeholder alert, the NSE's "suppress" path leaked an empty
+    // banner because iOS still rendered the original alert.)
     final defaultPayload = <String, dynamic>{
       'aps': <String, dynamic>{
         'mutable-content': 1,
-        'alert': <String, dynamic>{
-          'body': ' ',
-        },
       },
     };
 
