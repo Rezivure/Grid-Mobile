@@ -32,6 +32,19 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
     project.evaluationDependsOn(':app')
+
+    // Keep plugin modules in sync with the app's ndkVersion. Without this,
+    // plugins that don't declare ndkVersion (e.g. webcrypto) fall back to
+    // AGP's default and clash with local.properties' ndk.dir, failing the
+    // release bundle with CXX1104.
+    afterEvaluate { subproject ->
+        if (subproject.plugins.hasPlugin("com.android.application")
+                || subproject.plugins.hasPlugin("com.android.library")) {
+            subproject.android {
+                ndkVersion "28.0.12433566"
+            }
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
