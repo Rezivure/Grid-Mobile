@@ -157,13 +157,20 @@ class NotificationService: UNNotificationServiceExtension {
                     return
                 }
 
-                // Both endpoints inaccessible to this user. Treat as a
-                // generic invite — that's overwhelmingly the cause under
-                // the allowlist policy.
-                os_log("member fallback also failed — generic invite banner",
-                       log: nseLog, type: .info)
+                // Member-state inaccessible (Synapse 403s invitees on it).
+                // Room name is more permissive (stripped state) and is
+                // typically readable. Treat as a generic invite — that's
+                // overwhelmingly the cause under the allowlist policy.
+                let roomName = await client.fetchRoomName(roomID: roomID)
+                os_log("member fallback failed — generic invite banner, roomName=%{public}@",
+                       log: nseLog, type: .info,
+                       roomName ?? "<nil>")
                 bestAttemptContent.title = "Grid"
-                bestAttemptContent.body = "You have a new invite"
+                if let name = roomName, !name.isEmpty {
+                    bestAttemptContent.body = "You're invited to \(name)"
+                } else {
+                    bestAttemptContent.body = "You have a new invite"
+                }
                 bestAttemptContent.sound = .default
                 contentHandler(bestAttemptContent)
             }
