@@ -158,16 +158,25 @@ class NotificationService: UNNotificationServiceExtension {
                 }
 
                 // Member-state inaccessible (Synapse 403s invitees on it).
-                // Room name is more permissive (stripped state) and is
-                // typically readable. Treat as a generic invite — that's
-                // overwhelmingly the cause under the allowlist policy.
+                // Fall back to parsing the room name like the Flutter app
+                // does — Grid encodes participants/group name into it:
+                //   "Grid:Direct:<user1>:<user2>"
+                //   "Grid:Group:<ts>:<groupName>:<creatorId>"
                 let roomName = await client.fetchRoomName(roomID: roomID)
-                os_log("member fallback failed — generic invite banner, roomName=%{public}@",
+                let parsed = parseGridRoomName(roomName, currentUser: currentUserID)
+                os_log("member fallback failed — parsed roomName=%{public}@ -> direct=%{public}@ group=%{public}@",
                        log: nseLog, type: .info,
-                       roomName ?? "<nil>")
+                       roomName ?? "<nil>",
+                       parsed.directOther ?? "<nil>",
+                       parsed.groupName ?? "<nil>")
+
                 bestAttemptContent.title = "Grid"
-                if let name = roomName, !name.isEmpty {
-                    bestAttemptContent.body = "You're invited to \(name)"
+                if let other = parsed.directOther {
+                    bestAttemptContent.body = "\(other) wants to share location with you"
+                } else if let group = parsed.groupName {
+                    bestAttemptContent.body = "You're invited to \(group)"
+                } else if let raw = roomName, !raw.isEmpty {
+                    bestAttemptContent.body = "You're invited to \(raw)"
                 } else {
                     bestAttemptContent.body = "You have a new invite"
                 }
@@ -185,6 +194,62 @@ class NotificationService: UNNotificationServiceExtension {
         if let contentHandler = contentHandler {
             suppressNotification(contentHandler: contentHandler)
         }
+    }
+
+    /// Parse a Grid-encoded room name. Mirrors the Flutter app's logic
+    /// in `lib/utilities/utils.dart`:
+    ///   - "Grid:Direct:<user1>:<user2>" → returns the *other* user's
+    ///     display-friendly name (MXID localpart)
+    ///   - "Grid:Group:<ts>:<groupName>:<creator>" → returns the group name
+    /// Falls through to (nil, nil) for any other format.
+    private func parseGridRoomName(
+        _ name: String?,
+        currentUser: String?
+    ) -> (directOther: String?, groupName: String?) {
+        guard let name = name, !name.isEmpty else { return (nil, nil) }
+
+        if name.hasPrefix("Grid:Direct:") {
+            let rest = String(name.dropFirst("Grid:Direct:".count))
+            // After the prefix we have "@u1:server:@u2:server" — splitting
+            // on `:` yields exactly 4 parts when both users are well-formed.
+            let parts = rest.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 4 else { return (nil, nil) }
+            let user1 = "\(parts[0]):\(parts[1])"
+            let user2 = "\(parts[2]):\(parts[3])"
+            let otherMXID = (user1 == currentUser) ? user2 : user1
+            return (localpart(of: otherMXID), nil)
+        }
+
+        if name.hasPrefix("Grid:Group:") {
+            // "Grid:Group:<ts>:<groupName>:<creator MXID>"
+            // The creator MXID itself contains a `:` (e.g. @user:server),
+            // so we can't just split — but the first 3 fields are
+            // colon-free and the group name is everything between the 3rd
+            // colon and the next `:@` (start of creator MXID).
+            // Safer: strip prefix, find first `:`, that ends ts; find
+            // next `:`, between those is groupName-or-rest. Group names
+            // generally have no `:`, so this works.
+            let rest = String(name.dropFirst("Grid:Group:".count))
+            let parts = rest.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+            // Expected: [ts, groupName, "@creator:server"]
+            guard parts.count >= 2 else { return (nil, nil) }
+            let group = parts[1].trimmingCharacters(in: .whitespaces)
+            return (nil, group.isEmpty ? nil : group)
+        }
+
+        return (nil, nil)
+    }
+
+    /// Strip the leading `@` and everything from `:` onward — i.e. turn
+    /// `@lily:matrix.mygrid.app` into `lily`. If the input doesn't match
+    /// MXID shape, return it unchanged so the caller still has *something*.
+    private func localpart(of mxid: String) -> String {
+        guard mxid.hasPrefix("@") else { return mxid }
+        let trimmed = mxid.dropFirst()
+        if let colon = trimmed.firstIndex(of: ":") {
+            return String(trimmed[..<colon])
+        }
+        return String(trimmed)
     }
 
     /// Suppress a notification by delivering empty content.
