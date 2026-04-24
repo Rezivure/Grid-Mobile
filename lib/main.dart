@@ -54,6 +54,7 @@ import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
+import 'package:grid_frontend/services/push/app_group_bridge.dart';
 import 'package:grid_frontend/services/push/notification_channels.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -112,6 +113,9 @@ void main() async {
 
       // Register push notifications on session restore
       if (client.isLogged()) {
+        // Mirror credentials into the App Group before registering the
+        // pusher — the NSE needs them to fetch events when a push arrives.
+        await AppGroupBridge.writeMatrixCredentials(client);
         final pushService = PushNotificationService(client: client);
         await pushService.register();
       }

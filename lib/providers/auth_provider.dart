@@ -8,6 +8,7 @@ import 'package:grid_frontend/services/database_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
+import 'package:grid_frontend/services/push/app_group_bridge.dart';
 
 class AuthProvider with ChangeNotifier {
   bool _isLoggedIn = false;
@@ -66,6 +67,12 @@ class AuthProvider with ChangeNotifier {
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
 
+      // Mirror Matrix credentials into the iOS App Group so the
+      // GridNotificationService (NSE) can fetch events when a push arrives.
+      // Must happen before/alongside pusher registration so the first push
+      // after login finds credentials present.
+      await AppGroupBridge.writeMatrixCredentials(client);
+
       // Register push notifications
       try {
         final pushService = PushNotificationService(client: client);
@@ -88,6 +95,9 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       print('Error unregistering push notifications: $e');
     }
+
+    // Clear App Group credentials so the NSE can't resurrect old tokens.
+    await AppGroupBridge.clearMatrixCredentials();
 
     _isLoggedIn = false;
     _token = null;
