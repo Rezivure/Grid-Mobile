@@ -21,6 +21,66 @@ platform :ios do
     current_version = pubspec.match(/version:\s*(\S+)/)[1]
     UI.message("📦 Building version: #{current_version}")
 
+    # Ensure App Store distribution profiles exist / are installed for
+    # both the main app and the notification service extension. sigh
+    # downloads existing profiles from App Store Connect (or creates
+    # them if missing) and installs them into
+    # ~/Library/MobileDevice/Provisioning Profiles/.
+    main_bundle_id = "app.mygrid.grid"
+    extension_bundle_id = "app.mygrid.grid.GridNotificationService"
+
+    sigh(
+      api_key: api_key,
+      app_identifier: main_bundle_id,
+      readonly: false,
+      force: false,
+      skip_install: false,
+    )
+    main_profile_name = lane_context[SharedValues::SIGH_NAME]
+
+    sigh(
+      api_key: api_key,
+      app_identifier: extension_bundle_id,
+      readonly: false,
+      force: false,
+      skip_install: false,
+    )
+    extension_profile_name = lane_context[SharedValues::SIGH_NAME]
+    UI.message("Using profiles: main=#{main_profile_name}, ext=#{extension_profile_name}")
+
+    # Regenerate ExportOptions.plist so export uses whatever profile
+    # names sigh resolved (the extension profile didn't exist before,
+    # and hardcoded names drift).
+    export_opts_path = File.join(Dir.pwd, "..", "ios", "ExportOptions.plist")
+    export_opts = <<~PLIST
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+          <key>method</key>
+          <string>app-store</string>
+          <key>teamID</key>
+          <string>45NCU5QA4S</string>
+          <key>uploadBitcode</key>
+          <false/>
+          <key>uploadSymbols</key>
+          <true/>
+          <key>signingStyle</key>
+          <string>manual</string>
+          <key>signingCertificate</key>
+          <string>Apple Distribution</string>
+          <key>provisioningProfiles</key>
+          <dict>
+              <key>#{main_bundle_id}</key>
+              <string>#{main_profile_name}</string>
+              <key>#{extension_bundle_id}</key>
+              <string>#{extension_profile_name}</string>
+          </dict>
+      </dict>
+      </plist>
+    PLIST
+    File.write(export_opts_path, export_opts)
+
     # Build the Flutter IPA (verbose so codesign errors surface in CI logs)
     sh("cd #{File.join(Dir.pwd, '..')} && flutter build ipa --release --verbose --export-options-plist=ios/ExportOptions.plist")
 
