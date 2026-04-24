@@ -1,4 +1,8 @@
 import UserNotifications
+import os.log
+
+// Subsystem picks up in Console.app when filtering by `app.mygrid.grid`.
+private let nseLog = OSLog(subsystem: "app.mygrid.grid", category: "NSE")
 
 /// Grid Notification Service Extension
 ///
@@ -25,10 +29,15 @@ class NotificationService: UNNotificationServiceExtension {
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
+        os_log("didReceive fired, userInfo keys=%{public}@",
+               log: nseLog, type: .info,
+               "\(Array(request.content.userInfo.keys).map(String.init(describing:)))")
+
         self.contentHandler = contentHandler
         self.bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
 
         guard let bestAttemptContent = bestAttemptContent else {
+            os_log("suppress: could not mutableCopy content", log: nseLog, type: .error)
             suppressNotification(contentHandler: contentHandler)
             return
         }
@@ -37,19 +46,28 @@ class NotificationService: UNNotificationServiceExtension {
         guard let eventID = userInfo["event_id"] as? String,
               let roomID = userInfo["room_id"] as? String else {
             // No event info — can't classify, so suppress.
+            os_log("suppress: no event_id/room_id in userInfo", log: nseLog, type: .error)
             suppressNotification(contentHandler: contentHandler)
             return
         }
+        os_log("parsed eventID=%{public}@ roomID=%{public}@", log: nseLog, type: .info, eventID, roomID)
 
         let storage = SharedStorage()
         let currentUserID = storage.userID
+        os_log("storage: hasCredentials=%{public}d userID=%{public}@",
+               log: nseLog, type: .info,
+               storage.hasCredentials ? 1 : 0,
+               currentUserID ?? "<nil>")
 
         // Step 1: fast path — use the main app's pre-cached event hint if any.
         if let hint = storage.eventHint(for: eventID) {
+            os_log("fast-path hint hit: type=%{public}@", log: nseLog, type: .info, hint.type)
             let action = EventClassifier.classify(hint: hint)
             if EventClassifier.apply(action: action, to: bestAttemptContent) {
+                os_log("hint -> show", log: nseLog, type: .info)
                 contentHandler(bestAttemptContent)
             } else {
+                os_log("hint -> suppress", log: nseLog, type: .info)
                 suppressNotification(contentHandler: contentHandler)
             }
             return
@@ -59,9 +77,7 @@ class NotificationService: UNNotificationServiceExtension {
         guard storage.hasCredentials,
               let homeserver = storage.homeserverURL,
               let token = storage.accessToken else {
-            // No credentials means the main app never bridged them into the
-            // App Group. Under the allowlist policy we suppress rather than
-            // show a generic "New activity" banner, which is just noise.
+            os_log("suppress: no credentials in app group", log: nseLog, type: .error)
             suppressNotification(contentHandler: contentHandler)
             return
         }
@@ -70,7 +86,14 @@ class NotificationService: UNNotificationServiceExtension {
 
         Task {
             do {
+                os_log("fetching event...", log: nseLog, type: .info)
                 let event = try await client.fetchEvent(roomID: roomID, eventID: eventID)
+                os_log("fetched event type=%{public}@ membership=%{public}@ stateKey=%{public}@ isDirect=%{public}d",
+                       log: nseLog, type: .info,
+                       event.type,
+                       event.content?.membership ?? "<nil>",
+                       event.stateKey ?? "<nil>",
+                       (event.content?.isDirect ?? false) ? 1 : 0)
                 let action = await EventClassifier.classifyWithContext(
                     event: event,
                     roomID: roomID,
@@ -78,14 +101,18 @@ class NotificationService: UNNotificationServiceExtension {
                     client: client
                 )
                 if EventClassifier.apply(action: action, to: bestAttemptContent) {
+                    os_log("classifier -> show title=%{public}@ body=%{public}@",
+                           log: nseLog, type: .info,
+                           bestAttemptContent.title, bestAttemptContent.body)
                     contentHandler(bestAttemptContent)
                 } else {
+                    os_log("classifier -> suppress", log: nseLog, type: .info)
                     self.suppressNotification(contentHandler: contentHandler)
                 }
             } catch {
-                // Network / decode error — suppress. Showing a fallback here
-                // would both leak the fact that *some* activity happened and
-                // violate the allowlist policy.
+                os_log("suppress: fetchEvent threw %{public}@",
+                       log: nseLog, type: .error,
+                       String(describing: error))
                 self.suppressNotification(contentHandler: contentHandler)
             }
         }
