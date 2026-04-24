@@ -33,7 +33,6 @@ platform :ios do
       api_key: api_key,
       app_identifier: main_bundle_id,
       readonly: false,
-      force: false,
       skip_install: false,
     )
     main_profile_name = lane_context[SharedValues::SIGH_NAME]
@@ -42,7 +41,6 @@ platform :ios do
       api_key: api_key,
       app_identifier: extension_bundle_id,
       readonly: false,
-      force: false,
       skip_install: false,
     )
     extension_profile_name = lane_context[SharedValues::SIGH_NAME]
