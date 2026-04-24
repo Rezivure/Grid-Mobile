@@ -21,8 +21,8 @@ platform :ios do
     current_version = pubspec.match(/version:\s*(\S+)/)[1]
     UI.message("📦 Building version: #{current_version}")
 
-    # Build the Flutter IPA
-    sh("cd #{File.join(Dir.pwd, '..')} && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist")
+    # Build the Flutter IPA (verbose so codesign errors surface in CI logs)
+    sh("cd #{File.join(Dir.pwd, '..')} && flutter build ipa --release --verbose --export-options-plist=ios/ExportOptions.plist")
 
     # Upload to TestFlight
     upload_to_testflight(
