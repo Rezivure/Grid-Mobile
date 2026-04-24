@@ -26,13 +26,16 @@ import FirebaseCore
 
     // Wire the method channel the Flutter `AppGroupBridge` uses to mirror
     // Matrix credentials into the App Group `UserDefaults` so the NSE can
-    // fetch events. Registered on the implicit engine so it attaches once,
-    // regardless of which Flutter entrypoint spawned us.
+    // fetch events. FlutterPluginRegistry itself doesn't expose a messenger
+    // — get one via registrar(forPlugin:), which every plugin host supports.
+    guard let registrar = engineBridge.pluginRegistry
+      .registrar(forPlugin: "GridAppGroupBridge")
+    else { return }
     let channel = FlutterMethodChannel(
       name: "app.mygrid.grid/app_group",
-      binaryMessenger: engineBridge.pluginRegistry.messenger()
+      binaryMessenger: registrar.messenger()
     )
-    channel.setMethodCallHandler { [weak self] call, result in
+    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard let self = self else {
         result(FlutterError(code: "DEAD", message: "AppDelegate gone", details: nil))
         return
