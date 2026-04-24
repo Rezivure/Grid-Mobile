@@ -84,8 +84,12 @@ jobs:
       - name: Set dynamic build number
         run: |
           export PATH="/opt/homebrew/bin:$PATH"
-          # Derive build number from CI run number (no git push needed)
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
+          # Derive build number from CI run number (no git push needed).
+          # Offset 600 keeps us above the highest versionCode already on
+          # any Play Store track (production was manually bumped to 509
+          # while CI deploys were broken). The bump is one-way — never
+          # lower the offset or Play Store will reject the upload.
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 600 ))
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
           # Update pubspec.yaml for this build only (not committed)
           sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
