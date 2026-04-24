@@ -73,6 +73,7 @@ class NotificationService: UNNotificationServiceExtension {
                 let event = try await client.fetchEvent(roomID: roomID, eventID: eventID)
                 let action = await EventClassifier.classifyWithContext(
                     event: event,
+                    roomID: roomID,
                     currentUserID: currentUserID,
                     client: client
                 )
