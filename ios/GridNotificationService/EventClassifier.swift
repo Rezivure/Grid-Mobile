@@ -87,12 +87,16 @@ final class EventClassifier {
     /// when they have a live `MatrixAPIClient`.
     static func classifyWithContext(
         event: MatrixEvent,
+        roomID: String,
         currentUserID: String?,
         client: MatrixAPIClient
     ) async -> NotificationAction {
+        // `roomID` is passed explicitly because the CS API
+        // `/rooms/{roomId}/event/{eventId}` response often omits `room_id`
+        // from the body (it's already in the URL), so `event.roomId` is
+        // frequently nil even for valid events.
         guard event.type == "m.room.member",
-              let membership = event.content?.membership,
-              let roomID = event.roomId
+              let membership = event.content?.membership
         else {
             return .suppress
         }
