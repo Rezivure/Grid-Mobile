@@ -76,8 +76,18 @@ class PushNotificationService {
     await _ensureGroupJoinPushRule();
   }
 
-  /// PUT an override push rule that fires on `m.room.member` events with
-  /// `membership == "join"`. Idempotent — safe to call on every login.
+  /// Add an override rule that notifies on member-join events, AND
+  /// disable the spec-default `.m.rule.member_event` (which would
+  /// otherwise dont_notify all member events, including ours).
+  ///
+  /// Both calls are idempotent — safe to run on every login.
+  ///
+  /// Why disable the default instead of inserting before it: Synapse
+  /// rejects `?before=.m.rule.*` (default rules can't be used as a
+  /// before/after anchor in this version). Disabling the default
+  /// removes its dont_notify entirely; non-join member events
+  /// (leaves, profile changes) then match no override rule and
+  /// silently fall through, which matches the allowlist policy.
   Future<void> _ensureGroupJoinPushRule() async {
     try {
       await client.request(
@@ -98,6 +108,17 @@ class PushNotificationService {
       debugPrint('[Push] Override rule grid.member.join set');
     } catch (e) {
       debugPrint('[Push] Failed to set grid.member.join rule: $e');
+    }
+
+    try {
+      await client.request(
+        RequestType.PUT,
+        '/client/v3/pushrules/global/override/.m.rule.member_event/enabled',
+        data: {'enabled': false},
+      );
+      debugPrint('[Push] Disabled default .m.rule.member_event');
+    } catch (e) {
+      debugPrint('[Push] Failed to disable .m.rule.member_event: $e');
     }
   }
 
