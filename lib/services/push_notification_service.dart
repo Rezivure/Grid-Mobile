@@ -129,6 +129,40 @@ class PushNotificationService {
   Future<void> _setPusher(PusherConfig config) async {
     final deviceName = await _deviceDisplayName();
 
+    // `default_payload` is a sygnal feature: it is merged into every APNs
+    // payload Sygnal generates. With `format: event_id_only` Sygnal by default
+    // emits a payload with **no `aps` dict**, which makes iOS drop the push
+    // silently (the NSE never even runs). We force `mutable-content: 1` so the
+    // NSE gets a chance to classify and either fill in or suppress the alert.
+    //
+    // The placeholder body is overwritten by the NSE on every push the user
+    // should see, and suppressed to empty for every other push. It is only
+    // visible if the NSE fails to run (hard OS-level failure) and iOS falls
+    // back to rendering the raw APNs payload — which we prefer to silence
+    // than to surface as a leak.
+    final defaultPayload = <String, dynamic>{
+      'aps': <String, dynamic>{
+        'mutable-content': 1,
+        'alert': <String, dynamic>{
+          'body': ' ',
+        },
+      },
+    };
+
+    final pusherData = PusherData(
+      url: config.dataUrl,
+      format: 'event_id_only',
+    );
+
+    // APNs-only knob. FCM / UnifiedPush ignore it; Sygnal's FCM path has its
+    // own default payload semantics we don't need to touch yet.
+    if (config.transport == PushTransport.apns) {
+      pusherData.additionalProperties = <String, Object?>{
+        ...pusherData.additionalProperties,
+        'default_payload': defaultPayload,
+      };
+    }
+
     final pusher = Pusher(
       appId: config.appId,
       pushkey: config.pushkey,
@@ -136,10 +170,7 @@ class PushNotificationService {
       deviceDisplayName: deviceName,
       lang: 'en',
       kind: 'http',
-      data: PusherData(
-        url: config.dataUrl,
-        format: 'event_id_only',
-      ),
+      data: pusherData,
     );
 
     final pushkeyPreview = config.pushkey.length > 20
