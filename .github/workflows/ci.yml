@@ -150,6 +150,13 @@ jobs:
         run: |
           cp "$HOME/.fastlane-secrets/GoogleService-Info.plist" ios/Runner/GoogleService-Info.plist
 
+      - name: Clean iOS build artifacts
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          flutter clean
+          rm -rf ~/Library/Developer/Xcode/DerivedData/Runner-*
+          rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/build
+
       - name: Build & Upload iOS to TestFlight
         run: |
           export LC_ALL=en_US.UTF-8
