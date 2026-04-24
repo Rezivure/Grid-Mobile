@@ -119,31 +119,53 @@ class NotificationService: UNNotificationServiceExtension {
                 // current-member state still works because invitees own a
                 // m.room.member state event with membership=invite. Render
                 // the invite banner from that.
+                // Best-effort: try to read self-member state for richer
+                // content. Synapse may 403 invitees here too, in which case
+                // we fall through to a generic invite banner — under the
+                // allowlisted policy a push the NSE can't decode is almost
+                // always an invite (the only event type where the user
+                // isn't yet a member of the room).
                 if let me = currentUserID,
                    let member = try? await client.fetchRoomMember(
-                       roomID: roomID, userID: me),
-                   member.membership == "invite" {
-                    os_log("member fallback: invite confirmed", log: nseLog, type: .info)
-                    let inviterDisplay = member.displayname ?? "Someone"
-                    let isDirect = member.isDirect == true
-                    let body: String
-                    if isDirect {
-                        body = "\(inviterDisplay) wants to share location with you"
-                    } else if let name = await client.fetchRoomName(roomID: roomID),
-                              !name.isEmpty {
-                        body = "\(inviterDisplay) invited you to \(name)"
-                    } else {
-                        body = "\(inviterDisplay) invited you"
+                       roomID: roomID, userID: me) {
+                    os_log("member fallback fetched: membership=%{public}@ isDirect=%{public}d",
+                           log: nseLog, type: .info,
+                           member.membership ?? "<nil>",
+                           (member.isDirect ?? false) ? 1 : 0)
+                    if member.membership == "invite" {
+                        let inviterDisplay = member.displayname ?? "Someone"
+                        let isDirect = member.isDirect == true
+                        let body: String
+                        if isDirect {
+                            body = "\(inviterDisplay) wants to share location with you"
+                        } else if let name = await client.fetchRoomName(roomID: roomID),
+                                  !name.isEmpty {
+                            body = "\(inviterDisplay) invited you to \(name)"
+                        } else {
+                            body = "\(inviterDisplay) invited you"
+                        }
+                        bestAttemptContent.title = "Grid"
+                        bestAttemptContent.body = body
+                        bestAttemptContent.sound = .default
+                        contentHandler(bestAttemptContent)
+                        return
                     }
-                    bestAttemptContent.title = "Grid"
-                    bestAttemptContent.body = body
-                    bestAttemptContent.sound = .default
-                    contentHandler(bestAttemptContent)
-                } else {
-                    os_log("member fallback: not an invite, suppress",
-                           log: nseLog, type: .info)
+                    // Member-state readable but not invite — we shouldn't
+                    // have been pushed for this; suppress.
+                    os_log("member fallback: not invite, suppress", log: nseLog, type: .info)
                     self.suppressNotification(contentHandler: contentHandler)
+                    return
                 }
+
+                // Both endpoints inaccessible to this user. Treat as a
+                // generic invite — that's overwhelmingly the cause under
+                // the allowlist policy.
+                os_log("member fallback also failed — generic invite banner",
+                       log: nseLog, type: .info)
+                bestAttemptContent.title = "Grid"
+                bestAttemptContent.body = "You have a new invite"
+                bestAttemptContent.sound = .default
+                contentHandler(bestAttemptContent)
             }
         }
     }
