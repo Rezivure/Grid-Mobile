@@ -63,6 +63,27 @@
             android:exported="false"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"/>
 
+        <!--
+            UnifiedPush receiver service. The unifiedpush_android plugin
+            already merges this declaration in via its own AndroidManifest,
+            but we duplicate it here (with tools:node="merge") so the
+            contract is visible at the app level — the manifest merger will
+            collapse the two identical entries. This service is what the
+            distributor (e.g. ntfy-android) binds to when delivering an
+            encrypted Web Push message; on receipt it spins up a headless
+            Flutter engine with `--unifiedpush-bg` so our top-level
+            `unifiedPushBackgroundHandler` (lib/services/push/unifiedpush_background_handler.dart)
+            can decrypt and render.
+        -->
+        <service
+            android:name="org.unifiedpush.flutter.connector.UnifiedPushService"
+            android:exported="false"
+            tools:node="merge">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
 
     <!-- Required to query activities that can process text -->

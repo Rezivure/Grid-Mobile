@@ -31,14 +31,14 @@ final class EventClassifier {
             let sender = hint.senderName ?? "Someone"
             return .showMessage(title: "Grid", body: "\(sender) invited you")
         }
-        if type == "m.room.member.join.group" {
+        if type == "m.room.member.join.group" || type == "grid.member.join" {
             let sender = hint.senderName ?? "Someone"
             let summary = hint.summary ?? "joined a group"
             return .showMessage(title: "Grid", body: "\(sender) \(summary)")
         }
-        if type == "m.room.member.join.direct" {
+        if type == "m.room.member.join.direct" || type == "grid.member.accept" {
             let sender = hint.senderName ?? "Someone"
-            return .showMessage(title: "Grid", body: "\(sender) accepted your invite")
+            return .showMessage(title: "Grid", body: "\(sender) accepted your request")
         }
 
         // Every other hint — location, avatar, map icon, message, sos,
@@ -51,16 +51,6 @@ final class EventClassifier {
     /// decidable cases (invite with matching state_key). For join-vs-direct
     /// disambiguation see `classifyWithContext`.
     static func classify(event: MatrixEvent, currentUserID: String?) -> NotificationAction {
-        // Synthetic Grid system message ("X joined room") posted by the
-        // joining user's app. Allowlisted because Matrix's default push
-        // rules don't notify on m.room.member joins and we can't easily
-        // override them server-side.
-        if event.type == "m.room.message",
-           event.content?.msgtype == "grid.member.join" {
-            let body = event.content?.body ?? "Someone joined a group"
-            return .showMessage(title: "Grid", body: body)
-        }
-
         guard event.type == "m.room.member" else {
             // Messages, encrypted events, location updates, etc. — all suppressed.
             return .suppress
@@ -101,13 +91,6 @@ final class EventClassifier {
         currentUserID: String?,
         client: MatrixAPIClient
     ) async -> NotificationAction {
-        // Synthetic Grid join message — render the body directly.
-        if event.type == "m.room.message",
-           event.content?.msgtype == "grid.member.join" {
-            let body = event.content?.body ?? "Someone joined a group"
-            return .showMessage(title: "Grid", body: body)
-        }
-
         // `roomID` is passed explicitly because the CS API
         // `/rooms/{roomId}/event/{eventId}` response often omits `room_id`
         // from the body (it's already in the URL), so `event.roomId` is
@@ -136,18 +119,26 @@ final class EventClassifier {
             guard let me = currentUserID, event.stateKey == me else {
                 return .suppress
             }
-            // Differentiate group vs direct when the inviter flagged
-            // `is_direct: true` (Matrix convention for DM invites).
-            if event.content?.isDirect == true {
+            // Differentiate group vs direct. Prefer the inviter's `is_direct`
+            // flag (Matrix convention for DM invites). Fall back to parsing
+            // the Grid-encoded room name, which always carries the room kind
+            // for Grid rooms and is reliable even when the invite event
+            // doesn't include `is_direct`.
+            let roomName = await client.fetchRoomName(roomID: roomID)
+            let isDirectByName = roomName?.hasPrefix("Grid:Direct:") == true
+            if event.content?.isDirect == true || isDirectByName {
                 return .showMessage(
                     title: "Grid",
                     body: "\(actorDisplay) wants to share location with you"
                 )
             }
-            if let roomName = await client.fetchRoomName(roomID: roomID), !roomName.isEmpty {
+            if let name = roomName, !name.isEmpty {
+                // For Grid:Group: rooms, the human-friendly group name is
+                // embedded; surface that rather than the raw encoded name.
+                let pretty = prettyGroupName(from: name) ?? name
                 return .showMessage(
                     title: "Grid",
-                    body: "\(actorDisplay) invited you to \(roomName)"
+                    body: "\(actorDisplay) invited you to \(pretty)"
                 )
             }
             return .showMessage(title: "Grid", body: "\(actorDisplay) invited you")
@@ -184,9 +175,123 @@ final class EventClassifier {
 
             // Group room join: always notify, with the group name when known.
             if let roomName = await client.fetchRoomName(roomID: roomID), !roomName.isEmpty {
+                let pretty = prettyGroupName(from: roomName) ?? roomName
                 return .showMessage(
                     title: "Grid",
-                    body: "\(actorDisplay) joined \(roomName)"
+                    body: "\(actorDisplay) joined \(pretty)"
+                )
+            }
+            return .showMessage(title: "Grid", body: "\(actorDisplay) joined a group")
+
+        default:
+            return .suppress
+        }
+    }
+
+    /// Classify a `NotificationDecryptionClient.DecryptedEvent` — the model
+    /// produced by the rust-sdk decryption path. Equivalent semantics to
+    /// `classifyWithContext(event:roomID:currentUserID:client:)` but takes
+    /// the already-resolved fields from `NotificationItem` instead of doing
+    /// extra HTTP round-trips for room name / member display name.
+    ///
+    /// The HTTP `MatrixAPIClient` is still passed so we can fall back for
+    /// fields the rust-sdk didn't fill (e.g. group room name when
+    /// `roomDisplayName` is the auto-generated fallback). It's optional.
+    static func classifyDecrypted(
+        _ decrypted: NotificationDecryptionClient.DecryptedEvent,
+        currentUserID: String?,
+        client: MatrixAPIClient?
+    ) async -> NotificationAction {
+        // We only render banners for `m.room.member` transitions under the
+        // current product policy. Anything else from the rust-sdk path
+        // (encrypted message, location update, sos, geofence, etc.) is
+        // suppressed — push rules already disable those, but the NSE
+        // remains the last line of defense.
+        guard decrypted.eventType == "m.room.member",
+              let membership = decrypted.membership else {
+            return .suppress
+        }
+
+        let actorDisplay = decrypted.senderDisplayName
+            ?? decrypted.senderID.map(localpart(of:))
+            ?? "Someone"
+
+        switch membership {
+        case "invite":
+            // Only invites *to this user*.
+            guard let me = currentUserID, decrypted.stateKey == me else {
+                return .suppress
+            }
+            // Prefer the rust-sdk-resolved roomDisplayName, falling back to
+            // an HTTP probe of `m.room.name` for the Grid-encoded form.
+            let roomName: String?
+            if let rn = decrypted.roomDisplayName, !rn.isEmpty {
+                roomName = rn
+            } else if let client = client {
+                roomName = await client.fetchRoomName(roomID: decrypted.roomID)
+            } else {
+                roomName = nil
+            }
+            let isDirectByName = roomName?.hasPrefix("Grid:Direct:") == true
+            if decrypted.isDirectInvite == true || isDirectByName {
+                return .showMessage(
+                    title: "Grid",
+                    body: "\(actorDisplay) wants to share location with you"
+                )
+            }
+            if let name = roomName, !name.isEmpty {
+                let pretty = prettyGroupName(from: name) ?? name
+                return .showMessage(
+                    title: "Grid",
+                    body: "\(actorDisplay) invited you to \(pretty)"
+                )
+            }
+            return .showMessage(title: "Grid", body: "\(actorDisplay) invited you")
+
+        case "join":
+            // Never notify on the current user's own joins.
+            if let me = currentUserID, decrypted.stateKey == me {
+                return .suppress
+            }
+
+            // Direct-room join = friendship accept (only when the *previous*
+            // membership was an invite we sent).
+            let isDirect: Bool
+            if let me = currentUserID, let client = client {
+                isDirect = await client.fetchDirectRoomIDs(userID: me)
+                    .contains(decrypted.roomID)
+            } else if let rn = decrypted.roomDisplayName,
+                      rn.hasPrefix("Grid:Direct:") {
+                // Fallback: infer from Grid's encoded room name.
+                isDirect = true
+            } else {
+                isDirect = false
+            }
+
+            if isDirect {
+                if decrypted.prevMembership == "invite" {
+                    return .showMessage(
+                        title: "Grid",
+                        body: "\(actorDisplay) accepted your invite"
+                    )
+                }
+                return .suppress
+            }
+
+            // Group room join: notify with group name when known.
+            let roomName: String?
+            if let rn = decrypted.roomDisplayName, !rn.isEmpty {
+                roomName = rn
+            } else if let client = client {
+                roomName = await client.fetchRoomName(roomID: decrypted.roomID)
+            } else {
+                roomName = nil
+            }
+            if let name = roomName, !name.isEmpty {
+                let pretty = prettyGroupName(from: name) ?? name
+                return .showMessage(
+                    title: "Grid",
+                    body: "\(actorDisplay) joined \(pretty)"
                 )
             }
             return .showMessage(title: "Grid", body: "\(actorDisplay) joined a group")
@@ -240,5 +345,17 @@ final class EventClassifier {
         // "@alice:example.com" → "alice"
         guard userID.hasPrefix("@"), let colon = userID.firstIndex(of: ":") else { return userID }
         return String(userID[userID.index(after: userID.startIndex)..<colon])
+    }
+
+    /// Extract the human-readable group name from Grid's encoded room name
+    /// "Grid:Group:<ts>:<groupName>:<creator MXID>". Returns nil if the
+    /// input doesn't follow the Grid:Group: pattern.
+    private static func prettyGroupName(from raw: String) -> String? {
+        guard raw.hasPrefix("Grid:Group:") else { return nil }
+        let rest = String(raw.dropFirst("Grid:Group:".count))
+        let parts = rest.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 2 else { return nil }
+        let group = parts[1].trimmingCharacters(in: .whitespaces)
+        return group.isEmpty ? nil : group
     }
 }

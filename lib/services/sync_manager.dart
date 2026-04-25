@@ -1409,13 +1409,11 @@ class SyncManager with ChangeNotifier {
           
           groupsBloc.add(RefreshGroups());
 
-          // Post a synthetic "X joined GROUP" system message so the
-          // existing members get a push notification. We can't push on
-          // raw m.room.member joins (Matrix's default `.m.rule.member_event`
-          // suppresses them and Synapse won't let us reorder defaults),
-          // so we ride on top of the regular `.m.rule.message` rule with
-          // a custom msgtype the NSE allowlist recognizes.
-          await _postSyntheticJoinMessage(roomId);
+          // Note: the m.room.member join event itself drives the push for
+          // other members — an override push rule on
+          // `type == "m.room.member"` + `content.membership == "join"`
+          // is configured in `push_notification_service.dart`. No need
+          // to post a synthetic marker.
         }
       } else {
         throw Exception('Failed to join room');
@@ -1425,44 +1423,6 @@ class SyncManager with ChangeNotifier {
       throw e; // Re-throw for error handling in calling code
     }
   }
-
-  /// Send a `m.room.message` with a custom Grid msgtype announcing
-  /// that the local user just joined this room. Skipped for direct
-  /// rooms — joins there are friendship accepts and have their own
-  /// notification path.
-  Future<void> _postSyntheticJoinMessage(String roomId) async {
-    final room = client.getRoomById(roomId);
-    if (room == null) return;
-
-    final name = room.name;
-    if (!name.startsWith('Grid:Group:')) {
-      // Direct room or untyped room — don't post a join announcement.
-      return;
-    }
-
-    // "Grid:Group:<ts>:<groupName>:<creator MXID>"
-    final rest = name.substring('Grid:Group:'.length);
-    final parts = rest.split(':');
-    final groupName = (parts.length >= 2) ? parts[1] : 'a group';
-
-    final me = client.userID ?? 'Someone';
-    final myName = me.startsWith('@')
-        ? me.substring(1, me.contains(':') ? me.indexOf(':') : me.length)
-        : me;
-    final body = '$myName joined $groupName';
-
-    try {
-      await room.sendEvent({
-        'msgtype': 'grid.member.join',
-        'body': body,
-      });
-      print('[Push] Posted synthetic join: $body');
-    } catch (e) {
-      print('[Push] Failed to post synthetic join message: $e');
-    }
-  }
-
-
 
   String _extractInviter(InvitedRoomUpdate inviteUpdate) {
     final inviteState = inviteUpdate.inviteState;
