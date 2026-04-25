@@ -57,6 +57,10 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^18.0.0
   unifiedpush: ^6.0.1
+  # Pinned explicitly so the Android platform implementation is treated as a
+  # direct dependency (not transitive). The umbrella `unifiedpush` package
+  # delegates to this one on Android — see Phase 4 of the push migration.
+  unifiedpush_android: ^3.4.1
   google_api_availability: ^5.0.1
 
 

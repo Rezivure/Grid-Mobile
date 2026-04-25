@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_api_availability/google_api_availability.dart';
+import 'package:unifiedpush/unifiedpush.dart';
+
+import 'push/unifiedpush_background_handler.dart';
 
 /// Service responsible for registering/unregistering Matrix push notification
 /// pushers with Synapse via the Matrix SDK's built-in `postPusher` /
@@ -79,21 +84,28 @@ class PushNotificationService {
 
   /// Apply the allowlist policy via Matrix push rules:
   ///
-  /// - Add an OVERRIDE rule that notifies on `grid.member.join`-typed
-  ///   messages (synthetic join markers we post when the local user
-  ///   accepts an invite to a Grid:Group: room).
+  /// - Add an OVERRIDE rule that notifies on `m.room.member` events with
+  ///   `content.membership == "join"` (Element-iOS pattern: the join
+  ///   event itself drives the push, no synthetic message needed).
+  ///   Matches ahead of the spec's `.m.rule.member_event` default
+  ///   (which is `dont_notify`).
+  /// - Leave `.m.rule.invite_for_me` at its default (enabled) so invites
+  ///   still push — no explicit rule needed.
   /// - Disable the spec defaults that push every regular message
   ///   (`.m.rule.message`, `.m.rule.room_one_to_one`,
-  ///   `.m.rule.encrypted`, `.m.rule.encrypted_room_one_to_one`).
-  /// - Keep `.m.rule.invite_for_me` (default, enabled): invites still
-  ///   push.
-  /// - Keep `.m.rule.member_event` (default, enabled, dont_notify):
-  ///   raw member events still don't push — synthetic messages carry
-  ///   that signal instead.
+  ///   `.m.rule.encrypted`, `.m.rule.encrypted_room_one_to_one`). Until
+  ///   we implement NSE decryption for chat messages, we don't want any
+  ///   push for regular messages.
   ///
   /// All calls are idempotent and survive across logins.
+  ///
+  /// See https://spec.matrix.org/v1.11/client-server-api/#conditions for
+  /// condition semantics.
   Future<void> _applyAllowlistPushRules() async {
-    // OVERRIDE rule: notify on synthetic Grid join markers.
+    // OVERRIDE rule: notify on member join events. `event_match` doesn't
+    // support OR between conditions, so this rule only covers joins; the
+    // invite case is already handled by the spec's `.m.rule.invite_for_me`
+    // default, which we deliberately leave enabled.
     try {
       await client.request(
         RequestType.PUT,
@@ -104,12 +116,12 @@ class PushNotificationService {
             {
               'kind': 'event_match',
               'key': 'type',
-              'pattern': 'm.room.message',
+              'pattern': 'm.room.member',
             },
             {
               'kind': 'event_match',
-              'key': 'content.msgtype',
-              'pattern': 'grid.member.join',
+              'key': 'content.membership',
+              'pattern': 'join',
             },
           ],
         },
@@ -341,20 +353,126 @@ class PushNotificationService {
   }
 
   /// Check for Google Play Services availability on Android.
+  ///
+  /// Uses the dedicated `google_api_availability` plugin first because
+  /// `FirebaseMessaging.getToken()` can hang indefinitely on GrapheneOS
+  /// (where GMS is missing AND microG isn't installed) — the firebase
+  /// SDK quietly retries forever waiting for a registration response
+  /// that never arrives. Only fall back to a token probe if the GMS
+  /// check itself errors out (e.g. the platform plugin failed to load).
   Future<bool> _hasGooglePlayServices() async {
     try {
-      // Try getting FCM token — if it works, GMS is available
-      final token = await FirebaseMessaging.instance.getToken();
-      return token != null;
-    } catch (_) {
+      final status = await GoogleApiAvailability.instance
+          .checkGooglePlayServicesAvailability();
+      // `success` means GMS is installed and ready. Every other state —
+      // missing, disabled, updating, version-too-old, invalid signature,
+      // or "not available on this platform" (degoogled ROMs) — should
+      // route to UnifiedPush so we never block on an FCM call that
+      // can't possibly resolve.
+      if (status == GooglePlayServicesAvailability.success) {
+        return true;
+      }
+      debugPrint('[Push] Google Play Services unavailable: $status');
       return false;
+    } catch (e) {
+      debugPrint('[Push] GMS availability check failed, probing FCM: $e');
+      // Fallback path: bound the token probe so we don't hang forever.
+      try {
+        final token = await FirebaseMessaging.instance
+            .getToken()
+            .timeout(const Duration(seconds: 10));
+        return token != null;
+      } catch (_) {
+        return false;
+      }
     }
   }
 
   /// Get UnifiedPush / ntfy endpoint URL (Android without GMS).
+  ///
+  /// The UnifiedPush flow:
+  ///   1. Initialise the plugin's callbacks. `onMessage` MUST be a
+  ///      top-level function (`unifiedPushBackgroundHandler`) — the OS may
+  ///      wake a fresh isolate via `--unifiedpush-bg` and resolve the
+  ///      callback by name, so any closure / instance method would fail.
+  ///   2. Pick a distributor. We try the user's saved distributor first;
+  ///      if none is saved we fall back to the system default. If the
+  ///      device has zero distributors installed we throw — the user
+  ///      needs to install one (e.g. ntfy-android, conversations,
+  ///      Google's embedded distributor).
+  ///   3. Call `register()`. The distributor will call back into us
+  ///      asynchronously via `onNewEndpoint` with the URL we should
+  ///      hand to Synapse as our pushkey.
+  ///   4. Wait for the endpoint with a 15s timeout. The UP spec doesn't
+  ///      bound this — distributors can take their sweet time talking
+  ///      to their server (especially ntfy on a cold-started device) —
+  ///      but 15s is a reasonable upper bound for app startup.
   Future<String> _getUnifiedPushEndpoint() async {
-    // TODO: Wire up unifiedpush package when testing on degoogled device
-    throw UnimplementedError('UnifiedPush not yet wired for testing');
+    final endpointCompleter = Completer<String>();
+
+    // Plugin-wide callback registration. Idempotent — `unifiedpush` keeps
+    // a single static registry and overwrites callbacks on re-init.
+    //
+    // NOTE: we use a closure here only to bridge `onNewEndpoint` into
+    // the Completer. `onMessage` deliberately points at the TOP-LEVEL
+    // `unifiedPushBackgroundHandler` so the headless engine can find it
+    // by name — a closure here would not survive `--unifiedpush-bg`.
+    final alreadyRegistered = await UnifiedPush.initialize(
+      onNewEndpoint: (PushEndpoint endpoint, String instance) {
+        debugPrint(
+          '[Push][UP] onNewEndpoint instance=$instance url=${endpoint.url}',
+        );
+        if (!endpointCompleter.isCompleted) {
+          endpointCompleter.complete(endpoint.url);
+        }
+      },
+      onRegistrationFailed: (FailedReason reason, String instance) {
+        debugPrint(
+          '[Push][UP] onRegistrationFailed instance=$instance reason=$reason',
+        );
+        if (!endpointCompleter.isCompleted) {
+          endpointCompleter.completeError(
+            Exception('UnifiedPush registration failed: $reason'),
+          );
+        }
+      },
+      onUnregistered: (String instance) {
+        debugPrint('[Push][UP] onUnregistered instance=$instance');
+      },
+      onMessage: unifiedPushBackgroundHandler,
+      onTempUnavailable: (String instance) {
+        debugPrint('[Push][UP] onTempUnavailable instance=$instance');
+      },
+    );
+
+    // Pick a distributor. `tryUseCurrentOrDefaultDistributor` returns
+    // true if either the previously-saved choice or the system default
+    // is available; false means the device has zero installed
+    // distributors and the user must install one.
+    final pickedDistributor =
+        await UnifiedPush.tryUseCurrentOrDefaultDistributor();
+    if (!pickedDistributor) {
+      throw Exception(
+        'No UnifiedPush distributor installed. '
+        'Install ntfy-android (or any UP distributor) and re-launch.',
+      );
+    }
+
+    debugPrint(
+      '[Push][UP] initialize complete (alreadyRegistered=$alreadyRegistered), '
+      'distributor=${await UnifiedPush.getDistributor()}',
+    );
+
+    // Kick off the registration. The distributor will respond
+    // asynchronously via `onNewEndpoint`.
+    await UnifiedPush.register(instance: 'grid');
+
+    return endpointCompleter.future.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw TimeoutException(
+        'UnifiedPush distributor did not return an endpoint within 15s',
+      ),
+    );
   }
 
   Future<String> _deviceDisplayName() async {

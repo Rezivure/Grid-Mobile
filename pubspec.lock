@@ -1933,7 +1933,7 @@ packages:
     source: hosted
     version: "6.2.0"
   unifiedpush_android:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: unifiedpush_android
       sha256: "2e6684e0a1a39ad8d6c7bc0d197954d50686acb1b1a7614b18ab0e0126f5492a"

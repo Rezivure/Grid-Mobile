@@ -85,6 +85,42 @@ class NotificationService: UNNotificationServiceExtension {
         let client = MatrixAPIClient(homeserverURL: homeserver, accessToken: token)
 
         Task {
+            // Step 2a: try the rust-sdk decryption path first. Fast no-op
+            // (`.sdkNotLinked`) until the SPM dep is added; once added,
+            // succeeds for E2EE events the NSE has megolm keys for.
+            if let decryptor = NotificationDecryptionClient(storage: storage) {
+                do {
+                    let decrypted = try await decryptor.fetchAndDecrypt(
+                        roomID: roomID, eventID: eventID
+                    )
+                    os_log("decrypted via rust-sdk: type=%{public}@ membership=%{public}@",
+                           log: nseLog, type: .info,
+                           decrypted.eventType,
+                           decrypted.membership ?? "<nil>")
+                    let action = await EventClassifier.classifyDecrypted(
+                        decrypted,
+                        currentUserID: currentUserID,
+                        client: client
+                    )
+                    if EventClassifier.apply(action: action, to: bestAttemptContent) {
+                        os_log("decrypt -> show", log: nseLog, type: .info)
+                        contentHandler(bestAttemptContent)
+                    } else {
+                        os_log("decrypt -> suppress", log: nseLog, type: .info)
+                        self.suppressNotification(contentHandler: contentHandler)
+                    }
+                    return
+                } catch let err {
+                    // Fall through to the HTTP path below — `.sdkNotLinked`
+                    // is the steady-state until the SPM dep is wired, and
+                    // any decryption / fetch failure should also degrade
+                    // gracefully rather than silently dropping the push.
+                    os_log("decrypt path failed: %{public}@ — using HTTP fallback",
+                           log: nseLog, type: .info,
+                           String(describing: err))
+                }
+            }
+
             do {
                 os_log("fetching event...", log: nseLog, type: .info)
                 let event = try await client.fetchEvent(roomID: roomID, eventID: eventID)
