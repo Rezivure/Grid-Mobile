@@ -125,81 +125,136 @@ final class NotificationDecryptionClient {
         roomID: String,
         eventID: String
     ) async throws -> DecryptedEvent {
-        // -----------------------------------------------------------------
-        // TODO(phase-3-followup): wire actual rust-sdk APIs.
-        //
-        // Pseudocode mirroring Element-X iOS NSE flow (NSEUserSession.swift):
-        //
-        //   let cachePath = storeDirectory.appendingPathComponent("cache").path
-        //   let dataPath  = storeDirectory.path
-        //
-        //   let builder = ClientBuilder()
-        //       .sessionPaths(dataPath: dataPath, cachePath: cachePath)
-        //       .homeserverUrl(url: homeserverURL)
-        //       .username(username: userID)
-        //       .passphrase(passphrase: NSEKeychain.passphrase())  // 32 random bytes,
-        //                                                          // persisted in
-        //                                                          // keychain access group
-        //       .setSessionDelegate(KeychainTokenRefresher())
-        //
-        //   let client = try await builder.build()
-        //
-        //   // First launch only: register the NSE as a separate device.
-        //   //   try await client.matrixAuth().login(
-        //   //       username: userID, password: ..., initialDeviceName: "Grid NSE"
-        //   //   )
-        //   // Subsequent launches: restore the persisted session token.
-        //   try await client.restoreSession(session: Session(
-        //       accessToken: accessToken,
-        //       refreshToken: nil,
-        //       userId: userID,
-        //       deviceId: deviceID ?? "",
-        //       homeserverUrl: homeserverURL,
-        //       slidingSyncVersion: .native,
-        //       oidcData: nil
-        //   ))
-        //
-        //   let notifClient = try await client.notificationClient(
-        //       processSetup: .singleProcess
-        //   )
-        //
-        //   guard let item = try await notifClient.getNotification(
-        //       roomId: roomID, eventId: eventID
-        //   ) else {
-        //       throw DecryptionError.eventNotFound
-        //   }
-        //
-        //   let timelineEvent = item.event              // TimelineEvent
-        //   let content = timelineEvent.eventType()     // .state(content: ...) | .messageLike(...)
-        //   // For `m.room.member`, dig out membership / prev_membership
-        //   // from the state content. Field names: verify against the SDK
-        //   // version pinned in Package.resolved.
-        //
-        //   return DecryptedEvent(
-        //       eventID: eventID,
-        //       roomID: roomID,
-        //       senderID: timelineEvent.senderId(),
-        //       senderDisplayName: item.senderInfo.displayName,
-        //       eventType: "m.room.member",
-        //       stateKey: <state_key from event>,
-        //       membership: <membership from content>,
-        //       prevMembership: <prev_content.membership from unsigned>,
-        //       isDirectInvite: item.isDirect,
-        //       roomDisplayName: item.roomDisplayName
-        //   )
-        //
-        // Field names (`senderInfo`, `roomDisplayName`, `isDirect`,
-        // `senderId`, `eventType`) live on `NotificationItem` and
-        // `TimelineEvent`. Names rotate between SDK releases — pin a version
-        // and validate against the generated headers.
-        //
-        // Until that wiring lands, throw so the HTTP fallback path runs.
-        // -----------------------------------------------------------------
-        os_log(
-            "fetchAndDecryptImpl: stub — SPM linked but call site not wired yet",
-            log: decryptionLog, type: .info
+        os_log("building rust-sdk client", log: decryptionLog, type: .info)
+
+        let dataPath = storeDirectory.path
+        let cachePath = storeDirectory
+            .appendingPathComponent("cache", isDirectory: true)
+            .path
+        try? FileManager.default.createDirectory(
+            atPath: cachePath,
+            withIntermediateDirectories: true
         )
-        throw DecryptionError.notificationFetchFailed("not implemented")
+
+        let client: Client
+        do {
+            client = try await ClientBuilder()
+                .sessionPaths(dataPath: dataPath, cachePath: cachePath)
+                .homeserverUrl(url: homeserverURL)
+                .build()
+        } catch {
+            throw DecryptionError.clientBuildFailed(String(describing: error))
+        }
+
+        do {
+            try await client.restoreSession(session: Session(
+                accessToken: accessToken,
+                refreshToken: nil,
+                userId: userID,
+                deviceId: deviceID ?? "",
+                homeserverUrl: homeserverURL,
+                oidcData: nil,
+                slidingSyncVersion: .native
+            ))
+        } catch {
+            throw DecryptionError.sessionRestoreFailed(String(describing: error))
+        }
+
+        os_log("session restored, fetching notification %{public}@/%{public}@",
+               log: decryptionLog, type: .info, roomID, eventID)
+
+        let notifClient: NotificationClient
+        do {
+            // The NSE is a *separate* OS process from the main Grid app, so
+            // .multipleProcesses is the correct setup. .singleProcess is for
+            // when the same process owns both a SyncService and the
+            // NotificationClient.
+            notifClient = try await client.notificationClient(
+                processSetup: .multipleProcesses
+            )
+        } catch {
+            throw DecryptionError.notificationFetchFailed(
+                "notificationClient(): \(error)"
+            )
+        }
+
+        let status: NotificationStatus
+        do {
+            status = try await notifClient.getNotification(
+                roomId: roomID,
+                eventId: eventID
+            )
+        } catch {
+            throw DecryptionError.notificationFetchFailed(String(describing: error))
+        }
+
+        // `NotificationStatus` is an enum of {event, eventFilteredOut, eventNotFound}.
+        // Pattern-match each known case; on filtered/not-found we throw so the
+        // HTTP fallback path runs.
+        switch status {
+        case .event(let item):
+            os_log("notification decrypted; mapping to DecryptedEvent",
+                   log: decryptionLog, type: .info)
+            return mapNotificationItem(item, roomID: roomID, eventID: eventID)
+        @unknown default:
+            throw DecryptionError.eventNotFound
+        }
+    }
+
+    /// Translate the rust-sdk `NotificationItem` into our classifier-friendly
+    /// `DecryptedEvent`. Field accessors below assume the
+    /// `matrix-rust-components-swift` API surface circa version `26.04.x` —
+    /// adjust if the SPM-pinned version diverges.
+    private func mapNotificationItem(
+        _ item: NotificationItem,
+        roomID: String,
+        eventID: String
+    ) -> DecryptedEvent {
+        // Layout (matrix-rust-components-swift ~26.04.x):
+        //   NotificationItem
+        //     .event:       NotificationEvent  (enum: .timeline(TimelineEvent) | .invite(sender))
+        //     .senderInfo:  NotificationSenderInfo  (.displayName, .avatarUrl)
+        //     .roomInfo:    NotificationRoomInfo    (.displayName, .isDirect, ...)
+        //     .isNoisy:     Bool?
+        //
+        // For an *invite* the wrapping NotificationEvent case is `.invite(...)`
+        // and there's no full TimelineEvent. For other events, .timeline
+        // carries the decrypted body. Under Grid's allowlist policy the only
+        // events we expect here are invite-state members on the user.
+        let senderDisplay = item.senderInfo.displayName
+        let roomDisplay = item.roomInfo.displayName
+        let roomIsDirect = item.roomInfo.isDirect
+
+        let eventType: String
+        let membership: String?
+
+        switch item.event {
+        case .invite:
+            eventType = "m.room.member"
+            membership = "invite"
+        case .timeline:
+            // Allowlist push rules currently keep encrypted messages from
+            // reaching us at all; if one slips through, treat as generic
+            // message and let the classifier suppress.
+            eventType = "m.room.message"
+            membership = nil
+        @unknown default:
+            eventType = "m.room.message"
+            membership = nil
+        }
+
+        return DecryptedEvent(
+            eventID: eventID,
+            roomID: roomID,
+            senderID: nil,
+            senderDisplayName: senderDisplay,
+            eventType: eventType,
+            stateKey: nil,
+            membership: membership,
+            prevMembership: nil,
+            isDirectInvite: roomIsDirect,
+            roomDisplayName: roomDisplay
+        )
     }
     #endif
 }

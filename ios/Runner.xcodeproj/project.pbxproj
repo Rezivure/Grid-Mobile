@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -17,6 +17,7 @@
 		9D642FEE4AD1523EE2F420E4 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 35FD13841D8ED8CB53CA887F /* Pods_RunnerTests.framework */; };
 		CB1110F52E49234000D501E9 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1110F42E49234000D501E9 /* StoreKit.framework */; };
 		CBAA0000000000000000A001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CBAA0000000000000000A002 /* GoogleService-Info.plist */; };
+		EC835E3B2F9CFC25009EC4D9 /* MatrixRustSDK in Frameworks */ = {isa = PBXBuildFile; productRef = EC835E3A2F9CFC25009EC4D9 /* MatrixRustSDK */; };
 		ECFCA6962F79F39300386C62 /* GridNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ECFCA68F2F79F39300386C62 /* GridNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FD4B62FB5672D7B2CB70A143 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3737650B9FFA0C466F929C91 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -94,7 +95,17 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		ECFCA6902F79F39300386C62 /* GridNotificationService */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = GridNotificationService; sourceTree = "<group>"; };
+		ECFCA6902F79F39300386C62 /* GridNotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = GridNotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +130,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EC835E3B2F9CFC25009EC4D9 /* MatrixRustSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,6 +319,9 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				EC835E392F9CFC25009EC4D9 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -356,13 +371,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -834,7 +845,7 @@
 				INFOPLIST_FILE = "GridNotificationService-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GridNotificationService;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -879,7 +890,7 @@
 				INFOPLIST_FILE = "GridNotificationService-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GridNotificationService;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -922,7 +933,7 @@
 				INFOPLIST_FILE = "GridNotificationService-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = GridNotificationService;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 16;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -987,6 +998,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		EC835E392F9CFC25009EC4D9 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/element-hq/matrix-rust-components-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 26.4.23;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		EC835E3A2F9CFC25009EC4D9 /* MatrixRustSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EC835E392F9CFC25009EC4D9 /* XCRemoteSwiftPackageReference "matrix-rust-components-swift" */;
+			productName = MatrixRustSDK;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }
