@@ -69,36 +69,76 @@ class PushNotificationService {
       debugPrint('[Push] Failed to register pusher: $e\n$st');
     }
 
-    // Reset any push rule overrides we previously installed when we
-    // tried to gate joins server-side. We now use synthetic
-    // `grid.member.join` messages instead, which push via the
-    // standard `.m.rule.message` rule and are gated by the NSE.
-    await _resetCustomPushRules();
+    // Tighten push rules so non-allowlisted events don't even reach
+    // sygnal/APNs. The NSE alone can't truly suppress — it only mutates
+    // content; iOS still renders the original `default_payload` alert
+    // (a single space) when the NSE returns empty content. The right
+    // place to filter is server-side push rules.
+    await _applyAllowlistPushRules();
   }
 
-  /// Idempotently undo PR #222/#223:
-  /// - delete the `grid.member.join` override rule (no longer needed)
-  /// - re-enable `.m.rule.member_event` (we no longer want every member
-  ///   event to fire; the spec default of suppressing them is correct)
-  Future<void> _resetCustomPushRules() async {
-    try {
-      await client.request(
-        RequestType.DELETE,
-        '/client/v3/pushrules/global/override/grid.member.join',
-      );
-      debugPrint('[Push] Removed override rule grid.member.join');
-    } catch (_) {
-      // 404 if it never existed for this user — fine.
-    }
+  /// Apply the allowlist policy via Matrix push rules:
+  ///
+  /// - Add an OVERRIDE rule that notifies on `grid.member.join`-typed
+  ///   messages (synthetic join markers we post when the local user
+  ///   accepts an invite to a Grid:Group: room).
+  /// - Disable the spec defaults that push every regular message
+  ///   (`.m.rule.message`, `.m.rule.room_one_to_one`,
+  ///   `.m.rule.encrypted`, `.m.rule.encrypted_room_one_to_one`).
+  /// - Keep `.m.rule.invite_for_me` (default, enabled): invites still
+  ///   push.
+  /// - Keep `.m.rule.member_event` (default, enabled, dont_notify):
+  ///   raw member events still don't push — synthetic messages carry
+  ///   that signal instead.
+  ///
+  /// All calls are idempotent and survive across logins.
+  Future<void> _applyAllowlistPushRules() async {
+    // OVERRIDE rule: notify on synthetic Grid join markers.
     try {
       await client.request(
         RequestType.PUT,
-        '/client/v3/pushrules/global/override/.m.rule.member_event/enabled',
-        data: {'enabled': true},
+        '/client/v3/pushrules/global/override/grid.member.join',
+        data: {
+          'actions': ['notify'],
+          'conditions': [
+            {
+              'kind': 'event_match',
+              'key': 'type',
+              'pattern': 'm.room.message',
+            },
+            {
+              'kind': 'event_match',
+              'key': 'content.msgtype',
+              'pattern': 'grid.member.join',
+            },
+          ],
+        },
       );
-      debugPrint('[Push] Re-enabled default .m.rule.member_event');
+      debugPrint('[Push] Override rule grid.member.join set');
     } catch (e) {
-      debugPrint('[Push] Failed to re-enable .m.rule.member_event: $e');
+      debugPrint('[Push] Failed to set grid.member.join rule: $e');
+    }
+
+    // Disable underride defaults that would otherwise push regular
+    // messages. Without these, regular m.room.message / m.room.encrypted
+    // events match no rule and don't push at all (truly silent — no
+    // blank banner, NSE never invoked).
+    for (final ruleId in const <String>[
+      '.m.rule.message',
+      '.m.rule.room_one_to_one',
+      '.m.rule.encrypted',
+      '.m.rule.encrypted_room_one_to_one',
+    ]) {
+      try {
+        await client.request(
+          RequestType.PUT,
+          '/client/v3/pushrules/global/underride/$ruleId/enabled',
+          data: {'enabled': false},
+        );
+        debugPrint('[Push] Disabled underride $ruleId');
+      } catch (e) {
+        debugPrint('[Push] Failed to disable $ruleId: $e');
+      }
     }
   }
 
