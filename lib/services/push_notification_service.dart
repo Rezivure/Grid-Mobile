@@ -163,18 +163,19 @@ class PushNotificationService {
 
     // `default_payload` is a sygnal feature merged into every APNs payload.
     // With `format: event_id_only` Sygnal by default emits a payload with no
-    // `aps` dict, so iOS drops the push silently (NSE never runs). We force
-    // `mutable-content: 1` so the NSE gets invoked.
-    //
-    // We deliberately do NOT include an `alert` here. Without an alert, iOS
-    // only renders a banner if the NSE actively *adds* one. That's exactly
-    // what we want under the allowlist policy: events the NSE classifier
-    // approves get a banner; everything else is silent. (When we did set
-    // a placeholder alert, the NSE's "suppress" path leaked an empty
-    // banner because iOS still rendered the original alert.)
+    // `aps` dict, so iOS drops the push silently (NSE never runs). Need
+    // BOTH `mutable-content: 1` and an `alert` for iOS to invoke the NSE
+    // — pushes with `mutable-content` only get treated as silent and the
+    // NSE is skipped, so there's no chance to classify or render. Keep a
+    // placeholder body and rely on the NSE's `suppressNotification` path
+    // (passive interruption + empty title/body) to keep suppressed events
+    // quiet, while allowlisted events overwrite the placeholder.
     final defaultPayload = <String, dynamic>{
       'aps': <String, dynamic>{
         'mutable-content': 1,
+        'alert': <String, dynamic>{
+          'body': ' ',
+        },
       },
     };
 
