@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -18,6 +18,7 @@
 		CB1110F52E49234000D501E9 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1110F42E49234000D501E9 /* StoreKit.framework */; };
 		CBAA0000000000000000A001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = CBAA0000000000000000A002 /* GoogleService-Info.plist */; };
 		EC835E3B2F9CFC25009EC4D9 /* MatrixRustSDK in Frameworks */ = {isa = PBXBuildFile; productRef = EC835E3A2F9CFC25009EC4D9 /* MatrixRustSDK */; };
+		EC835E3C2F9CFC25009EC4D9 /* MatrixRustSDK in Embed Frameworks */ = {isa = PBXBuildFile; productRef = EC835E3A2F9CFC25009EC4D9 /* MatrixRustSDK */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		ECFCA6962F79F39300386C62 /* GridNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ECFCA68F2F79F39300386C62 /* GridNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FD4B62FB5672D7B2CB70A143 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3737650B9FFA0C466F929C91 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -41,6 +42,17 @@
 
 /* Begin PBXCopyFilesBuildPhase section */
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				EC835E3C2F9CFC25009EC4D9 /* MatrixRustSDK in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EC9C9F752F9D1AB100790B5E /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
@@ -95,17 +107,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		ECFCA6902F79F39300386C62 /* GridNotificationService */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = GridNotificationService;
-			sourceTree = "<group>";
-		};
+		ECFCA6902F79F39300386C62 /* GridNotificationService */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = GridNotificationService; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -273,6 +275,7 @@
 				ECFCA68B2F79F39300386C62 /* Sources */,
 				ECFCA68C2F79F39300386C62 /* Frameworks */,
 				ECFCA68D2F79F39300386C62 /* Resources */,
+				EC9C9F752F9D1AB100790B5E /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -371,9 +374,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -862,6 +869,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -904,6 +912,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "app.mygrid.grid.GridNotificationService AppStore";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -946,6 +955,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
