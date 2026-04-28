@@ -2187,7 +2187,9 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
 
             // Subscriptions Section (only for default homeserver)
-            if (!isCustomHomeserver()) ...[
+            // Hidden while sat-map provider is offline; re-enable by removing
+            // the `false &&` once subscriptions can deliver value again.
+            if (false && !isCustomHomeserver()) ...[
               _buildSectionCard(
                 theme: theme,
                 colorScheme: colorScheme,

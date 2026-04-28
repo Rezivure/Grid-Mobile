@@ -2576,28 +2576,31 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               colorScheme: colorScheme,
               isDarkMode: isDarkMode,
             ),
-            SizedBox(height: 8),
-            // Satellite Map Option
-            _buildMapOption(
-              title: 'Satellite Map',
-              imagePath: 'assets/extras/satellite.png',
-              isSelected: _currentMapStyle == 'satellite',
-              showStar: true,
-              onTap: _isLoadingMapStyle ? null : () async {
-                final hasSubscription = await _subscriptionService.hasActiveSubscription();
-                if (!hasSubscription) {
-                  // Navigate to subscription page
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                  );
-                } else {
-                  _selectMapStyle('satellite');
-                }
-              },
-              colorScheme: colorScheme,
-              isDarkMode: isDarkMode,
-            ),
+            // Satellite Map hidden while the sat-tile provider is offline.
+            // Re-enable by removing the `if (false)` guard once available.
+            if (false) ...[
+              SizedBox(height: 8),
+              _buildMapOption(
+                title: 'Satellite Map',
+                imagePath: 'assets/extras/satellite.png',
+                isSelected: _currentMapStyle == 'satellite',
+                showStar: true,
+                onTap: _isLoadingMapStyle ? null : () async {
+                  final hasSubscription = await _subscriptionService.hasActiveSubscription();
+                  if (!hasSubscription) {
+                    // Navigate to subscription page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+                    );
+                  } else {
+                    _selectMapStyle('satellite');
+                  }
+                },
+                colorScheme: colorScheme,
+                isDarkMode: isDarkMode,
+              ),
+            ],
           ],
         ],
       ),
