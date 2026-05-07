@@ -194,11 +194,20 @@ class _OnboardingModalState extends State<OnboardingModal>
           locationGranted = true;
           break;
         case LocationPermission.denied:
+          // First denial: stay on the onboarding screen so the user can
+          // tap "Allow Location" again to re-prompt. App Review
+          // (Guideline 5.1.1) explicitly disallows auto-redirecting to
+          // Settings after a denial.
+          print('[Onboarding] Permission denied; user can retry');
+          break;
         case LocationPermission.deniedForever:
-          // Denied - need to go to settings
-          print('[Onboarding] Permission denied, opening settings');
-          await _showSettingsDialog('Location');
-          return;
+          // OS won't show the system prompt again. Show an in-app message
+          // explaining how to enable manually — but the Settings link is a
+          // user-initiated action (SnackBarAction), not an automatic
+          // redirect. Required by App Review guideline 5.1.1.
+          print('[Onboarding] Permission deniedForever; offering manual settings link');
+          _showLocationDeniedNotice();
+          break;
       }
 
       print('[Onboarding] Final permission granted: $locationGranted');
@@ -208,8 +217,28 @@ class _OnboardingModalState extends State<OnboardingModal>
       });
     } catch (e) {
       print('[Onboarding] ERROR requesting location permission: $e');
-      await _showSettingsDialog('Location');
     }
+  }
+
+  void _showLocationDeniedNotice() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Location access is needed to share your location with friends. '
+          'You can enable it in Settings.',
+        ),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Open Settings',
+          onPressed: () async {
+            await openAppSettings();
+            await _checkPermissionStatus();
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _requestActivityPermission() async {
@@ -251,28 +280,6 @@ class _OnboardingModalState extends State<OnboardingModal>
         _activityRecognitionGranted = true;
       });
     }
-  }
-
-  Future<void> _showSettingsDialog(String permissionName) async {
-    // Show a clean snackbar instead of ugly dialog
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Opening Settings to enable $permissionName'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-
-    // Small delay so user sees the message
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    // Go straight to settings
-    await openAppSettings();
-
-    // Check permissions when user comes back
-    await _checkPermissionStatus();
   }
 
   Future<void> _checkPermissionStatus() async {
