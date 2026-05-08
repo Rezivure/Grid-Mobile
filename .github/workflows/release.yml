@@ -130,37 +130,12 @@ jobs:
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane ios beta
 
-      - name: Submit iOS to App Store Review
-        run: |
-          export LC_ALL=en_US.UTF-8
-          export LANG=en_US.UTF-8
-          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
-
-          # Write release notes for deliver
-          mkdir -p fastlane/metadata/en-US
-          bash scripts/build-release-notes.sh > fastlane/metadata/en-US/release_notes.txt
-
-          fastlane ios release
-
       - name: Upload Android to Play Store Internal
         run: |
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane android beta
-
-      - name: Promote Android to Production
-        run: |
-          export LC_ALL=en_US.UTF-8
-          export LANG=en_US.UTF-8
-          export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
-
-          # Write release notes for Play Store
-          BUILD_NUMBER="${{ steps.version.outputs.build_number }}"
-          mkdir -p fastlane/metadata/android/en-US/changelogs
-          bash scripts/build-release-notes.sh > "fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
-
-          fastlane android release
 
       - name: Create GitHub Release
         run: |
@@ -173,8 +148,8 @@ jobs:
           ${STORE_NOTES}
 
           ---
-          - 📱 iOS: Submitted to App Store Review
-          - 🤖 Android: Promoted to Production" \
+          - 📱 iOS: Uploaded to TestFlight (manual App Store release)
+          - 🤖 Android: Uploaded as draft to Play Store internal (manual promotion)" \
             build/ios/ipa/Grid.ipa \
             build/app/outputs/bundle/release/app-release.aab \
             build/app/outputs/flutter-apk/app-release.apk
