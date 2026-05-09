@@ -17,7 +17,6 @@ class LibreLocationService implements LocationService {
 
   StreamSubscription<libre.Position>? _positionSubscription;
   StreamSubscription<libre.Position>? _motionSubscription;
-  StreamSubscription<libre.HeartbeatEvent>? _heartbeatSubscription;
   StreamSubscription<libre.ActivityEvent>? _activitySubscription;
   StreamSubscription<libre.ProviderEvent>? _providerSubscription;
   StreamSubscription<bool>? _powerSaveSubscription;
@@ -90,17 +89,6 @@ class LibreLocationService implements LocationService {
         });
       });
 
-      // Listen for heartbeat events (periodic pings when stationary)
-      _heartbeatSubscription = libre.LibreLocation.onHeartbeat.listen((event) {
-        DebugLogService.instance.log('heartbeat', {
-          'latitude': event.position.latitude,
-          'longitude': event.position.longitude,
-          'accuracy': event.position.accuracy,
-          'speed': event.position.speed,
-          'isMoving': event.position.isMoving,
-        });
-      });
-
       // Listen for activity changes (still/walking/driving/cycling)
       _activitySubscription = libre.LibreLocation.onActivityChange.listen((event) {
         DebugLogService.instance.log('activity_change', {
@@ -162,13 +150,11 @@ class LibreLocationService implements LocationService {
       
       await _positionSubscription?.cancel();
       await _motionSubscription?.cancel();
-      await _heartbeatSubscription?.cancel();
       await _activitySubscription?.cancel();
       await _providerSubscription?.cancel();
       await _powerSaveSubscription?.cancel();
       _positionSubscription = null;
       _motionSubscription = null;
-      _heartbeatSubscription = null;
       _activitySubscription = null;
       _providerSubscription = null;
       _powerSaveSubscription = null;
