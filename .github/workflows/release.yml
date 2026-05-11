@@ -9,6 +9,9 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   check-changes:
     name: Check for Changes
