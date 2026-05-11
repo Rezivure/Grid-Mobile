@@ -53,7 +53,7 @@ jobs:
         run: |
           export PATH="/opt/homebrew/bin:$PATH"
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 500 ))
+          BUILD_NUMBER=$(( ${{ github.run_number }} + 709 ))
           sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
           echo "📦 Release version: ${VERSION_NAME}+${BUILD_NUMBER}"
           echo "version=${VERSION_NAME}+${BUILD_NUMBER}" >> $GITHUB_OUTPUT
