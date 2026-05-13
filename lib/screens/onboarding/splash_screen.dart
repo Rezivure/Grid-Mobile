@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
@@ -113,10 +115,12 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         if (customHomeserver != null && customHomeserver.isNotEmpty) {
           // For custom servers, we need to set the homeserver before checking if logged in
           try {
-            await client.checkHomeserver(Uri.https(customHomeserver, ''));
+            await client.checkHomeserver(Uri.https(customHomeserver, '')).timeout(
+              const Duration(seconds: 15),
+            );
           } catch (e) {
-            // If we can't reach the custom server (offline), still set it as the homeserver
-            // so isCustomHomeserver() will work correctly
+            // If we can't reach the custom server (offline or timed out), still set it as the
+            // homeserver so isCustomHomeserver() will work correctly
             print('Could not reach custom homeserver (may be offline): $e');
             // Manually set the homeserver URL even if offline
             client.homeserver = Uri.https(customHomeserver, '');
@@ -124,9 +128,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         } else {
           // For default server, ensure the homeserver is set even if offline
           try {
-            await client.checkHomeserver(Uri.parse(dotenv.env['MATRIX_SERVER_URL']!));
+            await client.checkHomeserver(Uri.parse(dotenv.env['MATRIX_SERVER_URL']!)).timeout(
+              const Duration(seconds: 15),
+            );
           } catch (e) {
-            // If offline, manually set the default homeserver
+            // If offline or timed out, manually set the default homeserver
             print('Could not reach default homeserver (may be offline): $e');
             final defaultUrl = dotenv.env['MATRIX_SERVER_URL'] ?? 'https://matrix.mygrid.app';
             client.homeserver = Uri.parse(defaultUrl);
