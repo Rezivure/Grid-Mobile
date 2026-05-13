@@ -54,6 +54,7 @@ import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/widgets/battery_optimization_prompt.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -195,13 +196,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
           // Check if user needs passkey migration warning (default homeserver only)
           _checkPasskeyWarning();
+
+          // Remind Android users to disable battery optimization (shown once)
+          BatteryOptimizationPrompt.showIfNeeded(context);
         },
       ).then((_) {
         // For existing users who already completed onboarding,
         // the onComplete callback won't fire — check here instead
         if (!mounted) return;
         OnboardingModal.shouldShowOnboarding().then((shouldShow) {
-          if (!shouldShow) _checkPasskeyWarning();
+          if (!shouldShow) {
+            _checkPasskeyWarning();
+            BatteryOptimizationPrompt.showIfNeeded(context);
+          }
         });
       });
 
