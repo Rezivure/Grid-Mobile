@@ -1054,7 +1054,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _tileProvider = null;
 
       _mapTheme = ProtomapsThemes.light();
-      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
+      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl)
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw TimeoutException('Map provider load timed out. Please check your connection.');
+      });
 
       context.read<MapBloc>().add(MapInitialize());
       setState(() {});
