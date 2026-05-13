@@ -78,3 +78,7 @@ fastlane/keys/
 
 # Maestro debug artifacts
 maestro-core-debug-*/
+
+# Claude Code per-machine local config
+.claude/settings.local.json
+.claude/agent-memory/
