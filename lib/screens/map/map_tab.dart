@@ -1048,7 +1048,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
+      final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v2/v2_protomaps_20260512.pmtiles';
 
       // Clear existing tile provider to force complete reinitialization
       _tileProvider = null;
