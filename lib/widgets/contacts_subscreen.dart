@@ -770,17 +770,17 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   String _getEnhancedStatusText(String timeAgo) {
     if (timeAgo == 'Just now') {
-      return 'Active now';
+      return 'Just moved';
     } else if (timeAgo.contains('s ago')) {
-      return 'Active now';
+      return 'Just moved';
     } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      return timeAgo;
+      return 'moved $timeAgo';
     } else if (timeAgo.contains('h ago')) {
-      return timeAgo;
+      return 'moved $timeAgo';
     } else if (timeAgo.contains('d ago')) {
-      return timeAgo;
+      return 'moved $timeAgo';
     } else {
-      return 'Offline';
+      return 'Off Grid';
     }
   }
 
