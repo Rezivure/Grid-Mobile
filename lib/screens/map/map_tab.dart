@@ -760,6 +760,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager?.removeListener(_checkAuthenticationStatus);
     _syncManager?.removeListener(_onSyncStateChanged);
     _subscreenProvider?.removeListener(_onSubscreenChanged);
+    _mlController?.removeListener(_onMaplibreCameraChanged);
     _mapController.dispose();
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
@@ -1262,6 +1263,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
+  void _onMaplibreCameraChanged() {
+    if (!mounted) return;
+    _mapController.syncFromController();
+    // Re-position the marker overlay widgets to stay glued to the map
+    // during pan/zoom gestures (not just on idle).
+    setState(() {});
+  }
+
   void _onMarkerTap(String userId, LatLng position) async {
     // Update map state with selected user
     context.read<MapBloc>().add(MapMoveToUser(userId));
@@ -1379,6 +1388,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   onMapCreated: (controller) {
                     _mlController = controller;
                     _mapController.attach(controller);
+                    controller.addListener(_onMaplibreCameraChanged);
                   },
                   onStyleLoadedCallback: () {
                     print('[SMART ZOOM] Style loaded — map ready');
