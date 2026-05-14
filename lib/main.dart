@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import 'styles/tokens.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -315,38 +318,8 @@ void main() async {
         ],
         child: MaterialApp(
           title: 'Grid App',
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF00DBA4),
-              primary: const Color(0xFF00DBA4),
-              secondary: const Color(0xFF267373),
-              tertiary: const Color(0xFFDCF8C6),
-              background: Colors.white,
-              surface: Colors.white,
-              onPrimary: Colors.white,
-              onSecondary: Colors.black,
-              onBackground: Colors.black,
-              onSurface: Colors.black,
-              brightness: Brightness.light,
-            ),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF00DBA4),
-              primary: const Color(0xFF00DBA4),
-              secondary: const Color(0xFF267373),
-              tertiary: const Color(0xFF3E4E50),
-              background: Colors.black,
-              surface: Colors.black,
-              onPrimary: Colors.black,
-              onSecondary: Colors.white,
-              onBackground: Colors.white,
-              onSurface: Colors.white,
-              brightness: Brightness.dark,
-            ),
-          ),
+          theme: _buildTheme(GridTokens.lightScheme()),
+          darkTheme: _buildTheme(GridTokens.darkScheme()),
           themeMode: ThemeMode.system,
           home: VersionWrapper(
             client: client,
@@ -365,6 +338,148 @@ void main() async {
             ),
           },
         ),
+      ),
+    ),
+  );
+}
+
+/// Build the app theme from a Grid-tokenized ColorScheme.
+///
+/// - Geist for UI body text, Geist Mono for status/coords/timestamps
+///   (apply mono ad-hoc per widget via `GoogleFonts.geistMono`).
+/// - Surfaces, shadows and rounded radii match the design tokens.
+ThemeData _buildTheme(ColorScheme scheme) {
+  final base = scheme.brightness == Brightness.dark
+      ? ThemeData.dark(useMaterial3: true)
+      : ThemeData.light(useMaterial3: true);
+
+  final textTheme = GoogleFonts.getTextTheme('Geist', base.textTheme).apply(
+    bodyColor: scheme.onSurface,
+    displayColor: scheme.onSurface,
+  );
+
+  return base.copyWith(
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    canvasColor: scheme.surface,
+    textTheme: textTheme,
+    primaryTextTheme: textTheme,
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: false,
+      titleTextStyle: GoogleFonts.getFont('Geist',
+        color: scheme.onSurface,
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.015,
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: scheme.surfaceVariant,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        side: BorderSide(color: scheme.outlineVariant, width: 1),
+      ),
+    ),
+    dividerColor: scheme.outlineVariant,
+    iconTheme: IconThemeData(color: scheme.onSurface),
+    primaryIconTheme: IconThemeData(color: scheme.onPrimary),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        minimumSize: const Size.fromHeight(52),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        textStyle: GoogleFonts.getFont('Geist',
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: scheme.onSurface,
+        minimumSize: const Size.fromHeight(52),
+        side: BorderSide(color: scheme.outline, width: 1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        textStyle: GoogleFonts.getFont('Geist',
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: scheme.primary,
+        textStyle: GoogleFonts.getFont('Geist',
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceVariant,
+      hintStyle: GoogleFonts.getFont('Geist',color: GridTokens.text3, fontSize: 15),
+      labelStyle: GoogleFonts.getFont('Geist',color: GridTokens.text2, fontSize: 13),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: BorderSide(color: scheme.outlineVariant),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: BorderSide(color: scheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: scheme.inverseSurface,
+      contentTextStyle: GoogleFonts.getFont('Geist',color: scheme.onInverseSurface),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(GridTokens.r2Xl),
+        ),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rXl),
+      ),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? Colors.white
+            : scheme.onSurface.withOpacity(0.5),
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? scheme.primary
+            : scheme.surfaceContainerHighest,
       ),
     ),
   );

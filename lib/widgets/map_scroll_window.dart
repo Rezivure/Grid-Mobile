@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/widgets/profile_modal.dart';
@@ -267,17 +275,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   ),
                 ),
                 
-                // Header Section
-                _buildModernHeader(colorScheme),
-                
-                // Expandable Group Selector
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: _isDropdownExpanded 
-                      ? _buildModernHorizontalScroller(colorScheme)
-                      : const SizedBox.shrink(),
-                ),
+                // Header Section — new segmented tabs.
+                _buildSegmentedHeader(colorScheme),
                 
                 // Content
                 Expanded(
@@ -310,6 +309,163 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     ),  // End of Stack
     ],
   );
+  }
+
+  /// New segmented tabs header: People · Groups · Invites + search field.
+  /// Replaces the old dropdown header. Invites segment opens the existing
+  /// invites modal (preserves current routing behavior).
+  Widget _buildSegmentedHeader(ColorScheme colorScheme) {
+    final int contactCount = _contactsLiveCount();
+    final int groupCount = _groupsCount();
+    final int inviteCount = _invitesCount();
+
+    final int selected = _selectedOption == SubscreenOption.groups ? 1 : 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: GridSegmented(
+                  selected: selected,
+                  tabs: [
+                    GridSegmentedTab(label: 'People', badgeCount: contactCount),
+                    GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
+                  ],
+                  onChanged: (i) {
+                    setState(() {
+                      _selectedOption = i == 1
+                          ? SubscreenOption.groups
+                          : SubscreenOption.contacts;
+                    });
+                    Provider.of<SelectedSubscreenProvider>(context, listen: false)
+                        .setSelectedSubscreen(i == 1 ? 'groups' : 'contacts');
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              _invitesChip(inviteCount),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: GridTokens.surface2,
+              borderRadius: BorderRadius.circular(GridTokens.rMd),
+              border: Border.all(color: GridTokens.hairline),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search_rounded, size: 18, color: GridTokens.text3),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: _selectedOption == SubscreenOption.groups
+                          ? 'Find a group'
+                          : 'Find a contact',
+                      hintStyle: TextStyle(color: GridTokens.text3, fontSize: 14),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      fillColor: Colors.transparent,
+                      filled: true,
+                    ),
+                    style: const TextStyle(color: GridTokens.text, fontSize: 14),
+                    onChanged: (q) {
+                      // TODO: wire to subscreen filters when restructure lands.
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _invitesChip(int count) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => _showInvitesModal(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: count > 0 ? GridTokens.amberSoft : GridTokens.surface2,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: count > 0 ? GridTokens.amber.withOpacity(0.4) : GridTokens.hairline,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.mail_outline_rounded,
+                size: 14,
+                color: count > 0 ? GridTokens.amber : GridTokens.text2,
+              ),
+              const SizedBox(width: 6),
+              GridMono(
+                'INVITES',
+                color: count > 0 ? GridTokens.amber : GridTokens.text2,
+                size: 10.5,
+                letterSpacing: 0.1,
+                weight: FontWeight.w600,
+              ),
+              if (count > 0) ...[
+                const SizedBox(width: 6),
+                GridMono(
+                  '$count',
+                  color: GridTokens.amber,
+                  size: 10.5,
+                  letterSpacing: 0,
+                  uppercase: false,
+                  weight: FontWeight.w700,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  int _contactsLiveCount() {
+    try {
+      final s = context.read<ContactsBloc>().state;
+      if (s is ContactsLoaded) {
+        return s.contacts.length;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  int _groupsCount() {
+    try {
+      final s = context.read<GroupsBloc>().state;
+      if (s is GroupsLoaded) return s.groups.length;
+    } catch (_) {}
+    return 0;
+  }
+
+  int _invitesCount() {
+    try {
+      final s = context.read<InvitationsBloc>().state;
+      if (s is InvitationsLoaded) return s.invitations.length;
+    } catch (_) {}
+    return 0;
   }
 
   Widget _buildModernHeader(ColorScheme colorScheme) {

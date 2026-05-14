@@ -73,6 +73,25 @@ gh issue list --state open --limit 100 --json number,title,body,labels,createdAt
 
 For each candidate, do the following sequentially. If any step throws an unexpected error: log it, attempt to remove `agent-in-progress` from the issue, and continue to the next issue. **Never crash the whole pipeline due to one bad issue.**
 
+### Step pre-A — Dedup check (skip if already handled)
+
+Before doing anything else, check whether this issue has already been worked on in any in-scope repo. For each of the 5 repos:
+
+```
+git -C ~/git/<repo> ls-remote --heads origin "agent/issue-<n>-*"
+```
+
+(Or, if querying via GitHub MCP, list branches with the prefix `agent/issue-<n>-` per repo.)
+
+If **any** branch matching `agent/issue-<n>-*` exists in **any** of the 5 repos (open feature branch, merged-and-deleted, or otherwise), **skip this issue entirely**:
+- Do not add `agent-in-progress`.
+- Do not spawn the triager.
+- Log: `"skipped #<n> — branch agent/issue-<n>-* already exists in <repo>"`.
+- Increment the "Skipped (dedup)" counter for the summary.
+- Continue to next issue.
+
+This catches re-triggers, concurrent runs, and previously-attempted issues so we never produce duplicate PRs for the same issue number.
+
 ### Step A — Mark in-progress
 
 ```
@@ -156,14 +175,18 @@ If `reviewer.verdict == "reject"`:
 If `reviewer.verdict == "approve"`:
 
 1. Poll CI: `gh pr checks <pr_url>` every 30s, timeout 20 minutes.
-2. If CI failed or timed out: treat as a reject (Step G logic, but mention CI failure in the comment).
+2. If CI failed or timed out: treat as a reject (Step G logic, mention CI failure in the comment).
 3. If CI passed:
    - `gh pr ready <pr_url>` (un-draft)
    - `gh pr merge <pr_url> --squash --delete-branch`
-   - On the Grid-Mobile issue:
-     - If `target_repo == "Grid-Mobile"`: `Fixes #N` should have auto-closed it. If still open, `gh issue close <n>`. Comment: "Merged in <pr_url>."
-     - Else (cross-repo): `gh issue close <n> --repo Rezivure/Grid-Mobile`. Comment: "Addressed by cross-repo PR <pr_url> in `<target_repo>`."
-   - Remove `agent-in-progress` from the issue.
+   - **Close the Grid-Mobile issue and fully clean up agent-* labels:**
+     - `Fixes #N` does **not** auto-close when a PR merges into the weekly branch — GitHub only auto-closes on merge to the *default* branch. **Always close the issue manually.**
+     - `gh issue close <n> --repo Rezivure/Grid-Mobile`
+     - Remove every agent-* state label that might be lingering from this run or a previous one: `agent-in-progress`, `agent-declined`, `agent-stuck`, `agent-attempt-1`, `agent-attempt-2`, `agent-attempt-3`. Apply via `--remove-label` per label; ignore errors for labels that aren't currently applied.
+     - Post **one** comment on the issue:
+       - If `target_repo == "Grid-Mobile"`: `"Resolved by <pr_url>. Merged into the weekly agent branch; the Friday rollup carries it to main."`
+       - Else (cross-repo — `target_repo` is one of `libre-location`, `Grid-Auth-Middleware`, `Grid-Backend-Helm-Chart`, `sygnal`): `"Resolved by cross-repo PR <pr_url> in Rezivure/<target_repo>. Merged into that repo's weekly agent branch; the Friday rollup carries it to main."`
+     - **Do not** use the word "cross-repo" when `target_repo == "Grid-Mobile"`. That phrasing is reserved for the actual cross-repo case.
 
 ---
 
@@ -173,6 +196,7 @@ Print:
 
 ```
 === Daily Issue Pipeline summary — <TODAY> ===
+Skipped (dedup):        <K>
 Triaged:                <N>
 Declined:               <M>
 Implemented (PRs open): <P>

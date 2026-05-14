@@ -17,6 +17,12 @@ import 'package:http/http.dart' as http;
 import 'grid_map_style.dart';
 import 'maplibre_camera_facade.dart';
 
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
+
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
@@ -1269,6 +1275,66 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
+  /// "SHARING WITH N" pill rendered top-center over the map.
+  Widget _buildSharingPill() {
+    return BlocBuilder<MapBloc, MapState>(
+      buildWhen: (p, c) => p.userLocations.length != c.userLocations.length,
+      builder: (context, state) {
+        final count = state.userLocations.length;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: GridTokens.surface.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: GridTokens.hairlineStrong),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: GridTokens.mint,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: GridTokens.mint.withOpacity(0.55),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 7),
+              GridMono(
+                'SHARING WITH $count',
+                color: GridTokens.text,
+                size: 10.5,
+                letterSpacing: 0.1,
+                weight: FontWeight.w600,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  int _invitesBadgeCount(BuildContext context) {
+    try {
+      final state = context.read<InvitationsBloc>().state;
+      if (state is InvitationsLoaded) return state.invitations.length;
+    } catch (_) {}
+    return 0;
+  }
+
   void _onMaplibreCameraChanged() {
     if (!mounted) return;
     _mapController.syncFromController();
@@ -2036,125 +2102,69 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
               ),
 
+            // Floating chrome — top-center "SHARING WITH N" pill.
             Positioned(
-              top: 100,
-              left: 16,
-              child: FloatingActionButton(
-                heroTag: "settingsBtn",
-                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => SettingsPage()),
-                  );
-                },
-                child: Icon(
-                    Icons.menu,
-                    color: isDarkMode ? colorScheme.primary : Colors.black
-                ),
-                mini: true,
+              top: 60,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Center(child: _buildSharingPill()),
               ),
             ),
 
+            // Right rail — search / notifications / settings.
             Positioned(
               right: 16,
               top: 100,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildCompassButton(isDarkMode, colorScheme),
-                  const SizedBox(height: 10),
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      FloatingActionButton(
-                        heroTag: "pingBtn",
-                        backgroundColor: _isPingOnCooldown
-                            ? Colors.grey
-                            : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                        onPressed: _isPingOnCooldown ? null : _sendPing,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            if (_isPingOnCooldown)
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  value: _pingCooldownSeconds / 5,
-                                  strokeWidth: 2,
-                                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                                  backgroundColor: isDarkMode ? colorScheme.surfaceVariant : Colors.grey.withOpacity(0.3),
-                                ),
-                              )
-                            else
-                              Icon(
-                                Icons.sensors,
-                                color: isDarkMode ? colorScheme.primary : Colors.black,
-                                size: 24,
-                              ),
-                            if (_isPingOnCooldown)
-                              Text(
-                                '$_pingCooldownSeconds',
-                                style: TextStyle(
-                                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                              ),
-                          ],
-                        ),
-                        mini: true,
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    GridNavIconButton(
+                      icon: Icons.search_rounded,
+                      onPressed: () {
+                        // TODO: surface a search affordance (contacts, places).
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    GridNavIconButton(
+                      icon: Icons.notifications_outlined,
+                      badgeCount: _invitesBadgeCount(context),
+                      onPressed: () {
+                        // Existing invites surface — keeps current navigation.
+                        context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    GridNavIconButton(
+                      icon: Icons.settings_outlined,
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SettingsPage()),
                       ),
-                    ],
-                  ),
-                  // Layer / map style picker — removed. Light/dark now auto from system.
-                  const SizedBox(height: 10),
-                  // Center on user button
-                  FloatingActionButton(
-                    heroTag: 'center_on_user_fab',
-                    backgroundColor: _followUser
-                      ? colorScheme.primary
-                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                    onPressed: () {
-                      final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
-                      if (target != null) {
-                        _mapController.move(target, 16.0);
-                      }
-                      setState(() {
-                        _followUser = true;
-                        _isAtResetView = false;
-                      });
-                    },
-                    child: Icon(
-                      Icons.my_location,
-                      color: _followUser
-                        ? Colors.white
-                        : (isDarkMode ? colorScheme.primary : Colors.black),
                     ),
-                    tooltip: 'Center on me',
-                    elevation: _followUser ? 6 : 2,
-                    mini: true,
-                  ),
-                  const SizedBox(height: 10),
-                  // Globe reset button
-                  FloatingActionButton(
-                    heroTag: 'reset_view_fab',
-                    backgroundColor: _isAtResetView
-                      ? colorScheme.primary
-                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                    onPressed: _resetToInitialZoom,
-                    child: Icon(
-                      Icons.public,
-                      color: _isAtResetView
-                        ? Colors.white
-                        : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
-                    tooltip: 'Reset view',
-                    elevation: _isAtResetView ? 6 : 2,
-                    mini: true,
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom-left center-on-me crosshair.
+            Positioned(
+              left: 16,
+              bottom: MediaQuery.of(context).size.height * 1 / 4 + 16,
+              child: GridNavIconButton(
+                icon: Icons.my_location_rounded,
+                onPressed: () {
+                  final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
+                  if (target != null) {
+                    _mapController.move(target, 16.0);
+                  }
+                  setState(() {
+                    _followUser = true;
+                    _isAtResetView = false;
+                  });
+                },
               ),
             ),
 
