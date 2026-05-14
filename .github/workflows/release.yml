@@ -69,7 +69,7 @@ jobs:
           MATRIX_SERVER_URL=https://matrix.mygrid.app
           GAUTH_URL=https://gauth.mygrid.app
           HOMESERVER=matrix.mygrid.app
-          MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
+          MAPS_URL=https://map.mygrid.app/v2/v2_protomaps_20260512.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
           EOF
 

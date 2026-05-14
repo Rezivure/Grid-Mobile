@@ -92,7 +92,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       
       // Initialize base map provider (still needed for fallback)
       if (_currentMapStyle == 'base') {
-        final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
+        final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v2/v2_protomaps_20260512.pmtiles';
         _mapTheme = ProtomapsThemes.light();
         _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
       }
