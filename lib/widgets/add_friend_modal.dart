@@ -152,7 +152,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
     
     var normalizedUserId = rawInput.toLowerCase();
-    
+
     // Check if this is from QR scan (already has @ prefix)
     if (_friendQrCodeScan != null && normalizedUserId.startsWith('@')) {
       // QR code contains full matrix ID
@@ -164,7 +164,12 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       }
       // For custom homeserver, use as-is
     } else {
-      // Manual input from text field
+      // Manual input from text field.
+      // Strip any leading '@' the user may have typed (the input field already
+      // shows '@' as a prefix, but copy-paste can introduce a duplicate).
+      if (normalizedUserId.startsWith('@')) {
+        normalizedUserId = normalizedUserId.substring(1);
+      }
       if (isCustomServer) {
         // For custom homeservers, expect full matrix ID without @ prefix
         // (since @ is already shown as prefix in the input field)
