@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:random_avatar/random_avatar.dart';
@@ -180,40 +182,43 @@ class _InvitesModalState extends State<InvitesModal> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                          Container(
-                            padding: EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface.withOpacity(0.5),
-                              shape: BoxShape.circle,
+                            Container(
+                              width: 88,
+                              height: 88,
+                              decoration: BoxDecoration(
+                                color: GridTokens.mintFaint,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: const Icon(
+                                Icons.mail_outline_rounded,
+                                color: GridTokens.mint,
+                                size: 40,
+                              ),
                             ),
-                            child: Icon(
-                              Icons.notifications_none,
-                              color: colorScheme.onSurface.withOpacity(0.4),
-                              size: 48,
+                            const SizedBox(height: 20),
+                            Text(
+                              'Inbox is quiet.',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.02,
+                                color: GridTokens.text,
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No notifications',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface.withOpacity(0.6),
+                            const SizedBox(height: 8),
+                            Text(
+                              'When someone wants to share their location with you, it\'ll land here first. You decide what happens next.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.5,
+                                color: GridTokens.text2,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Friend requests and group invites will appear here',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.onSurface.withOpacity(0.4),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  )
+                    )
                   : ListView.builder(
                       shrinkWrap: true,
                       padding: EdgeInsets.symmetric(horizontal: 16),

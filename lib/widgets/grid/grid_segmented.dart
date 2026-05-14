@@ -88,7 +88,7 @@ class _SegItem extends StatelessWidget {
               Text(
                 tab.label,
                 style: GoogleFonts.getFont(
-                  'Geist',
+                  'Inter',
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.01,

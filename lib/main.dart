@@ -353,7 +353,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
       ? ThemeData.dark(useMaterial3: true)
       : ThemeData.light(useMaterial3: true);
 
-  final textTheme = GoogleFonts.getTextTheme('Geist', base.textTheme).apply(
+  final textTheme = GoogleFonts.getTextTheme('Inter', base.textTheme).apply(
     bodyColor: scheme.onSurface,
     displayColor: scheme.onSurface,
   );
@@ -370,7 +370,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.getFont('Geist',
+      titleTextStyle: GoogleFonts.getFont('Inter',
         color: scheme.onSurface,
         fontSize: 17,
         fontWeight: FontWeight.w600,
@@ -399,7 +399,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont('Inter',
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
@@ -413,7 +413,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont('Inter',
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
@@ -422,7 +422,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: scheme.primary,
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont('Inter',
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
@@ -431,8 +431,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: scheme.surfaceVariant,
-      hintStyle: GoogleFonts.getFont('Geist',color: GridTokens.text3, fontSize: 15),
-      labelStyle: GoogleFonts.getFont('Geist',color: GridTokens.text2, fontSize: 13),
+      hintStyle: GoogleFonts.getFont('Inter',color: GridTokens.text3, fontSize: 15),
+      labelStyle: GoogleFonts.getFont('Inter',color: GridTokens.text2, fontSize: 13),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
         borderSide: BorderSide(color: scheme.outlineVariant),
@@ -448,7 +448,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: scheme.inverseSurface,
-      contentTextStyle: GoogleFonts.getFont('Geist',color: scheme.onInverseSurface),
+      contentTextStyle: GoogleFonts.getFont('Inter',color: scheme.onInverseSurface),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),

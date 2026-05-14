@@ -164,7 +164,7 @@ class GridAvatar extends StatelessWidget {
   Widget _fallbackInitial() => Text(
         _initial,
         style: TextStyle(
-          fontFamily: 'Geist',
+          fontFamily: 'Inter',
           color: Colors.white,
           fontWeight: FontWeight.w600,
           fontSize: size * 0.40,

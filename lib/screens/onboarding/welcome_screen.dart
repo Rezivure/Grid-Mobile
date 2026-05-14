@@ -340,10 +340,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         Text(
                           'Grid',
                           style: theme.textTheme.displaySmall?.copyWith(
-                            fontFamily: 'Goli',
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                             color: colorScheme.onSurface,
                             height: 1.0,
+                            letterSpacing: -0.03,
                           ),
                         ),
                         const SizedBox(height: 8),

@@ -4,7 +4,6 @@ import 'package:matrix/matrix.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/onboarding/splash_screen.dart';
 import '../screens/map/map_tab.dart';
-import '../screens/map/maplibre_test_screen.dart';
 
 class AppInitializer extends StatefulWidget {
   final Client client;
