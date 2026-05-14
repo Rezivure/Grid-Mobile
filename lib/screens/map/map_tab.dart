@@ -3,20 +3,19 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:vector_map_tiles/vector_map_tiles.dart';
-import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
-import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+
+import 'grid_map_style.dart';
+import 'maplibre_camera_facade.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
@@ -78,7 +77,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   static DateTime? _lastInitTime;
   bool _servicesInitialized = false;
   AppLifecycleState? _currentLifecycleState;
-  late MapController _mapController;
+  final MaplibreCameraFacade _mapController = MaplibreCameraFacade();
   LocationManager? _locationManager;
   RoomService? _roomService;
   UserService? _userService;
@@ -108,8 +107,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Track if user has completed onboarding (to avoid auto-requesting location permission)
   bool _hasCompletedOnboarding = false;
 
-  VectorTileProvider? _tileProvider;
-  late vector_renderer.Theme _mapTheme;
+  ml.MapLibreMapController? _mlController;
+  String? _styleJson;
+  bool _isDarkStyle = false;
+  final GlobalKey _mapKeyForSize = GlobalKey();
 
   // Bubble variables
   LatLng? _bubblePosition;
@@ -169,8 +170,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     super.initState();
     print('[MapTab] Initializing - hasInitialized: $_hasInitialized');
     WidgetsBinding.instance.addObserver(this);
-    _mapController = MapController();
-    
+    _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+
     // Check if app was properly initialized
     _checkAndInitialize().then((_) {
       // Only access _locationManager after initialization is complete
@@ -474,21 +475,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         lifecycleState == AppLifecycleState.inactive;
 
     if (wasLaunchedFromBackground) {
-      print('[MapTab] App launched from background/terminated state - forcing tile provider reinitialization');
-      // Clear tile provider first to ensure complete reinitialization
-      _tileProvider = null;
+      print('[MapTab] App launched from background/terminated state');
     }
 
     await _loadMapProvider();
 
-    // Only force rebuild if actually launched from background AND tile provider exists
-    if (wasLaunchedFromBackground && _tileProvider != null) {
-      // Single setState to trigger UI update after everything is loaded
-      if (mounted) {
-        setState(() {
-          print('[MapTab] UI refreshed after background launch');
-        });
-      }
+    if (wasLaunchedFromBackground && mounted) {
+      setState(() {
+        print('[MapTab] UI refreshed after background launch');
+      });
     }
   }
   
@@ -816,17 +811,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Normal resume handling for short pauses
     _syncManager?.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
-    // Refresh satellite token when app resumes if using satellite maps
-    if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
-      _refreshSatelliteTokenIfNeeded();
-    }
-    
     // Only reinitialize if app was paused for a significant time
     if (state == AppLifecycleState.resumed && _pausedTime != null) {
       final pauseDuration = DateTime.now().difference(_pausedTime!);
 
-      // Only rebuild if paused for more than 5 seconds (to handle background location wakes)
-      if (pauseDuration.inSeconds > 5 && _tileProvider != null) {
+      if (pauseDuration.inSeconds > 5) {
         print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - rebuilding map');
 
         // Single rebuild after short delay
@@ -870,44 +859,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     await backwardsService.runBackfillIfNeeded();
   }
 
-  Future<void> _refreshSatelliteTokenIfNeeded() async {
-    try {
-      // Check if still has subscription
-      final hasSubscription = await _subscriptionService.hasActiveSubscription();
-      if (!hasSubscription) {
-        // Subscription expired, revert to base maps
-        setState(() {
-          _currentMapStyle = 'base';
-          _satelliteMapToken = null;
-        });
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_mapStyleKey, 'base');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Subscription expired. Reverting to base maps.'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      
-      // Get a fresh token (will use cached if still valid)
-      final token = await _subscriptionService.getMapToken();
-      if (token != null && token != _satelliteMapToken) {
-        setState(() {
-          _satelliteMapToken = token;
-        });
-      }
-    } catch (e) {
-    }
-  }
+  // Satellite mode was deprecated when map style switched to system brightness.
+  // Kept as a no-op stub so any remaining callers compile.
+  Future<void> _refreshSatelliteTokenIfNeeded() async {}
 
   void _handleIconSelection(IconType iconType) async {
     if (_longPressLocation == null || _selectedGroupId == null) return;
@@ -1039,65 +993,28 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   Future<void> _loadMapProvider() async {
     try {
-      // Ensure dotenv is loaded before proceeding
+      // Ensure dotenv is loaded before proceeding.
       if (dotenv.env.isEmpty) {
         try {
           await dotenv.load(fileName: ".env");
-        } catch (e) {
-        }
+        } catch (e) {}
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
-
-      // Clear existing tile provider to force complete reinitialization
-      _tileProvider = null;
-
-      _mapTheme = ProtomapsThemes.light();
-      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
-
-      context.read<MapBloc>().add(MapInitialize());
-      setState(() {});
+      // Style JSON is reactively built per-build based on system brightness;
+      // nothing to pre-fetch here.
+      if (mounted) {
+        context.read<MapBloc>().add(MapInitialize());
+        setState(() {});
+      }
     } catch (e) {
       _showMapErrorDialog();
     }
   }
-  
+
   Future<void> _loadMapStylePreference() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedStyle = prefs.getString(_mapStyleKey) ?? 'base';
-
-      // Check if user has an active subscription before loading satellite maps
-      if (savedStyle == 'satellite') {
-        final hasSubscription = await _subscriptionService.hasActiveSubscription();
-        if (hasSubscription) {
-          // Try to get a map token (will use cached if valid)
-          final token = await _subscriptionService.getMapToken();
-          if (token != null) {
-            // Set satellite style without setState since we're in init
-            _currentMapStyle = 'satellite';
-            _satelliteMapToken = token;
-          } else {
-            // Failed to get token, revert to base maps
-            _currentMapStyle = 'base';
-            await prefs.setString(_mapStyleKey, 'base');
-          }
-        } else {
-          // No subscription, revert to base maps
-          _currentMapStyle = 'base';
-          await prefs.setString(_mapStyleKey, 'base');
-        }
-      } else {
-        _currentMapStyle = savedStyle;
-      }
-    } catch (e) {
-      // Default to base maps on error
-      _currentMapStyle = 'base';
-    }
-
-    // If still null somehow, default to base
-    _currentMapStyle ??= 'base';
+    // Map style is now driven by system brightness; user choice no longer
+    // persisted. Kept as a stub so existing call sites still resolve.
+    _currentMapStyle = 'base';
   }
 
   void _showMapErrorDialog() {
@@ -1373,7 +1290,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final colorScheme = theme.colorScheme;
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // Don't pre-calculate - let onMapReady handle it
+    // Keep map style in sync with system brightness.
+    if (isDarkMode != _isDarkStyle) {
+      _isDarkStyle = isDarkMode;
+      _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+      // Hot-swap the style on an already-running map.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mlController?.setStyle(_styleJson!);
+      });
+    }
 
     return BlocListener<MapBloc, MapState>(
       listenWhen: (previous, current) =>
@@ -1429,336 +1354,200 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               children: [
                 SizedBox(
                     height: MediaQuery.of(context).size.height * 3/4,
-                child: GestureDetector(
-                  onLongPressStart: (details) {
-                    print('[DEBUG] GestureDetector long press at: ${details.globalPosition}');
-                    
-                    // Convert screen position to lat/lng
-                    final renderBox = context.findRenderObject() as RenderBox?;
-                    if (renderBox != null && _mapController.camera.center != null) {
-                      final localPosition = renderBox.globalToLocal(details.globalPosition);
-                      
-                      // Check if we're in groups subscreen and have a selected group
-                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
-                      
-                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
-                      
-                      // Check if the subscreen starts with "group:" which means a group is selected
-                      if (selectedSubscreen.startsWith('group:')) {
-                        // Extract the group ID (remove "group:" prefix)
-                        final groupId = selectedSubscreen.substring(6);
-                        print('[DEBUG] Showing icon wheel for group: $groupId');
-                        
-                        // Show icon selection wheel
-                        setState(() {
-                          _showIconWheel = true;
-                          _iconWheelPosition = details.globalPosition;
-                          // For now, use map center as location (we'll improve this later)
-                          _longPressLocation = _mapController.camera.center;
-                          _selectedGroupId = groupId;
+                child: LayoutBuilder(builder: (context, constraints) {
+                  _mapController.setMapSize(Size(constraints.maxWidth, constraints.maxHeight));
+                  return Stack(children: [
+                  ml.MapLibreMap(
+                  key: _mapKey,
+                  styleString: _styleJson ?? buildGridMapStyle(dark: isDarkMode),
+                  initialCameraPosition: ml.CameraPosition(
+                    target: ml.LatLng(
+                      (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).latitude,
+                      (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).longitude,
+                    ),
+                    zoom: _zoom,
+                  ),
+                  myLocationEnabled: _hasCompletedOnboarding,
+                  myLocationTrackingMode: _followUser
+                      ? ml.MyLocationTrackingMode.tracking
+                      : ml.MyLocationTrackingMode.none,
+                  trackCameraPosition: true,
+                  minMaxZoomPreference: const ml.MinMaxZoomPreference(3.5, 17),
+                  rotateGesturesEnabled: true,
+                  tiltGesturesEnabled: false,
+                  attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+                  onMapCreated: (controller) {
+                    _mlController = controller;
+                    _mapController.attach(controller);
+                  },
+                  onStyleLoadedCallback: () {
+                    print('[SMART ZOOM] Style loaded — map ready');
+                    if (mounted) setState(() => _isMapReady = true);
+                    _mapController.syncFromController();
+
+                    if (!_initialZoomCalculated) {
+                      if (_locationManager?.currentLatLng == null) {
+                        _locationManager?.grabLocationAndPing().then((_) {
+                          if (_locationManager?.currentLatLng != null && mounted) {
+                            _zoom = 3.5;
+                            _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+
+                            final userLocations = context.read<MapBloc>().state.userLocations;
+                            if (userLocations.isNotEmpty) {
+                              final result = _calculateOptimalZoomAndCenter(
+                                _locationManager!.currentLatLng!,
+                                userLocations,
+                              );
+                              _zoom = result.zoom;
+                              _mapController.moveAndRotate(result.center, _zoom, 0);
+                            }
+                            setState(() => _initialZoomCalculated = true);
+                          }
                         });
                       } else {
-                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
+                        _zoom = 3.5;
+                        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+
+                        final userLocations = context.read<MapBloc>().state.userLocations;
+                        if (userLocations.isNotEmpty) {
+                          final result = _calculateOptimalZoomAndCenter(
+                            _locationManager!.currentLatLng!,
+                            userLocations,
+                          );
+                          _zoom = result.zoom;
+                          _mapController.moveAndRotate(result.center, _zoom, 0);
+                        }
+                        setState(() => _initialZoomCalculated = true);
                       }
                     }
                   },
-                  child: FlutterMap(
-                  key: _mapKey,
-                  mapController: _mapController,
-                  options: MapOptions(
-                    onTap: (tapPosition, latLng) async {
-                      // Check if we're in move mode
-                      if (_isMovingIcon && _movingIcon != null) {
-                        // Only allow moving if user created it
-                        if (_movingIcon!.creatorId != context.read<Client>().userID) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('You can only move icons you created'),
-                              backgroundColor: Theme.of(context).colorScheme.error,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                          setState(() {
-                            _isMovingIcon = false;
-                            _movingIcon = null;
-                            _selectedMapIcon = null;
-                            _selectedIconPosition = null;
-                          });
-                          return;
-                        }
-                        
-                        // Update the icon position
-                        final updatedIcon = MapIcon(
-                          id: _movingIcon!.id,
-                          roomId: _movingIcon!.roomId,
-                          creatorId: _movingIcon!.creatorId,
-                          latitude: latLng.latitude,
-                          longitude: latLng.longitude,
-                          iconType: _movingIcon!.iconType,
-                          iconData: _movingIcon!.iconData,
-                          name: _movingIcon!.name,
-                          description: _movingIcon!.description,
-                          createdAt: _movingIcon!.createdAt,
-                          expiresAt: _movingIcon!.expiresAt,
-                          metadata: _movingIcon!.metadata,
+                  onMapClick: (point, latLng) async {
+                    final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
+                    if (_isMovingIcon && _movingIcon != null) {
+                      if (_movingIcon!.creatorId != context.read<Client>().userID) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('You can only move icons you created'),
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            duration: const Duration(seconds: 2),
+                          ),
                         );
-                        
-                        await _mapIconRepository?.updateMapIcon(updatedIcon);
-                        
-                        // Send update to other users
-                        await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
-                        
-                        // Notify the BLoC about the update
-                        context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
-                        
                         setState(() {
-                          // Exit move mode
                           _isMovingIcon = false;
                           _movingIcon = null;
                           _selectedMapIcon = null;
                           _selectedIconPosition = null;
                         });
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Icon moved'),
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      } else {
-                        // Clear selection when tapping on map
-                        context.read<MapBloc>().add(MapClearSelection());
-                        // Also clear bubbles if shown
-                        setState(() {
-                          _bubblePosition = null;
-                          _selectedUserId = null;
-                          _selectedUserName = null;
-                          _selectedMapIcon = null;
-                          _selectedIconPosition = null;
-                          _showIconActionWheel = false;
-                          _iconActionWheelPosition = null;
-                        });
-                      }
-                    },
-                    onLongPress: (tapPosition, latLng) {
-                      print('[DEBUG] Long press detected at: $latLng');
-                      
-                      // Check if we're in groups subscreen and have a selected group
-                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
-                      
-                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
-                      
-                      // Check if the subscreen starts with "group:" which means a group is selected
-                      if (selectedSubscreen.startsWith('group:')) {
-                        // Extract the group ID (remove "group:" prefix)
-                        final groupId = selectedSubscreen.substring(6);
-                        print('[DEBUG] Showing icon wheel for group: $groupId');
-                        
-                        // Show icon selection wheel
-                        setState(() {
-                          _showIconWheel = true;
-                          _iconWheelPosition = Offset(tapPosition.global.dx, tapPosition.global.dy);
-                          _longPressLocation = latLng;
-                          _selectedGroupId = groupId;
-                        });
-                      } else {
-                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
-                      }
-                    },
-                    onPositionChanged: (position, hasGesture) {
-                      if (hasGesture && _followUser) {
-                        setState(() {
-                          _followUser = false;
-                        });
+                        return;
                       }
 
-                      // Track map rotation changes
-                      if (position.rotation != _currentMapRotation) {
-                        setState(() {
-                          _currentMapRotation = position.rotation ?? 0.0;
-                        });
-                      }
+                      final updatedIcon = MapIcon(
+                        id: _movingIcon!.id,
+                        roomId: _movingIcon!.roomId,
+                        creatorId: _movingIcon!.creatorId,
+                        latitude: dartLatLng.latitude,
+                        longitude: dartLatLng.longitude,
+                        iconType: _movingIcon!.iconType,
+                        iconData: _movingIcon!.iconData,
+                        name: _movingIcon!.name,
+                        description: _movingIcon!.description,
+                        createdAt: _movingIcon!.createdAt,
+                        expiresAt: _movingIcon!.expiresAt,
+                        metadata: _movingIcon!.metadata,
+                      );
 
-                      // Check if we've moved away from reset view (on ANY movement, not just gestures)
-                      if (_resetCenter != null && _resetZoom != null) {
-                        final distance = const Distance().as(
-                          LengthUnit.Meter,
-                          _resetCenter!,
-                          position.center!,
-                        );
+                      await _mapIconRepository?.updateMapIcon(updatedIcon);
+                      await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
+                      context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
 
-                        // Consider moved if more than 100m away or zoom changed by more than 0.5
-                        final zoomDiff = (position.zoom - _resetZoom!).abs();
-                        final hasMoved = distance > 100 || zoomDiff > 0.5;
-
-                        if (_isAtResetView && hasMoved) {
-                          setState(() {
-                            _isAtResetView = false;
-                          });
-                        }
-                      }
-                    },
-                    initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
-                    initialZoom: _zoom,
-                    initialRotation: 0.0,
-                    minZoom: 3.5, // Prevent zooming out too far (country level minimum)
-                    maxZoom: 17, // Prevent zooming in too close where tiles don't exist
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.all,
-                      enableMultiFingerGestureRace: true,
-                    ),
-                    // Add camera constraints to prevent panning beyond world bounds
-                    cameraConstraint: CameraConstraint.contain(
-                      bounds: LatLngBounds(
-                        const LatLng(-85, -180), // Southwest corner of the world
-                        const LatLng(85, 180),   // Northeast corner of the world
-                      ),
-                    ),
-                    onMapReady: () {
-                      print('[SMART ZOOM] Map is ready!');
-                      setState(() => _isMapReady = true);
-                      
-                      // Force tile loading by slightly moving the map
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        if (mounted && _mapController.camera.center != null) {
-                          // Tiny movement to trigger tile loading
-                          final currentCenter = _mapController.camera.center;
-                          _mapController.move(
-                            LatLng(
-                              currentCenter.latitude + 0.00001,
-                              currentCenter.longitude + 0.00001,
-                            ),
-                            _mapController.camera.zoom,
-                          );
-                          // Move back immediately
-                          _mapController.move(currentCenter, _mapController.camera.zoom);
-                        }
+                      setState(() {
+                        _isMovingIcon = false;
+                        _movingIcon = null;
+                        _selectedMapIcon = null;
+                        _selectedIconPosition = null;
                       });
-                      
-                      // Calculate optimal zoom when map is ready
-                      if (!_initialZoomCalculated) {
-                        // Try to get current position if we don't have it yet
-                        if (_locationManager?.currentLatLng == null) {
-                          print('[SMART ZOOM] No location yet, requesting current position...');
-                          _locationManager?.grabLocationAndPing().then((_) {
-                            print('[SMART ZOOM] Got location: ${_locationManager?.currentLatLng}');
-                            if (_locationManager?.currentLatLng != null && mounted) {
-                              // Immediately center on user's location first
-                              _zoom = 3.5; // Full country view for faster tile loading
-                              _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-                              
-                              // Then check if we have user locations from sync
-                              final mapBloc = context.read<MapBloc>();
-                              final userLocations = mapBloc.state.userLocations;
-                              if (userLocations.isNotEmpty) {
-                                // Recalculate with user locations
-                                final result = _calculateOptimalZoomAndCenter(
-                                  _locationManager!.currentLatLng!, 
-                                  userLocations
-                                );
-                                _zoom = result.zoom;
-                                print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
-                                _mapController.moveAndRotate(result.center, _zoom, 0);
-                              }
-                              setState(() {
-                                _initialZoomCalculated = true;
-                              });
-                            }
-                          });
-                        } else {
-                          // We already have location - immediately center on user
-                          print('[SMART ZOOM] Have location: ${_locationManager?.currentLatLng}');
-                          _zoom = 3.5; // Full country view for faster tile loading
-                          _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-                          
-                          // Then check if we have user locations from sync
-                          final mapBloc = context.read<MapBloc>();
-                          final userLocations = mapBloc.state.userLocations;
-                          if (userLocations.isNotEmpty) {
-                            // Recalculate with user locations
-                            final result = _calculateOptimalZoomAndCenter(
-                              _locationManager!.currentLatLng!, 
-                              userLocations
-                            );
-                            _zoom = result.zoom;
-                            print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
-                            _mapController.moveAndRotate(result.center, _zoom, 0);
-                          }
-                          setState(() {
-                            _initialZoomCalculated = true;
-                          });
-                        }
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Icon moved'),
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    } else {
+                      context.read<MapBloc>().add(MapClearSelection());
+                      setState(() {
+                        _bubblePosition = null;
+                        _selectedUserId = null;
+                        _selectedUserName = null;
+                        _selectedMapIcon = null;
+                        _selectedIconPosition = null;
+                        _showIconActionWheel = false;
+                        _iconActionWheelPosition = null;
+                      });
+                    }
+                  },
+                  onMapLongClick: (point, latLng) {
+                    final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
+                    final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+                    if (selectedSubscreen.startsWith('group:')) {
+                      final groupId = selectedSubscreen.substring(6);
+                      setState(() {
+                        _showIconWheel = true;
+                        _iconWheelPosition = Offset(point.x.toDouble(), point.y.toDouble());
+                        _longPressLocation = dartLatLng;
+                        _selectedGroupId = groupId;
+                      });
+                    }
+                  },
+                  onCameraIdle: () {
+                    _mapController.syncFromController();
+                    final cam = _mapController.camera;
+                    if (cam.center == null) return;
+                    if (cam.bearing != _currentMapRotation) {
+                      setState(() => _currentMapRotation = cam.bearing);
+                    }
+                    if (_resetCenter != null && _resetZoom != null) {
+                      final distance = const Distance().as(
+                        LengthUnit.Meter,
+                        _resetCenter!,
+                        cam.center!,
+                      );
+                      final zoomDiff = (cam.zoom - _resetZoom!).abs();
+                      if (_isAtResetView && (distance > 100 || zoomDiff > 0.5)) {
+                        setState(() => _isAtResetView = false);
                       }
-                    },
-                  ),
-              children: [
-                // Show a subtle gray placeholder while tiles are loading or style not yet determined
-                // This gives instant visual feedback like Google Maps
-                if (_currentMapStyle == null || _tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
-                  Container(
-                    color: isDarkMode
-                      ? const Color(0xFF2C2C2C)  // Slightly lighter dark gray for visibility
-                      : const Color(0xFFE8E8E8), // Light gray for light mode
-                  ),
-                // Regular map tiles
-                if (_currentMapStyle == 'base' && _tileProvider != null)
-                  VectorTileLayer(
-                    theme: _mapTheme,
-                    tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                    fileCacheTtl: const Duration(days: 14),
-                    memoryTileDataCacheMaxSize: 80,
-                    memoryTileCacheMaxSize: 100,
-                    concurrency: 5,
-                  )
-                else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
-                  TileLayer(
-                    urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
-                    tileProvider: NetworkTileProvider(
-                      headers: {
-                        'Authorization': 'Bearer $_satelliteMapToken',
-                      },
-                    ),
-                    maxZoom: 20,
-                    maxNativeZoom: 20,
-                    tileSize: 256,
-                    errorTileCallback: (tile, error, stack) {
-                      // Handle 401/403 errors indicating token issues
-                      if (error.toString().contains('401') || error.toString().contains('403')) {
-                        print('Satellite tile auth error: $error');
-                        // Refresh token on next frame to avoid setState during build
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _refreshSatelliteTokenIfNeeded();
-                        });
-                      }
-                    },
-                  ),
-                // Only show CurrentLocationLayer AFTER onboarding (it auto-requests permissions)
-                if (_hasCompletedOnboarding)
-                  CurrentLocationLayer(
-                    alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
-                    style: const LocationMarkerStyle(),
-                  ),
+                    }
+                    // force refresh of marker overlay positions
+                    if (mounted) setState(() {});
+                  },
+                  onCameraTrackingDismissed: () {
+                    if (_followUser) setState(() => _followUser = false);
+                  },
+                ),
+                // User-location markers (Stack overlay).
                 BlocBuilder<MapBloc, MapState>(
-                  buildWhen: (previous, current) => 
+                  buildWhen: (previous, current) =>
                       previous.userLocations != current.userLocations ||
                       previous.selectedUserId != current.selectedUserId,
                   builder: (context, state) {
-                    return MarkerLayer(
-                      markers: state.userLocations.map((userLocation) =>
-                          Marker(
-                            width: 100.0,
-                            height: 100.0,
-                            point: userLocation.position,
+                    if (!_isMapReady) return const SizedBox.shrink();
+                    return IgnorePointer(
+                      ignoring: false,
+                      child: Stack(
+                        children: state.userLocations.map((userLocation) {
+                          final pt = _mapController.camera.latLngToScreenPoint(userLocation.position);
+                          return Positioned(
+                            left: pt.dx - 50,
+                            top: pt.dy - 50,
+                            width: 100,
+                            height: 100,
                             child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
                               onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
                               child: UserMapMarker(
                                 userId: userLocation.userId,
@@ -1766,75 +1555,77 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 timestamp: userLocation.timestamp,
                               ),
                             ),
-                          )
-                      ).toList(),
+                          );
+                        }).toList(),
+                      ),
                     );
                   },
                 ),
-                // Map icons layer
+                // Map-icons overlay.
                 BlocBuilder<MapIconsBloc, MapIconsState>(
                   builder: (context, mapIconsState) {
-                    return MarkerLayer(
-                      markers: mapIconsState.filteredIcons.map((icon) =>
-                        Marker(
-                          width: 50.0,
-                          height: 50.0,
-                          point: icon.position,
-                          child: GestureDetector(
-                            onTap: () {
-                              // Show icon action wheel
-                              setState(() {
-                                _selectedMapIcon = icon;
-                                _selectedIconPosition = icon.position;
-                                _showIconActionWheel = true;
-                                // Calculate screen position for the wheel
-                                final renderBox = context.findRenderObject() as RenderBox;
-                                final screenPoint = _mapController.camera.latLngToScreenPoint(icon.position);
-                                _iconActionWheelPosition = Offset(screenPoint.x, screenPoint.y);
-                                // Clear user selection when selecting an icon
-                                _bubblePosition = null;
-                                _selectedUserId = null;
-                                _selectedUserName = null;
-                              });
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
+                    if (!_isMapReady) return const SizedBox.shrink();
+                    return IgnorePointer(
+                      ignoring: false,
+                      child: Stack(
+                        children: mapIconsState.filteredIcons.map((icon) {
+                          final pt = _mapController.camera.latLngToScreenPoint(icon.position);
+                          return Positioned(
+                            left: pt.dx - 25,
+                            top: pt.dy - 25,
+                            width: 50,
+                            height: 50,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: () {
+                                setState(() {
+                                  _selectedMapIcon = icon;
+                                  _selectedIconPosition = icon.position;
+                                  _showIconActionWheel = true;
+                                  _iconActionWheelPosition = Offset(pt.dx, pt.dy);
+                                  _bubblePosition = null;
+                                  _selectedUserId = null;
+                                  _selectedUserName = null;
+                                });
+                              },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surface,
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                                padding: const EdgeInsets.all(8),
-                                child: Icon(
-                                  _getIconDataForType(icon.iconData),
-                                  size: 24,
-                                  color: Theme.of(context).colorScheme.primary,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    _getIconDataForType(icon.iconData),
+                                    size: 24,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        )
-                      ).toList(),
+                          );
+                        }).toList(),
+                      ),
                     );
                   },
                 ),
-              ],
-            ),
-            )),  // Close GestureDetector and SizedBox
+              ]);
+            })),  // close Stack, LayoutBuilder builder, LayoutBuilder, SizedBox
 
             if (_bubblePosition != null && _selectedUserId != null)
               UserInfoBubble(
@@ -2254,24 +2045,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ),
                     ],
                   ),
-                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? '')) ...[
-                    const SizedBox(height: 10),
-                    FloatingActionButton(
-                      heroTag: "mapSelectorBtn",
-                      backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                      onPressed: () {
-                        setState(() {
-                          _showMapSelector = !_showMapSelector;
-                        });
-                      },
-                      child: Icon(
-                        Icons.layers,
-                        color: isDarkMode ? colorScheme.primary : Colors.black,
-                        size: 24,
-                      ),
-                      mini: true,
-                    ),
-                  ],
+                  // Layer / map style picker — removed. Light/dark now auto from system.
                   const SizedBox(height: 10),
                   // Center on user button
                   FloatingActionButton(
@@ -2280,11 +2054,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ? colorScheme.primary
                       : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
                     onPressed: () {
-                      // Center on user with same zoom level as other users
-                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
+                      final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
+                      if (target != null) {
+                        _mapController.move(target, 16.0);
+                      }
                       setState(() {
                         _followUser = true;
-                        _isAtResetView = false;  // Unhighlight globe when centering on user
+                        _isAtResetView = false;
                       });
                     },
                     child: Icon(
@@ -2319,14 +2095,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
             ),
 
-            // Map Selector Overlay (only for default homeserver)
-            if (_showMapSelector && !utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
-              Positioned(
-                top: 300,
-                right: 16,
-                child: _buildMapSelector(isDarkMode, colorScheme),
-              ),
-              
+            // Map Selector Overlay — removed (theme follows system brightness now).
+
+
             Align(
               alignment: Alignment.bottomCenter,
               child: MapScrollWindow(
@@ -2383,12 +2154,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
     return GestureDetector(
       onTap: () {
-        // Orient north when tapped
-        _mapController.moveAndRotate(
-          _mapController.camera.center,
-          _mapController.camera.zoom,
-          0, // Set rotation to 0 (north)
-        );
+        // Orient north when tapped.
+        final center = _mapController.camera.center;
+        if (center != null) {
+          _mapController.moveAndRotate(
+            center,
+            _mapController.camera.zoom,
+            0,
+          );
+        }
         setState(() {
           _currentMapRotation = 0.0;
         });
@@ -2487,309 +2261,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     );
   }
   
-  Widget _buildMapSelector(bool isDarkMode, ColorScheme colorScheme) {
-    return Container(
-      width: 220,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header with title and close button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Map Layers',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showMapSelector = false;
-                  });
-                },
-                child: Container(
-                  padding: EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    size: 18,
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 12),
-
-          // Loading overlay if switching maps
-          if (_isLoadingMapStyle)
-            Container(
-              height: 120,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                      strokeWidth: 2,
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Loading map...',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else ...[
-            // Base Map Option
-            _buildMapOption(
-              title: 'Standard Map',
-              imagePath: 'assets/extras/basemaps.png',
-              isSelected: _currentMapStyle == 'base',
-              onTap: _isLoadingMapStyle ? null : () {
-                _selectMapStyle('base');
-              },
-              colorScheme: colorScheme,
-              isDarkMode: isDarkMode,
-            ),
-            // Satellite Map hidden while the sat-tile provider is offline.
-            // Re-enable by removing the `if (false)` guard once available.
-            if (false) ...[
-              SizedBox(height: 8),
-              _buildMapOption(
-                title: 'Satellite Map',
-                imagePath: 'assets/extras/satellite.png',
-                isSelected: _currentMapStyle == 'satellite',
-                showStar: true,
-                onTap: _isLoadingMapStyle ? null : () async {
-                  final hasSubscription = await _subscriptionService.hasActiveSubscription();
-                  if (!hasSubscription) {
-                    // Navigate to subscription page
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                    );
-                  } else {
-                    _selectMapStyle('satellite');
-                  }
-                },
-                colorScheme: colorScheme,
-                isDarkMode: isDarkMode,
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildMapOption({
-    required String title,
-    required String imagePath,
-    required bool isSelected,
-    required VoidCallback? onTap,
-    required ColorScheme colorScheme,
-    required bool isDarkMode,
-    bool showStar = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 180, // Fixed width for consistent alignment
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? colorScheme.primary.withOpacity(0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected 
-                ? colorScheme.primary 
-                : colorScheme.outline.withOpacity(0.2),
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Map preview image
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.outline.withOpacity(0.2),
-                  width: 1,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: Image.asset(
-                  imagePath,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected 
-                      ? colorScheme.primary 
-                      : (isDarkMode ? Colors.white : Colors.black),
-                ),
-              ),
-            ),
-            if (showStar)
-              Icon(
-                Icons.star,
-                color: Colors.amber,
-                size: 16,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Future<void> _selectMapStyle(String style) async {
-    // Don't allow switching if already loading
-    if (_isLoadingMapStyle) return;
-
-    // Don't switch if already on the selected style
-    if (_currentMapStyle == style) return;
-
-    setState(() {
-      _isLoadingMapStyle = true;
-    });
-
-    try {
-      if (style == 'satellite') {
-        // Check subscription and get token
-        final hasSubscription = await _subscriptionService.hasActiveSubscription();
-        if (!hasSubscription) {
-          setState(() {
-            _isLoadingMapStyle = false;
-          });
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-          );
-          return;
-        }
-
-        // Try to get a map token (will use cached if valid)
-        final token = await _subscriptionService.getMapToken();
-        if (token == null) {
-          setState(() {
-            _isLoadingMapStyle = false;
-          });
-          // Failed to get token, navigate to subscription page
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-        );
-        return;
-      }
-      
-      // Switch to satellite tile provider with token
-      print('Got satellite map token: ${token.substring(0, 20)}...'); // Debug log
-      print('Full token length: ${token.length}'); // Debug log
-      setState(() {
-        _satelliteMapToken = token;
-        _currentMapStyle = style;
-        _showMapSelector = false;
-        _isLoadingMapStyle = false;
-      });
-      
-      // Save the preference
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_mapStyleKey, style);
-      
-      // Force a rebuild to ensure new token is used
-      if (mounted) {
-        setState(() {});
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Switched to satellite maps'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    } else {
-      // Switch to base maps
-      setState(() {
-        _currentMapStyle = style;
-        _showMapSelector = false;
-        _satelliteMapToken = null; // Clear token when switching back
-        _isLoadingMapStyle = false;
-      });
-      
-      // Save the preference
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_mapStyleKey, style);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Switched to base maps'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-    } catch (e) {
-      // Handle any errors and reset loading state
-      print('Error switching map style: $e');
-      setState(() {
-        _isLoadingMapStyle = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to switch map layer'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-  }
 }
 
 class CompassPainter extends CustomPainter {

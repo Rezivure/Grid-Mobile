@@ -10,6 +10,7 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   flutter_map: ^7.0.2
+  maplibre_gl: ^0.26.0
   timeago: ^3.1.0
   latlong2: ^0.9.1
   flutter_map_marker_popup: ^7.0.0

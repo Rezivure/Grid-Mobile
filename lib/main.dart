@@ -39,6 +39,7 @@ import 'widgets/app_initializer.dart';
 import 'screens/onboarding/login_screen.dart';
 import 'screens/onboarding/signup_screen.dart';
 import 'screens/map/map_tab.dart';
+import 'screens/map/maplibre_test_screen.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
@@ -358,6 +359,7 @@ void main() async {
             '/login': (context) => LoginScreen(),
             '/signup': (context) => SignUpScreen(),
             '/main': (context) => const MapTab(),
+            '/main-maplibre-debug': (context) => const MaplibreTestScreen(),
             '/migration': (context) => Scaffold(
               body: Center(
                 child: MigrationModal(),
