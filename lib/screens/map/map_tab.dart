@@ -112,6 +112,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _isDarkStyle = false;
   final GlobalKey _mapKeyForSize = GlobalKey();
 
+  // Authoritative screen positions for every marker, sourced from maplibre's
+  // own projection. Keyed by "lat,lng". Values are screen-pixel offsets
+  // relative to the map widget's top-left. Refreshed every camera tick.
+  final Map<String, Offset> _markerScreenPositions = {};
+  int _projectionSeq = 0;
+
   // Bubble variables
   LatLng? _bubblePosition;
   String? _selectedUserId;
@@ -1269,7 +1275,54 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Re-position the marker overlay widgets to stay glued to the map
     // during pan/zoom gestures (not just on idle).
     setState(() {});
+    _refreshMarkerScreenPositions();
   }
+
+  String _latLngKey(LatLng p) => '${p.latitude},${p.longitude}';
+
+  /// Ask maplibre for the authoritative screen position of every marker we
+  /// render. Uses the controller's batch API (one round-trip across the
+  /// platform channel for all markers). Stale results from concurrent calls
+  /// are ignored via [_projectionSeq].
+  Future<void> _refreshMarkerScreenPositions() async {
+    final controller = _mlController;
+    if (controller == null || !mounted) return;
+
+    final userLocations = context.read<MapBloc>().state.userLocations;
+    final mapIcons = context.read<MapIconsBloc>().state.filteredIcons;
+    if (userLocations.isEmpty && mapIcons.isEmpty) return;
+
+    // Collect all distinct LatLngs and remember the matching keys in order.
+    final List<ml.LatLng> mlPoints = [];
+    final List<String> keys = [];
+    for (final u in userLocations) {
+      mlPoints.add(ml.LatLng(u.position.latitude, u.position.longitude));
+      keys.add(_latLngKey(u.position));
+    }
+    for (final i in mapIcons) {
+      mlPoints.add(ml.LatLng(i.position.latitude, i.position.longitude));
+      keys.add(_latLngKey(i.position));
+    }
+
+    final seq = ++_projectionSeq;
+    try {
+      final screenPoints = await controller.toScreenLocationBatch(mlPoints);
+      // Ignore stale responses — camera may have moved past us.
+      if (!mounted || seq != _projectionSeq) return;
+      for (var idx = 0; idx < keys.length && idx < screenPoints.length; idx++) {
+        final p = screenPoints[idx];
+        _markerScreenPositions[keys[idx]] =
+            Offset(p.x.toDouble(), p.y.toDouble());
+      }
+      setState(() {});
+    } catch (_) {
+      // toScreenLocation can race with map teardown — swallow.
+    }
+  }
+
+  Offset _screenPosFor(LatLng p) =>
+      _markerScreenPositions[_latLngKey(p)] ??
+      _mapController.camera.latLngToScreenPoint(p);
 
   void _onMarkerTap(String userId, LatLng position) async {
     // Update map state with selected user
@@ -1550,7 +1603,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ignoring: false,
                       child: Stack(
                         children: state.userLocations.map((userLocation) {
-                          final pt = _mapController.camera.latLngToScreenPoint(userLocation.position);
+                          final pt = _screenPosFor(userLocation.position);
                           return Positioned(
                             left: pt.dx - 50,
                             top: pt.dy - 50,
@@ -1579,7 +1632,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ignoring: false,
                       child: Stack(
                         children: mapIconsState.filteredIcons.map((icon) {
-                          final pt = _mapController.camera.latLngToScreenPoint(icon.position);
+                          final pt = _screenPosFor(icon.position);
                           return Positioned(
                             left: pt.dx - 25,
                             top: pt.dy - 25,

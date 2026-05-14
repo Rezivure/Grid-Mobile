@@ -116,7 +116,10 @@ class CameraSnapshot {
     final c = center;
     if (c == null || mapSize == Size.zero) return Offset.zero;
     // Web Mercator projection at the current zoom & center.
-    final scale = math.pow(2, zoom).toDouble() * 256.0; // pixels per world
+    // maplibre-native uses a 512px tile size for vector tiles; the world is
+    // 512 * 2^zoom pixels across. Using 256 here was half-scale and caused
+    // overlay markers to drift behind the map at low zoom.
+    final scale = math.pow(2, zoom).toDouble() * 512.0;
     Offset project(LatLng p) {
       final x = (p.longitude + 180) / 360;
       final sinLat = math.sin(p.latitude * math.pi / 180);
