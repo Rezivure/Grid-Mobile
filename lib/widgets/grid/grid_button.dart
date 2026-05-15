@@ -80,7 +80,7 @@ class GridButton extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.getFont(
-                  'Inter',
+                  'Geist',
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.01,
@@ -162,7 +162,7 @@ class GridNavIconButton extends StatelessWidget {
             child: Text(
               '$badgeCount',
               style: GoogleFonts.getFont(
-                'Inter',
+                'Geist',
                 color: Colors.black,
                 fontWeight: FontWeight.w700,
                 fontSize: 10,

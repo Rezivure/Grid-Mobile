@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'dart:math';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 class WelcomeScreen extends StatefulWidget {
   @override
@@ -281,182 +286,369 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: <Widget>[
-                const SizedBox(height: 20),
-                
-                // Modern Logo Section
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: _buildModernLogo(),
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              // 8-avatar constellation hero.
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: const _AvatarConstellation(),
                 ),
-                
-                const SizedBox(height: 15),
-                
-                // Avatar Network
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: _buildModernAvatarNetwork(),
+              ),
+              const Spacer(flex: 2),
+              // E2E ENCRYPTED · OPEN SOURCE chip
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: GridTokens.mintFaint,
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                ),
-                
-                const SizedBox(height: 30),
-                
-                // Welcome Text Section
-                SlideTransition(
-                  position: _slideAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            'WELCOME TO',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.primary,
-                              letterSpacing: 1.0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: GridTokens.mint,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: GridTokens.mint.withOpacity(0.6),
+                              blurRadius: 6,
                             ),
-                          ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Grid',
-                          style: theme.textTheme.displaySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface,
-                            height: 1.0,
-                            letterSpacing: -0.03,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Connect with friends and share your location\nsecurely in real-time',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurface.withOpacity(0.7),
-                            height: 1.4,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 40),
-                
-                // Action Buttons
-                SlideTransition(
-                  position: _slideAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        _buildModernButton(
-                          text: 'Get Started',
-                          onPressed: () {
-                            Navigator.pushNamed(context, '/server_select');
-                          },
-                          isPrimary: true,
-                          colorScheme: colorScheme,
-                          icon: Icons.arrow_forward,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildModernButton(
-                          text: 'Custom Provider',
-                          onPressed: () {
-                            Navigator.pushNamed(context, '/login');
-                          },
-                          isPrimary: false,
-                          colorScheme: colorScheme,
-                          icon: Icons.settings,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 30),
-                
-                // Terms and Privacy
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceVariant.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.1),
-                        width: 1,
                       ),
+                      const SizedBox(width: 6),
+                      const GridMono(
+                        'E2E ENCRYPTED · OPEN SOURCE',
+                        color: GridTokens.mint,
+                        size: 10,
+                        letterSpacing: 0.08,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Text(
+                  'Be hard to track.',
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 36,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.03,
+                    color: GridTokens.text,
+                    height: 1.05,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: SizedBox(
+                  width: 300,
+                  child: Text(
+                    'Share your location only with the people you choose — encrypted, on your own infrastructure if you want.',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
                     ),
-                    child: Text.rich(
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              const Spacer(flex: 3),
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: Column(
+                    children: [
+                      GridButton(
+                        label: 'Get started',
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/server_select'),
+                      ),
+                      const SizedBox(height: 8),
+                      GridButton(
+                        label: 'I already have an account',
+                        style: GridButtonStyle.ghost,
+                        onPressed: () {
+                          // The same multi-step screen handles both flows;
+                          // the login-flow flag is set inside.
+                          Navigator.pushNamed(
+                            context,
+                            '/server_select',
+                            arguments: {'isLoginFlow': true},
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    Text.rich(
                       TextSpan(
-                        text: 'By continuing, you agree to our ',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                          height: 1.3,
+                        text: 'By continuing you agree to our ',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 11.5,
+                          color: GridTokens.text3,
                         ),
-                        children: <TextSpan>[
+                        children: [
                           TextSpan(
-                            text: 'Privacy Policy',
+                            text: 'Terms & Privacy',
                             style: TextStyle(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.w500,
+                              color: GridTokens.text2,
                               decoration: TextDecoration.underline,
                             ),
                             recognizer: TapGestureRecognizer()
-                              ..onTap = () {
-                                _launchUrl('https://mygrid.app/privacy');
-                              },
-                          ),
-                          const TextSpan(text: ' and '),
-                          TextSpan(
-                            text: 'Terms of Service',
-                            style: TextStyle(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.w500,
-                              decoration: TextDecoration.underline,
-                            ),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = () {
-                                _launchUrl('https://mygrid.app/terms');
-                              },
+                              ..onTap =
+                                  () => _launchUrl('https://mygrid.app/privacy'),
                           ),
                           const TextSpan(text: '.'),
                         ],
                       ),
                       textAlign: TextAlign.center,
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/login'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: GridTokens.mint,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.link_rounded, size: 14, color: GridTokens.mint),
+                          SizedBox(width: 4),
+                          Text(
+                            'Use a custom server',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: GridTokens.mint,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                
-                const SizedBox(height: 20),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+/// 8-avatar constellation rendered in a fixed-size canvas.
+/// Avatar colors are drawn from a deterministic palette so it always reads
+/// as the same image across launches.
+class _AvatarConstellation extends StatelessWidget {
+  const _AvatarConstellation();
+
+  static const _palette = <List<Color>>[
+    [Color(0xFF7DD181), Color(0xFF2F6B33)], // A — green
+    [Color(0xFF00DBA4), Color(0xFF0F7B5E)], // M — mint
+    [Color(0xFFF5B947), Color(0xFF8A5E15)], // D — amber
+    [Color(0xFFFF8E72), Color(0xFF8A3F2A)], // K — coral
+    [Color(0xFFB79EFF), Color(0xFF5B4690)], // J — purple
+    [Color(0xFF6DD3F5), Color(0xFF1F6E8F)], // S — sky
+    [Color(0xFFE879C1), Color(0xFF7B2E60)], // R — pink
+    [Color(0xFF9DC3FF), Color(0xFF34619D)], // Y — blue
+  ];
+  static const _letters = ['A', 'M', 'D', 'K', 'J', 'S', 'R', 'Y'];
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 280.0;
+    const r = 95.0;
+    const avatarSize = 44.0;
+
+    final positions = <Offset>[];
+    for (var i = 0; i < 8; i++) {
+      final angle = (i * 2 * pi / 8) - pi / 2;
+      positions.add(Offset(
+        size / 2 + r * cos(angle),
+        size / 2 + r * sin(angle),
+      ));
+    }
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CustomPaint(
+            size: const Size(size, size),
+            painter: _ConstellationLines(positions: positions),
+          ),
+          // Outer dashed ring
+          Center(
+            child: Container(
+              width: 246,
+              height: 246,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: GridTokens.mint.withOpacity(0.18),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          // Inner solid ring
+          Center(
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: GridTokens.mint.withOpacity(0.22),
+                  width: 1,
+                ),
+              ),
+            ),
+          ),
+          // Center Grid mark
+          Center(
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: GridTokens.mintFaint,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: GridTokens.mint.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: const BoxDecoration(
+                  color: GridTokens.mint,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+          // Avatars
+          for (var i = 0; i < positions.length; i++)
+            Positioned(
+              left: positions[i].dx - avatarSize / 2,
+              top: positions[i].dy - avatarSize / 2,
+              child: _ConstellationAvatar(
+                letter: _letters[i],
+                palette: _palette[i],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConstellationAvatar extends StatelessWidget {
+  const _ConstellationAvatar({required this.letter, required this.palette});
+
+  final String letter;
+  final List<Color> palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          center: const Alignment(-0.4, -0.5),
+          radius: 0.95,
+          colors: palette,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: GridTokens.bg, width: 2),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: GoogleFonts.getFont(
+          'Geist',
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 17,
+        ),
+      ),
+    );
+  }
+}
+
+class _ConstellationLines extends CustomPainter {
+  _ConstellationLines({required this.positions});
+  final List<Offset> positions;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final connector = Paint()
+      ..color = GridTokens.mint.withOpacity(0.18)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (var i = 0; i < positions.length; i++) {
+      final j = (i + 1) % positions.length;
+      canvas.drawLine(positions[i], positions[j], connector);
+    }
+    final cross = Paint()
+      ..color = GridTokens.mint.withOpacity(0.10)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    for (var i = 0; i < positions.length; i += 2) {
+      final j = (i + 4) % positions.length;
+      canvas.drawLine(positions[i], positions[j], cross);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConstellationLines old) =>
+      old.positions != positions;
 }
 
 class CircularLinesPainter extends CustomPainter {

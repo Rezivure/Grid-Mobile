@@ -79,7 +79,7 @@ class GridContactRow extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.getFont(
-                              'Inter',
+                              'Geist',
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.01,
@@ -103,7 +103,7 @@ class GridContactRow extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.getFont(
-                                'Inter',
+                                'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
                                 color: GridTokens.text2,

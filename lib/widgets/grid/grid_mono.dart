@@ -38,7 +38,7 @@ class GridMono extends StatelessWidget {
       maxLines: maxLines,
       overflow: overflow,
       style: GoogleFonts.getFont(
-        'JetBrains Mono',
+        'Geist Mono',
         fontSize: size,
         fontWeight: weight,
         letterSpacing: letterSpacing,

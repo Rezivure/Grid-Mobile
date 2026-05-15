@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:random_avatar/random_avatar.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
@@ -226,71 +231,35 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     bool isLoading = false,
     IconData? icon,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isEnabled = onPressed != null && !isLoading;
-    
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isPrimary && isEnabled ? [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
-      ),
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5))
-              : Colors.transparent,
-          foregroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-              : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: isPrimary ? BorderSide.none : BorderSide(
-              color: isEnabled 
-                  ? colorScheme.outline.withOpacity(0.2)
-                  : colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
+    if (isLoading) {
+      return Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? GridTokens.mint.withOpacity(0.55)
+              : GridTokens.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: isPrimary
+              ? null
+              : Border.all(color: GridTokens.hairlineStrong),
+        ),
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            color: isPrimary ? Colors.black : GridTokens.mint,
+            strokeWidth: 2,
           ),
         ),
-        child: isLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 20),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isPrimary 
-                          ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-                          : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-                    ),
-                  ),
-                ],
-              ),
-      ),
+      );
+    }
+    return GridButton(
+      label: text,
+      onPressed: onPressed,
+      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
+      icon: icon,
     );
   }
 
@@ -299,46 +268,41 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     required String subtitle,
     Widget? illustration,
   }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
     return Column(
       children: [
         if (illustration != null) ...[
           illustration,
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
         ],
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} OF ${_isLoginFlow ? 3 : 1}',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.primary,
-              letterSpacing: 1.0,
-            ),
-          ),
+        // Step counter — mono uppercase
+        GridMono(
+          'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} / ${_isLoginFlow ? 3 : 1}',
+          color: GridTokens.mint,
+          size: 10.5,
+          letterSpacing: 0.12,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
           title,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: colorScheme.onSurface,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 28,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.025,
+            color: GridTokens.text,
+            height: 1.1,
           ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           subtitle,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colorScheme.onSurface.withOpacity(0.7),
-            height: 1.4,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: GridTokens.text2,
+            height: 1.45,
           ),
           textAlign: TextAlign.center,
         ),
