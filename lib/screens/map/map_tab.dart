@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -1732,7 +1733,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
                   TileLayer(
                     urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
-                    tileProvider: NetworkTileProvider(
+                    tileProvider: CancellableTileProvider(
                       headers: {
                         'Authorization': 'Bearer $_satelliteMapToken',
                       },
