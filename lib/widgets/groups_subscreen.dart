@@ -1,152 +1,314 @@
 // lib/widgets/groups_subscreen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_event.dart';
+import 'package:grid_frontend/blocs/groups/groups_state.dart';
+import 'package:grid_frontend/models/room.dart' as gr;
 import 'package:grid_frontend/styles/tokens.dart';
-import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
-import 'package:grid_frontend/widgets/group_info_subscreen.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 
+/// Bottom-sheet body that lists the user's real groups (driven by
+/// `GroupsBloc`) using the Grid redesign card pattern.
+///
+/// Selecting a group hands the `Room` up to the parent scroll window via
+/// [onGroupSelected]; the parent owns navigation to `GroupDetailsSubscreen`.
 class GroupsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
+  final void Function(gr.Room room)? onGroupSelected;
 
-  GroupsSubscreen({required this.scrollController});
+  const GroupsSubscreen({
+    super.key,
+    required this.scrollController,
+    this.onGroupSelected,
+  });
 
   @override
-  _GroupsSubscreenState createState() => _GroupsSubscreenState();
+  State<GroupsSubscreen> createState() => _GroupsSubscreenState();
 }
 
 class _GroupsSubscreenState extends State<GroupsSubscreen> {
-  bool _showGroupDetail = false;
-  String _selectedGroupName = '';
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
 
-  // Placeholder group data shaping the redesigned list. The item count and
-  // tap handler stay wired to the original `_showGroupDetail` flow so the
-  // existing navigation logic into `GroupInfoSubscreen` is preserved.
-  static const List<_GroupCardModel> _groups = [
-    _GroupCardModel(
-      name: 'Climbing crew',
-      memberNames: ['Anya', 'Marcus', 'Devon', 'Jules'],
-      memberCount: 4,
-      place: 'Index, WA',
-      liveCount: 3,
-      timerLabel: 'ends in 3h 12m',
-      featured: true,
-    ),
-    _GroupCardModel(
-      name: 'Roomies',
-      memberNames: ['Kai', 'Sam'],
-      memberCount: 2,
-      place: 'Capitol Hill',
-      liveCount: 2,
-    ),
-    _GroupCardModel(
-      name: 'Road trip — Day 4',
-      memberNames: ['Anya', 'Yuki', 'Rey'],
-      memberCount: 3,
-      place: 'Crater Lake',
-      liveCount: 3,
-      timerLabel: 'active for 4d',
-      isTrip: true,
-    ),
-    _GroupCardModel(
-      name: 'Family',
-      memberNames: ['Mom', 'Dad', 'Y'],
-      memberCount: 3,
-      place: null,
-      liveCount: 0,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Make sure the BLoC has up-to-date data.
+    context.read<GroupsBloc>().add(LoadGroups());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// "Grid:Group:<expiration>:<name>:<creator>" → human group name.
+  String _parseGroupName(gr.Room room) {
+    final parts = room.name.split(':');
+    if (parts.length > 3) return parts[3];
+    return room.name;
+  }
+
+  String _placeFor(gr.Room room) => '${room.members.length} members';
+
+  /// Returns a non-null timer label only when the group has an expiry.
+  String? _timerFor(gr.Room room) {
+    if (room.expirationTimestamp == 0) return null;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final remaining = room.expirationTimestamp - now;
+    if (remaining <= 0) return 'expired';
+    final hours = remaining ~/ 3600;
+    final minutes = (remaining % 3600) ~/ 60;
+    final days = hours ~/ 24;
+    if (days > 0) return 'ends in ${days}d ${hours % 24}h';
+    if (hours > 0) return 'ends in ${hours}h ${minutes}m';
+    return 'ends in ${minutes}m';
+  }
+
+  /// Crude "is this a trip" heuristic — long-running, named like a trip.
+  bool _isTripGroup(gr.Room room) {
+    final lower = _parseGroupName(room).toLowerCase();
+    return lower.contains('trip') ||
+        lower.contains('road') ||
+        lower.contains('vacation');
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_showGroupDetail) {
-      return Column(
+    return BlocBuilder<GroupsBloc, GroupsState>(
+      builder: (context, state) {
+        if (state is GroupsLoading || state is GroupsInitial) {
+          return const Center(
+            child: CircularProgressIndicator(color: GridTokens.mint),
+          );
+        }
+        if (state is GroupsError) {
+          return _errorState(state.error);
+        }
+
+        final allGroups = state is GroupsLoaded ? state.groups : <gr.Room>[];
+        final groups = _query.isEmpty
+            ? allGroups
+            : allGroups
+                .where((r) =>
+                    _parseGroupName(r).toLowerCase().contains(_query))
+                .toList();
+
+        if (allGroups.isEmpty) {
+          return _emptyState();
+        }
+
+        return Column(
+          children: [
+            _searchField(),
+            if (groups.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Text(
+                  'No groups match "$_query".',
+                  style: TextStyle(color: GridTokens.text3, fontSize: 14),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  controller: widget.scrollController,
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    final room = groups[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _GroupCard(
+                        name: _parseGroupName(room),
+                        memberIds: room.members,
+                        memberCount: room.members.length,
+                        place: _placeFor(room),
+                        timerLabel: _timerFor(room),
+                        isTrip: _isTripGroup(room),
+                        featured: index == 0,
+                        onTap: () => widget.onGroupSelected?.call(room),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      child: Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: GridTokens.surface2,
+          borderRadius: BorderRadius.circular(GridTokens.rMd),
+          border: Border.all(color: GridTokens.hairline),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: GridTokens.text3,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                onChanged: (v) => setState(() => _query = v.toLowerCase()),
+                style: const TextStyle(
+                  color: GridTokens.text,
+                  fontSize: 14,
+                ),
+                cursorColor: GridTokens.mint,
+                decoration: const InputDecoration(
+                  hintText: 'Find a group',
+                  hintStyle:
+                      TextStyle(color: GridTokens.text3, fontSize: 14),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CustomSearchBar(
-              controller: TextEditingController(), hintText: 'Search Groups'),
-          Expanded(
-            child: GroupInfoSubscreen(
-              groupName: _selectedGroupName,
-              onBack: () {
-                setState(() {
-                  _showGroupDetail = false;
-                  _selectedGroupName = '';
-                });
-              },
-              scrollController: widget.scrollController,
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: GridTokens.mintFaint,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Icon(
+              Icons.group_outlined,
+              color: GridTokens.mint,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'No groups yet.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.02,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Create a group to share location with several people at once — perfect for trips, families, or close friends.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13.5,
+              fontWeight: FontWeight.w400,
+              color: GridTokens.text2,
+              height: 1.5,
             ),
           ),
         ],
-      );
-    }
+      ),
+    );
+  }
 
-    return Column(
-      children: [
-        CustomSearchBar(
-            controller: TextEditingController(), hintText: 'Search Groups'),
-        Expanded(
-          child: ListView.builder(
-            controller: widget.scrollController,
-            itemCount: _groups.length,
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
-            itemBuilder: (context, index) {
-              final group = _groups[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _GroupCard(
-                  model: group,
-                  onTap: () {
-                    setState(() {
-                      _showGroupDetail = true;
-                      _selectedGroupName = group.name;
-                    });
-                  },
-                ),
-              );
-            },
+  Widget _errorState(String message) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: GridTokens.danger,
+            size: 36,
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          Text(
+            'Couldn\'t load groups.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 12.5,
+              color: GridTokens.text2,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          GridButton(
+            label: 'Try again',
+            expand: false,
+            style: GridButtonStyle.secondary,
+            onPressed: () => context.read<GroupsBloc>().add(LoadGroups()),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// View-model for the redesigned group card. Kept local to this file so we
-/// don't introduce a new shared primitive.
-class _GroupCardModel {
-  const _GroupCardModel({
+/// Card view for one real group.
+class _GroupCard extends StatelessWidget {
+  const _GroupCard({
     required this.name,
-    required this.memberNames,
+    required this.memberIds,
     required this.memberCount,
     required this.place,
-    required this.liveCount,
-    this.timerLabel,
-    this.isTrip = false,
-    this.featured = false,
+    required this.timerLabel,
+    required this.isTrip,
+    required this.featured,
+    required this.onTap,
   });
 
   final String name;
-  final List<String> memberNames;
+  final List<String> memberIds;
   final int memberCount;
-  final String? place;
-  final int liveCount;
+  final String place;
   final String? timerLabel;
   final bool isTrip;
   final bool featured;
-}
-
-class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.model, required this.onTap});
-
-  final _GroupCardModel model;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final featured = model.featured;
     final decoration = BoxDecoration(
       gradient: featured
           ? const LinearGradient(
@@ -177,83 +339,95 @@ class _GroupCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StackedAvatars(names: model.memberNames),
+                    _StackedAvatars(names: memberIds),
                     const SizedBox(width: 14),
-                    Expanded(child: _GroupCardBody(model: model)),
-                    if (model.liveCount > 0) ...[
-                      const SizedBox(width: 8),
-                      GridLiveBadge(label: '${model.liveCount} LIVE'),
-                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.01,
+                                    color: GridTokens.text,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                              if (isTrip) ...[
+                                const SizedBox(width: 8),
+                                const GridStatusPill(
+                                  label: 'TRIP',
+                                  kind: GridStatusKind.trip,
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$memberCount members  ·  $place',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: -0.01,
+                              color: GridTokens.text2,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                if (model.timerLabel != null) ...[
+                if (timerLabel != null) ...[
                   const SizedBox(height: 12),
-                  _TimerRow(label: model.timerLabel!),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: GridTokens.surface2,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.history_rounded,
+                          size: 14,
+                          color: GridTokens.text3,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GridMono(
+                            timerLabel!,
+                            color: GridTokens.text2,
+                            size: 11,
+                            letterSpacing: 0.06,
+                            uppercase: false,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _GroupCardBody extends StatelessWidget {
-  const _GroupCardBody({required this.model});
-
-  final _GroupCardModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    final subtitle = model.place == null
-        ? '${model.memberCount} members  ·  —'
-        : '${model.memberCount} members  ·  ${model.place}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                model.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.01,
-                  color: GridTokens.text,
-                  height: 1.2,
-                ),
-              ),
-            ),
-            if (model.isTrip) ...[
-              const SizedBox(width: 8),
-              const GridStatusPill(
-                label: 'TRIP',
-                kind: GridStatusKind.trip,
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.getFont(
-            'Geist',
-            fontSize: 12.5,
-            fontWeight: FontWeight.w400,
-            letterSpacing: -0.01,
-            color: GridTokens.text2,
-            height: 1.25,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -274,9 +448,6 @@ class _StackedAvatars extends StatelessWidget {
       return const SizedBox(width: _avatarSize, height: _avatarSize);
     }
 
-    // Each avatar's ring adds ~3pt of padding, so an avatar tile is
-    // _avatarSize + 6. The first sits flush, every additional one advances
-    // by (tile - overlap).
     const tile = _avatarSize + 6;
     final width = tile + (visible.length - 1) * (tile - _overlap);
 
@@ -296,45 +467,6 @@ class _StackedAvatars extends StatelessWidget {
                 padding: 3,
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimerRow extends StatelessWidget {
-  const _TimerRow({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: GridTokens.surface2,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.hairline),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.history_rounded,
-            size: 14,
-            color: GridTokens.text3,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GridMono(
-              label,
-              color: GridTokens.text2,
-              size: 11,
-              letterSpacing: 0.06,
-              uppercase: false,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
         ],
       ),
     );

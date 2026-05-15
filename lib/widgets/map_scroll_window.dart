@@ -351,43 +351,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               _invitesChip(inviteCount),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: GridTokens.surface2,
-              borderRadius: BorderRadius.circular(GridTokens.rMd),
-              border: Border.all(color: GridTokens.hairline),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.search_rounded, size: 18, color: GridTokens.text3),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: _selectedOption == SubscreenOption.groups
-                          ? 'Find a group'
-                          : 'Find a contact',
-                      hintStyle: TextStyle(color: GridTokens.text3, fontSize: 14),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                      fillColor: Colors.transparent,
-                      filled: true,
-                    ),
-                    style: const TextStyle(color: GridTokens.text, fontSize: 14),
-                    onChanged: (q) {
-                      // TODO: wire to subscreen filters when restructure lands.
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Search field lives inside each subscreen — don't render here.
         ],
       ),
     );
@@ -960,7 +924,20 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget _buildSubscreen(ScrollController scrollController) {
     switch (_selectedOption) {
       case SubscreenOption.groups:
-        return GroupsSubscreen(scrollController: scrollController);
+        return GroupsSubscreen(
+          scrollController: scrollController,
+          onGroupSelected: (room) {
+            setState(() {
+              _selectedRoom = room;
+              _selectedOption = SubscreenOption.groupDetails;
+              _selectedLabel = room.name.split(':').length > 3
+                  ? room.name.split(':')[3]
+                  : room.name;
+            });
+            Provider.of<SelectedSubscreenProvider>(context, listen: false)
+                .setSelectedSubscreen('group:${room.roomId}');
+          },
+        );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
           return GroupDetailsSubscreen(
