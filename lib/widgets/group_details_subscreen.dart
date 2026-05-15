@@ -2,21 +2,34 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:grid_frontend/widgets/status_indictator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart';
+
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
-import 'user_avatar_bloc.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
+import 'package:grid_frontend/widgets/group_markers_modal.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
+
+import 'user_avatar_bloc.dart';
 import '../blocs/groups/groups_event.dart';
 import '../blocs/groups/groups_state.dart';
 import '../services/user_service.dart';
@@ -24,11 +37,6 @@ import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
 import 'group_profile_modal.dart';
 import 'location_history_modal.dart';
-import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
-import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
-import 'package:grid_frontend/widgets/group_markers_modal.dart';
-import 'package:grid_frontend/repositories/map_icon_repository.dart';
-import 'package:grid_frontend/services/database_service.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
@@ -57,14 +65,12 @@ class GroupDetailsSubscreen extends StatefulWidget {
 class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     with TickerProviderStateMixin {
   bool _isLeaving = false;
-  bool _isProcessing = false;
-  bool _isRefreshing = false;
-  bool _isInitialLoad = true;
 
   final TextEditingController _searchController = TextEditingController();
   List<GridUser> _filteredMembers = [];
   String? _currentUserId;
   Timer? _refreshTimer;
+  Timer? _expiryTicker;
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -72,7 +78,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   @override
   void initState() {
     super.initState();
-    
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -81,9 +87,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       parent: _fadeController,
       curve: Curves.easeOut,
     );
-    
+
     _searchController.addListener(_filterMembers);
     _loadCurrentUser();
+
+    // Tick once a minute so the "ends in X" copy updates without a full reload.
+    _expiryTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('group:${widget.room.roomId}');
@@ -97,6 +108,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     _fadeController.dispose();
     _searchController.dispose();
     _refreshTimer?.cancel();
+    _expiryTicker?.cancel();
     super.dispose();
   }
 
@@ -139,7 +151,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   Future<bool> _isUserAContact(String userId) async {
     try {
-      final directRoom = await widget.userRepository.getDirectRoomForContact(userId);
+      final directRoom =
+          await widget.userRepository.getDirectRoomForContact(userId);
       return directRoom != null;
     } catch (e) {
       print('Error checking if user is contact: $e');
@@ -154,26 +167,23 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.all(20),
+          insetPadding: const EdgeInsets.all(20),
           child: GestureDetector(
             onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              color: Colors.transparent,
-              child: Center(
-                child: Hero(
-                  tag: 'member_menu_avatar_$userId',
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    height: MediaQuery.of(context).size.width * 0.8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Theme.of(context).colorScheme.surface,
-                    ),
-                    child: ClipOval(
-                      child: UserAvatarBloc(
-                        userId: userId,
-                        size: MediaQuery.of(context).size.width * 0.8,
-                      ),
+            child: Center(
+              child: Hero(
+                tag: 'member_menu_avatar_$userId',
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: MediaQuery.of(context).size.width * 0.8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: GridTokens.surface,
+                  ),
+                  child: ClipOval(
+                    child: UserAvatarBloc(
+                      userId: userId,
+                      size: MediaQuery.of(context).size.width * 0.8,
                     ),
                   ),
                 ),
@@ -187,78 +197,63 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   Future<void> _kickMember(String userId) async {
     try {
-      final success = await widget.roomService.kickMemberFromRoom(
-          widget.room.roomId, userId);
+      final success = await widget.roomService
+          .kickMemberFromRoom(widget.room.roomId, userId);
 
       if (mounted) {
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('User removed from group'),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
-          
-          // Refresh the member list immediately
+          _showToast('User removed from group', danger: false);
+
           context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
-          
-          // Handle the kick in the bloc
-          await context.read<GroupsBloc>().handleMemberKicked(
-              widget.room.roomId, userId);
-              
-          // Add a delayed refresh to ensure sync
+
+          await context
+              .read<GroupsBloc>()
+              .handleMemberKicked(widget.room.roomId, userId);
+
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted) {
-              context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
+              context
+                  .read<GroupsBloc>()
+                  .add(LoadGroupMembers(widget.room.roomId));
             }
           });
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Failed to remove user. You may not have permission.'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
+          _showToast(
+              'Failed to remove user. You may not have permission.',
+              danger: true);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error removing user: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+        _showToast('Error removing user: $e', danger: true);
       }
     }
   }
 
+  void _showToast(String text, {required bool danger}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor:
+            danger ? GridTokens.danger : GridTokens.mint,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GridTokens.rMd),
+        ),
+      ),
+    );
+  }
+
   void _showMemberMenu(GridUser user, String? memberStatus) async {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final canKick = await _canCurrentUserKick();
 
-    // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = isCustomHomeserver(currentHomeserver);
 
-    // Check if user is already a contact
     final isAlreadyContact = await _isUserAContact(user.userId);
 
     if (!mounted) return;
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -269,36 +264,38 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Member info header
               Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(GridTokens.rLg),
+                    topRight: Radius.circular(GridTokens.rLg),
                   ),
                 ),
                 child: Row(
                   children: [
                     GestureDetector(
-                      onTap: () {
-                        _showExpandedAvatar(context, user.userId);
-                      },
+                      onTap: () =>
+                          _showExpandedAvatar(context, user.userId),
                       child: Hero(
                         tag: 'member_menu_avatar_${user.userId}',
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: colorScheme.primary.withOpacity(0.1),
-                          child: UserAvatarBloc(
-                            userId: user.userId,
-                            size: 56,
+                        child: ClipOval(
+                          child: SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: UserAvatarBloc(
+                              userId: user.userId,
+                              size: 56,
+                            ),
                           ),
                         ),
                       ),
@@ -310,18 +307,23 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         children: [
                           Text(
                             user.displayName ?? localpart(user.userId),
-                            style: theme.textTheme.titleMedium?.copyWith(
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
+                              letterSpacing: -0.015,
+                              color: GridTokens.text,
                             ),
                           ),
-                          Text(
-                            showFullMatrixId 
+                          const SizedBox(height: 2),
+                          GridMono(
+                            showFullMatrixId
                                 ? user.userId
                                 : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                            color: GridTokens.text3,
+                            size: 11,
+                            uppercase: false,
+                            letterSpacing: 0,
                           ),
                         ],
                       ),
@@ -329,77 +331,47 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   ],
                 ),
               ),
-              
-              // Menu options
+
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    // Send Friend Request option
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isAlreadyContact
-                              ? colorScheme.surfaceVariant
-                              : colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.person_add_outlined,
-                          color: isAlreadyContact
-                              ? colorScheme.onSurface.withOpacity(0.3)
-                              : colorScheme.primary,
-                          size: 20,
-                        ),
-                      ),
-                      title: Text(
-                        isAlreadyContact ? 'Already in Contacts' : 'Send Friend Request',
-                        style: TextStyle(
-                          color: isAlreadyContact
-                              ? colorScheme.onSurface.withOpacity(0.3)
-                              : colorScheme.onSurface,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      enabled: !isAlreadyContact,
-                      onTap: !isAlreadyContact ? () {
-                        Navigator.pop(context);
-                        _showFriendRequestConfirmation(user, showFullMatrixId);
-                      } : null,
+                    _menuRow(
+                      icon: Icons.person_add_outlined,
+                      label: isAlreadyContact
+                          ? 'Already in contacts'
+                          : 'Send friend request',
+                      tint: isAlreadyContact
+                          ? GridTokens.text4
+                          : GridTokens.mint,
+                      bgTint: isAlreadyContact
+                          ? GridTokens.surface3
+                          : GridTokens.mintFaint,
+                      onTap: isAlreadyContact
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              _showFriendRequestConfirmation(
+                                  user, showFullMatrixId);
+                            },
                     ),
-
-                    // Remove from group option
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: canKick 
-                              ? Colors.red.withOpacity(0.1)
-                              : colorScheme.surfaceVariant,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.person_remove_outlined,
-                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
-                          size: 20,
-                        ),
-                      ),
-                      title: Text(
-                        'Remove from Group',
-                        style: TextStyle(
-                          color: canKick ? Colors.red : colorScheme.onSurface.withOpacity(0.3),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      enabled: canKick,
-                      onTap: canKick ? () {
-                        Navigator.pop(context);
-                        _showKickConfirmation(user);
-                      } : null,
+                    _menuRow(
+                      icon: Icons.person_remove_outlined,
+                      label: 'Remove from group',
+                      tint: canKick
+                          ? GridTokens.danger
+                          : GridTokens.text4,
+                      bgTint: canKick
+                          ? GridTokens.dangerSoft
+                          : GridTokens.surface3,
+                      onTap: canKick
+                          ? () {
+                              Navigator.pop(context);
+                              _showKickConfirmation(user);
+                            }
+                          : null,
                     ),
-                    
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -410,30 +382,88 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
-  void _showFriendRequestConfirmation(GridUser user, bool showFullMatrixId) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _menuRow({
+    required IconData icon,
+    required String label,
+    required Color tint,
+    required Color bgTint,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: bgTint,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: Icon(icon, color: tint, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w500,
+                    color: onTap == null
+                        ? GridTokens.text4
+                        : (tint == GridTokens.danger
+                            ? GridTokens.danger
+                            : GridTokens.text),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
+  void _showFriendRequestConfirmation(GridUser user, bool showFullMatrixId) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: colorScheme.surface,
+          backgroundColor: GridTokens.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            side: const BorderSide(color: GridTokens.hairline),
           ),
           title: Row(
             children: [
-              Icon(
-                Icons.person_add,
-                color: colorScheme.primary,
-                size: 24,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: GridTokens.mintFaint,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: const Icon(
+                  Icons.person_add,
+                  color: GridTokens.mint,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Send Friend Request',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
+                'Send friend request',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
+                  letterSpacing: -0.015,
+                  color: GridTokens.text,
                 ),
               ),
             ],
@@ -444,25 +474,30 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             children: [
               Text(
                 'Send a friend request to:',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13.5,
+                  color: GridTokens.text2,
                 ),
               ),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  border: Border.all(color: GridTokens.hairline),
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: UserAvatarBloc(
-                        userId: user.userId,
-                        size: 56,
+                    ClipOval(
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: UserAvatarBloc(
+                          userId: user.userId,
+                          size: 48,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -472,19 +507,22 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         children: [
                           Text(
                             user.displayName ?? localpart(user.userId),
-                            style: TextStyle(
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
+                              color: GridTokens.text,
                             ),
                           ),
-                          Text(
+                          const SizedBox(height: 2),
+                          GridMono(
                             showFullMatrixId
                                 ? user.userId
                                 : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                            color: GridTokens.text3,
+                            size: 11,
+                            uppercase: false,
+                            letterSpacing: 0,
                           ),
                         ],
                       ),
@@ -499,7 +537,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               onPressed: () => Navigator.pop(context),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontWeight: FontWeight.w500,
+                  color: GridTokens.text3,
+                ),
               ),
             ),
             FilledButton(
@@ -508,12 +550,19 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 await _sendFriendRequest(user);
               },
               style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.primary,
+                backgroundColor: GridTokens.mint,
+                foregroundColor: const Color(0xFF04201A),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
                 ),
               ),
-              child: const Text('Send Request'),
+              child: Text(
+                'Send request',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         );
@@ -523,85 +572,75 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   Future<void> _sendFriendRequest(GridUser user) async {
     try {
-      final success = await widget.roomService.createRoomAndInviteContact(user.userId);
+      final success =
+          await widget.roomService.createRoomAndInviteContact(user.userId);
 
       if (!mounted) return;
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Friend request sent to ${user.displayName ?? localpart(user.userId)}'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        _showToast(
+          'Friend request sent to ${user.displayName ?? localpart(user.userId)}',
+          danger: false,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to send friend request. User may not exist or is already a contact.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 3),
-          ),
+        _showToast(
+          'Failed to send friend request. User may not exist or is already a contact.',
+          danger: true,
         );
       }
     } catch (e) {
       print('Error sending friend request: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending friend request: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        _showToast('Error sending friend request: ${e.toString()}',
+            danger: true);
       }
     }
   }
 
   void _showKickConfirmation(GridUser user) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: colorScheme.surface,
+          backgroundColor: GridTokens.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            side: const BorderSide(color: GridTokens.hairline),
           ),
           title: Row(
             children: [
-              Icon(
-                Icons.person_remove_outlined,
-                color: Colors.red,
-                size: 24,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: GridTokens.dangerSoft,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: const Icon(
+                  Icons.person_remove_outlined,
+                  color: GridTokens.danger,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Remove Member',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
+                'Remove member',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
+                  letterSpacing: -0.015,
+                  color: GridTokens.text,
                 ),
               ),
             ],
           ),
           content: Text(
             'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 14,
+              color: GridTokens.text2,
               height: 1.4,
             ),
           ),
@@ -610,8 +649,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontWeight: FontWeight.w500,
+                  color: GridTokens.text3,
                 ),
               ),
             ),
@@ -620,11 +661,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 Navigator.of(context).pop();
                 await _kickMember(user.userId);
               },
-              child: const Text(
+              child: Text(
                 'Remove',
-                style: TextStyle(
-                  color: Colors.red,
+                style: GoogleFonts.getFont(
+                  'Geist',
                   fontWeight: FontWeight.w600,
+                  color: GridTokens.danger,
                 ),
               ),
             ),
@@ -657,58 +699,75 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
-
   Future<void> _showLeaveConfirmationDialog() async {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: GridTokens.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            side: const BorderSide(color: GridTokens.hairline),
           ),
           title: Row(
             children: [
-              Icon(
-                Icons.exit_to_app,
-                color: colorScheme.error,
-                size: 24,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: GridTokens.dangerSoft,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: const Icon(
+                  Icons.exit_to_app,
+                  color: GridTokens.danger,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Leave Group',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
+                'Leave group',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
+                  letterSpacing: -0.015,
+                  color: GridTokens.text,
                 ),
               ),
             ],
           ),
           content: Text(
             'Are you sure you want to leave this group? This action cannot be undone.',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 14,
+              color: GridTokens.text2,
+              height: 1.4,
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(
-                foregroundColor: colorScheme.onSurface.withOpacity(0.7),
-              ),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                foregroundColor: colorScheme.onError,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontWeight: FontWeight.w500,
+                  color: GridTokens.text3,
                 ),
               ),
-              child: const Text('Leave'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                'Leave',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontWeight: FontWeight.w600,
+                  color: GridTokens.danger,
+                ),
+              ),
             ),
           ],
         );
@@ -729,31 +788,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       await widget.roomService.leaveRoom(widget.room.roomId);
       if (mounted) {
         context.read<GroupsBloc>().add(RefreshGroups());
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('You have left the group'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+        _showToast('You have left the group', danger: false);
       }
       widget.onGroupLeft();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error leaving group: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+        _showToast('Error leaving group: $e', danger: true);
       }
     } finally {
       if (mounted) {
@@ -773,15 +813,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: const BoxDecoration(
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.vertical(
+              top: Radius.circular(GridTokens.r2Xl)),
         ),
         child: AddGroupMemberModal(
           roomId: widget.room.roomId,
-          groupName: widget.room.name.split(':').length >= 5
-              ? widget.room.name.split(':')[3]
-              : widget.room.name,
+          groupName: _groupName,
           userService: widget.userService,
           roomService: widget.roomService,
           userRepository: widget.userRepository,
@@ -792,7 +831,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       ),
     );
   }
-  
+
   void _showGroupMarkersModal() {
     showModalBottomSheet(
       context: context,
@@ -800,18 +839,13 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       backgroundColor: Colors.transparent,
       builder: (context) => GroupMarkersModal(
         roomId: widget.room.roomId,
-        roomName: widget.room.name.split(':').length >= 5 
-            ? widget.room.name.split(':')[3]
-            : widget.room.name,
+        roomName: _groupName,
         mapIconRepository: MapIconRepository(DatabaseService()),
       ),
     );
   }
-  
+
   void _showGroupDetailsMenu() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -822,31 +856,34 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Group info header
               Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(GridTokens.rLg),
+                    topRight: Radius.circular(GridTokens.rLg),
                   ),
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: colorScheme.primary.withOpacity(0.1),
-                      child: GroupAvatarBloc(
-                        roomId: widget.room.roomId,
-                        memberIds: widget.room.members,
-                        size: 56,
+                    ClipOval(
+                      child: SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: GroupAvatarBloc(
+                          roomId: widget.room.roomId,
+                          memberIds: widget.room.members,
+                          size: 56,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -855,19 +892,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.room.name.split(':').length >= 5 
-                                ? widget.room.name.split(':')[3]
-                                : widget.room.name,
-                            style: theme.textTheme.titleMedium?.copyWith(
+                            _groupName,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
+                              letterSpacing: -0.015,
+                              color: GridTokens.text,
                             ),
                           ),
-                          Text(
-                            '${_filteredMembers.length} members',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                          const SizedBox(height: 2),
+                          GridMono(
+                            '${_filteredMembers.length} MEMBERS',
+                            color: GridTokens.text3,
+                            size: 10.5,
+                            letterSpacing: 0.08,
                           ),
                         ],
                       ),
@@ -875,28 +914,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   ],
                 ),
               ),
-              
-              // Menu options
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'Group Settings',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+
+              _menuRow(
+                icon: Icons.info_outline,
+                label: 'Group settings',
+                tint: GridTokens.mint,
+                bgTint: GridTokens.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   showModalBottomSheet(
@@ -905,12 +928,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     backgroundColor: Colors.transparent,
                     builder: (context) => Container(
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                        maxHeight:
+                            MediaQuery.of(context).size.height * 0.8,
                       ),
                       child: GroupProfileModal(
                         room: widget.room,
                         roomService: widget.roomService,
-                        sharingPreferencesRepo: widget.sharingPreferencesRepository,
+                        sharingPreferencesRepo:
+                            widget.sharingPreferencesRepository,
                         onMemberAdded: () {
                           Navigator.pop(context);
                           _showAddGroupMemberModal();
@@ -920,55 +945,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   );
                 },
               ),
-              
-              // Add Member
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.person_add_outlined,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'Add Member',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              _menuRow(
+                icon: Icons.person_add_outlined,
+                label: 'Add member',
+                tint: GridTokens.mint,
+                bgTint: GridTokens.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   _showAddGroupMemberModal();
                 },
               ),
-              
-              // Group History
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.history,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'View History',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              _menuRow(
+                icon: Icons.history,
+                label: 'View history',
+                tint: GridTokens.mint,
+                bgTint: GridTokens.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   showModalBottomSheet(
@@ -978,71 +969,37 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     builder: (BuildContext context) {
                       return LocationHistoryModal(
                         userId: widget.room.roomId,
-                        userName: widget.room.name.split(':').length >= 5 
-                            ? widget.room.name.split(':')[3]
-                            : widget.room.name,
-                        memberIds: _filteredMembers.map((m) => m.userId).toList(),
+                        userName: _groupName,
+                        memberIds:
+                            _filteredMembers.map((m) => m.userId).toList(),
                       );
                     },
                   );
                 },
               ),
-              
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.location_on,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'View Markers',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              _menuRow(
+                icon: Icons.location_on,
+                label: 'View markers',
+                tint: GridTokens.mint,
+                bgTint: GridTokens.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   _showGroupMarkersModal();
                 },
               ),
-              
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.exit_to_app_outlined,
-                    color: Colors.red,
-                    size: 20,
-                  ),
-                ),
-                title: const Text(
-                  'Leave Group',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: _isLeaving 
-                    ? null 
+              _menuRow(
+                icon: Icons.exit_to_app_outlined,
+                label: 'Leave group',
+                tint: GridTokens.danger,
+                bgTint: GridTokens.dangerSoft,
+                onTap: _isLeaving
+                    ? null
                     : () {
                         Navigator.pop(context);
                         _showLeaveConfirmationDialog();
                       },
               ),
-              
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
             ],
           ),
         );
@@ -1050,204 +1007,305 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
-  Widget _buildMemberTile(GridUser user, GroupsLoaded state, 
+  // ── derived helpers ────────────────────────────────────────────────
+
+  String get _groupName {
+    final parts = widget.room.name.split(':');
+    return parts.length >= 5 ? parts[3] : widget.room.name;
+  }
+
+  int _liveCount(GroupsLoaded state, List<UserLocation> userLocations) {
+    int live = 0;
+    for (final m in _filteredMembers) {
+      if (state.getMemberStatus(m.userId) == 'invite') continue;
+      final loc = userLocations
+          .cast<UserLocation?>()
+          .firstWhere((l) => l?.userId == m.userId, orElse: () => null);
+      if (loc == null) continue;
+      final ago = TimeAgoFormatter.format(loc.timestamp);
+      if (_isRecentlyActive(ago)) live += 1;
+    }
+    return live;
+  }
+
+  String? _endsInLabel() {
+    final ts = widget.room.expirationTimestamp;
+    if (ts == 0) return null;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final remaining = ts - now;
+    if (remaining <= 0) return 'expired';
+    final hours = remaining ~/ 3600;
+    final minutes = (remaining % 3600) ~/ 60;
+    if (hours > 0 && minutes > 0) return 'ends in ${hours}h ${minutes}m';
+    if (hours > 0) return 'ends in ${hours}h';
+    return 'ends in ${minutes}m';
+  }
+
+  String? _endsAtClock() {
+    final ts = widget.room.expirationTimestamp;
+    if (ts == 0) return null;
+    final at = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+    final hour = at.hour;
+    final minute = at.minute;
+    final isPm = hour >= 12;
+    final h12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final mm = minute.toString().padLeft(2, '0');
+    return '$h12:$mm ${isPm ? 'PM' : 'AM'}';
+  }
+
+  // ── builders ───────────────────────────────────────────────────────
+
+  Widget _buildHeader(int liveCount) {
+    final endsIn = _endsInLabel();
+    final memberCount = _filteredMembers.length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+      child: Row(
+        children: [
+          ClipOval(
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: GroupAvatarBloc(
+                roomId: widget.room.roomId,
+                memberIds: widget.room.members,
+                size: 52,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _groupName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.02,
+                    color: GridTokens.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _MonoSummary(
+                  liveCount: liveCount,
+                  memberCount: memberCount,
+                  endsIn: endsIn,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _showGroupDetailsMenu,
+              borderRadius: BorderRadius.circular(GridTokens.rMd),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  border: Border.all(color: GridTokens.hairline),
+                ),
+                child: const Icon(
+                  Icons.more_horiz,
+                  color: GridTokens.text2,
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildAutoStopCard() {
+    final endsAt = _endsAtClock();
+    if (endsAt == null) return null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: GridTokens.amberSoft,
+          borderRadius: BorderRadius.circular(GridTokens.rMd),
+          border: Border.all(color: GridTokens.amber.withOpacity(0.22)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: GridTokens.amber.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(GridTokens.rSm),
+              ),
+              child: const Icon(
+                Icons.history,
+                color: GridTokens.amber,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Auto-stops at $endsAt',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.01,
+                      color: GridTokens.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Sharing pauses automatically when the trip ends.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 12.5,
+                      color: GridTokens.text2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Existing logic preserved: Extend opens the existing Group
+            // Settings modal where group lifecycle is managed.
+            GridButton(
+              label: 'Extend',
+              style: GridButtonStyle.ghost,
+              expand: false,
+              height: 36,
+              onPressed: _openGroupSettings,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openGroupSettings() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: GroupProfileModal(
+          room: widget.room,
+          roomService: widget.roomService,
+          sharingPreferencesRepo: widget.sharingPreferencesRepository,
+          onMemberAdded: () {
+            Navigator.pop(context);
+            _showAddGroupMemberModal();
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberRow(GridUser user, GroupsLoaded state,
       List<UserLocation> userLocations) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    // Check if using custom homeserver
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
     final userLocation = userLocations
         .cast<UserLocation?>()
-        .firstWhere(
-          (loc) => loc?.userId == user.userId,
-          orElse: () => null,
-        );
+        .firstWhere((l) => l?.userId == user.userId, orElse: () => null);
 
     final memberStatus = state.getMemberStatus(user.userId);
     final timeAgoText = userLocation != null
         ? TimeAgoFormatter.format(userLocation.timestamp)
         : 'Off Grid';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
+
+    final handle = showFullMatrixId
+        ? user.userId
+        : '@${user.userId.split(':')[0].replaceFirst('@', '')}';
+    final name = user.displayName ?? localpart(user.userId);
+
+    // Map status into avatar dot tokens.
+    final isInvited = memberStatus == 'invite';
+    final isLive = !isInvited && _isRecentlyActive(timeAgoText);
+    final isPaused = !isInvited &&
+        !isLive &&
+        (timeAgoText.contains('m ago') ||
+            timeAgoText.contains('h ago'));
+
+    final avatarStatus = isInvited
+        ? GridAvatarStatus.paused
+        : isLive
+            ? GridAvatarStatus.live
+            : isPaused
+                ? GridAvatarStatus.paused
+                : GridAvatarStatus.offline;
+
+    String? statusLabel;
+    GridStatusKind? statusKind;
+    if (isInvited) {
+      statusKind = GridStatusKind.paused;
+      statusLabel = 'INVITED';
+    } else if (timeAgoText == 'Off Grid') {
+      // no pill — offline avatar dot conveys it
+    } else if (isLive) {
+      // live badge is already shown next to the name
+    } else if (isPaused) {
+      statusKind = GridStatusKind.paused;
+      statusLabel = 'PAUSED';
+    }
+
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-          onTap: () {
-            Provider.of<SelectedUserProvider>(context, listen: false)
-                .setSelectedUserId(user.userId, context);
-          },
-          onLongPress: () => _showMemberMenu(user, memberStatus),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Row(
-              children: [
-                // Avatar with status indicator
-                Stack(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.15),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: colorScheme.primary.withOpacity(0.1),
-                        child: UserAvatarBloc(
-                          userId: user.userId,
-                          size: 56,
-                        ),
-                      ),
-                    ),
-                    // Status dot
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: _buildStatusDot(timeAgoText, colorScheme, membershipStatus: memberStatus),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(width: 12),
-                
-                // User information
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Display name
-                      Text(
-                        user.displayName ?? localpart(user.userId),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                          fontSize: 15,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      
-                      const SizedBox(height: 2),
-                      
-                      // User ID subtitle
-                      Text(
-                        showFullMatrixId 
-                            ? user.userId
-                            : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                          fontSize: 12,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Status indicator on the right
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    StatusIndicator(
-                      timeAgo: timeAgoText,
-                      membershipStatus: memberStatus,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        onTap: () {
+          Provider.of<SelectedUserProvider>(context, listen: false)
+              .setSelectedUserId(user.userId, context);
+        },
+        onLongPress: () => _showMemberMenu(user, memberStatus),
+        child: IgnorePointer(
+          // Tapping passes through to the InkWell above; ContactRow shouldn't
+          // own its own tap because we need long-press for the action menu.
+          child: GridContactRow(
+            name: name,
+            handle: handle,
+            placeLine: _placeLine(timeAgoText, isInvited),
+            timeText: isInvited
+                ? null
+                : (timeAgoText == 'Off Grid' ? null : timeAgoText),
+            distanceText: null,
+            statusKind: statusKind,
+            statusLabel: statusLabel,
+            live: isLive,
+            avatarStatus: avatarStatus,
+            showDivider: false,
           ),
         ),
-    );
-  }
-
-  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
-    Color statusColor;
-    bool isOnline;
-    
-    // Check for invitation status first
-    if (membershipStatus == 'invite') {
-      statusColor = Colors.orange;
-      isOnline = false;
-    } else {
-      statusColor = _getStatusColor(timeAgo, colorScheme);
-      isOnline = _isRecentlyActive(timeAgo);
-    }
-    
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: colorScheme.surface,
-          width: 2,
-        ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: statusColor,
-          shape: BoxShape.circle,
-        ),
-        child: isOnline
-            ? Container(
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.circle,
-                  color: Colors.transparent,
-                  size: 8,
-                ),
-              )
-            : null,
       ),
     );
   }
 
-  Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return colorScheme.primary; // Use primary green
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      // Extract minutes to check if over 10 minutes
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10 ? colorScheme.primary : Colors.orange;
-      }
-      return colorScheme.primary;
-    } else if (timeAgo.contains('h ago')) {
-      return Colors.orange;
-    } else if (timeAgo.contains('d ago')) {
-      return Colors.red;
-    } else {
-      return colorScheme.onSurface.withOpacity(0.4);
-    }
+  String? _placeLine(String timeAgoText, bool isInvited) {
+    if (isInvited) return 'pending invite';
+    if (timeAgoText == 'Off Grid') return 'off grid';
+    return null;
   }
 
   bool _isRecentlyActive(String timeAgo) {
@@ -1258,66 +1316,69 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
       if (minutesMatch != null) {
         final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10; // Only consider active if 10 minutes or less
+        return minutes <= 10;
       }
     }
     return false;
   }
 
   Widget _buildEmptyState() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 80),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.group_outlined,
-                  size: 48,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                "It's lonely here!",
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Invite friends to join this group',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: GridTokens.mintFaint,
+              borderRadius: BorderRadius.circular(GridTokens.r2Xl),
+            ),
+            child: const Icon(
+              Icons.group_outlined,
+              size: 36,
+              color: GridTokens.mint,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          Text(
+            "It's lonely here.",
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.015,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Invite friends to join this group.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13.5,
+              color: GridTokens.text2,
+            ),
+          ),
+          const SizedBox(height: 16),
+          GridButton(
+            label: 'Add member',
+            icon: Icons.person_add_outlined,
+            style: GridButtonStyle.secondary,
+            expand: false,
+            onPressed: _showAddGroupMemberModal,
+          ),
+        ],
+      ),
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final userLocations = Provider.of<UserLocationProvider>(context)
-        .getAllUserLocations();
+    final userLocations =
+        Provider.of<UserLocationProvider>(context).getAllUserLocations();
 
     return BlocBuilder<GroupsBloc, GroupsState>(
       buildWhen: (previous, current) {
@@ -1336,10 +1397,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 controller: _searchController,
                 hintText: 'Search Members',
               ),
-              Expanded(
+              const Expanded(
                 child: Center(
                   child: CircularProgressIndicator(
-                    color: colorScheme.primary,
+                    color: GridTokens.mint,
                   ),
                 ),
               ),
@@ -1358,40 +1419,154 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               .toList();
         }
 
+        final liveCount = _liveCount(state, userLocations);
+        final autoStopCard = _buildAutoStopCard();
+
         return FadeTransition(
           opacity: _fadeAnimation,
-          child: Column(
-            children: [
-              CustomSearchBar(
-                controller: _searchController,
-                hintText: 'Search Members',
-              ),
-              
-              Expanded(
-                child: _filteredMembers.isEmpty
-                    ? SingleChildScrollView(
-                        controller: widget.scrollController,
-                        padding: const EdgeInsets.all(16.0),
-                        child: _buildEmptyState(),
-                      )
-                    : ListView.builder(
-                        controller: widget.scrollController,
-                        padding: const EdgeInsets.all(16.0),
-                        itemCount: _filteredMembers.length,
-                        itemBuilder: (context, index) {
-                          final user = _filteredMembers[index];
-                          return _buildMemberTile(
-                            user,
-                            state,
-                            userLocations,
-                          );
-                        },
+          child: CustomScrollView(
+            controller: widget.scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(liveCount),
+                    if (autoStopCard != null) autoStopCard,
+                    const SizedBox(height: 4),
+                    GridSectionHeader(
+                      text: 'MEMBERS',
+                      trailing: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _showAddGroupMemberModal,
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rSm),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            child: const Icon(
+                              Icons.add,
+                              color: GridTokens.mint,
+                              size: 18,
+                            ),
+                          ),
+                        ),
                       ),
+                    ),
+                    CustomSearchBar(
+                      controller: _searchController,
+                      hintText: 'Search members',
+                    ),
+                  ],
+                ),
               ),
+              if (_filteredMembers.isEmpty)
+                SliverToBoxAdapter(child: _buildEmptyState())
+              else
+                SliverList.builder(
+                  itemCount: _filteredMembers.length,
+                  itemBuilder: (context, index) {
+                    final user = _filteredMembers[index];
+                    return _buildMemberRow(user, state, userLocations);
+                  },
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 28)),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Mono summary line under the group title:
+/// `3 LIVE · 4 MEMBERS · ends in 3h 12m`.
+class _MonoSummary extends StatelessWidget {
+  const _MonoSummary({
+    required this.liveCount,
+    required this.memberCount,
+    required this.endsIn,
+  });
+
+  final int liveCount;
+  final int memberCount;
+  final String? endsIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final segments = <Widget>[];
+
+    segments.add(_LiveSegment(count: liveCount));
+
+    segments.add(_dot());
+    segments.add(GridMono(
+      '$memberCount MEMBERS',
+      color: GridTokens.text2,
+      size: 10.5,
+      letterSpacing: 0.08,
+    ));
+
+    if (endsIn != null) {
+      segments.add(_dot());
+      segments.add(Flexible(
+        child: GridMono(
+          endsIn!,
+          color: GridTokens.text3,
+          size: 10.5,
+          letterSpacing: 0.08,
+          uppercase: true,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ));
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.max,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: segments,
+    );
+  }
+
+  Widget _dot() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Container(
+          width: 2,
+          height: 2,
+          decoration: const BoxDecoration(
+            color: GridTokens.text4,
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
+}
+
+class _LiveSegment extends StatelessWidget {
+  const _LiveSegment({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 5,
+          height: 5,
+          decoration: const BoxDecoration(
+            color: GridTokens.mint,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        GridMono(
+          '$count LIVE',
+          color: GridTokens.mint,
+          size: 10.5,
+          letterSpacing: 0.1,
+        ),
+      ],
     );
   }
 }

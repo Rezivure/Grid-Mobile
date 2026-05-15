@@ -1,19 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:grid_frontend/widgets/status_indictator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
-import 'package:grid_frontend/widgets/custom_search_bar.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'user_avatar.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'user_avatar_bloc.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
@@ -135,8 +138,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       _isRefreshing = false;
     }
   }
-  
-  
+
+
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
@@ -184,12 +187,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     contactsWithTimestamp.sort((a, b) {
       final timestampA = a['timestamp'] as String?;
       final timestampB = b['timestamp'] as String?;
-      
+
       // Handle null timestamps (put them at the end)
       if (timestampA == null && timestampB == null) return 0;
       if (timestampA == null) return 1;
       if (timestampB == null) return -1;
-      
+
       // Parse and compare timestamps
       try {
         final dateA = DateTime.parse(timestampA);
@@ -207,123 +210,343 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         .toList();
   }
 
+  // Categorize a contact's section by its time-ago string + membership status.
+  // - SHARING NOW: live / recently active (≤ 10 min, no invite)
+  // - PAUSED: invitation pending OR loosely active (minutes/hours)
+  // - OFFLINE: days/unknown
+  _ContactBucket _bucketFor(ContactDisplay c) {
+    final time = c.lastSeen;
+    if (c.membershipStatus == 'invite') return _ContactBucket.paused;
+
+    if (time == 'Just now' || time.contains('s ago')) {
+      return _ContactBucket.sharingNow;
+    }
+    if (time.contains('m ago') && !time.contains('h')) {
+      final m = RegExp(r'(\d+)m ago').firstMatch(time);
+      if (m != null) {
+        final minutes = int.tryParse(m.group(1)!) ?? 0;
+        if (minutes <= 10) return _ContactBucket.sharingNow;
+      }
+      return _ContactBucket.paused;
+    }
+    if (time.contains('h ago')) return _ContactBucket.paused;
+    return _ContactBucket.offline;
+  }
+
+  bool _isLive(ContactDisplay c) =>
+      _bucketFor(c) == _ContactBucket.sharingNow &&
+      c.membershipStatus != 'invite';
+
+  GridAvatarStatus _avatarStatusFor(ContactDisplay c) {
+    switch (_bucketFor(c)) {
+      case _ContactBucket.sharingNow:
+        return GridAvatarStatus.live;
+      case _ContactBucket.paused:
+        return GridAvatarStatus.paused;
+      case _ContactBucket.offline:
+        return GridAvatarStatus.offline;
+    }
+  }
+
+  String _placeLineFor(ContactDisplay c) {
+    // We don't yet have a geocoded place; show the membership state or a
+    // gentle fallback. Keeps the row visually balanced with the design.
+    if (c.membershipStatus == 'invite') return 'Invite pending';
+    final time = c.lastSeen;
+    if (time == 'Offline' || time.isEmpty || time == '-') {
+      return 'Last seen unknown';
+    }
+    return 'Sharing location';
+  }
+
+  String? _timeTextFor(ContactDisplay c) {
+    final time = c.lastSeen;
+    if (time.isEmpty) return null;
+    if (time == 'Just now') return 'now';
+    // Already short ("2m ago", "3h ago"); strip " ago" for compactness.
+    if (time.endsWith(' ago')) return time.substring(0, time.length - 4);
+    return time;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Column(
-      children: [
-        CustomSearchBar(
-          controller: _searchController,
-          hintText: 'Search Contacts',
-        ),
-        Expanded(
-          child: BlocListener<AvatarBloc, AvatarState>(
-            listenWhen: (previous, current) => previous.updateCounter != current.updateCounter,
-            listener: (context, avatarState) {
-              // Force rebuild when avatar updates occur
-              setState(() {});
-            },
-            child: BlocConsumer<ContactsBloc, ContactsState>(
-              listener: (context, state) {
-                // Show snackbar for error states
-                if (state is ContactsError) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${state.message}'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  );
-                }
+    return Container(
+      color: GridTokens.bg,
+      child: Column(
+        children: [
+          _buildSearchField(),
+          Expanded(
+            child: BlocListener<AvatarBloc, AvatarState>(
+              listenWhen: (previous, current) =>
+                  previous.updateCounter != current.updateCounter,
+              listener: (context, avatarState) {
+                // Force rebuild when avatar updates occur
+                setState(() {});
               },
-              builder: (context, state) {
-              if (state is ContactsLoading && !_hasShownInitialLoading) {
-                _hasShownInitialLoading = true;
-                return _buildLoadingState();
-              }
-
-              if (state is ContactsError) {
-                return Center(child: Text('Error: ${state.message}'));
-              }
-
-              if (state is ContactsLoaded) {
-                return Consumer<UserLocationProvider>(
-                  builder: (context, locationProvider, child) {
-                    final contactsWithLocation = _getContactsWithCurrentLocation(
-                      state.contacts,
-                      locationProvider,
+              child: BlocConsumer<ContactsBloc, ContactsState>(
+                listener: (context, state) {
+                  if (state is ContactsError) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${state.message}'),
+                        backgroundColor: GridTokens.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     );
+                  }
+                },
+                builder: (context, state) {
+                  if (state is ContactsLoading && !_hasShownInitialLoading) {
+                    _hasShownInitialLoading = true;
+                    return _buildLoadingState();
+                  }
 
-                    return contactsWithLocation.isEmpty
-                        ? _buildEmptyState(colorScheme)
-                        : Consumer<SyncManager>(
-                            builder: (context, syncManager, child) {
-                              final isSyncing = syncManager.syncState != SyncState.ready;
+                  if (state is ContactsError) {
+                    return _buildErrorState(state.message);
+                  }
 
-                              // Handle sync state transitions
-                              if (_previousSyncState != null &&
-                                  _previousSyncState != SyncState.ready &&
-                                  syncManager.syncState == SyncState.ready) {
-                                // Sync just completed
-                                _syncJustCompleted = true;
-                                _showCheckmark = true;
-                                _checkmarkAnimationController.forward().then((_) {
-                                  if (mounted) {
-                                    Future.delayed(const Duration(milliseconds: 200), () {
+                  if (state is ContactsLoaded) {
+                    return Consumer<UserLocationProvider>(
+                      builder: (context, locationProvider, child) {
+                        final contactsWithLocation =
+                            _getContactsWithCurrentLocation(
+                          state.contacts,
+                          locationProvider,
+                        );
+
+                        return contactsWithLocation.isEmpty
+                            ? _buildEmptyState()
+                            : Consumer<SyncManager>(
+                                builder: (context, syncManager, child) {
+                                  final isSyncing = syncManager.syncState !=
+                                      SyncState.ready;
+
+                                  // Handle sync state transitions
+                                  if (_previousSyncState != null &&
+                                      _previousSyncState != SyncState.ready &&
+                                      syncManager.syncState ==
+                                          SyncState.ready) {
+                                    _syncJustCompleted = true;
+                                    _showCheckmark = true;
+                                    _checkmarkAnimationController
+                                        .forward()
+                                        .then((_) {
                                       if (mounted) {
-                                        setState(() {
-                                          _showCheckmark = false;
-                                          _syncJustCompleted = false;
+                                        Future.delayed(
+                                            const Duration(milliseconds: 200),
+                                            () {
+                                          if (mounted) {
+                                            setState(() {
+                                              _showCheckmark = false;
+                                              _syncJustCompleted = false;
+                                            });
+                                            _checkmarkAnimationController
+                                                .reset();
+                                          }
                                         });
-                                        _checkmarkAnimationController.reset();
                                       }
                                     });
                                   }
-                                });
-                              }
-                              _previousSyncState = syncManager.syncState;
+                                  _previousSyncState = syncManager.syncState;
 
-                              return ListView.builder(
-                                controller: widget.scrollController,
-                                itemCount: contactsWithLocation.length + (isSyncing || _showCheckmark ? 1 : 0),
-                                padding: const EdgeInsets.all(16.0),
-                                itemBuilder: (context, index) {
-                                  // Show sync indicator as first item
-                                  if ((isSyncing || _showCheckmark) && index == 0) {
-                                    return _buildSyncingIndicator(colorScheme, isSyncing: isSyncing);
-                                  }
-
-                                  // Adjust index for contacts when syncing indicator is shown
-                                  final contactIndex = (isSyncing || _showCheckmark) ? index - 1 : index;
-                                  final contact = contactsWithLocation[contactIndex];
-
-                                  return _buildModernContactCard(contact, colorScheme, theme);
+                                  return _buildContactsList(
+                                    contactsWithLocation,
+                                    isSyncing: isSyncing,
+                                  );
                                 },
                               );
-                            },
-                          );
-                  },
-                );
-              }
+                      },
+                    );
+                  }
 
-              return const Center(child: Text('No contacts'));
-            },
+                  return Center(
+                    child: Text(
+                      'No contacts',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text2,
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildSyncingIndicator(ColorScheme colorScheme, {required bool isSyncing}) {
+  // ── Search field (overlapping the hero by 8pt — the parent map sheet
+  // already provides that visual context, so we just render the field). ──
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: GridTokens.surface2,
+          borderRadius: BorderRadius.circular(GridTokens.rMd),
+          border: Border.all(color: GridTokens.hairline),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+            const Icon(Icons.search, size: 18, color: GridTokens.text3),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                cursorColor: GridTokens.mint,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 14,
+                  color: GridTokens.text,
+                  letterSpacing: -0.01,
+                ),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: 'Search contacts',
+                  hintStyle: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    color: GridTokens.text3,
+                    letterSpacing: -0.01,
+                  ),
+                ),
+              ),
+            ),
+            if (_searchController.text.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _searchController.clear();
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Icon(Icons.close_rounded,
+                      size: 16, color: GridTokens.text3),
+                ),
+              )
+            else
+              const SizedBox(width: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── List with sections (SHARING NOW / PAUSED / OFFLINE) ──
+  Widget _buildContactsList(
+    List<ContactDisplay> contacts, {
+    required bool isSyncing,
+  }) {
+    // Group while preserving the upstream sort order (recent-first).
+    final live = <ContactDisplay>[];
+    final paused = <ContactDisplay>[];
+    final offline = <ContactDisplay>[];
+    for (final c in contacts) {
+      switch (_bucketFor(c)) {
+        case _ContactBucket.sharingNow:
+          live.add(c);
+          break;
+        case _ContactBucket.paused:
+          paused.add(c);
+          break;
+        case _ContactBucket.offline:
+          offline.add(c);
+          break;
+      }
+    }
+
+    final items = <_ListItem>[];
+    if (isSyncing || _showCheckmark) {
+      items.add(const _ListItem.syncing());
+    }
+    if (live.isNotEmpty) {
+      items.add(_ListItem.section('SHARING NOW', trailingCount: live.length));
+      for (int i = 0; i < live.length; i++) {
+        items.add(_ListItem.contact(live[i], isLast: i == live.length - 1));
+      }
+    }
+    if (paused.isNotEmpty) {
+      items.add(_ListItem.section('PAUSED', trailingCount: paused.length));
+      for (int i = 0; i < paused.length; i++) {
+        items.add(
+            _ListItem.contact(paused[i], isLast: i == paused.length - 1));
+      }
+    }
+    if (offline.isNotEmpty) {
+      items.add(_ListItem.section('OFFLINE', trailingCount: offline.length));
+      for (int i = 0; i < offline.length; i++) {
+        items.add(
+            _ListItem.contact(offline[i], isLast: i == offline.length - 1));
+      }
+    }
+
+    return ListView.builder(
+      controller: widget.scrollController,
+      itemCount: items.length,
+      padding: const EdgeInsets.only(top: 4, bottom: 32),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        switch (item.kind) {
+          case _ListItemKind.syncing:
+            return _buildSyncingIndicator(isSyncing: isSyncing);
+          case _ListItemKind.section:
+            return GridSectionHeader(
+              text: item.sectionTitle!,
+              trailing: item.trailingCount != null && item.trailingCount! > 0
+                  ? GridMono(
+                      '${item.trailingCount}',
+                      color: GridTokens.text3,
+                      size: 10.5,
+                      letterSpacing: 0.12,
+                    )
+                  : null,
+            );
+          case _ListItemKind.contact:
+            return _buildContactRow(item.contact!, isLast: item.isLast);
+        }
+      },
+    );
+  }
+
+  Widget _buildContactRow(ContactDisplay contact, {required bool isLast}) {
+    final isInvite = contact.membershipStatus == 'invite';
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
+    final handle = showFullMatrixId
+        ? contact.userId
+        : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
+
+    return GestureDetector(
+      onLongPress: () => _showContactMenu(contact),
+      child: GridContactRow(
+        name: contact.displayName,
+        handle: handle,
+        placeLine: _placeLineFor(contact),
+        timeText: _timeTextFor(contact),
+        live: _isLive(contact),
+        avatarStatus: _avatarStatusFor(contact),
+        showDivider: !isLast,
+        statusKind: isInvite ? null : null,
+        statusLabel: null,
+        onTap: () {
+          Provider.of<SelectedUserProvider>(context, listen: false)
+              .setSelectedUserId(contact.userId, context);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSyncingIndicator({required bool isSyncing}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       height: 24,
       child: Center(
         child: AnimatedSwitcher(
@@ -339,8 +562,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         child: Container(
                           width: 10,
                           height: 10,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
+                          decoration: const BoxDecoration(
+                            color: GridTokens.mint,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -362,8 +585,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                             height: 8,
                             decoration: BoxDecoration(
                               color: index <= _dotsAnimation.value
-                                ? colorScheme.primary
-                                : colorScheme.primary.withOpacity(0.3),
+                                  ? GridTokens.mint
+                                  : GridTokens.mint.withOpacity(0.3),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -376,357 +599,68 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       ),
     );
   }
-  
+
   Widget _buildLoadingState() {
     return ListView.builder(
       controller: widget.scrollController,
-      padding: const EdgeInsets.all(16.0),
-      itemCount: 6, // Show 6 skeleton items
+      padding: const EdgeInsets.only(top: 8),
+      itemCount: 6,
       itemBuilder: (context, index) {
-        return _buildSkeletonContactCard();
+        return _buildSkeletonContactRow();
       },
     );
   }
 
-  Widget _buildSkeletonContactCard() {
+  Widget _buildSkeletonContactRow() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: GridTokens.hairline, width: 1),
+        ),
       ),
       child: Row(
         children: [
-          // Skeleton avatar
           Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.3),
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: GridTokens.surface2,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Skeleton title
                 Container(
-                  height: 16,
-                  width: double.infinity,
+                  height: 12,
+                  width: 140,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(8),
+                    color: GridTokens.surface2,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Skeleton subtitle
                 Container(
-                  height: 12,
-                  width: 120,
+                  height: 10,
+                  width: 100,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: GridTokens.surface2.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(ColorScheme colorScheme) {
-    return ListView(
-      controller: widget.scrollController,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.people_outline,
-                  size: 64,
-                  color: colorScheme.primary.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'No contacts yet',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Add friends to start sharing your location and see where they are',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primary.withOpacity(0.8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    // Open add friends modal
-                    _showAddFriendModal(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.person_add,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  label: const Text(
-                    'Add Your First Contact',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModernContactCard(ContactDisplay contact, ColorScheme colorScheme, ThemeData theme) {
-    // Check if using custom homeserver
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () {
-          Provider.of<SelectedUserProvider>(context, listen: false)
-              .setSelectedUserId(contact.userId, context);
-        },
-        onLongPress: () => _showContactMenu(contact),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: [
-              // Smaller avatar with status indicator
-              Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.15),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: UserAvatarBloc(
-                      userId: contact.userId,
-                      size: 56,
-                    ),
-                  ),
-                  // Online status indicator
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: _buildStatusDot(contact.lastSeen, colorScheme, membershipStatus: contact.membershipStatus),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(width: 12),
-              
-              // Contact information
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Display name
-                    Text(
-                      contact.displayName,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                        fontSize: 15,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    
-                    const SizedBox(height: 2),
-                    
-                    // User ID subtitle - show full matrix ID for custom homeservers
-                    Text(
-                      showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Status badge on the right
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Use StatusIndicator if we have membership status, otherwise use enhanced status
-                  contact.membershipStatus != null
-                      ? StatusIndicator(
-                          timeAgo: contact.lastSeen,
-                          membershipStatus: contact.membershipStatus,
-                        )
-                      : _buildEnhancedStatusIndicator(contact.lastSeen, colorScheme, theme),
-                  // Future: Add geocoding info here
-                  // const SizedBox(height: 4),
-                  // Text('2.3 km away', style: TextStyle(fontSize: 10)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
-    Color statusColor;
-    bool isOnline;
-    
-    // Check for invitation status first
-    if (membershipStatus == 'invite') {
-      statusColor = Colors.orange;
-      isOnline = false;
-    } else {
-      statusColor = _getStatusColor(timeAgo, colorScheme);
-      isOnline = _isRecentlyActive(timeAgo);
-    }
-    
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: colorScheme.surface,
-          width: 2,
-        ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: statusColor,
-          shape: BoxShape.circle,
-        ),
-        child: isOnline
-            ? Container(
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.circle,
-                  color: Colors.transparent,
-                  size: 8,
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildEnhancedStatusIndicator(String timeAgo, ColorScheme colorScheme, ThemeData theme) {
-    Color statusColor = _getStatusColor(timeAgo, colorScheme);
-    IconData statusIcon = _getStatusIcon(timeAgo);
-    String enhancedText = _getEnhancedStatusText(timeAgo);
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: statusColor.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            statusIcon,
-            size: 12,
-            color: statusColor,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            enhancedText,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: statusColor,
-              fontWeight: FontWeight.w500,
-              fontSize: 11,
+          const SizedBox(width: 8),
+          Container(
+            width: 32,
+            height: 10,
+            decoration: BoxDecoration(
+              color: GridTokens.surface2.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(6),
             ),
           ),
         ],
@@ -734,78 +668,120 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     );
   }
 
-  Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return colorScheme.primary; // Use primary green
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      // Extract minutes to check if over 10 minutes
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10 ? colorScheme.primary : Colors.orange;
-      }
-      return colorScheme.primary;
-    } else if (timeAgo.contains('h ago')) {
-      return Colors.orange;
-    } else if (timeAgo.contains('d ago')) {
-      return Colors.red;
-    } else {
-      return colorScheme.onSurface.withOpacity(0.4);
-    }
+  Widget _buildErrorState(String message) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: GridTokens.dangerSoft,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: GridTokens.danger,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Something went wrong',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: GridTokens.text,
+                letterSpacing: -0.01,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                color: GridTokens.text2,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  IconData _getStatusIcon(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return Icons.circle;
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      return Icons.circle;
-    } else if (timeAgo.contains('h ago')) {
-      return Icons.schedule;
-    } else if (timeAgo.contains('d ago')) {
-      return Icons.access_time;
-    } else {
-      return Icons.circle_outlined;
-    }
+  Widget _buildEmptyState() {
+    return ListView(
+      controller: widget.scrollController,
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      children: [
+        const SizedBox(height: 24),
+        Center(
+          child: Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: GridTokens.mintFaint,
+              borderRadius: BorderRadius.circular(GridTokens.r2Xl),
+            ),
+            child: const Icon(
+              Icons.people_alt_outlined,
+              size: 40,
+              color: GridTokens.mint,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'No people yet',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            color: GridTokens.text,
+            letterSpacing: -0.02,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Add a friend with a code, a link, or a handle. '
+          'Nothing is shared until you both confirm.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 14,
+            color: GridTokens.text2,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: GridButton(
+            label: 'Add a friend',
+            icon: Icons.person_add_alt_1_rounded,
+            onPressed: () => _showAddFriendModal(context),
+          ),
+        ),
+      ],
+    );
   }
 
-  String _getEnhancedStatusText(String timeAgo) {
-    if (timeAgo == 'Just now') {
-      return 'Active now';
-    } else if (timeAgo.contains('s ago')) {
-      return 'Active now';
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      return timeAgo;
-    } else if (timeAgo.contains('h ago')) {
-      return timeAgo;
-    } else if (timeAgo.contains('d ago')) {
-      return timeAgo;
-    } else {
-      return 'Offline';
-    }
-  }
-
-  bool _isRecentlyActive(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return true;
-    }
-    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10; // Only consider active if 10 minutes or less
-      }
-    }
-    return false;
-  }
-
-  void _showExpandedAvatar(BuildContext context, String userId) {
+  void _showExpandedAvatar(BuildContext context, String userId, String name) {
     showDialog(
       context: context,
       barrierColor: Colors.black87,
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.all(20),
+          insetPadding: const EdgeInsets.all(20),
           child: GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             child: Container(
@@ -816,9 +792,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.8,
                     height: MediaQuery.of(context).size.width * 0.8,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Theme.of(context).colorScheme.surface,
+                      color: GridTokens.surface,
                     ),
                     child: ClipOval(
                       child: UserAvatarBloc(
@@ -850,11 +826,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           userService: Provider.of<UserService>(context, listen: false),
           groupsBloc: context.read<GroupsBloc>(),
           onGroupCreated: () {
-            // Refresh contacts when a new group is created
             context.read<ContactsBloc>().add(LoadContacts());
           },
           onContactAdded: () {
-            // Trigger immediate refresh - sync manager will handle the rest
             context.read<ContactsBloc>().add(RefreshContacts());
           },
         ),
@@ -863,54 +837,48 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   void _showContactMenu(ContactDisplay contact) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    // Check if using custom homeserver
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
-    
+    final handle = showFullMatrixId
+        ? contact.userId
+        : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
         return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Contact info header
+              // Identity header
               Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(GridTokens.rLg),
+                    topRight: Radius.circular(GridTokens.rLg),
                   ),
                 ),
                 child: Row(
                   children: [
                     GestureDetector(
-                      onTap: () {
-                        _showExpandedAvatar(context, contact.userId);
-                      },
+                      onTap: () => _showExpandedAvatar(
+                          context, contact.userId, contact.displayName),
                       child: Hero(
                         tag: 'contact_menu_avatar_${contact.userId}',
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: colorScheme.primary.withOpacity(0.1),
-                          child: UserAvatarBloc(
-                            userId: contact.userId,
-                            size: 56,
-                          ),
+                        child: GridAvatar(
+                          name: contact.displayName,
+                          size: 48,
+                          status: _avatarStatusFor(contact),
+                          imageUrl: contact.avatarUrl,
                         ),
                       ),
                     ),
@@ -921,16 +889,23 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         children: [
                           Text(
                             contact.displayName,
-                            style: theme.textTheme.titleMedium?.copyWith(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
+                              color: GridTokens.text,
+                              letterSpacing: -0.01,
                             ),
                           ),
-                          Text(
-                            showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                          const SizedBox(height: 2),
+                          GridMono(
+                            handle,
+                            color: GridTokens.text3,
+                            size: 11,
+                            letterSpacing: 0.02,
+                            uppercase: false,
                           ),
                         ],
                       ),
@@ -938,88 +913,34 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                   ],
                 ),
               ),
-              
-              // Menu options
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.person,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'View Profile',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+
+              _MenuRow(
+                icon: Icons.person_rounded,
+                iconBg: GridTokens.mintFaint,
+                iconFg: GridTokens.mint,
+                label: 'View profile',
                 onTap: () {
                   Navigator.pop(context);
                   _showOptionsDialog(contact);
                 },
               ),
-              
-              // Commented out for this release - history feature only for groups
-              // ListTile(
-              //   leading: Container(
-              //     padding: const EdgeInsets.all(8),
-              //     decoration: BoxDecoration(
-              //       color: colorScheme.primary.withOpacity(0.1),
-              //       borderRadius: BorderRadius.circular(8),
-              //     ),
-              //     child: Icon(
-              //       Icons.history,
-              //       color: colorScheme.primary,
-              //       size: 20,
-              //     ),
-              //   ),
-              //   title: Text(
-              //     'View History',
-              //     style: TextStyle(
-              //       color: colorScheme.onSurface,
-              //       fontWeight: FontWeight.w500,
-              //     ),
-              //   ),
-              //   onTap: () {
-              //     Navigator.pop(context);
-              //     _showLocationHistory(contact);
-              //   },
-              // ),
-              
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                    size: 20,
-                  ),
-                ),
-                title: const Text(
-                  'Remove Contact',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+
+              const Divider(
+                  height: 1, thickness: 1, color: GridTokens.hairline),
+
+              _MenuRow(
+                icon: Icons.delete_outline_rounded,
+                iconBg: GridTokens.dangerSoft,
+                iconFg: GridTokens.danger,
+                label: 'Remove contact',
+                labelColor: GridTokens.danger,
                 onTap: () {
                   Navigator.pop(context);
                   _showDeleteConfirmation(contact);
                 },
               ),
-              
-              const SizedBox(height: 16),
+
+              const SizedBox(height: 8),
             ],
           ),
         );
@@ -1028,65 +949,88 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   void _showDeleteConfirmation(ContactDisplay contact) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: colorScheme.surface,
+          backgroundColor: GridTokens.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            side: const BorderSide(color: GridTokens.hairline),
           ),
           title: Row(
             children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.red,
-                size: 24,
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: GridTokens.dangerSoft,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: GridTokens.danger,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Remove Contact',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
+                'Remove contact',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
+                  color: GridTokens.text,
+                  letterSpacing: -0.01,
                 ),
               ),
             ],
           ),
           content: Text(
-            'Are you sure you want to remove "${contact.displayName}" from your contacts? This action cannot be undone.',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
-              height: 1.4,
+            'Remove "${contact.displayName}" from your contacts? '
+            'You can always add them back later.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 14,
+              color: GridTokens.text2,
+              height: 1.45,
             ),
           ),
+          actionsPadding:
+              const EdgeInsets.fromLTRB(16, 0, 16, 12),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: GridTokens.text2,
+              ),
               child: Text(
                 'Cancel',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
+                  color: GridTokens.text2,
                 ),
               ),
             ),
-            ElevatedButton(
+            GridButton(
+              label: 'Remove',
+              expand: false,
+              height: 40,
+              style: GridButtonStyle.danger,
               onPressed: () {
                 Navigator.of(context).pop();
                 final contactName = contact.displayName;
-                
-                // Send delete event
-                context.read<ContactsBloc>().add(DeleteContact(contact.userId));
-                
-                // Show immediate feedback - assume success unless error occurs
+
+                context
+                    .read<ContactsBloc>()
+                    .add(DeleteContact(contact.userId));
+
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Removing $contactName from contacts...'),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: GridTokens.surface2,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1094,26 +1038,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                   ),
                 );
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Remove',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
             ),
           ],
         );
       },
     );
   }
-  
+
   void _showLocationHistory(ContactDisplay contact) {
     showModalBottomSheet(
       context: context,
@@ -1126,6 +1057,107 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           avatarUrl: contact.avatarUrl,
         );
       },
+    );
+  }
+}
+
+// ── Internal helpers ────────────────────────────────────────────────
+
+enum _ContactBucket { sharingNow, paused, offline }
+
+enum _ListItemKind { syncing, section, contact }
+
+class _ListItem {
+  const _ListItem._({
+    required this.kind,
+    this.sectionTitle,
+    this.trailingCount,
+    this.contact,
+    this.isLast = false,
+  });
+
+  const _ListItem.syncing()
+      : kind = _ListItemKind.syncing,
+        sectionTitle = null,
+        trailingCount = null,
+        contact = null,
+        isLast = false;
+
+  factory _ListItem.section(String title, {int? trailingCount}) => _ListItem._(
+        kind: _ListItemKind.section,
+        sectionTitle: title,
+        trailingCount: trailingCount,
+      );
+
+  factory _ListItem.contact(ContactDisplay c, {required bool isLast}) =>
+      _ListItem._(
+        kind: _ListItemKind.contact,
+        contact: c,
+        isLast: isLast,
+      );
+
+  final _ListItemKind kind;
+  final String? sectionTitle;
+  final int? trailingCount;
+  final ContactDisplay? contact;
+  final bool isLast;
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
+    required this.icon,
+    required this.iconBg,
+    required this.iconFg,
+    required this.label,
+    this.labelColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconFg;
+  final String label;
+  final Color? labelColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: Icon(icon, color: iconFg, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: labelColor ?? GridTokens.text,
+                    letterSpacing: -0.01,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: GridTokens.text3, size: 18),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

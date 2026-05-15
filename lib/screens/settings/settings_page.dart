@@ -41,6 +41,11 @@ import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 import 'package:grid_frontend/screens/settings/developer_settings_screen.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../styles/tokens.dart';
+import '../../widgets/grid/grid_avatar.dart';
+import '../../widgets/grid/grid_mono.dart';
+import '../../widgets/grid/grid_segmented.dart';
 
 
 
@@ -59,6 +64,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
   String _appVersion = '';
+  String _buildNumber = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
   String? _userID;
@@ -88,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final packageInfo = await PackageInfo.fromPlatform();
     setState(() {
       _appVersion = 'v${packageInfo.version}';
+      _buildNumber = packageInfo.buildNumber;
     });
   }
 
@@ -2064,118 +2071,181 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isCustom = isCustomHomeserver();
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: GridTokens.bg,
       appBar: AppBar(
+        backgroundColor: GridTokens.bg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: GridTokens.text,
+            size: 20,
+          ),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: Text(
           'Settings',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onBackground,
+          style: GoogleFonts.getFont(
+            'Geist',
+            color: GridTokens.text,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.015,
           ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Container(
-          margin: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: colorScheme.onSurface,
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
           children: [
-            // Profile Section
+            // Profile header card
             _buildProfileSection(theme, colorScheme),
-            SizedBox(height: 32),
 
-            // Privacy & Location Section
+            // ── Sharing ─────────────────────────────────────
+            const GridSectionHeader(text: 'Sharing'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Privacy & Location',
               children: [
                 _buildToggleOption(
-                  icon: Icons.visibility_off,
-                  title: 'Incognito Mode',
-                  subtitle: 'Stops all location sharing services',
-                  value: _incognitoMode,
-                  onChanged: _toggleIncognitoMode,
+                  icon: Icons.location_on_outlined,
+                  title: 'Sharing location',
+                  // The screen historically called this "Incognito Mode"; the
+                  // redesign inverts the framing so a green toggle == sharing.
+                  value: !_incognitoMode,
+                  onChanged: (v) => _toggleIncognitoMode(!v),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
+                // TODO: needs server-side support (auto-pause / geofencing).
                 _buildToggleOption(
-                  icon: Icons.battery_saver,
-                  title: 'Battery Saver Mode',
-                  subtitle: 'Less accurate, but less power consumption',
+                  icon: Icons.home_outlined,
+                  title: 'Auto-pause when phone is at home',
+                  subtitle: 'Saves battery',
+                  value: false,
+                  onChanged: (_) {},
+                  enabled: false,
+                  colorScheme: colorScheme,
+                ),
+                _buildSettingsDivider(),
+                _buildToggleOption(
+                  icon: Icons.battery_saver_outlined,
+                  title: 'Battery saver',
+                  subtitle: 'Less accurate, less power',
                   value: _batterySaver,
                   onChanged: _toggleBatterySaver,
                   colorScheme: colorScheme,
                 ),
+                _buildSettingsDivider(),
+                _buildValueRow(
+                  icon: Icons.gps_fixed_rounded,
+                  title: 'Precision',
+                  // TODO: needs server-side support (approximate / blurred
+                  // precision). Render fixed to "Exact" until that ships.
+                  value: 'Exact',
+                  enabled: false,
+                  onTap: () {},
+                ),
               ],
             ),
-            SizedBox(height: 24),
 
-            // Security Information Section
+            // ── Privacy & security ──────────────────────────
+            const GridSectionHeader(text: 'Privacy & security'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Security Information',
               children: [
                 _buildInfoRow(
-                  icon: Icons.device_hub,
-                  title: 'Device ID',
-                  value: deviceID ?? 'Loading...',
-                  onTap: () => _showInfoModal('Device ID', deviceID ?? 'Loading...'),
+                  icon: Icons.shield_outlined,
+                  title: 'Encryption keys',
+                  value: deviceID == null || identityKey == null
+                      ? 'Loading…'
+                      : 'Device $_shortDeviceId · 1 backed up',
+                  onTap: () => _showInfoModal(
+                    'Identity Key',
+                    identityKey ?? 'Loading...',
+                  ),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildInfoRow(
-                  icon: Icons.key,
-                  title: 'Identity Key',
-                  value: identityKey ?? 'Loading...',
-                  onTap: () => _showInfoModal('Identity Key', identityKey ?? 'Loading...'),
+                  icon: Icons.fingerprint_rounded,
+                  title: 'Device ID',
+                  value: deviceID ?? 'Loading…',
+                  onTap: () => _showInfoModal(
+                    'Device ID',
+                    deviceID ?? 'Loading...',
+                  ),
                   colorScheme: colorScheme,
+                  mono: true,
                 ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Passkeys Section (only for default homeserver)
-            if (!isCustomHomeserver()) ...[
-              _buildSectionCard(
-                theme: theme,
-                colorScheme: colorScheme,
-                title: 'Authentication',
-                children: [
+                if (!isCustom) ...[
+                  _buildSettingsDivider(),
                   _buildMenuOption(
-                    icon: Icons.fingerprint,
+                    icon: Icons.key_outlined,
                     title: 'Passkeys',
-                    subtitle: 'Manage passkey login credentials',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const PasskeyManagementScreen(),
+                          builder: (context) =>
+                              const PasskeyManagementScreen(),
+                        ),
+                      );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                ],
+                _buildSettingsDivider(),
+                // TODO: needs server-side support (per-event notification
+                // prefs are not wired up yet on the redesign trunk).
+                _buildMenuOption(
+                  icon: Icons.notifications_none_rounded,
+                  title: 'Notifications',
+                  trailing: 'On',
+                  onTap: () {},
+                  enabled: false,
+                  colorScheme: colorScheme,
+                ),
+                _buildSettingsDivider(),
+                _buildMenuOption(
+                  icon: Icons.dns_outlined,
+                  title: 'Server',
+                  trailing: isCustom ? 'Custom' : 'grid.cloud',
+                  onTap: () => _showInfoModal(
+                    'Server',
+                    isCustom
+                        ? 'You are connected to a custom Matrix homeserver.'
+                        : 'You are connected to the default grid.cloud server.',
+                  ),
+                  colorScheme: colorScheme,
+                ),
+              ],
+            ),
+
+            // Subscriptions (still hidden — kept as a flag for parity).
+            // Hidden while sat-map provider is offline; re-enable by removing
+            // the `false &&` once subscriptions can deliver value again.
+            if (false && !isCustom) ...[
+              const GridSectionHeader(text: 'Subscription'),
+              _buildSectionCard(
+                theme: theme,
+                colorScheme: colorScheme,
+                children: [
+                  _buildMenuOption(
+                    icon: Icons.credit_card,
+                    title: 'Manage subscription',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SubscriptionScreen(),
                         ),
                       );
                     },
@@ -2183,134 +2253,69 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ],
               ),
-              SizedBox(height: 24),
             ],
 
-            // Subscriptions Section (only for default homeserver)
-            // Hidden while sat-map provider is offline; re-enable by removing
-            // the `false &&` once subscriptions can deliver value again.
-            if (false && !isCustomHomeserver()) ...[
-              _buildSectionCard(
-                theme: theme,
-                colorScheme: colorScheme,
-                title: 'Subscriptions',
-                children: [
-                  _buildMenuOption(
-                    icon: Icons.credit_card,
-                    title: 'Manage Subscriptions',
-                    subtitle: 'View and manage your subscriptions',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                      );
-                    },
-                    colorScheme: colorScheme,
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-            ],
-
-            // Community Section
+            // ── About ───────────────────────────────────────
+            const GridSectionHeader(text: 'About'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Community',
               children: [
                 _buildMenuOption(
-                  icon: FontAwesomeIcons.discord,
-                  title: 'Join our Discord',
-                  subtitle: 'Connect with the Grid community',
-                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
-                  colorScheme: colorScheme,
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Support & Information Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Support & Information',
-              children: [
-                _buildMenuOption(
-                  icon: Icons.info_outline,
-                  title: 'About Grid',
-                  subtitle: 'Learn more about the app',
-                  onTap: () => _launchURL('https://mygrid.app/about'),
-                  colorScheme: colorScheme,
-                ),
-                SizedBox(height: 16),
-                _buildMenuOption(
-                  icon: Icons.shield_outlined,
-                  title: 'Privacy Policy',
-                  subtitle: 'How we protect your data',
-                  onTap: () => _launchURL('https://mygrid.app/privacy'),
-                  colorScheme: colorScheme,
-                ),
-                SizedBox(height: 16),
-                _buildMenuOption(
-                  icon: Icons.feedback_outlined,
-                  title: 'Send Feedback',
-                  subtitle: 'Help us improve Grid',
+                  icon: Icons.help_outline_rounded,
+                  title: 'Help & support',
                   onTap: () => _launchURL('https://mygrid.app/feedback'),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.report_outlined,
-                  title: 'Report Abuse',
-                  subtitle: 'Report inappropriate behavior',
-                  onTap: () => _launchURL('https://mygrid.app/report'),
+                  icon: Icons.code_rounded,
+                  title: 'Open source',
+                  trailing: 'github.com/Rezivure',
+                  onTap: () => _launchURL('https://github.com/Rezivure'),
                   colorScheme: colorScheme,
                 ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Developer Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Developer',
-              children: [
+                _buildSettingsDivider(),
+                _buildMenuOption(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy policy',
+                  onTap: () => _launchURL('https://mygrid.app/privacy'),
+                  colorScheme: colorScheme,
+                ),
+                _buildSettingsDivider(),
+                _buildMenuOption(
+                  icon: FontAwesomeIcons.discord,
+                  title: 'Join our Discord',
+                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
+                  colorScheme: colorScheme,
+                ),
+                _buildSettingsDivider(),
                 _buildMenuOption(
                   icon: Icons.bug_report_outlined,
-                  title: 'Debug Logging',
-                  subtitle: 'Configure remote debug logging',
+                  title: 'Debug logging',
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DeveloperSettingsScreen()),
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const DeveloperSettingsScreen(),
+                      ),
                     );
                   },
                   colorScheme: colorScheme,
                 ),
-              ],
-            ),
-            SizedBox(height: 32),
-
-            // Account Actions Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Account Actions',
-              children: [
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.logout,
-                  title: 'Sign Out',
-                  subtitle: 'Sign out of your account',
+                  icon: Icons.logout_rounded,
+                  title: 'Sign out',
                   onTap: _logout,
                   colorScheme: colorScheme,
                   isDestructive: true,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.delete_forever,
-                  title: 'Delete Account',
-                  subtitle: 'Permanently delete your account',
+                  icon: Icons.delete_forever_outlined,
+                  title: 'Delete account',
                   onTap: _deleteAccount,
                   colorScheme: colorScheme,
                   isDestructive: true,
@@ -2318,21 +2323,118 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ],
             ),
-            SizedBox(height: 40),
-            
-            // Version info at the bottom
+
+            const SizedBox(height: 28),
+
+            // Footer: mono "Grid vX.X · build XXX" with Grid mark.
             Center(
-              child: Text(
-                _appVersion,
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.4),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: GridTokens.mint.withOpacity(0.18),
+                      border: Border.all(
+                        color: GridTokens.mint,
+                        width: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GridMono(
+                    _buildFooterText(),
+                    color: GridTokens.text3,
+                    size: 11,
+                    letterSpacing: 0.04,
+                    uppercase: false,
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 12),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Short 4-char prefix of the device ID used in the encryption-keys row.
+  String get _shortDeviceId {
+    final id = deviceID ?? '';
+    if (id.length <= 4) return id;
+    return id.substring(0, 4);
+  }
+
+  /// Footer line, e.g. "Grid v3.2 · build 612".
+  String _buildFooterText() {
+    final version = _appVersion.isEmpty ? '' : _appVersion;
+    final build = _buildNumber.isEmpty ? '' : 'build $_buildNumber';
+    if (version.isEmpty && build.isEmpty) return 'Grid';
+    if (version.isEmpty) return 'Grid · $build';
+    if (build.isEmpty) return 'Grid $version';
+    return 'Grid $version · $build';
+  }
+
+  /// Hairline separator between rows inside a settings group.
+  Widget _buildSettingsDivider() {
+    return const Padding(
+      padding: EdgeInsets.only(left: 56),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: GridTokens.hairline,
+      ),
+    );
+  }
+
+  /// A read-only "Title    Value" row used for things like Precision = Exact.
+  Widget _buildValueRow({
+    required IconData icon,
+    required String title,
+    required String value,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: GridTokens.text2),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: GridTokens.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.01,
+                    ),
+                  ),
+                ),
+                Text(
+                  value,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    color: GridTokens.text2,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.01,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2341,125 +2443,144 @@ class _SettingsPageState extends State<SettingsPage> {
   // Helper Methods for New UI
   Widget _buildProfileSection(ThemeData theme, ColorScheme colorScheme) {
     final client = Provider.of<Client>(context, listen: false);
-    
+    final isCustom = isCustomHomeserver();
+    final handle = _username ?? '';
+    final handlePrefix = handle.startsWith('@') ? handle : '@$handle';
+    final handleLine = isCustom
+        ? handlePrefix
+        : '$handlePrefix · grid.cloud';
+
     return Container(
-      padding: EdgeInsets.all(24),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: GridTokens.hairline),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Stack(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  _showExpandedAvatar(context);
-                },
-                child: Hero(
-                  tag: 'settings_avatar_${client.userID}',
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colorScheme.primary.withOpacity(0.1),
+          // Avatar — 56pt with mint live ring, tap to expand, long-press / edit
+          // pencil flow preserved by the camera button trailing.
+          GestureDetector(
+            onTap: () => _showExpandedAvatar(context),
+            child: Hero(
+              tag: 'settings_avatar_${client.userID}',
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // The redesigned GridAvatar renders the deterministic
+                    // gradient + ring; UserAvatarBloc still wins when the
+                    // user has uploaded a custom image, so we overlay it
+                    // inside the ring container.
+                    GridAvatar(
+                      name: _displayName ?? _username ?? 'Grid',
+                      size: 56,
+                      ring: true,
+                      status: _incognitoMode
+                          ? GridAvatarStatus.paused
+                          : GridAvatarStatus.live,
                     ),
-                    child: UserAvatarBloc(
-                      userId: client.userID ?? '',
-                      size: 100,
+                    // Live user-uploaded avatar, clipped into the inner disc.
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: ClipOval(
+                          child: UserAvatarBloc(
+                            userId: client.userID ?? '',
+                            size: 54,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: _pickAndUploadAvatar,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.camera_alt,
-                      size: 16,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  _displayName ?? 'Unknown User',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onBackground,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              SizedBox(width: 8),
-              if (_isEditingDisplayName)
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colorScheme.primary,
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: _editDisplayName,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.edit,
-                      size: 16,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              '@$_username',
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w600,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _displayName ?? 'Unknown User',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          color: GridTokens.text,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.015,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (_isEditingDisplayName)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: GridTokens.mint,
+                        ),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: _editDisplayName,
+                        child: const Icon(
+                          Icons.edit_outlined,
+                          size: 14,
+                          color: GridTokens.text3,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                GridMono(
+                  handleLine,
+                  color: GridTokens.text2,
+                  size: 12,
+                  letterSpacing: 0.02,
+                  uppercase: false,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Mint QR shortcut. Wired to the avatar picker so the existing
+          // upload flow stays reachable (no QR sheet exists yet in this
+          // build of the app).
+          // TODO: wire to dedicated profile QR sheet when that lands.
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _pickAndUploadAvatar,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: GridTokens.mintFaint,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: GridTokens.hairline),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.qr_code_2_rounded,
+                  size: 22,
+                  color: GridTokens.mint,
+                ),
               ),
             ),
           ),
@@ -2468,115 +2589,93 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// Grouped settings card — wraps a list of rows in the surface card style
+  /// used across the redesign. Rows handle their own padding so this widget
+  /// just clips and outlines them.
   Widget _buildSectionCard({
     required ThemeData theme,
     required ColorScheme colorScheme,
-    required String title,
     required List<Widget> children,
   }) {
     return Container(
-      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: GridTokens.hairline),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-            ),
-          ),
-          SizedBox(height: 16),
-          ...children,
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
     );
   }
 
   Widget _buildToggleOption({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required bool value,
     required Function(bool) onChanged,
     required ColorScheme colorScheme,
+    bool enabled = true,
   }) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: value
-                  ? colorScheme.primary.withOpacity(0.15)
-                  : colorScheme.outline.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
               icon,
-              color: value ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.6),
               size: 20,
+              color: value && enabled ? GridTokens.mint : GridTokens.text2,
             ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurface,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: GridTokens.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.01,
+                    ),
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-              ],
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text3,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          Transform.scale(
-            scale: 0.9,
-            child: Switch(
+            const SizedBox(width: 12),
+            Switch(
               value: value,
-              onChanged: onChanged,
-              activeColor: colorScheme.primary,
+              onChanged: enabled ? onChanged : null,
+              thumbColor: WidgetStateProperty.all(Colors.white),
+              trackColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? GridTokens.mint
+                    : GridTokens.surface3,
+              ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              trackOutlineColor:
+                  WidgetStateProperty.all(Colors.transparent),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2587,64 +2686,78 @@ class _SettingsPageState extends State<SettingsPage> {
     required String value,
     required VoidCallback onTap,
     required ColorScheme colorScheme,
+    bool mono = false,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: colorScheme.outline.withOpacity(0.15),
-            width: 1,
+    final displayValue = value.length > 36
+        ? '${value.substring(0, 36)}…'
+        : value;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: GridTokens.mintFaint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 16, color: GridTokens.mint),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.01,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    mono
+                        ? GridMono(
+                            displayValue,
+                            color: GridTokens.text3,
+                            size: 11,
+                            letterSpacing: 0.04,
+                            uppercase: false,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : Text(
+                            displayValue,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              color: GridTokens.text3,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: -0.005,
+                            ),
+                          ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: GridTokens.text3,
+              ),
+            ],
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: colorScheme.primary,
-                size: 20,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    value.length > 30 ? '${value.substring(0, 30)}...' : value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.visibility,
-              color: colorScheme.onSurface.withOpacity(0.4),
-              size: 18,
-            ),
-          ],
         ),
       ),
     );
@@ -2653,101 +2766,65 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildMenuOption({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? trailing,
     required VoidCallback onTap,
     required ColorScheme colorScheme,
     bool isDestructive = false,
     bool isHighRisk = false,
+    bool enabled = true,
   }) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    final iconColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade700 : Colors.red.shade600)
-        : colorScheme.primary;
-    final textColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade700 : Colors.red.shade600)
-        : colorScheme.onSurface;
-    final subtitleColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade500 : Colors.red.shade400)
-        : colorScheme.onSurface.withOpacity(0.6);
+    final Color titleColor = isDestructive ? GridTokens.danger : GridTokens.text;
+    final Color iconColor = isDestructive ? GridTokens.danger : GridTokens.text2;
 
-    // Better colors for dark mode
-    final backgroundColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade900.withOpacity(0.2))
-            : (isHighRisk ? Colors.red.shade50 : Colors.red.shade50))
-        : colorScheme.surface;
-        
-    final borderColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade700.withOpacity(0.4) : Colors.red.shade700.withOpacity(0.3))
-            : (isHighRisk ? Colors.red.shade200 : Colors.red.shade200))
-        : colorScheme.outline.withOpacity(0.15);
-        
-    final iconBackgroundColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade800.withOpacity(0.4) : Colors.red.shade800.withOpacity(0.3))
-            : (isHighRisk ? Colors.red.shade100 : Colors.red.shade50))
-        : colorScheme.primary.withOpacity(0.1);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: borderColor,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: iconBackgroundColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 20,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.55,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: iconColor),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: titleColor,
+                      fontSize: 15,
+                      fontWeight: isHighRisk
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      letterSpacing: -0.01,
                     ),
                   ),
-                  SizedBox(height: 2),
+                ),
+                if (trailing != null) ...[
                   Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: subtitleColor,
+                    trailing,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: GridTokens.text2,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.005,
                     ),
                   ),
+                  const SizedBox(width: 8),
                 ],
-              ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: isDestructive
+                      ? GridTokens.danger.withOpacity(0.6)
+                      : GridTokens.text3,
+                ),
+              ],
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: isDestructive
-                  ? iconColor.withOpacity(0.6)
-                  : colorScheme.onSurface.withOpacity(0.4),
-              size: 16,
-            ),
-          ],
+          ),
         ),
       ),
     );

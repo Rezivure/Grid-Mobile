@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
@@ -12,6 +12,11 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 
 class GroupInvitationModal extends StatefulWidget {
   final RoomService roomService;
@@ -69,88 +74,140 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     expiry = calculateExpiryTime(widget.expiration);
   }
 
+  /// Returns the handle (e.g. "jordan.t") from a Matrix ID like "@jordan.t:grid.cloud".
+  String get _inviterHandle {
+    final raw = widget.inviter.split(':').first;
+    return raw.replaceFirst('@', '');
+  }
+
+  /// Returns the homeserver (e.g. "grid.cloud") from a Matrix ID.
+  String get _inviterHomeserver {
+    final parts = widget.inviter.split(':');
+    return parts.length > 1 ? parts.sublist(1).join(':') : 'grid.cloud';
+  }
+
+  /// Synthesize avatar seeds for the stacked-avatar cluster at the top.
+  /// We don't have the full member list here — the inviter is the only known
+  /// real participant, so the rest are deterministic stand-ins keyed off the
+  /// room id and group name. The visual goal is the cluster pattern from
+  /// `21-invites-active.png` (GroupInviteCard).
+  List<String> get _avatarSeeds {
+    final inviter = _inviterHandle;
+    final room = widget.roomId;
+    final name = widget.groupName;
+    return [
+      inviter,
+      '$inviter.$room',
+      '$name.$room',
+      'group.$room',
+    ];
+  }
+
+  bool get _isTrip => expiry != 'Permanent';
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,  // Start taller
+      initialChildSize: 0.75,
       minChildSize: 0.5,
       maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        decoration: const BoxDecoration(
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(GridTokens.r2Xl)),
+          border: Border(
+            top: BorderSide(color: GridTokens.hairlineStrong, width: 1),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle indicator
+            // Grab handle
             Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 32,
+              margin: const EdgeInsets.only(top: 10),
+              width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                color: GridTokens.text4,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
-            // Header with close button
+
+            // Close button row (no header title — content is the moment)
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.group_add,
-                    color: colorScheme.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Group Invitation',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(
-                      Icons.close,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
+                  const Spacer(),
+                  _CloseButton(onTap: () => Navigator.of(context).pop()),
                 ],
               ),
             ),
-            
+
             Expanded(
               child: SingleChildScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),  // Reduced top padding
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Group info section
-                    _buildGroupInfoCard(theme, colorScheme),
-                    
-                    const SizedBox(height: 16),  // Reduced from 24
-                    
-                    // Action buttons
+                    // Stacked avatars cluster
+                    const SizedBox(height: 12),
+                    Center(child: _buildStackedAvatars()),
+
+                    const SizedBox(height: 18),
+
+                    // Optional TRIP pill (amber) when the group has an expiration
+                    if (_isTrip) ...[
+                      Center(
+                        child: GridStatusPill(
+                          kind: GridStatusKind.trip,
+                          label: 'TRIP · $expiry',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Group name
+                    Text(
+                      widget.groupName,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: GridTokens.text,
+                        letterSpacing: -0.01,
+                        height: 1.15,
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Mono subtitle: "@inviter · grid.cloud"
+                    Center(
+                      child: GridMono(
+                        '@$_inviterHandle · $_inviterHomeserver',
+                        size: 12,
+                        uppercase: false,
+                        letterSpacing: 0.02,
+                        color: GridTokens.text3,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Mint-faint "Wants to add you to this group" card
+                    _buildMintFaintCard(),
+
+                    const SizedBox(height: 12),
+
+                    // Action buttons / loading state
                     if (_isProcessing)
-                      _buildLoadingState(theme, colorScheme)
+                      _buildLoadingState()
                     else
-                      _buildActionButtons(theme, colorScheme),
+                      _buildActionButtons(),
                   ],
                 ),
               ),
@@ -161,159 +218,52 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     );
   }
 
-  Widget _buildGroupInfoCard(ThemeData theme, ColorScheme colorScheme) {
+  Widget _buildStackedAvatars() {
+    const double avatarSize = 56;
+    const double overlap = 18; // negative-margin overlap
+    final seeds = _avatarSeeds;
+
+    return SizedBox(
+      height: avatarSize + 8,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (int i = 0; i < seeds.length; i++)
+            Positioned(
+              left: i * (avatarSize - overlap),
+              child: GridAvatar(
+                name: seeds[i],
+                size: avatarSize,
+                padding: 2,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMintFaintCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),  // Reduced from 24
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
+        color: GridTokens.mintFaint,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
       ),
-      child: Column(
+      child: Row(
         children: [
-          // Group icon with inviter avatar
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              // Background circle
-              Container(
-                width: 70,  // Reduced from 80
-                height: 70,  // Reduced from 80
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.group,
-                  color: colorScheme.primary,
-                  size: 35,  // Reduced from 40
-                ),
+          const Icon(Icons.group_rounded, size: 18, color: GridTokens.mint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '@$_inviterHandle wants to add you to this group.',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: GridTokens.text,
+                height: 1.35,
               ),
-              // Inviter avatar in corner
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: colorScheme.surface,
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.shadow.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: RandomAvatar(
-                    widget.inviter.split(':')[0].replaceFirst('@', ''),
-                    height: 32,
-                    width: 32,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),  // Reduced from 20
-          
-          // Group name
-          Text(
-            widget.groupName,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          
-          const SizedBox(height: 12),  // Reduced from 16
-          
-          // Invitation message
-          Container(
-            padding: const EdgeInsets.all(12),  // Reduced from 16
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.person,
-                      color: colorScheme.primary,
-                      size: 18,  // Reduced from 20
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Invited by @${widget.inviter.split(":").first.replaceFirst('@', '')}',
-                        style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),  // Reduced from 8
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule,
-                      color: colorScheme.primary,
-                      size: 18,  // Reduced from 20
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Duration: $expiry',
-                        style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),  // Reduced from 16
-          
-          // Join message
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'You\'ll start sharing your location with group members once you join.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -321,148 +271,55 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     );
   }
 
-  Widget _buildLoadingState(ThemeData theme, ColorScheme colorScheme) {
-    return Container(
-      padding: const EdgeInsets.all(24),
+  Widget _buildLoadingState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
-          CircularProgressIndicator(
-            color: colorScheme.primary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Processing invitation...',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+          const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: GridTokens.mint,
             ),
+          ),
+          const SizedBox(height: 14),
+          GridMono(
+            'PROCESSING INVITATION',
+            size: 11,
+            letterSpacing: 0.12,
+            color: GridTokens.text3,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButtons(ThemeData theme, ColorScheme colorScheme) {
+  Widget _buildActionButtons() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Location sharing checkbox
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceVariant.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.1),
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: Checkbox(
-                  value: _startSharingOnJoin,
-                  onChanged: (value) {
-                    setState(() {
-                      _startSharingOnJoin = value ?? true;
-                    });
-                  },
-                  activeColor: colorScheme.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Start sharing on join',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _startSharingOnJoin 
-                        ? 'Share your location immediately with group members'
-                        : 'Location sharing will be disabled for this group',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        // "Start sharing with the group" toggle row — surface card + mint check tile
+        _ShareToggleRow(
+          value: _startSharingOnJoin,
+          onChanged: (v) => setState(() => _startSharingOnJoin = v),
         ),
-        
-        // Join button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _acceptGroupInvitation,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-              elevation: 0,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.group_add, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Join Group',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 16),
+
+        // Primary: Join group
+        GridButton(
+          label: 'Join group',
+          icon: Icons.check_rounded,
+          onPressed: _acceptGroupInvitation,
         ),
-        
-        const SizedBox(height: 12),
-        
-        // Decline button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: OutlinedButton(
-            onPressed: _declineGroupInvitation,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: BorderSide(color: Colors.red.withOpacity(0.5)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.close, size: 20, color: Colors.red),
-                const SizedBox(width: 8),
-                Text(
-                  'Decline',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 10),
+
+        // Danger ghost: Decline
+        GridButton(
+          label: 'Decline',
+          style: GridButtonStyle.danger,
+          onPressed: _declineGroupInvitation,
         ),
       ],
     );
@@ -488,7 +345,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         // Send immediate location update
         final locationManager = context.read<LocationManager>();
         await locationManager.grabLocationAndPing();
-        
+
         // Send location specifically to this room
         await widget.roomService.updateSingleRoom(widget.roomId);
       } else {
@@ -512,7 +369,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Group invitation accepted."),
+            content: const Text("Group invitation accepted."),
             backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -561,17 +418,17 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     } catch (e) {
       print('Error in _acceptGroupInvitation: $e');
       print('Error type: ${e.runtimeType}');
-      
+
       if (mounted) {
         setState(() {
           _isProcessing = false;
         });
-        
+
         // Only show the invalid invite modal for specific errors
         if (e.toString().contains('403') || e.toString().contains('not_in_room') || e.toString().contains('Invalid')) {
           Navigator.of(context).pop();
           Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-          
+
           await showDialog(
             context: context,
             builder: (context) => NoticeContinueModal(
@@ -617,16 +474,16 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       // Remove the invitation from SyncManager BEFORE closing modal
       if (mounted) {
         Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-        
+
         // Give time for the bloc state to update and UI to reflect changes
         await Future.delayed(const Duration(milliseconds: 300));
-        
+
         Navigator.of(context).pop(); // Close the modal
         await widget.refreshCallback(); // Trigger the callback to refresh
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Group invitation declined."),
+            content: const Text("Group invitation declined."),
             backgroundColor: Theme.of(context).colorScheme.primary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -657,5 +514,117 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         });
       }
     }
+  }
+}
+
+/// Small surface2 tap target with hairline border + close glyph. Avoids
+/// pulling in a new shared primitive while keeping the close affordance
+/// consistent with the redesign chrome.
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairline, width: 1),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.close_rounded, size: 18, color: GridTokens.text2),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Start sharing with the group" toggle row — surface2 card with mint check
+/// tile on the left, label + helper copy on the right. Tap anywhere on the
+/// row to toggle, matching the friend-request modal pattern.
+class _ShareToggleRow extends StatelessWidget {
+  const _ShareToggleRow({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline, width: 1),
+          ),
+          child: Row(
+            children: [
+              // Mint check tile
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: value ? GridTokens.mint : GridTokens.surface3,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: value ? GridTokens.mint : GridTokens.hairlineStrong,
+                    width: 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: value
+                    ? const Icon(Icons.check_rounded, size: 18, color: Color(0xFF04201A))
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Start sharing with the group',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: GridTokens.text,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value
+                          ? 'You can adjust this anytime.'
+                          : 'You can turn it on later in group settings.',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: GridTokens.text3,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

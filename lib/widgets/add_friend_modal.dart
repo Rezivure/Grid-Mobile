@@ -1,22 +1,26 @@
 // add_friend_modal.dart
+//
+// Restyled to match Grid mobile redesign §5.10 "Add friend (hub)" and §5.11
+// "Scan QR". All existing logic — QR scanning, share-link generation, handle
+// lookup, invite-sending, error handling, group creation — is preserved.
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:grid_frontend/models/room.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:sleek_circular_slider/sleek_circular_slider.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 
 import '../blocs/groups/groups_bloc.dart';
 import '../blocs/groups/groups_event.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../services/sync_manager.dart';
+import '../styles/tokens.dart';
+import 'grid/grid_button.dart';
+import 'grid/grid_mono.dart';
 
 
 class AddFriendModal extends StatefulWidget {
@@ -26,19 +30,40 @@ class AddFriendModal extends StatefulWidget {
   final VoidCallback? onGroupCreated;
   final VoidCallback? onContactAdded;
 
-  const AddFriendModal({required this.userService, Key? key, required this.roomService, required this.groupsBloc, required this.onGroupCreated, this.onContactAdded}) : super(key: key);
+  const AddFriendModal({
+    required this.userService,
+    Key? key,
+    required this.roomService,
+    required this.groupsBloc,
+    required this.onGroupCreated,
+    this.onContactAdded,
+  }) : super(key: key);
 
   @override
   _AddFriendModalState createState() => _AddFriendModalState();
 }
 
+/// Sub-views inside the Add Friend hub. The hub view itself shows the user's
+/// QR + the three method rows. Other views slot in to preserve all flows.
+enum _AddFriendView { hub, scan, handle, groupCreate }
 
-class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStateMixin {
-  // Add Contact variables
+class _AddFriendModalState extends State<AddFriendModal>
+    with TickerProviderStateMixin {
+  // ── Add Contact state ────────────────────────────────────────────────
   final TextEditingController _controller = TextEditingController();
   bool _isProcessing = false;
+  String? _contactError;
+  String? _matrixUserId = "";
+  String? _friendQrCodeScan;
 
-  // Create Group variables
+  // The currently visible sub-view.
+  _AddFriendView _view = _AddFriendView.hub;
+
+  // ── User identity (for the hero QR card) ─────────────────────────────
+  String? _myUserId;
+  String? _myHandle; // "@anya.beech" or full matrix id on custom HS
+
+  // ── Create Group state (preserved unchanged) ─────────────────────────
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _memberInputController = TextEditingController();
   List<String> _members = [];
@@ -47,34 +72,26 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   bool _isCustomDuration = false;
   DateTime? _customEndDate;
   String? _usernameError;
-  String? _contactError;
-  String? _matrixUserId = "";
-  String? _friendQrCodeScan;
-
-  // New variable for member limit error
   String? _memberLimitError;
-
-  // Step-based group creation variables
   int _currentGroupStep = 0; // 0: Name, 1: Duration, 2: Members, 3: Summary
 
-  late TabController _tabController;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
 
-  // QR code scanning variables
-  bool _isScanning = false;
+  // ── QR scan state ────────────────────────────────────────────────────
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
   QRViewController? _qrController;
-
-  // Used to prevent multiple scans
   bool hasScanned = false;
+  bool _flashOn = false;
+
+  // Animated scan line for the camera viewfinder.
+  late AnimationController _scanLineController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -97,19 +114,22 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       curve: Curves.easeOutCubic,
     ));
 
+    _scanLineController = AnimationController(
+      duration: const Duration(milliseconds: 1800),
+      vsync: this,
+    )..repeat();
+
     _controller.addListener(() {
       if (_contactError != null) {
         setState(() {
           _contactError = null;
         });
       }
-      // Reset _matrixUserId if the user types in the text field
       if (_controller.text.isNotEmpty) {
         _matrixUserId = null;
       }
     });
 
-    // Add listener to clear _memberLimitError when the user types
     _memberInputController.addListener(() {
       if (_memberLimitError != null) {
         setState(() {
@@ -120,25 +140,42 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
 
     _fadeController.forward();
     _slideController.forward();
+
+    _loadMyIdentity();
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
     _slideController.dispose();
+    _scanLineController.dispose();
     _controller.dispose();
-    _tabController.dispose();
     _qrController?.dispose();
     _groupNameController.dispose();
     _memberInputController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadMyIdentity() async {
+    final id = widget.roomService.getMyUserId();
+    if (id == null) return;
+    final isCustom = isCustomHomeserver();
+    if (mounted) {
+      setState(() {
+        _myUserId = id;
+        _myHandle = isCustom ? id : '@${utils.localpart(id)}';
+      });
+    }
+  }
+
   bool isCustomHomeserver() {
-    final homeserver = this.widget.roomService.getMyHomeserver();
+    final homeserver = widget.roomService.getMyHomeserver();
     return utils.isCustomHomeserver(homeserver);
   }
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Add contact / friend logic (preserved verbatim from original)
+  // ─────────────────────────────────────────────────────────────────────
   void _addContact() async {
     final inputText = _controller.text.trim();
     bool isCustomServer = isCustomHomeserver();
@@ -150,16 +187,19 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       });
       return;
     }
-    
+
     var normalizedUserId = rawInput.toLowerCase();
-    
+
     // Check if this is from QR scan (already has @ prefix)
     if (_friendQrCodeScan != null && normalizedUserId.startsWith('@')) {
       // QR code contains full matrix ID
       if (!isCustomServer) {
         // For default homeserver, extract just the localpart and rebuild
-        final localpart = normalizedUserId.split(':')[0].replaceFirst('@', '');
-        final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+        final localpart =
+            normalizedUserId.split(':')[0].replaceFirst('@', '');
+        final homeserver = widget.roomService
+            .getMyHomeserver()
+            .replaceFirst('https://', '');
         normalizedUserId = '@$localpart:$homeserver';
       }
       // For custom homeserver, use as-is
@@ -170,7 +210,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         // (since @ is already shown as prefix in the input field)
         if (!normalizedUserId.contains(':')) {
           setState(() {
-            _contactError = 'Please enter full Matrix ID (e.g., user:domain.com)';
+            _contactError =
+                'Please enter full Matrix ID (e.g., user:domain.com)';
             _isProcessing = false;
           });
           return;
@@ -178,11 +219,13 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         normalizedUserId = '@$normalizedUserId';
       } else {
         // For default homeserver, just add local part
-        final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+        final homeserver = widget.roomService
+            .getMyHomeserver()
+            .replaceFirst('https://', '');
         normalizedUserId = '@$normalizedUserId:$homeserver';
       }
     }
-    
+
     if (normalizedUserId.isNotEmpty) {
       if (mounted) {
         setState(() {
@@ -192,7 +235,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       }
       try {
         print('AddFriendModal: Checking if user exists: $normalizedUserId');
-        bool userExists = await widget.userService.userExists(normalizedUserId);
+        bool userExists =
+            await widget.userService.userExists(normalizedUserId);
         if (!userExists) {
           if (mounted) {
             setState(() {
@@ -203,39 +247,42 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           return;
         }
 
-        final result = await this.widget.roomService.createRoomAndInviteContact(normalizedUserId);
+        final result = await widget.roomService
+            .createRoomAndInviteContact(normalizedUserId);
 
         if (result) {
           // Get the room ID for the newly created direct room
-          final myUserId = await widget.roomService.getMyUserId();
+          final myUserId = widget.roomService.getMyUserId();
           if (myUserId != null) {
             // Find the direct room we just created
             final rooms = widget.roomService.client.rooms;
             final directRoom = rooms.where((room) {
               final name = room.name ?? '';
-              return name == "Grid:Direct:$myUserId:$normalizedUserId" || 
-                     name == "Grid:Direct:$normalizedUserId:$myUserId";
+              return name == "Grid:Direct:$myUserId:$normalizedUserId" ||
+                  name == "Grid:Direct:$normalizedUserId:$myUserId";
             }).firstOrNull;
-            
+
             if (directRoom != null) {
               // Handle the new contact invite immediately using ContactsBloc
               try {
                 final contactsBloc = context.read<ContactsBloc>();
-                await contactsBloc.handleNewContactInvited(directRoom.id, normalizedUserId);
+                await contactsBloc.handleNewContactInvited(
+                    directRoom.id, normalizedUserId);
                 print('AddFriendModal: Handled new contact invite via ContactsBloc');
               } catch (e) {
                 print('AddFriendModal: Error calling ContactsBloc: $e');
               }
             }
           }
-          
+
           // Clear _matrixUserId after successful use
           _matrixUserId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Friend request sent to ${utils.localpart(normalizedUserId)}.'),
-                backgroundColor: Theme.of(context).colorScheme.primary,
+                content: Text(
+                    'Friend request sent to ${utils.localpart(normalizedUserId)}.'),
+                backgroundColor: GridTokens.mint,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -270,10 +317,13 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
   }
 
-  // QR code scanning methods
-  void _scanQRCode() {
+  // ─────────────────────────────────────────────────────────────────────
+  // QR scanning (logic preserved; chrome restyled)
+  // ─────────────────────────────────────────────────────────────────────
+  void _openScanner() {
+    hasScanned = false;
     setState(() {
-      _isScanning = true;
+      _view = _AddFriendView.scan;
     });
   }
 
@@ -286,18 +336,19 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
 
         if (scannedUserId.isNotEmpty) {
           hasScanned = true;
-          controller.pauseCamera(); // Pause the camera to avoid rescanning
+          controller.pauseCamera();
           setState(() {
-            _isScanning = false;
             _matrixUserId = scannedUserId;
             // For custom homeservers, preserve the full matrix ID (without @)
             // For default homeserver, extract just the localpart
             if (isCustomHomeserver() && scannedUserId.contains(':')) {
               _controller.text = scannedUserId.replaceFirst('@', '');
             } else {
-              _controller.text = scannedUserId.split(":").first.replaceFirst('@', '');
+              _controller.text =
+                  scannedUserId.split(":").first.replaceFirst('@', '');
             }
             _friendQrCodeScan = scannedUserId;
+            _view = _AddFriendView.hub;
             _addContact();
           });
         } else {
@@ -307,12 +358,30 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     });
   }
 
-  void _resetScan() {
-    hasScanned = false;
-    _qrController?.resumeCamera();
+  void _toggleFlash() async {
+    try {
+      await _qrController?.toggleFlash();
+      final flash = await _qrController?.getFlashStatus();
+      if (mounted) {
+        setState(() {
+          _flashOn = flash ?? !_flashOn;
+        });
+      }
+    } catch (_) {
+      // toggleFlash can throw on devices without flash; ignore.
+    }
   }
 
-  // Create Group methods
+  void _closeScanner() {
+    _qrController?.pauseCamera();
+    setState(() {
+      _view = _AddFriendView.hub;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Group-creation logic (preserved verbatim; reachable via overflow)
+  // ─────────────────────────────────────────────────────────────────────
   void _addMember() async {
     if (_members.length >= 5) {
       setState(() {
@@ -329,7 +398,9 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       return;
     }
 
-    String username = inputUsername.startsWith('@') ? inputUsername.substring(1) : inputUsername;
+    String username = inputUsername.startsWith('@')
+        ? inputUsername.substring(1)
+        : inputUsername;
 
     if (_members.contains(username)) {
       setState(() {
@@ -340,25 +411,25 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
 
     var usernameLowercase = username.toLowerCase();
     var fullMatrixId = usernameLowercase;
-    final homeserver = this.widget.roomService.getMyHomeserver().replaceFirst('https://', '');
+    final homeserver =
+        widget.roomService.getMyHomeserver().replaceFirst('https://', '');
     bool isCustomServer = isCustomHomeserver();
-    
+
     if (isCustomServer) {
-      // For custom homeservers, expect full matrix ID without @ prefix
       if (!usernameLowercase.contains(':')) {
         setState(() {
-          _usernameError = 'Please enter full Matrix ID (e.g., user:domain.com)';
+          _usernameError =
+              'Please enter full Matrix ID (e.g., user:domain.com)';
         });
         return;
       }
       fullMatrixId = '@$usernameLowercase';
     } else {
-      // For default homeserver, just add local part
       fullMatrixId = '@$usernameLowercase:$homeserver';
     }
 
     final doesExist = await widget.userService.userExists(fullMatrixId);
-    final isSelf = await widget.roomService.getMyUserId() == (fullMatrixId);
+    final isSelf = widget.roomService.getMyUserId() == fullMatrixId;
 
     if (!doesExist || isSelf) {
       setState(() {
@@ -367,8 +438,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     } else {
       setState(() {
         _members.add(username);
-        _usernameError = null; // Clear error on successful add
-        _memberLimitError = null; // Clear limit error if member added successfully
+        _usernameError = null;
+        _memberLimitError = null;
         _memberInputController.clear();
       });
     }
@@ -377,7 +448,6 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   void _removeMember(String username) {
     setState(() {
       _members.remove(username);
-      // Clear the member limit error when a member is removed
       if (_memberLimitError != null && _members.length < 5) {
         _memberLimitError = null;
       }
@@ -387,7 +457,8 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   Future<void> _createGroup() async {
     if (_groupNameController.text.trim().isEmpty || _members.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a group name and add members.')),
+        const SnackBar(
+            content: Text('Please enter a group name and add members.')),
       );
       return;
     }
@@ -399,49 +470,39 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     try {
       final groupName = _groupNameController.text.trim();
       int durationInHours;
-      
+
       if (_isForever) {
         durationInHours = 0;
       } else if (_isCustomDuration && _customEndDate != null) {
         final now = DateTime.now();
         final difference = _customEndDate!.difference(now);
         durationInHours = difference.inHours;
-        if (durationInHours <= 0) durationInHours = 1; // Minimum 1 hour
+        if (durationInHours <= 0) durationInHours = 1;
       } else {
         durationInHours = _sliderValue.toInt();
       }
 
-      // Pass member IDs without @ prefix - the room service will add it
       final normalizedMembers = _members.map((username) {
-        // username in _members is already lowercase and without @ prefix
-        // Just pass them as-is, the room service will handle the @ prefix
         print('Passing member to room service: $username');
         return username;
       }).toList();
-      
+
       print('Creating group with members: $normalizedMembers');
-      
-      // Create the group and get the room ID
-      final roomId = await widget.roomService.createGroup(groupName, normalizedMembers, durationInHours);
+
+      final roomId = await widget.roomService
+          .createGroup(groupName, normalizedMembers, durationInHours);
 
       if (mounted) {
-        // Wait briefly for room creation to complete
         await Future.delayed(const Duration(milliseconds: 500));
 
         final syncManager = Provider.of<SyncManager>(context, listen: false);
         await syncManager.handleNewGroupCreation(roomId);
 
-
-        // Notify parent that group was created
         widget.onGroupCreated?.call();
-
-        // Trigger multiple refreshes to ensure UI updates
         widget.groupsBloc.add(RefreshGroups());
 
-        // Close the modal
         Navigator.pop(context);
 
-        // After modal is closed, trigger more refreshes with delays
         Future.delayed(const Duration(milliseconds: 750), () {
           if (mounted) {
             widget.groupsBloc.add(RefreshGroups());
@@ -455,7 +516,6 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           }
         });
 
-        // Show success message with modern floating style
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
@@ -466,7 +526,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
                 fontSize: 15,
               ),
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: GridTokens.mint,
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.only(
               bottom: 20,
@@ -484,22 +544,24 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     } catch (e) {
       if (mounted) {
         String errorMsg = 'Error creating group';
-        if (e.toString().contains('does not exist') || e.toString().contains('not found')) {
+        if (e.toString().contains('does not exist') ||
+            e.toString().contains('not found')) {
           errorMsg = 'One or more users could not be found';
         } else if (e.toString().contains('permission')) {
           errorMsg = 'Permission denied to create group';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.white, size: 20),
-                SizedBox(width: 12),
+                const Icon(Icons.error_outline,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 12),
                 Expanded(child: Text(errorMsg)),
               ],
             ),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: GridTokens.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -517,13 +579,13 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
   }
 
-  // Step navigation methods for group creation
   void _nextGroupStep() {
     if (_currentGroupStep < 3) {
       setState(() {
         _currentGroupStep++;
       });
-      _animateStepTransition();
+      _slideController.reset();
+      _slideController.forward();
     }
   }
 
@@ -532,122 +594,43 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
       setState(() {
         _currentGroupStep--;
       });
-      _animateStepTransition();
+      _slideController.reset();
+      _slideController.forward();
     }
-  }
-
-  void _animateStepTransition() {
-    _slideController.reset();
-    _slideController.forward();
   }
 
   bool _canProceedFromStep(int step) {
     switch (step) {
-      case 0: // Group name
+      case 0:
         return _groupNameController.text.trim().isNotEmpty;
-      case 1: // Duration
-        return true; // Always can proceed from duration
-      case 2: // Members
+      case 1:
+        return true;
+      case 2:
         return _members.isNotEmpty;
-      case 3: // Summary
+      case 3:
         return true;
       default:
         return false;
     }
   }
 
-  // Helper Methods for New UI
-  Widget _buildModernCard({required Widget child, EdgeInsets? padding}) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: padding ?? const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildSectionCard({
-    required ThemeData theme,
-    required ColorScheme colorScheme,
-    required String title,
-    required String subtitle,
-    required Widget child,
-  }) {
-    return Container(
-      padding: EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 14,
-              color: colorScheme.onBackground.withOpacity(0.6),
-            ),
-          ),
-          SizedBox(height: 16),
-          child,
-        ],
-      ),
-    );
-  }
-
   Future<void> _showCustomDatePicker() async {
     final now = DateTime.now();
-    final initialDate = _customEndDate ?? now.add(Duration(hours: 24));
-    
+    final initialDate = _customEndDate ?? now.add(const Duration(hours: 24));
+
     final selectedDate = await showDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: now,
-      lastDate: now.add(Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365)),
     );
-    
+
     if (selectedDate != null) {
       final selectedTime = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(initialDate),
       );
-      
+
       if (selectedTime != null) {
         final customDateTime = DateTime(
           selectedDate.year,
@@ -656,7 +639,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
           selectedTime.hour,
           selectedTime.minute,
         );
-        
+
         setState(() {
           _customEndDate = customDateTime;
           _isCustomDuration = true;
@@ -669,7 +652,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
   String _formatCustomDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = dateTime.difference(now);
-    
+
     if (difference.inDays > 0) {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} (${difference.inDays}d ${difference.inHours % 24}h)';
     } else {
@@ -677,418 +660,17 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
   }
 
-  Widget _buildQuickDurationButton(String label, int hours, ColorScheme colorScheme) {
-    bool isSelected;
-    if (label == 'Custom') {
-      isSelected = _isCustomDuration;
-    } else {
-      isSelected = !_isCustomDuration && (_sliderValue == hours || (hours == 0 && _isForever));
-    }
-    
-    return GestureDetector(
-      onTap: () {
-        if (label == 'Custom') {
-          _showCustomDatePicker();
-        } else {
-          setState(() {
-            _sliderValue = hours.toDouble();
-            _isForever = hours == 0;
-            _isCustomDuration = false;
-            _customEndDate = null;
-          });
-        }
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? colorScheme.primary 
-              : colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected 
-                ? colorScheme.primary 
-                : colorScheme.outline.withOpacity(0.3),
-            width: 1,
-          ),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: colorScheme.primary.withOpacity(0.3),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ] : [],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected 
-                ? Colors.white 
-                : colorScheme.onSurface,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMemberCard(String username, ColorScheme colorScheme) {
-    // Extract localpart for avatar generation
-    String avatarSeed = username;
-    if (username.contains(':')) {
-      avatarSeed = username.split(':')[0];
-    }
-    
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.primary.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
-            child: RandomAvatar(
-              avatarSeed.toLowerCase(),
-              height: 32,
-              width: 32,
-            ),
-          ),
-          SizedBox(width: 8),
-          Text(
-            '@${username.toLowerCase()}',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => _removeMember(username),
-            child: Container(
-              padding: EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.close,
-                color: Colors.red,
-                size: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // New Modern Add Contact UI Components
-  Widget _buildContactHeader() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return _buildModernCard(
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.person_add,
-              color: colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add Contact',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Send a friend request to start sharing',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactUsernameInput() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return _buildModernCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Username',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _addContact(),
-            decoration: InputDecoration(
-              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-              prefixText: '@',
-              errorText: _contactError,
-              filled: true,
-              fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.outline.withOpacity(0.2),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.primary,
-                  width: 2,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.error,
-                  width: 2,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            ),
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurface,
-            ),
-          ),
-          if (_contactError == null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Secure location sharing begins once accepted',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactQRScannerCard() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return _buildModernCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.qr_code_scanner,
-                  color: colorScheme.secondary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Quick Add',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Scan a user\'s QR code',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _scanQRCode,
-                icon: Icon(
-                  Icons.qr_code_scanner,
-                  size: 18,
-                  color: colorScheme.primary,
-                ),
-                label: Text(
-                  'Scan',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  backgroundColor: colorScheme.primary.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInviteToGridSection() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    // Only show for default homeserver users
-    if (isCustomHomeserver()) {
-      return const SizedBox.shrink();
-    }
-
-    return _buildModernCard(
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.share,
-                  color: colorScheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Invite to Grid',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Share Grid with your friends',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _shareInviteLink,
-                icon: Icon(
-                  Icons.send,
-                  size: 18,
-                  color: colorScheme.primary,
-                ),
-                label: Text(
-                  'Share',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  backgroundColor: colorScheme.primary.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
+  // ─────────────────────────────────────────────────────────────────────
+  // Share invite link (logic preserved)
+  // ─────────────────────────────────────────────────────────────────────
   Future<void> _shareInviteLink() async {
     try {
-      // Get the current user's localpart
-      final myUserId = await widget.roomService.getMyUserId();
+      final myUserId = widget.roomService.getMyUserId();
       if (myUserId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Unable to get your username'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: GridTokens.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -1098,13 +680,11 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         return;
       }
 
-      // Extract localpart (username without @ and domain)
       final localpart = utils.localpart(myUserId);
 
-      // Create the share message
-      final message = 'Join me on Grid! Download it at https://get.grid.lat and send @$localpart a friend request!';
+      final message =
+          'Join me on Grid! Download it at https://get.grid.lat and send @$localpart a friend request!';
 
-      // Open native share dialog
       await Share.share(
         message,
         subject: 'Join me on Grid: Private Location Sharing!',
@@ -1115,7 +695,7 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Unable to share invite'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: GridTokens.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -1126,79 +706,576 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
   }
 
-  Widget _buildContactQRScanner() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  // ─────────────────────────────────────────────────────────────────────
+  // Build
+  // ─────────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return _buildModernCard(
+    return Material(
+      color: Colors.transparent,
+      child: AnimatedPadding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: GridTokens.bg,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(GridTokens.r2Xl),
+              topRight: Radius.circular(GridTokens.r2Xl),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: _buildCurrentView(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentView() {
+    switch (_view) {
+      case _AddFriendView.scan:
+        return _buildScanView();
+      case _AddFriendView.handle:
+        return _buildHandleView();
+      case _AddFriendView.groupCreate:
+        return _buildGroupCreateView();
+      case _AddFriendView.hub:
+        return _buildHubView();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // §5.10  Add friend (hub)
+  // ─────────────────────────────────────────────────────────────────────
+  Widget _buildHubView() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildTopBar(
+          title: 'Add a friend',
+          onClose: () => Navigator.of(context).pop(),
+          trailing: IconButton(
+            icon: const Icon(Icons.group_add_outlined,
+                color: GridTokens.text2, size: 22),
+            tooltip: 'Create a group',
+            onPressed: () {
+              setState(() {
+                _currentGroupStep = 0;
+                _view = _AddFriendView.groupCreate;
+              });
+              _slideController.reset();
+              _slideController.forward();
+            },
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildQrHeroCard(),
+                  const SizedBox(height: 24),
+                  _buildOrDivider(),
+                  const SizedBox(height: 20),
+                  _buildMethodRow(
+                    icon: Icons.qr_code_scanner_rounded,
+                    title: "Scan a friend's code",
+                    subtitle: 'Open camera and point',
+                    onTap: _openScanner,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildMethodRow(
+                    icon: Icons.link_rounded,
+                    title: 'Share an invite link',
+                    subtitle: 'Expires in 24 hours',
+                    onTap: _shareInviteLink,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildMethodRow(
+                    icon: Icons.search_rounded,
+                    title: 'Type a handle',
+                    subtitle: isCustomHomeserver()
+                        ? '@user:homeserver.io'
+                        : '@username on this server',
+                    onTap: () {
+                      setState(() {
+                        _view = _AddFriendView.handle;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSafetyTip(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // QR hero card — surface gradient, white tile, mono caption, handle.
+  Widget _buildQrHeroCard() {
+    final handle = _myHandle ?? '@…';
+    final qrData = _myUserId ?? handle;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [GridTokens.surface2, GridTokens.surface],
+        ),
+        borderRadius: BorderRadius.circular(GridTokens.rXl),
+        border: Border.all(color: GridTokens.hairline),
+      ),
       child: Column(
         children: [
-          Row(
+          // White rounded-16 QR tile with center Grid-mark.
+          LayoutBuilder(builder: (context, constraints) {
+            final tile =
+                (constraints.maxWidth * 0.62).clamp(180.0, 240.0).toDouble();
+            return Container(
+              width: tile,
+              height: tile,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.32),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: tile - 28,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Colors.black,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Colors.black,
+                    ),
+                  ),
+                  // Center Grid-mark badge.
+                  Container(
+                    width: (tile - 28) * 0.16,
+                    height: (tile - 28) * 0.16,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: (tile - 28) * 0.10,
+                      height: (tile - 28) * 0.10,
+                      decoration: const BoxDecoration(
+                        color: GridTokens.mint,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.location_on_rounded,
+                        size: 12,
+                        color: Color(0xFF04201A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 18),
+          GridMono(
+            'YOUR HANDLE',
+            size: 10,
+            color: GridTokens.text3,
+            letterSpacing: 0.12,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            handle,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.01,
+              color: GridTokens.text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrDivider() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: Container(height: 1, color: GridTokens.hairline)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: GridMono('OR',
+              size: 10, color: GridTokens.text3, letterSpacing: 0.16),
+        ),
+        Expanded(child: Container(height: 1, color: GridTokens.hairline)),
+      ],
+    );
+  }
+
+  Widget _buildMethodRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: Row(
             children: [
-              IconButton(
-                onPressed: () {
-                  _qrController?.pauseCamera();
-                  setState(() {
-                    _isScanning = false;
-                  });
-                },
-                icon: Icon(
-                  Icons.arrow_back,
-                  color: colorScheme.onSurface,
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: GridTokens.surface2,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  border: Border.all(color: GridTokens.hairline),
+                ),
+                child: Icon(icon, color: GridTokens.text, size: 18),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: GridTokens.text3,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                'Scan QR Code',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: GridTokens.text3, size: 22),
             ],
           ),
-          const SizedBox(height: 16),
-          Container(
-            height: 300,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.outline.withOpacity(0.2),
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: QRView(
-              key: qrKey,
-              onQRViewCreated: _onQRViewCreated,
-              overlay: QrScannerOverlayShape(
-                borderColor: colorScheme.primary,
-                borderRadius: 12,
-                borderLength: 30,
-                borderWidth: 4,
-                cutOutSize: 250,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSafetyTip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: GridTokens.hairline),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.verified_user_outlined,
+              color: GridTokens.mint, size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: GridTokens.text2,
+                ),
+                children: const [
+                  TextSpan(text: 'Nothing is shared until '),
+                  TextSpan(
+                    text: 'both of you',
+                    style: TextStyle(
+                      color: GridTokens.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  TextSpan(text: ' confirm. Verify with a 4-digit safety number.'),
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  size: 16,
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Shared top bar
+  // ─────────────────────────────────────────────────────────────────────
+  Widget _buildTopBar({
+    required String title,
+    required VoidCallback onClose,
+    Widget? trailing,
+    Color? foreground,
+    bool transparent = false,
+  }) {
+    final fg = foreground ?? GridTokens.text;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        12,
+        MediaQuery.of(context).padding.top + 8,
+        12,
+        8,
+      ),
+      child: Row(
+        children: [
+          _topBarButton(
+            icon: Icons.close_rounded,
+            onTap: onClose,
+            fg: fg,
+            transparent: transparent,
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                title,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.01,
+                  color: fg,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+              ),
+            ),
+          ),
+          if (trailing != null)
+            SizedBox(width: 44, height: 44, child: Center(child: trailing))
+          else
+            const SizedBox(width: 44),
+        ],
+      ),
+    );
+  }
+
+  Widget _topBarButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color fg = GridTokens.text,
+    bool transparent = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: transparent
+                ? Colors.black.withValues(alpha: 0.32)
+                : GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(
+              color: transparent
+                  ? Colors.white.withValues(alpha: 0.16)
+                  : GridTokens.hairline,
+            ),
+          ),
+          child: Icon(icon, color: fg, size: 20),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // §5.11  Scan QR (full-screen camera with overlay)
+  // ─────────────────────────────────────────────────────────────────────
+  Widget _buildScanView() {
+    final size = MediaQuery.of(context).size;
+    const viewfinder = 240.0;
+    return SizedBox(
+      width: double.infinity,
+      height: size.height * 0.92,
+      child: Stack(
+        children: [
+          // Camera feed.
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(GridTokens.r2Xl),
+                topRight: Radius.circular(GridTokens.r2Xl),
+              ),
+              child: QRView(
+                key: qrKey,
+                onQRViewCreated: _onQRViewCreated,
+                overlay: QrScannerOverlayShape(
+                  borderColor: Colors.transparent,
+                  borderWidth: 0,
+                  cutOutSize: viewfinder,
+                  overlayColor: Colors.black.withValues(alpha: 0.55),
+                ),
+              ),
+            ),
+          ),
+          // Mint corner brackets + animated scan line, perfectly centered.
+          Center(
+            child: SizedBox(
+              width: viewfinder,
+              height: viewfinder,
+              child: Stack(
+                children: [
+                  // Four mint corner brackets.
+                  ..._buildCornerBrackets(),
+                  // Animated horizontal scan line.
+                  AnimatedBuilder(
+                    animation: _scanLineController,
+                    builder: (context, _) {
+                      final t = _scanLineController.value;
+                      return Positioned(
+                        left: 0,
+                        right: 0,
+                        top: (viewfinder - 2) * t,
+                        child: Container(
+                          height: 2,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                GridTokens.mint.withValues(alpha: 0.0),
+                                GridTokens.mint,
+                                GridTokens.mint.withValues(alpha: 0.0),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    GridTokens.mint.withValues(alpha: 0.55),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Top bar (transparent over camera).
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildTopBar(
+              title: 'Scan a code',
+              onClose: _closeScanner,
+              transparent: true,
+              foreground: Colors.white,
+              trailing: _topBarButton(
+                icon: _flashOn
+                    ? Icons.flash_on_rounded
+                    : Icons.flash_off_rounded,
+                onTap: _toggleFlash,
+                fg: Colors.white,
+                transparent: true,
+              ),
+            ),
+          ),
+          // Bottom hint pill + secondary controls.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 20,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
+                    ),
+                  ),
+                  child: GridMono(
+                    'HOLD STEADY · CENTER THE CODE',
+                    size: 10,
+                    color: Colors.white.withValues(alpha: 0.85),
+                    letterSpacing: 0.14,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: GridButton(
+                    label: 'Show my code instead',
+                    icon: Icons.qr_code_rounded,
+                    style: GridButtonStyle.secondary,
+                    onPressed: _closeScanner,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () {
+                    _closeScanner();
+                    setState(() {
+                      _view = _AddFriendView.handle;
+                    });
+                  },
                   child: Text(
-                    'Point your camera at a user\'s QR code to add them instantly',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.6),
+                    'Or paste a Grid link',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: GridTokens.mint,
                     ),
                   ),
                 ),
@@ -1210,835 +1287,283 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     );
   }
 
-  Widget _buildContactActionButtons() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: colorScheme.outline.withOpacity(0.1),
+  List<Widget> _buildCornerBrackets() {
+    const length = 26.0;
+    const thickness = 3.0;
+    const radius = 2.0;
+    Widget corner({required Alignment alignment, required bool horizontal}) {
+      return Align(
+        alignment: alignment,
+        child: Container(
+          width: horizontal ? length : thickness,
+          height: horizontal ? thickness : length,
+          decoration: BoxDecoration(
+            color: GridTokens.mint,
+            borderRadius: BorderRadius.circular(radius),
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colorScheme.onSurface,
-                side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+      );
+    }
+
+    return [
+      // Top-left
+      corner(alignment: Alignment.topLeft, horizontal: true),
+      corner(alignment: Alignment.topLeft, horizontal: false),
+      // Top-right
+      corner(alignment: Alignment.topRight, horizontal: true),
+      corner(alignment: Alignment.topRight, horizontal: false),
+      // Bottom-left
+      corner(alignment: Alignment.bottomLeft, horizontal: true),
+      corner(alignment: Alignment.bottomLeft, horizontal: false),
+      // Bottom-right
+      corner(alignment: Alignment.bottomRight, horizontal: true),
+      corner(alignment: Alignment.bottomRight, horizontal: false),
+    ];
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Handle-input sub-view (reachable from "Type a handle")
+  // ─────────────────────────────────────────────────────────────────────
+  Widget _buildHandleView() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildTopBar(
+          title: 'Add by handle',
+          onClose: () {
+            setState(() {
+              _view = _AddFriendView.hub;
+              _contactError = null;
+              _controller.clear();
+              _friendQrCodeScan = null;
+            });
+          },
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  decoration: BoxDecoration(
+                    color: GridTokens.surface,
+                    borderRadius: BorderRadius.circular(GridTokens.rLg),
+                    border: Border.all(
+                      color: _contactError != null
+                          ? GridTokens.danger
+                          : GridTokens.hairline,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GridMono(
+                        'HANDLE',
+                        size: 10,
+                        color: GridTokens.text3,
+                        letterSpacing: 0.14,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '@',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: GridTokens.text3,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              autofocus: true,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _addContact(),
+                              cursorColor: GridTokens.mint,
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                color: GridTokens.text,
+                              ),
+                              decoration: InputDecoration(
+                                isCollapsed: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                hintText: isCustomHomeserver()
+                                    ? 'user:homeserver.io'
+                                    : 'username',
+                                hintStyle: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                  color: GridTokens.text4,
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: const Text('Cancel'),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: _isProcessing ? null : _addContact,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                if (_contactError != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          color: GridTokens.danger, size: 14),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _contactError!,
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: GridTokens.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _buildSafetyTip(),
+                const SizedBox(height: 20),
+                GridButton(
+                  label: 'Send friend request',
+                  icon: Icons.send_rounded,
+                  onPressed: _isProcessing ? null : _addContact,
                 ),
-                elevation: 0,
-              ),
-              child: _isProcessing
-                  ? SizedBox(
+                if (_isProcessing) ...[
+                  const SizedBox(height: 14),
+                  const Center(
+                    child: SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                        color: colorScheme.onPrimary,
                         strokeWidth: 2,
+                        color: GridTokens.mint,
                       ),
-                    )
-                  : const Text(
-                      'Send Request',
-                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
+                  ),
+                ],
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // Step-based Group Creation UI Components
-  Widget _buildStepHeader({
-    required String title,
-    required String subtitle,
-    Widget? illustration,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
+  // ─────────────────────────────────────────────────────────────────────
+  // Group creation sub-view (logic preserved; lightly restyled with tokens)
+  // ─────────────────────────────────────────────────────────────────────
+  Widget _buildGroupCreateView() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (illustration != null) ...[
-          illustration,
-          const SizedBox(height: 24),
-        ],
-        Text(
-          title,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: colorScheme.onSurface,
-          ),
-          textAlign: TextAlign.center,
+        _buildTopBar(
+          title: 'Create a group',
+          onClose: () {
+            setState(() {
+              _view = _AddFriendView.hub;
+            });
+          },
         ),
-        const SizedBox(height: 12),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colorScheme.onSurface.withOpacity(0.7),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+          child: _buildStepIndicator(),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: _buildGroupStepContent(),
+            ),
           ),
-          textAlign: TextAlign.center,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: _currentGroupStep == 0 ? 'Cancel' : 'Back',
+                  style: GridButtonStyle.secondary,
+                  onPressed: _isProcessing
+                      ? null
+                      : () {
+                          if (_currentGroupStep == 0) {
+                            setState(() {
+                              _view = _AddFriendView.hub;
+                            });
+                          } else {
+                            _previousGroupStep();
+                          }
+                        },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GridButton(
+                  label: _currentGroupStep == 3 ? 'Create group' : 'Next',
+                  icon: _currentGroupStep == 3
+                      ? Icons.check_rounded
+                      : Icons.arrow_forward_rounded,
+                  onPressed: _isProcessing
+                      ? null
+                      : (_currentGroupStep == 3
+                          ? (_canProceedFromStep(_currentGroupStep)
+                              ? _createGroup
+                              : null)
+                          : (_canProceedFromStep(_currentGroupStep)
+                              ? _nextGroupStep
+                              : null)),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
   Widget _buildStepIndicator() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(4, (index) {
         final isActive = index <= _currentGroupStep;
         final isCurrent = index == _currentGroupStep;
-        
+
         return Container(
-          margin: EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: isCurrent ? 24 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isActive 
-                      ? colorScheme.primary 
-                      : colorScheme.outline.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              if (index < 3) SizedBox(width: 8),
-            ],
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: isCurrent ? 24 : 8,
+            height: 6,
+            decoration: BoxDecoration(
+              color: isActive ? GridTokens.mint : GridTokens.hairlineStrong,
+              borderRadius: BorderRadius.circular(3),
+            ),
           ),
         );
       }),
     );
   }
 
-  Widget _buildStepNavigationButtons({
-    required String? nextText,
-    required VoidCallback? onNext,
-    String? backText,
-    VoidCallback? onBack,
-    bool isLoading = false,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          if (onBack != null) ...[
-            Expanded(
-              child: OutlinedButton(
-                onPressed: isLoading ? null : onBack,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colorScheme.onSurface,
-                  side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(backText ?? 'Back'),
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            flex: onBack != null ? 1 : 2,
-            child: ElevatedButton(
-              onPressed: isLoading ? null : onNext,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: isLoading
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: colorScheme.onPrimary,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          nextText ?? 'Next',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        if (nextText == null || nextText.toLowerCase().contains('next')) ...[
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward, size: 18),
-                        ],
-                      ],
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Step 0: Group Name
-  Widget _buildGroupNameStep() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return SlideTransition(
-      position: _slideAnimation,
-      child: _buildModernCard(
-        child: Column(
-          children: [
-            _buildStepHeader(
-              title: 'Create Group',
-              subtitle: 'Choose a memorable name for your group',
-              illustration: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      colorScheme.primary.withOpacity(0.1),
-                      colorScheme.primary.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: Icon(
-                  Icons.group_add,
-                  size: 40,
-                  color: colorScheme.primary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            TextField(
-              controller: _groupNameController,
-              maxLength: 14,
-              onChanged: (value) => setState(() {}), // Trigger rebuild for button state
-              decoration: InputDecoration(
-                labelText: 'Group Name',
-                hintText: 'Enter group name...',
-                filled: true,
-                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.primary,
-                    width: 2,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                counterText: '',
-              ),
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Group names are visible to all members',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Step 1: Duration
-  Widget _buildGroupDurationStep() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return SlideTransition(
-      position: _slideAnimation,
-      child: _buildModernCard(
-        child: Column(
-          children: [
-            _buildStepHeader(
-              title: 'Set Duration',
-              subtitle: 'How long should the group last?',
-              illustration: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      colorScheme.secondary.withOpacity(0.1),
-                      colorScheme.secondary.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: Icon(
-                  Icons.schedule,
-                  size: 40,
-                  color: colorScheme.secondary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            // Duration options in a clean grid
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _buildQuickDurationButton('12h', 12, colorScheme),
-                _buildQuickDurationButton('24h', 24, colorScheme),
-                _buildQuickDurationButton('72h', 72, colorScheme),
-                _buildQuickDurationButton('∞', 0, colorScheme),
-                _buildQuickDurationButton('Custom', -1, colorScheme),
-              ],
-            ),
-            
-            // Show selected custom duration info
-            if (_isCustomDuration && _customEndDate != null) ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.primary.withOpacity(0.2),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      color: colorScheme.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Custom End Time',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatCustomDateTime(_customEndDate!),
-                            style: TextStyle(
-                              color: colorScheme.onSurface.withOpacity(0.7),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _showCustomDatePicker,
-                      child: Text(
-                        'Change',
-                        style: TextStyle(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Step 2: Add Members
-  Widget _buildGroupMembersStep() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return SlideTransition(
-      position: _slideAnimation,
-      child: _buildModernCard(
-        child: Column(
-          children: [
-            _buildStepHeader(
-              title: 'Add Members',
-              subtitle: 'Invite up to 5 friends to your group',
-              illustration: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      colorScheme.tertiary.withOpacity(0.1),
-                      colorScheme.tertiary.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: Icon(
-                  Icons.people,
-                  size: 40,
-                  color: colorScheme.tertiary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            // Add Member Input
-            TextField(
-              controller: _memberInputController,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _addMember(),
-              decoration: InputDecoration(
-                labelText: 'Username',
-                hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username...',
-                prefixText: '@',
-                errorText: _usernameError ?? _memberLimitError,
-                filled: true,
-                fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.primary,
-                    width: 2,
-                  ),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: colorScheme.error,
-                    width: 2,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.add_circle, color: colorScheme.primary),
-                  onPressed: _addMember,
-                  tooltip: 'Add Member',
-                ),
-              ),
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Add Member Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _addMember,
-                icon: Icon(Icons.person_add, size: 18, color: colorScheme.onPrimary),
-                label: Text('Add Member', style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary,
-                  foregroundColor: colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Members List
-            if (_members.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.people,
-                          color: colorScheme.primary,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Group Members (${_members.length}/5)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: _members.map((username) => _buildMemberCard(username, colorScheme)).toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.people_outline,
-                      color: colorScheme.onSurface.withOpacity(0.4),
-                      size: 48,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No members added yet',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Add friends to get started',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: colorScheme.onSurface.withOpacity(0.4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Step 3: Summary
-  Widget _buildGroupSummaryStep() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    String durationText;
-    if (_isForever) {
-      durationText = 'Permanent';
-    } else if (_isCustomDuration && _customEndDate != null) {
-      durationText = 'Until ${_formatCustomDateTime(_customEndDate!)}';
-    } else {
-      durationText = '${_sliderValue.toInt()} hours';
-    }
-
-    return SlideTransition(
-      position: _slideAnimation,
-      child: _buildModernCard(
-        child: Column(
-          children: [
-            _buildStepHeader(
-              title: 'Review & Create',
-              subtitle: 'Check your group details before creating',
-              illustration: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.green.withOpacity(0.1),
-                      Colors.green.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.check_circle_outline,
-                  size: 40,
-                  color: Colors.green,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            
-            // Summary Cards
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: colorScheme.outline.withOpacity(0.1),
-                ),
-              ),
-              child: Column(
-                children: [
-                  _buildSummaryRow(
-                    icon: Icons.group,
-                    label: 'Group Name',
-                    value: _groupNameController.text.trim(),
-                    colorScheme: colorScheme,
-                  ),
-                  const Divider(height: 24),
-                  _buildSummaryRow(
-                    icon: Icons.schedule,
-                    label: 'Duration',
-                    value: durationText,
-                    colorScheme: colorScheme,
-                  ),
-                  const Divider(height: 24),
-                  _buildSummaryRow(
-                    icon: Icons.people,
-                    label: 'Members',
-                    value: '${_members.length} invited',
-                    colorScheme: colorScheme,
-                  ),
-                ],
-              ),
-            ),
-            
-            if (_members.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colorScheme.outline.withOpacity(0.1),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Members to invite:',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _members.map((username) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: colorScheme.primary.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Text(
-                          '@$username',
-                          style: TextStyle(
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )).toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow({
-    required IconData icon,
-    required String label,
-    required String value,
-    required ColorScheme colorScheme,
-  }) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: colorScheme.primary,
-            size: 20,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStepBasedGroupTab() {
-    return Column(
-      children: [
-        // Step indicator
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: _buildStepIndicator(),
-        ),
-        
-        // Step content with generous padding
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(
-              left: 24,
-              right: 24,
-              bottom: 24,
-            ),
-            child: _getCurrentStepWidget(),
-          ),
-        ),
-        
-        // Navigation buttons
-        _buildStepNavigationButtons(
-          nextText: _currentGroupStep == 3 ? 'Create Group' : null,
-          onNext: _currentGroupStep == 3 
-              ? (_canProceedFromStep(_currentGroupStep) ? _createGroup : null)
-              : (_canProceedFromStep(_currentGroupStep) ? _nextGroupStep : null),
-          backText: _currentGroupStep == 0 ? 'Cancel' : null,
-          onBack: _currentGroupStep == 0 
-              ? () => Navigator.of(context).pop()
-              : _previousGroupStep,
-          isLoading: _isProcessing,
-        ),
-      ],
-    );
-  }
-
-  Widget _getCurrentStepWidget() {
+  Widget _buildGroupStepContent() {
     switch (_currentGroupStep) {
       case 0:
         return _buildGroupNameStep();
@@ -2053,105 +1578,489 @@ class _AddFriendModalState extends State<AddFriendModal> with TickerProviderStat
     }
   }
 
-  Widget _buildModernAddContactTab() {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(
-              left: 24,
-              right: 24,
-              top: 24,
-              bottom: 24,
-            ),
-            child: Column(
-              children: [
-                _buildContactHeader(),
-                if (_isScanning) _buildContactQRScanner() else ...[
-                  _buildContactUsernameInput(),
-                  _buildContactQRScannerCard(),
-                  _buildInviteToGridSection(),
-                ],
-                const SizedBox(height: 24), // Extra space for keyboard
-              ],
-            ),
-          ),
+  Widget _buildGroupNameStep() {
+    return _buildGroupCard(
+      title: 'Name the group',
+      subtitle: 'Choose a memorable name for your group',
+      child: TextField(
+        controller: _groupNameController,
+        maxLength: 14,
+        onChanged: (value) => setState(() {}),
+        cursorColor: GridTokens.mint,
+        style: GoogleFonts.getFont(
+          'Geist',
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: GridTokens.text,
         ),
-        if (!_isScanning) _buildContactActionButtons(),
-      ],
+        decoration: _groupInputDecoration(
+          hintText: 'Group name',
+          counterText: '',
+        ),
+      ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    
-    return Material(
-      color: Colors.transparent,
-      child: AnimatedPadding(
-        padding: EdgeInsets.only(bottom: bottomInset),
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        child: Container(
-          decoration: BoxDecoration(
-            color: colorScheme.background,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+  Widget _buildGroupDurationStep() {
+    return _buildGroupCard(
+      title: 'Set duration',
+      subtitle: 'How long should the group last?',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildDurationChip('12h', 12),
+              _buildDurationChip('24h', 24),
+              _buildDurationChip('72h', 72),
+              _buildDurationChip('Forever', 0),
+              _buildDurationChip('Custom', -1),
+            ],
+          ),
+          if (_isCustomDuration && _customEndDate != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: GridTokens.mintFaint,
+                borderRadius: BorderRadius.circular(GridTokens.rMd),
+                border: Border.all(color: GridTokens.mintSoft),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded,
+                      color: GridTokens.mint, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Custom end time',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: GridTokens.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatCustomDateTime(_customEndDate!),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 12,
+                            color: GridTokens.text2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showCustomDatePicker,
+                    child: Text(
+                      'Change',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: GridTokens.mint,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDurationChip(String label, int hours) {
+    bool isSelected;
+    if (label == 'Custom') {
+      isSelected = _isCustomDuration;
+    } else {
+      isSelected = !_isCustomDuration &&
+          (_sliderValue == hours || (hours == 0 && _isForever));
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (label == 'Custom') {
+          _showCustomDatePicker();
+        } else {
+          setState(() {
+            _sliderValue = hours.toDouble();
+            _isForever = hours == 0;
+            _isCustomDuration = false;
+            _customEndDate = null;
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? GridTokens.mintFaint : GridTokens.surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected ? GridTokens.mint : GridTokens.hairline,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? GridTokens.mint : GridTokens.text,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupMembersStep() {
+    return _buildGroupCard(
+      title: 'Add members',
+      subtitle: 'Invite up to 5 friends',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _memberInputController,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _addMember(),
+            cursorColor: GridTokens.mint,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: GridTokens.text,
+            ),
+            decoration: _groupInputDecoration(
+              hintText: isCustomHomeserver()
+                  ? 'user:homeserver.io'
+                  : 'username',
+              prefixText: '@',
+              errorText: _usernameError ?? _memberLimitError,
+              suffix: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: _addMember,
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.add_circle_rounded,
+                        color: GridTokens.mint, size: 24),
+                  ),
+                ),
+              ),
             ),
           ),
-          child: DefaultTabController(
-            length: 2,
+          const SizedBox(height: 14),
+          if (_members.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: GridTokens.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rMd),
+                border: Border.all(color: GridTokens.hairline),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.people_outline_rounded,
+                      color: GridTokens.text3, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No members added yet',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: GridTokens.text2,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _members
+                  .map((username) => _buildMemberChip(username))
+                  .toList(),
+            ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: GridMono(
+              '${_members.length}/5 MEMBERS',
+              size: 10,
+              color: GridTokens.text3,
+              letterSpacing: 0.14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberChip(String username) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: GridTokens.hairline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '@${username.toLowerCase()}',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () => _removeMember(username),
+            child: Container(
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: GridTokens.dangerSoft,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close_rounded,
+                  color: GridTokens.danger, size: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupSummaryStep() {
+    String durationText;
+    if (_isForever) {
+      durationText = 'Permanent';
+    } else if (_isCustomDuration && _customEndDate != null) {
+      durationText = 'Until ${_formatCustomDateTime(_customEndDate!)}';
+    } else {
+      durationText = '${_sliderValue.toInt()} hours';
+    }
+
+    return _buildGroupCard(
+      title: 'Review',
+      subtitle: 'Check the details before creating',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSummaryRow(
+              icon: Icons.group_rounded,
+              label: 'GROUP NAME',
+              value: _groupNameController.text.trim()),
+          const SizedBox(height: 14),
+          _buildSummaryRow(
+              icon: Icons.schedule_rounded,
+              label: 'DURATION',
+              value: durationText),
+          const SizedBox(height: 14),
+          _buildSummaryRow(
+              icon: Icons.people_alt_rounded,
+              label: 'MEMBERS',
+              value: '${_members.length} invited'),
+          if (_members.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _members
+                  .map(
+                    (username) => Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: GridTokens.mintFaint,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: GridTokens.mintSoft),
+                      ),
+                      child: Text(
+                        '@$username',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: GridTokens.mint,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: GridTokens.hairline),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: GridTokens.surface2,
+              borderRadius: BorderRadius.circular(GridTokens.rMd),
+              border: Border.all(color: GridTokens.hairline),
+            ),
+            child: Icon(icon, color: GridTokens.mint, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Modern handle
-                Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colorScheme.outline.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                
-                // Tabs with better spacing
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: TabBar(
-                    controller: _tabController,
-                    labelColor: colorScheme.primary,
-                    unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
-                    indicatorColor: colorScheme.primary,
-                    indicatorWeight: 3,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    tabs: [
-                      Tab(text: 'Add Contact'),
-                      Tab(text: 'Create Group'),
-                    ],
-                  ),
-                ),
-                
-                // Tab views with flexible height
-                Flexible(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      // Add Contact Tab - Modern Design
-                      _buildModernAddContactTab(),
-                      // Create Group Tab - Step-based Design
-                      _buildStepBasedGroupTab(),
-                    ],
+                GridMono(label,
+                    size: 10,
+                    color: GridTokens.text3,
+                    letterSpacing: 0.14),
+                const SizedBox(height: 4),
+                Text(
+                  value.isEmpty ? '—' : value,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: GridTokens.text,
                   ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildGroupCard({
+    required String title,
+    required String subtitle,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rXl),
+        border: Border.all(color: GridTokens.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.01,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              color: GridTokens.text3,
+            ),
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _groupInputDecoration({
+    required String hintText,
+    String? prefixText,
+    String? errorText,
+    Widget? suffix,
+    String? counterText,
+  }) {
+    final base = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(GridTokens.rMd),
+      borderSide: const BorderSide(color: GridTokens.hairline),
+    );
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: GoogleFonts.getFont(
+        'Geist',
+        fontSize: 15,
+        color: GridTokens.text4,
+      ),
+      prefixText: prefixText,
+      prefixStyle: GoogleFonts.getFont(
+        'Geist',
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: GridTokens.text3,
+      ),
+      errorText: errorText,
+      errorStyle: GoogleFonts.getFont(
+        'Geist',
+        fontSize: 12,
+        color: GridTokens.danger,
+      ),
+      filled: true,
+      fillColor: GridTokens.bg,
+      counterText: counterText,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: base,
+      enabledBorder: base,
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: const BorderSide(color: GridTokens.mint, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: const BorderSide(color: GridTokens.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderSide: const BorderSide(color: GridTokens.danger, width: 1.5),
+      ),
+      suffixIcon: suffix,
     );
   }
 }

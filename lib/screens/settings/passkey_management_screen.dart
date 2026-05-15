@@ -1,8 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:passkeys/types.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 
 class PasskeyManagementScreen extends StatefulWidget {
   const PasskeyManagementScreen({Key? key}) : super(key: key);
@@ -67,13 +72,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
       setState(() => _isLoading = true);
       await _passkeyService.registerPasskey(jwt);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Passkey added successfully'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-        ),
-      );
+      _showStyledSnackBar('Passkey added successfully');
 
       await _loadPasskeys();
     } on ExcludeCredentialsCanNotBeRegisteredException {
@@ -91,20 +90,28 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   }
 
   void _showStyledSnackBar(String message, {bool isError = false}) {
-    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(
+          message,
+          style: GoogleFonts.getFont(
+            'Geist',
+            color: isError ? Colors.white : const Color(0xFF04201A),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Colors.red : colorScheme.primary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor:
+            isError ? GridTokens.danger : GridTokens.mint,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GridTokens.rMd),
+        ),
         margin: const EdgeInsets.all(16),
       ),
     );
   }
 
   Future<void> _deletePasskey(PasskeyInfo passkey) async {
-    final colorScheme = Theme.of(context).colorScheme;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -115,13 +122,14 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: colorScheme.background,
-              borderRadius: BorderRadius.circular(20),
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
@@ -129,52 +137,51 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.05),
+                    color: GridTokens.dangerSoft,
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: colorScheme.outline.withOpacity(0.1),
-                      ),
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
                     ),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(GridTokens.rMd),
                         ),
+                        alignment: Alignment.center,
                         child: const Icon(
                           Icons.delete_outline,
-                          color: Colors.red,
-                          size: 24,
+                          color: GridTokens.danger,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Delete Passkey',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onBackground,
+                              'Delete passkey',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: GridTokens.text,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Text(
-                              'This action cannot be undone',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colorScheme.onBackground.withOpacity(0.6),
+                              "This can't be undone.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                color: GridTokens.text2,
                               ),
                             ),
                           ],
@@ -183,110 +190,61 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceVariant.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.2),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'You won\'t be able to use this passkey to sign in anymore.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: colorScheme.outline.withOpacity(0.1),
-                      ),
-                    ),
-                  ),
-                  child: Row(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: colorScheme.outline.withOpacity(0.3),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: GridTokens.surface2,
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                          border: Border.all(color: GridTokens.hairline),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: GridTokens.amber,
+                              size: 18,
                             ),
-                          ),
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                "You won't be able to use this passkey to sign in anymore.",
+                                style: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 13,
+                                  color: GridTokens.text2,
+                                  height: 1.35,
+                                ),
                               ),
                             ),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Delete',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GridButton(
+                              label: 'Cancel',
+                              style: GridButtonStyle.secondary,
+                              onPressed: () =>
+                                  Navigator.pop(context, false),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GridButton(
+                              label: 'Delete',
+                              style: GridButtonStyle.danger,
+                              onPressed: () =>
+                                  Navigator.pop(context, true),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -318,7 +276,6 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   }
 
   Future<void> _renamePasskey(PasskeyInfo passkey) async {
-    final colorScheme = Theme.of(context).colorScheme;
     final controller = TextEditingController(text: passkey.name ?? '');
     final name = await showDialog<String>(
       context: context,
@@ -330,13 +287,14 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: colorScheme.background,
-              borderRadius: BorderRadius.circular(20),
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
@@ -344,52 +302,51 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.05),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: colorScheme.outline.withOpacity(0.1),
-                      ),
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.mintFaint,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
                     ),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: colorScheme.primary.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          color: GridTokens.mintSoft,
+                          borderRadius: BorderRadius.circular(GridTokens.rMd),
                         ),
-                        child: Icon(
+                        alignment: Alignment.center,
+                        child: const Icon(
                           Icons.edit,
-                          color: colorScheme.primary,
-                          size: 24,
+                          color: GridTokens.mint,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Rename Passkey',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onBackground,
+                              'Rename passkey',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: GridTokens.text,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Text(
                               'Give this passkey a recognizable name',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colorScheme.onBackground.withOpacity(0.6),
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                color: GridTokens.text2,
                               ),
                             ),
                           ],
@@ -399,113 +356,77 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. YubiKey, iPhone, Work laptop',
-                      hintStyle: TextStyle(
-                        color: colorScheme.onSurface.withOpacity(0.4),
-                      ),
-                      filled: true,
-                      fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: colorScheme.outline.withOpacity(0.2),
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: colorScheme.outline.withOpacity(0.2),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: colorScheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                    onSubmitted: (value) =>
-                        Navigator.pop(context, value.trim()),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  child: Row(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: colorScheme.outline.withOpacity(0.3),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 15,
+                          color: GridTokens.text,
+                        ),
+                        cursorColor: GridTokens.mint,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. YubiKey, iPhone, Work laptop',
+                          hintStyle: GoogleFonts.getFont(
+                            'Geist',
+                            color: GridTokens.text3,
+                            fontSize: 15,
+                          ),
+                          filled: true,
+                          fillColor: GridTokens.surface2,
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rMd),
+                            borderSide:
+                                const BorderSide(color: GridTokens.hairline),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rMd),
+                            borderSide:
+                                const BorderSide(color: GridTokens.hairline),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rMd),
+                            borderSide: const BorderSide(
+                              color: GridTokens.mint,
+                              width: 1.5,
                             ),
                           ),
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: TextButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
                           ),
                         ),
+                        onSubmitted: (value) =>
+                            Navigator.pop(context, value.trim()),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: colorScheme.primary.withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: TextButton(
-                            onPressed: () => Navigator.pop(
-                                context, controller.text.trim()),
-                            style: TextButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GridButton(
+                              label: 'Cancel',
+                              style: GridButtonStyle.secondary,
+                              onPressed: () => Navigator.pop(context),
                             ),
-                            child: Text(
-                              'Save',
-                              style: TextStyle(
-                                color: colorScheme.onPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GridButton(
+                              label: 'Save',
+                              style: GridButtonStyle.primary,
+                              onPressed: () => Navigator.pop(
+                                context,
+                                controller.text.trim(),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -530,181 +451,279 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      backgroundColor: colorScheme.background,
-      appBar: AppBar(
-        title: Text(
-          'Passkeys',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onBackground,
+  Future<void> _showPasskeyMenu(PasskeyInfo passkey) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: GridTokens.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+                border: Border.all(color: GridTokens.hairline),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _menuRow(
+                    icon: Icons.edit_outlined,
+                    label: 'Rename',
+                    onTap: () => Navigator.pop(context, 'rename'),
+                  ),
+                  const Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: GridTokens.hairline,
+                  ),
+                  _menuRow(
+                    icon: Icons.delete_outline,
+                    label: 'Delete',
+                    color: GridTokens.danger,
+                    onTap: () => Navigator.pop(context, 'delete'),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+        );
+      },
+    );
+
+    if (action == 'rename') {
+      await _renamePasskey(passkey);
+    } else if (action == 'delete') {
+      await _deletePasskey(passkey);
+    }
+  }
+
+  Widget _menuRow({
+    required IconData icon,
+    required String label,
+    Color? color,
+    required VoidCallback onTap,
+  }) {
+    final fg = color ?? GridTokens.text;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: fg),
+              const SizedBox(width: 14),
+              Text(
+                label,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: fg,
+                ),
               ),
             ],
           ),
-          child: IconButton(
-            icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
-            onPressed: () => Navigator.pop(context),
-          ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildErrorState(colorScheme)
-              : _buildContent(theme, colorScheme),
-      floatingActionButton: !_isLoading && _error == null
-          ? FloatingActionButton.extended(
-              onPressed: _addPasskey,
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-              icon: const Icon(Icons.add),
-              label: const Text(
-                'Add Passkey',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            )
-          : null,
     );
   }
 
-  Widget _buildErrorState(ColorScheme colorScheme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: colorScheme.error.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.error_outline,
-              size: 48,
-              color: colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _error!,
-            style: TextStyle(
-              fontSize: 16,
-              color: colorScheme.onSurface.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            decoration: BoxDecoration(
-              color: colorScheme.primary,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: TextButton(
-              onPressed: _loadPasskeys,
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+  Future<void> _showRecoveryPhrase() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: GridTokens.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rXl),
+                border: Border.all(color: GridTokens.hairline),
               ),
-              child: Text(
-                'Retry',
-                style: TextStyle(
-                  color: colorScheme.onPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.mintSoft,
+                          borderRadius: BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.lock_outline,
+                          color: GridTokens.mint,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Recovery phrase',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: GridTokens.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const GridMono(
+                              '24 WORDS · STORED OFFLINE',
+                              size: 10.5,
+                              letterSpacing: 0.12,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: GridTokens.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: GridTokens.amber,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Recovery phrase reveal is not yet available. Use a registered passkey to sign in.',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              color: GridTokens.text2,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  GridButton(
+                    label: 'Close',
+                    style: GridButtonStyle.secondary,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: GridTokens.bg,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        title: Text(
+          'Passkeys',
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: GridTokens.text,
+            letterSpacing: -0.01,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: GridTokens.text),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          if (!_isLoading && _error == null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(Icons.add, color: GridTokens.mint),
+                onPressed: _addPasskey,
+              ),
+            ),
         ],
       ),
-    );
-  }
-
-  Widget _buildContent(ThemeData theme, ColorScheme colorScheme) {
-    if (_passkeys.isEmpty) {
-      return _buildEmptyState(colorScheme);
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadPasskeys,
-      color: colorScheme.primary,
-      backgroundColor: colorScheme.surface,
-      strokeWidth: 2.5,
-      displacement: 20,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _passkeys.length + 1,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return _buildHeader(colorScheme);
-          }
-
-          final passkey = _passkeys[index - 1];
-          return _buildPasskeyCard(passkey, colorScheme);
-        },
+      body: SafeArea(
+        top: false,
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: GridTokens.mint,
+                ),
+              )
+            : _error != null
+                ? _buildErrorState()
+                : _buildContent(),
       ),
     );
   }
 
-  Widget _buildHeader(ColorScheme colorScheme) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colorScheme.primary.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.primary.withOpacity(0.2),
-          ),
-        ),
-        child: Row(
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.info_outline, color: colorScheme.primary, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Passkeys let you sign in with Face ID, Touch ID, or your device PIN instead of SMS codes.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: colorScheme.primary,
-                  height: 1.4,
-                ),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: GridTokens.dangerSoft,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
               ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.error_outline,
+                size: 28,
+                color: GridTokens.danger,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 15,
+                color: GridTokens.text2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            GridButton(
+              label: 'Retry',
+              expand: false,
+              onPressed: _loadPasskeys,
             ),
           ],
         ),
@@ -712,38 +731,94 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     );
   }
 
-  Widget _buildEmptyState(ColorScheme colorScheme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildContent() {
+    return Column(
+      children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _loadPasskeys,
+            color: GridTokens.mint,
+            backgroundColor: GridTokens.surface,
+            strokeWidth: 2.5,
+            displacement: 20,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                _buildInfoCard(),
+                const SizedBox(height: 8),
+                GridSectionHeader(
+                  text: 'YOUR PASSKEYS',
+                  trailing: _passkeys.isEmpty
+                      ? null
+                      : GridMono(
+                          '${_passkeys.length} ACTIVE',
+                          color: GridTokens.text3,
+                          size: 10.5,
+                          letterSpacing: 0.12,
+                        ),
+                ),
+                if (_passkeys.isEmpty)
+                  _buildEmptyState()
+                else
+                  ..._passkeys.asMap().entries.map((entry) {
+                    final isFirst = entry.key == 0;
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        top: entry.key == 0 ? 4 : 10,
+                      ),
+                      child: _buildPasskeyCard(
+                        entry.value,
+                        isCurrentDevice: isFirst,
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 8),
+                const GridSectionHeader(text: 'BACKUP'),
+                _buildRecoveryRow(),
+              ],
+            ),
+          ),
+        ),
+        SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: GridButton(
+            label: 'Add a passkey',
+            icon: Icons.add,
+            onPressed: _addPasskey,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: GridTokens.mintFaint,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: GridTokens.mintSoft),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.fingerprint,
-              size: 48,
-              color: colorScheme.primary,
-            ),
+          const Icon(
+            Icons.shield_outlined,
+            color: GridTokens.mint,
+            size: 18,
           ),
-          const SizedBox(height: 24),
-          Text(
-            'No Passkeys Yet',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Add a passkey for faster, more secure login',
-            style: TextStyle(
-              fontSize: 14,
-              color: colorScheme.onSurface.withOpacity(0.6),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Sign in with Face ID, Touch ID, or device PIN instead of SMS codes — phishing-proof and faster.',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                color: GridTokens.text2,
+                height: 1.4,
+              ),
             ),
           ),
         ],
@@ -751,130 +826,333 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     );
   }
 
-  Widget _buildPasskeyCard(PasskeyInfo passkey, ColorScheme colorScheme) {
-    final name =
-        passkey.name ?? (passkey.backedUp ? 'Synced Passkey' : 'Security Key');
-    final typeLabel = passkey.backedUp ? 'Synced' : 'Hardware';
-    final icon = passkey.backedUp ? Icons.key : Icons.usb;
-    final created = passkey.createdAt != null
-        ? '${passkey.createdAt!.month}/${passkey.createdAt!.day}/${passkey.createdAt!.year}'
-        : 'Unknown';
-    final lastUsed = passkey.lastUsedAt != null
-        ? '${passkey.lastUsedAt!.month}/${passkey.lastUsedAt!.day}/${passkey.lastUsedAt!.year}'
-        : null;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Dismissible(
-        key: Key(passkey.credentialId),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Icon(Icons.delete, color: Colors.white),
-        ),
-        confirmDismiss: (_) async {
-          _deletePasskey(passkey);
-          return false;
-        },
-        child: GestureDetector(
-          onTap: () => _renamePasskey(passkey),
-          child: Container(
-            padding: const EdgeInsets.all(16),
+  Widget _buildEmptyState() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: GridTokens.hairline),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: colorScheme.outline.withOpacity(0.15),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              color: GridTokens.mintFaint,
+              borderRadius: BorderRadius.circular(GridTokens.rLg),
             ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.fingerprint,
+              size: 28,
+              color: GridTokens.mint,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'No passkeys yet',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: GridTokens.text,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add a passkey for faster, more secure login.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              color: GridTokens.text2,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasskeyCard(
+    PasskeyInfo passkey, {
+    required bool isCurrentDevice,
+  }) {
+    final name = passkey.name ??
+        (passkey.backedUp ? 'Synced passkey' : 'Security key');
+    final typeLabel = passkey.backedUp ? 'SYNCED' : 'HARDWARE';
+    final tileBg =
+        passkey.backedUp ? GridTokens.mintFaint : GridTokens.amberSoft;
+    final iconColor =
+        passkey.backedUp ? GridTokens.mint : GridTokens.amber;
+    final icon = passkey.backedUp
+        ? Icons.lock_outline_rounded
+        : Icons.usb_rounded;
+
+    final addedText = _formatAdded(passkey.createdAt);
+    final lastUsedText = _formatLastUsed(passkey.lastUsedAt);
+    final metaText = lastUsedText != null
+        ? '$addedText · $lastUsedText'
+        : addedText;
+
+    final isHighlight = isCurrentDevice;
+    final cardBg = isHighlight ? GridTokens.mintFaint : GridTokens.surface;
+    final cardBorder = isHighlight
+        ? Border.all(color: GridTokens.mintSoft)
+        : Border.all(color: GridTokens.hairline);
+
+    return Dismissible(
+      key: Key(passkey.credentialId),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: GridTokens.dangerSoft,
+          borderRadius: BorderRadius.circular(GridTokens.rLg),
+        ),
+        child: const Icon(Icons.delete_outline, color: GridTokens.danger),
+      ),
+      confirmDismiss: (_) async {
+        _deletePasskey(passkey);
+        return false;
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _renamePasskey(passkey),
+          borderRadius: BorderRadius.circular(GridTokens.rLg),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(GridTokens.rLg),
+              border: cardBorder,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: tileBg,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(icon, color: iconColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 160),
+                              child: Text(
+                                name,
+                                style: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: GridTokens.text,
+                                  letterSpacing: -0.01,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            _MonoChip(
+                              label: typeLabel,
+                              bg: passkey.backedUp
+                                  ? GridTokens.mintSoft
+                                  : GridTokens.amberSoft,
+                              fg: passkey.backedUp
+                                  ? GridTokens.mint
+                                  : GridTokens.amber,
+                            ),
+                            if (isCurrentDevice)
+                              const _MonoChip(
+                                label: 'THIS DEVICE',
+                                bg: GridTokens.surface2,
+                                fg: GridTokens.text2,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        GridMono(
+                          metaText,
+                          size: 10.5,
+                          color: GridTokens.text3,
+                          letterSpacing: 0.08,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _showPasskeyMenu(passkey),
+                    icon: const Icon(
+                      Icons.more_horiz,
+                      color: GridTokens.text2,
+                      size: 20,
+                    ),
+                    splashRadius: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecoveryRow() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showRecoveryPhrase,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: GridTokens.surface2,
+                    borderRadius: BorderRadius.circular(GridTokens.rMd),
                   ),
-                  child: Icon(
-                    icon,
-                    color: colorScheme.primary,
-                    size: 24,
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.menu_book_outlined,
+                    color: GridTokens.text2,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              name,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onSurface,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              typeLabel,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'Recovery phrase',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: GridTokens.text,
+                          letterSpacing: -0.01,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Added $created${lastUsed != null ? '  ·  Last used $lastUsed' : ''}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurface.withOpacity(0.5),
+                        '24 words · stored offline',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 13,
+                          color: GridTokens.text2,
                         ),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () => _deletePasskey(passkey),
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: Colors.red.withOpacity(0.7),
-                    size: 20,
-                  ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: GridTokens.text3,
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  String _formatAdded(DateTime? dt) {
+    if (dt == null) return 'ADDED —';
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    return 'ADDED ${months[dt.month - 1]} ${dt.day}';
+  }
+
+  String? _formatLastUsed(DateTime? dt) {
+    if (dt == null) return null;
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'LAST USED JUST NOW';
+    if (diff.inMinutes < 60) {
+      return 'LAST USED ${diff.inMinutes} MIN AGO';
+    }
+    if (diff.inHours < 24) {
+      return 'LAST USED ${diff.inHours} HR AGO';
+    }
+    if (diff.inDays == 1) return 'LAST USED YESTERDAY';
+    if (diff.inDays < 7) return 'LAST USED ${diff.inDays} DAYS AGO';
+    if (diff.inDays < 30) {
+      final weeks = (diff.inDays / 7).floor();
+      return 'LAST USED $weeks ${weeks == 1 ? 'WEEK' : 'WEEKS'} AGO';
+    }
+    if (diff.inDays < 365) {
+      final months = (diff.inDays / 30).floor();
+      return 'LAST USED $months ${months == 1 ? 'MONTH' : 'MONTHS'} AGO';
+    }
+    final years = (diff.inDays / 365).floor();
+    return 'LAST USED $years ${years == 1 ? 'YEAR' : 'YEARS'} AGO';
+  }
+}
+
+class _MonoChip extends StatelessWidget {
+  const _MonoChip({
+    required this.label,
+    required this.bg,
+    required this.fg,
+  });
+
+  final String label;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: GridMono(
+        label,
+        size: 9.5,
+        color: fg,
+        letterSpacing: 0.12,
       ),
     );
   }

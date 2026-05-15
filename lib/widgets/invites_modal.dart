@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/widgets/friend_request_modal.dart';
 import 'package:grid_frontend/widgets/group_invitation_modal.dart';
-import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 
 class InvitesModal extends StatefulWidget {
   final RoomService roomService;
@@ -26,9 +27,6 @@ class _InvitesModalState extends State<InvitesModal> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return BlocBuilder<InvitationsBloc, InvitationsState>(
       buildWhen: (previous, current) {
         // Force rebuild on any state change
@@ -108,67 +106,51 @@ class _InvitesModalState extends State<InvitesModal> {
         return Material(
       color: Colors.transparent,
       child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.background,
+        decoration: const BoxDecoration(
+          color: GridTokens.bg,
           borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+            topLeft: Radius.circular(GridTokens.r2Xl),
+            topRight: Radius.circular(GridTokens.r2Xl),
           ),
         ),
         child: Column(
           children: [
             // Handle indicator
             Container(
-              margin: EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: colorScheme.onBackground.withOpacity(0.3),
+                color: GridTokens.hairlineStrong,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
 
             // Header Section
             Container(
-              padding: EdgeInsets.fromLTRB(24, 16, 24, 20),
-              child: Row(
+              padding: EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.notifications,
-                      color: colorScheme.primary,
-                      size: 24,
+                  Text(
+                    'Invites',
+                    style: TextStyle(
+                      fontFamily: GridTokens.fontUi,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.01,
+                      color: GridTokens.text,
                     ),
                   ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Notifications',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onBackground,
-                          ),
-                        ),
-                        if (invites.isNotEmpty)
-                          Text(
-                            '${invites.length} pending request${invites.length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.onBackground.withOpacity(0.6),
-                            ),
-                          ),
-                      ],
+                  if (invites.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    GridMono(
+                      '${invites.length} pending',
+                      color: GridTokens.text3,
+                      size: 11,
+                      letterSpacing: 0.08,
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -219,187 +201,20 @@ class _InvitesModalState extends State<InvitesModal> {
                         ),
                       ),
                     )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: invites.length,
-                      itemBuilder: (context, index) {
-                        final invite = invites[index];
-                        final inviterId = invite['inviter'] ?? 'Unknown';
-                        final roomId = invite['roomId'] ?? 'Unknown';
-                        final roomName = invite['roomName'] ?? 'Unnamed Room';
-                        final isDirectInvite = roomName.startsWith("Grid:Direct");
-
-                        String displayGroupName = 'Unnamed Group';
-                        if (!isDirectInvite) {
-                          // Extract groupName from roomName
-                          final parts = roomName.split(':');
-                          if (parts.length > 3) {
-                            displayGroupName = parts[3]; // groupName
-                          } else {
-                            displayGroupName = roomName;
-                          }
-                        }
-
-                        return Container(
-                          margin: EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: colorScheme.outline.withOpacity(0.15),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: colorScheme.shadow.withOpacity(0.05),
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            contentPadding: EdgeInsets.all(16),
-                            leading: Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: CircleAvatar(
-                                radius: 25,
-                                backgroundColor: Colors.transparent,
-                                child: RandomAvatar(
-                                  localpart(inviterId),
-                                  height: 50,
-                                  width: 50,
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              '@${inviterId.split(":").first.replaceFirst("@", "")}',
-                              style: TextStyle(
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(height: 4),
-                                Text(
-                                  isDirectInvite
-                                      ? 'Wants to connect with you'
-                                      : 'Invited you to join "${displayGroupName}"',
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface.withOpacity(0.7),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: isDirectInvite 
-                                        ? Colors.blue.withOpacity(0.1)
-                                        : Colors.green.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        isDirectInvite ? Icons.person_add : Icons.group_add,
-                                        size: 14,
-                                        color: isDirectInvite ? Colors.blue : Colors.green,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        isDirectInvite ? 'Friend Request' : 'Group Invite',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDirectInvite ? Colors.blue : Colors.green,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            trailing: Icon(
-                              Icons.arrow_forward_ios,
-                              color: colorScheme.onSurface.withOpacity(0.4),
-                              size: 16,
-                            ),
-                            onTap: () {
-                              handleInviteTap(
-                                context,
-                                roomId,
-                                roomName,
-                                inviterId,
-                                isDirectInvite,
-                              );
-                            },
-                          ),
-                        );
-                      },
+                  : _buildInvitesList(
+                      context: context,
+                      invites: invites,
+                      handleInviteTap: handleInviteTap,
                     ),
             ),
 
             // Close Button
-            Container(
-              padding: EdgeInsets.all(24),
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primary.withOpacity(0.8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Close',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: GridButton(
+                label: 'Close',
+                style: GridButtonStyle.secondary,
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ),
           ],
@@ -407,5 +222,411 @@ class _InvitesModalState extends State<InvitesModal> {
       ),
     );
   });
+  }
+
+  // Builds the sectioned "From people" / "Group invites" list.
+  Widget _buildInvitesList({
+    required BuildContext context,
+    required List<dynamic> invites,
+    required void Function(
+      BuildContext context,
+      String roomId,
+      String roomName,
+      String inviterId,
+      bool isDirectInvite,
+    ) handleInviteTap,
+  }) {
+    final directInvites = <Map<String, dynamic>>[];
+    final groupInvites = <Map<String, dynamic>>[];
+    for (final raw in invites) {
+      final invite = Map<String, dynamic>.from(raw as Map);
+      final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
+      if (roomName.startsWith('Grid:Direct')) {
+        directInvites.add(invite);
+      } else {
+        groupInvites.add(invite);
+      }
+    }
+
+    // Featured (mint-faint backing) goes on the first invite, regardless of
+    // section — matches the §5.17 "most recent" rule.
+    final Object? featuredId = invites.isNotEmpty
+        ? (invites.first as Map)['roomId']
+        : null;
+
+    final children = <Widget>[];
+
+    if (directInvites.isNotEmpty) {
+      children.add(const GridSectionHeader(text: 'FROM PEOPLE'));
+      for (final invite in directInvites) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _PersonInviteCard(
+              invite: invite,
+              featured: invite['roomId'] == featuredId,
+              onAccept: () => handleInviteTap(
+                context,
+                (invite['roomId'] as String?) ?? 'Unknown',
+                (invite['roomName'] as String?) ?? 'Unnamed Room',
+                (invite['inviter'] as String?) ?? 'Unknown',
+                true,
+              ),
+              onDecline: () => handleInviteTap(
+                context,
+                (invite['roomId'] as String?) ?? 'Unknown',
+                (invite['roomName'] as String?) ?? 'Unnamed Room',
+                (invite['inviter'] as String?) ?? 'Unknown',
+                true,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    if (groupInvites.isNotEmpty) {
+      children.add(const GridSectionHeader(text: 'GROUP INVITES'));
+      for (final invite in groupInvites) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _GroupInviteCard(
+              invite: invite,
+              featured: invite['roomId'] == featuredId,
+              onJoin: () => handleInviteTap(
+                context,
+                (invite['roomId'] as String?) ?? 'Unknown',
+                (invite['roomName'] as String?) ?? 'Unnamed Room',
+                (invite['inviter'] as String?) ?? 'Unknown',
+                false,
+              ),
+              onDismiss: () => handleInviteTap(
+                context,
+                (invite['roomId'] as String?) ?? 'Unknown',
+                (invite['roomName'] as String?) ?? 'Unnamed Room',
+                (invite['inviter'] as String?) ?? 'Unknown',
+                false,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 8),
+      children: children,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Invite cards
+// ─────────────────────────────────────────────────────────────────────────
+
+class _PersonInviteCard extends StatelessWidget {
+  const _PersonInviteCard({
+    required this.invite,
+    required this.featured,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final Map<String, dynamic> invite;
+  final bool featured;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final inviterId = (invite['inviter'] as String?) ?? 'Unknown';
+    final handle = localpart(inviterId);
+    // Use the localpart as a friendly display name when no profile is known.
+    final displayName = handle.isEmpty
+        ? 'Unknown'
+        : (handle[0].toUpperCase() + handle.substring(1));
+
+    return _InviteShell(
+      featured: featured,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GridAvatar(name: handle, size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: GridTokens.fontUi,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    GridMono(
+                      '@$handle',
+                      uppercase: false,
+                      size: 11,
+                      letterSpacing: 0.04,
+                      color: GridTokens.text3,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Wants to share location with you',
+            style: TextStyle(
+              fontFamily: GridTokens.fontUi,
+              fontSize: 13,
+              height: 1.4,
+              color: GridTokens.text2,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: 'Accept',
+                  icon: Icons.check_rounded,
+                  height: 44,
+                  onPressed: onAccept,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GridButton(
+                  label: 'Decline',
+                  style: GridButtonStyle.secondary,
+                  height: 44,
+                  onPressed: onDecline,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupInviteCard extends StatelessWidget {
+  const _GroupInviteCard({
+    required this.invite,
+    required this.featured,
+    required this.onJoin,
+    required this.onDismiss,
+  });
+
+  final Map<String, dynamic> invite;
+  final bool featured;
+  final VoidCallback onJoin;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final inviterId = (invite['inviter'] as String?) ?? 'Unknown';
+    final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
+    final inviterHandle = localpart(inviterId);
+    final inviterDisplay = inviterHandle.isEmpty
+        ? 'Someone'
+        : (inviterHandle[0].toUpperCase() + inviterHandle.substring(1));
+
+    String groupName = 'Unnamed Group';
+    int expiration = -1;
+    final parts = roomName.split(':');
+    if (parts.length > 3) {
+      expiration = int.tryParse(parts[2]) ?? -1;
+      groupName = parts[3];
+    } else {
+      groupName = roomName;
+    }
+
+    final expiry = _formatExpiry(expiration);
+
+    return _InviteShell(
+      featured: featured,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StackedAvatars(seeds: [inviterHandle, groupName, roomName]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      groupName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: GridTokens.fontUi,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$inviterDisplay invited you',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: GridTokens.fontUi,
+                        fontSize: 13,
+                        color: GridTokens.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule_rounded,
+                size: 13,
+                color: GridTokens.amber,
+              ),
+              const SizedBox(width: 6),
+              GridMono(
+                expiration == -1 ? 'permanent invite' : 'auto-ends in $expiry',
+                uppercase: false,
+                size: 11,
+                letterSpacing: 0.04,
+                color: GridTokens.amber,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: 'Join group',
+                  icon: Icons.group_add_rounded,
+                  height: 44,
+                  onPressed: onJoin,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GridButton(
+                  label: 'Dismiss',
+                  style: GridButtonStyle.secondary,
+                  height: 44,
+                  onPressed: onDismiss,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatExpiry(int expiration) {
+    if (expiration == -1) return 'permanent';
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final diff = expiration - now;
+    if (diff <= 0) return 'expired';
+    final minutes = (diff / 60).round();
+    final hours = (minutes / 60).round();
+    final days = (hours / 24).round();
+    if (days > 0) return '$days day${days > 1 ? 's' : ''}';
+    if (hours > 0) return '$hours hour${hours > 1 ? 's' : ''}';
+    if (minutes > 0) return '$minutes min';
+    return 'a few seconds';
+  }
+}
+
+/// Shared card chrome — surface bg, hairline border, rounded-16. When
+/// [featured], adds a subtle mint-faint gradient backing per §5.17.
+class _InviteShell extends StatelessWidget {
+  const _InviteShell({required this.child, required this.featured});
+
+  final Widget child;
+  final bool featured;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: featured
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [GridTokens.mintFaint, GridTokens.surface],
+              )
+            : null,
+        color: featured ? null : GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(
+          color: featured ? GridTokens.mintSoft : GridTokens.hairline,
+          width: 1,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Three overlapping mini-avatars for group invites.
+class _StackedAvatars extends StatelessWidget {
+  const _StackedAvatars({required this.seeds});
+
+  final List<String> seeds;
+
+  static const double _size = 28;
+  static const double _overlap = 10;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = seeds.where((s) => s.isNotEmpty).take(3).toList();
+    if (visible.isEmpty) {
+      return const SizedBox(width: _size, height: _size);
+    }
+    const tile = _size + 4;
+    final width = tile + (visible.length - 1) * (tile - _overlap);
+    return SizedBox(
+      width: width,
+      height: tile,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (int i = 0; i < visible.length; i++)
+            Positioned(
+              left: i * (tile - _overlap),
+              top: 0,
+              child: GridAvatar(
+                name: visible[i],
+                size: _size,
+                padding: 2,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
