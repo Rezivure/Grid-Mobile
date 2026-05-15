@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -476,68 +479,35 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     bool isLoading = false,
     IconData? icon,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isEnabled = onPressed != null && !isLoading;
-    
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isPrimary && isEnabled ? [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
-      ),
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5))
-              : Colors.transparent,
-          foregroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-              : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: isPrimary ? BorderSide.none : BorderSide(
-              color: isEnabled 
-                  ? colorScheme.outline.withOpacity(0.2)
-                  : colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
+    if (isLoading) {
+      return Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? GridTokens.mint.withOpacity(0.55)
+              : GridTokens.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: isPrimary
+              ? null
+              : Border.all(color: GridTokens.hairlineStrong),
+        ),
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            color: isPrimary ? Colors.black : GridTokens.mint,
+            strokeWidth: 2,
           ),
         ),
-        child: isLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: colorScheme.onPrimary,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 20),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-      ),
+      );
+    }
+    return GridButton(
+      label: text,
+      onPressed: onPressed,
+      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
+      icon: icon,
     );
   }
 
