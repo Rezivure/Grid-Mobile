@@ -91,7 +91,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
           );
         }
         if (state is GroupsError) {
-          return _errorState(state.error);
+          return _errorState(state.message);
         }
 
         final allGroups = state is GroupsLoaded ? state.groups : <gr.Room>[];
