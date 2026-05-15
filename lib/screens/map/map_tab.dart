@@ -13,6 +13,7 @@ import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:google_fonts/google_fonts.dart';
 
 import 'grid_map_style.dart';
 import 'maplibre_camera_facade.dart';
@@ -1816,95 +1817,130 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   final shouldDelete = await showDialog<bool>(
                     context: context,
                     builder: (BuildContext context) {
-                      final colorScheme = Theme.of(context).colorScheme;
-                      
                       return Dialog(
                         backgroundColor: Colors.transparent,
                         child: Container(
-                          constraints: const BoxConstraints(maxWidth: 300),
+                          constraints: BoxConstraints(
+                            maxWidth:
+                                MediaQuery.of(context).size.width * 0.9,
+                          ),
                           decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(24),
+                            color: GridTokens.surface,
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rXl),
+                            border: Border.all(color: GridTokens.hairline),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.shadow.withOpacity(0.1),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
+                                color: Colors.black.withOpacity(0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
                             ],
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.error.withOpacity(0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.delete_outline,
-                                    color: colorScheme.error,
-                                    size: 32,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: const BoxDecoration(
+                                  color: GridTokens.dangerSoft,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft:
+                                        Radius.circular(GridTokens.rXl),
+                                    topRight:
+                                        Radius.circular(GridTokens.rXl),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Delete Icon?',
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'This icon will be permanently removed from the map.',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(0.8),
-                                    height: 1.5,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 24),
-                                Row(
+                                child: Row(
                                   children: [
-                                    Expanded(
-                                      child: OutlinedButton(
-                                        onPressed: () => Navigator.of(context).pop(false),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: colorScheme.onSurface,
-                                          side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Cancel'),
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: GridTokens.danger
+                                            .withOpacity(0.18),
+                                        borderRadius: BorderRadius.circular(
+                                            GridTokens.rMd),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.delete_outline,
+                                        color: GridTokens.danger,
+                                        size: 20,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 14),
                                     Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () => Navigator.of(context).pop(true),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: colorScheme.error,
-                                          foregroundColor: colorScheme.onError,
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Delete icon',
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: -0.015,
+                                              color: GridTokens.text,
+                                            ),
                                           ),
-                                          elevation: 0,
-                                        ),
-                                        child: const Text('Delete'),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "This can't be undone.",
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w400,
+                                              color: GridTokens.text2,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 0),
+                                child: Text(
+                                  'This icon will be permanently removed from the map.',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: GridTokens.text2,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 20),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Cancel',
+                                        style: GridButtonStyle.secondary,
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Delete',
+                                        style: GridButtonStyle.danger,
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -2103,56 +2139,63 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
 
             // Floating chrome — top-center "SHARING WITH N" pill.
+            // Anchored to the top safe-area inset so it clears the notch on
+            // every device without depending on a hardcoded offset.
             Positioned(
-              top: 60,
+              top: MediaQuery.of(context).padding.top + 8,
               left: 0,
               right: 0,
-              child: SafeArea(
-                child: Center(child: _buildSharingPill()),
-              ),
+              child: Center(child: _buildSharingPill()),
             ),
 
             // Right rail — search / notifications / settings.
+            // Sits just below the pill (pill is ~28px tall + 8px top inset
+            // padding + 20px gap) and uses the top safe-area inset directly so
+            // the rail never collides with the status bar / notch.
             Positioned(
               right: 16,
-              top: 100,
-              child: SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    GridNavIconButton(
-                      icon: Icons.search_rounded,
-                      onPressed: () {
-                        // TODO: surface a search affordance (contacts, places).
-                      },
+              top: MediaQuery.of(context).padding.top + 56,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  GridNavIconButton(
+                    icon: Icons.search_rounded,
+                    onPressed: () {
+                      // TODO: surface a search affordance (contacts, places).
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  GridNavIconButton(
+                    icon: Icons.notifications_outlined,
+                    badgeCount: _invitesBadgeCount(context),
+                    onPressed: () {
+                      // Existing invites surface — keeps current navigation.
+                      context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  GridNavIconButton(
+                    icon: Icons.settings_outlined,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => SettingsPage()),
                     ),
-                    const SizedBox(height: 10),
-                    GridNavIconButton(
-                      icon: Icons.notifications_outlined,
-                      badgeCount: _invitesBadgeCount(context),
-                      onPressed: () {
-                        // Existing invites surface — keeps current navigation.
-                        context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    GridNavIconButton(
-                      icon: Icons.settings_outlined,
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => SettingsPage()),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
             // Bottom-left center-on-me crosshair.
+            // The MapScrollWindow's DraggableScrollableSheet collapses at
+            // initialChildSize = 0.45 of screen height, so anchor this button
+            // just above that collapsed top edge (~12px breathing room) so it
+            // remains visible when the sheet is at rest. The sheet itself
+            // already extends into the bottom safe area, so no extra inset is
+            // needed here.
             Positioned(
               left: 16,
-              bottom: MediaQuery.of(context).size.height * 1 / 4 + 16,
+              bottom: MediaQuery.of(context).size.height * 0.45 + 12,
               child: GridNavIconButton(
                 icon: Icons.my_location_rounded,
                 onPressed: () {

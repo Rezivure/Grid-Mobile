@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:grid_frontend/models/map_icon.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:intl/intl.dart';
 import 'dart:io' show Platform;
 
@@ -73,101 +76,126 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        
         return Dialog(
           backgroundColor: Colors.transparent,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 300),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
             decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(24),
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: colorScheme.error.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.delete_outline,
-                      color: colorScheme.error,
-                      size: 32,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Delete Icon?',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'This icon will be permanently removed from the map.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.8),
-                      height: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: colorScheme.onSurface,
-                            side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Cancel'),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: GridTokens.danger,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colorScheme.error,
-                            foregroundColor: colorScheme.onError,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Delete icon',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
                             ),
-                            elevation: 0,
-                          ),
-                          child: const Text('Delete'),
+                            const SizedBox(height: 2),
+                            Text(
+                              "This can't be undone.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'This icon will be permanently removed from the map.',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Delete',
+                          style: GridButtonStyle.danger,
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
-    
+
     if (shouldDelete == true && widget.onDelete != null) {
       widget.onDelete!();
       widget.onClose();

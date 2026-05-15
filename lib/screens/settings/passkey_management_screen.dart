@@ -532,113 +532,6 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     );
   }
 
-  Future<void> _showRecoveryPhrase() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: GridTokens.surface,
-                borderRadius: BorderRadius.circular(GridTokens.rXl),
-                border: Border.all(color: GridTokens.hairline),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: GridTokens.mintSoft,
-                          borderRadius: BorderRadius.circular(GridTokens.rMd),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.lock_outline,
-                          color: GridTokens.mint,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Recovery phrase',
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: GridTokens.text,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            const GridMono(
-                              '24 WORDS · STORED OFFLINE',
-                              size: 10.5,
-                              letterSpacing: 0.12,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: GridTokens.surface2,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.warning_amber_rounded,
-                          color: GridTokens.amber,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Recovery phrase reveal is not yet available. Use a registered passkey to sign in.',
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 13,
-                              color: GridTokens.text2,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  GridButton(
-                    label: 'Close',
-                    style: GridButtonStyle.secondary,
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -773,9 +666,6 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                       ),
                     );
                   }),
-                const SizedBox(height: 8),
-                const GridSectionHeader(text: 'BACKUP'),
-                _buildRecoveryRow(),
               ],
             ),
           ),
@@ -1008,75 +898,6 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecoveryRow() {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _showRecoveryPhrase,
-        borderRadius: BorderRadius.circular(GridTokens.rLg),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: GridTokens.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: GridTokens.surface2,
-                    borderRadius: BorderRadius.circular(GridTokens.rMd),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.menu_book_outlined,
-                    color: GridTokens.text2,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recovery phrase',
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: GridTokens.text,
-                          letterSpacing: -0.01,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '24 words · stored offline',
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 13,
-                          color: GridTokens.text2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: GridTokens.text3,
-                ),
-              ],
             ),
           ),
         ),

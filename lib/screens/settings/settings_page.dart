@@ -39,11 +39,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 import 'package:grid_frontend/screens/settings/developer_settings_screen.dart';
+import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
+import 'package:latlong2/latlong.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../styles/tokens.dart';
 import '../../widgets/grid/grid_avatar.dart';
+import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../../widgets/grid/grid_segmented.dart';
 
@@ -67,6 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _buildNumber = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
+  bool _autoPauseAtHome = false;
   String? _userID;
   String? _username;
   String? _localpart;
@@ -86,6 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadIncognitoState();
     _loadBatterySaverState();
+    _loadAutoPauseAtHomeState();
     _loadCachedAvatar();
     _loadAppVersion();
   }
@@ -135,6 +140,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _batterySaver = prefs.getBool('battery_saver') ?? false;
+    });
+  }
+
+  Future<void> _loadAutoPauseAtHomeState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _autoPauseAtHome =
+          prefs.getBool('auto_pause_at_home_enabled') ?? false;
     });
   }
 
@@ -222,6 +235,157 @@ class _SettingsPageState extends State<SettingsPage> {
         SnackBar(content: Text('Your location is being shared with trusted contacts.')),
       );
     }
+  }
+
+  // ── Auto-pause at home ─────────────────────────────────
+  //
+  // The toggle only flips a local preference. The actual geofence detection
+  // (waking the location service when the user enters/leaves the home
+  // region) is handled platform-side.
+  // TODO: geofence trigger — needs platform geofencing setup.
+  Future<void> _onAutoPauseAtHomeToggled(bool requested) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!requested) {
+      // Turning off: keep the saved home location, just clear the enabled flag.
+      await prefs.setBool('auto_pause_at_home_enabled', false);
+      if (!mounted) return;
+      setState(() => _autoPauseAtHome = false);
+      return;
+    }
+
+    // Turning on: ensure we have a saved home location first.
+    final existing = prefs.getString('home_location');
+    if (existing != null && existing.trim().isNotEmpty) {
+      await prefs.setBool('auto_pause_at_home_enabled', true);
+      if (!mounted) return;
+      setState(() => _autoPauseAtHome = true);
+      return;
+    }
+
+    // No home set — prompt the user to pick one on the map.
+    final saved = await _promptSetHomeLocation();
+    if (!mounted) return;
+    if (!saved) {
+      // User cancelled — leave the toggle off.
+      setState(() => _autoPauseAtHome = false);
+      return;
+    }
+
+    await prefs.setBool('auto_pause_at_home_enabled', true);
+    if (!mounted) return;
+    setState(() => _autoPauseAtHome = true);
+  }
+
+  /// Shows the "Set your home location" bottom sheet and, if the user
+  /// confirms, pushes the home-location picker. Returns `true` when a home
+  /// location was successfully persisted.
+  Future<bool> _promptSetHomeLocation() async {
+    final shouldPick = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: GridTokens.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+                border: Border.all(color: GridTokens.hairline),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: GridTokens.mintFaint,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: GridTokens.mintSoft,
+                            width: 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.home_outlined,
+                          color: GridTokens.mint,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Set your home location',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pick the spot on the map. We use it locally to '
+                      'pause location sharing when your phone is at home.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text2,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        height: 1.35,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    GridButton(
+                      label: 'Pick on map',
+                      icon: Icons.map_outlined,
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(true),
+                    ),
+                    const SizedBox(height: 8),
+                    GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.ghost,
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldPick != true || !mounted) return false;
+
+    final picked = await Navigator.of(context).push<LatLng>(
+      MaterialPageRoute(
+        builder: (_) => const HomeLocationPickerScreen(),
+      ),
+    );
+
+    if (picked == null) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'home_location',
+      '${picked.latitude},${picked.longitude}',
+    );
+    return true;
   }
 
   Future<void> _getDeviceAndIdentityKey() async {
@@ -738,68 +902,70 @@ class _SettingsPageState extends State<SettingsPage> {
                   maxHeight: MediaQuery.of(context).size.height * 0.7,
                 ),
                 decoration: BoxDecoration(
-                  color: colorScheme.background,
-                  borderRadius: BorderRadius.circular(20),
+                  color: GridTokens.surface,
+                  borderRadius: BorderRadius.circular(GridTokens.rXl),
+                  border: Border.all(color: GridTokens.hairline),
                   boxShadow: [
                     BoxShadow(
-                      color: colorScheme.shadow.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header Section
+                    // Header
                     Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.05),
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        color: GridTokens.mintFaint,
                         borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: colorScheme.outline.withOpacity(0.1),
-                            width: 1,
-                          ),
+                          topLeft: Radius.circular(GridTokens.rXl),
+                          topRight: Radius.circular(GridTokens.rXl),
                         ),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: EdgeInsets.all(10),
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
-                              color: colorScheme.primary.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(10),
+                              color: GridTokens.mintSoft,
+                              borderRadius:
+                                  BorderRadius.circular(GridTokens.rMd),
                             ),
-                            child: Icon(
+                            alignment: Alignment.center,
+                            child: const Icon(
                               Icons.edit,
-                              color: colorScheme.primary,
+                              color: GridTokens.mint,
                               size: 20,
                             ),
                           ),
-                          SizedBox(width: 12),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Edit Display Name',
-                                  style: TextStyle(
+                                  'Edit display name',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
                                     fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onBackground,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.015,
+                                    color: GridTokens.text,
                                   ),
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
                                   'Choose how others see you',
-                                  style: TextStyle(
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
                                     fontSize: 13,
-                                    color: colorScheme.onBackground.withOpacity(0.6),
+                                    fontWeight: FontWeight.w400,
+                                    color: GridTokens.text2,
                                   ),
                                 ),
                               ],
@@ -808,121 +974,142 @@ class _SettingsPageState extends State<SettingsPage> {
                         ],
                       ),
                     ),
-                    
-                    // Content Section - Scrollable
+
+                    // Body
                     Flexible(
                       child: SingleChildScrollView(
-                        padding: EdgeInsets.all(20),
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Display Name',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onBackground.withOpacity(0.7),
+                            TextField(
+                              controller: controller,
+                              autofocus: true,
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 15,
+                                color: GridTokens.text,
                               ),
-                            ),
-                            SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: hasError 
-                                      ? Colors.red.withOpacity(0.5)
-                                      : colorScheme.outline.withOpacity(0.3),
-                                  width: 1,
+                              cursorColor: GridTokens.mint,
+                              maxLength: 14,
+                              decoration: InputDecoration(
+                                hintText: 'Enter your display name',
+                                hintStyle: GoogleFonts.getFont(
+                                  'Geist',
+                                  color: GridTokens.text3,
+                                  fontSize: 15,
+                                ),
+                                filled: true,
+                                fillColor: GridTokens.surface2,
+                                prefixIcon: const Icon(
+                                  Icons.person_outline,
+                                  color: GridTokens.text3,
+                                  size: 20,
+                                ),
+                                counterText:
+                                    '${controller.text.trim().length}/14',
+                                counterStyle: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 11,
+                                  color: hasError
+                                      ? GridTokens.danger
+                                      : GridTokens.text3,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? GridTokens.danger
+                                        : GridTokens.hairline,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? GridTokens.danger
+                                        : GridTokens.hairline,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? GridTokens.danger
+                                        : GridTokens.mint,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
                                 ),
                               ),
-                              child: TextField(
-                                controller: controller,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: colorScheme.onSurface,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Enter your display name',
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                  hintStyle: TextStyle(
-                                    color: colorScheme.onSurface.withOpacity(0.4),
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.person_outline,
-                                    color: colorScheme.onSurface.withOpacity(0.4),
-                                    size: 20,
-                                  ),
-                                  counterText: '${controller.text.trim().length}/14',
-                                  counterStyle: TextStyle(
-                                    fontSize: 11,
-                                    color: hasError 
-                                        ? Colors.red 
-                                        : colorScheme.onSurface.withOpacity(0.6),
-                                  ),
-                                ),
-                                maxLength: 14,
-                                onChanged: (value) {
-                                  setState(() {
-                                    hasError = !isValidName(value);
-                                    if (hasError) {
-                                      final trimmed = value.trim();
-                                      if (trimmed.isEmpty) {
-                                        errorText = 'Display name cannot be empty';
-                                      } else if (trimmed.length < 3) {
-                                        errorText = 'Must be at least 3 characters';
-                                      } else if (trimmed.length > 14) {
-                                        errorText = 'Must be 14 characters or less';
-                                      } else {
-                                        errorText = 'Contains invalid characters';
-                                      }
+                              onChanged: (value) {
+                                setState(() {
+                                  hasError = !isValidName(value);
+                                  if (hasError) {
+                                    final trimmed = value.trim();
+                                    if (trimmed.isEmpty) {
+                                      errorText =
+                                          'Display name cannot be empty';
+                                    } else if (trimmed.length < 3) {
+                                      errorText =
+                                          'Must be at least 3 characters';
+                                    } else if (trimmed.length > 14) {
+                                      errorText =
+                                          'Must be 14 characters or less';
                                     } else {
-                                      errorText = null;
+                                      errorText =
+                                          'Contains invalid characters';
                                     }
-                                  });
-                                },
-                              ),
+                                  } else {
+                                    errorText = null;
+                                  }
+                                });
+                              },
                             ),
                             if (errorText != null) ...[
-                              SizedBox(height: 6),
+                              const SizedBox(height: 6),
                               Text(
                                 errorText!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.red,
+                                style: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 12,
+                                  color: GridTokens.danger,
                                 ),
                               ),
                             ],
-                            SizedBox(height: 12),
-                            
-                            // Guidelines - More compact
+                            const SizedBox(height: 14),
                             Container(
-                              padding: EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: colorScheme.primary.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.2),
-                                  width: 1,
-                                ),
+                                color: GridTokens.surface2,
+                                borderRadius:
+                                    BorderRadius.circular(GridTokens.rMd),
+                                border:
+                                    Border.all(color: GridTokens.hairline),
                               ),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    Icons.visibility,
-                                    color: colorScheme.primary,
-                                    size: 14,
+                                  const Icon(
+                                    Icons.visibility_outlined,
+                                    color: GridTokens.text2,
+                                    size: 18,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      'Display names are only visible to your contacts and group members',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colorScheme.primary.withOpacity(0.8),
-                                        height: 1.3,
+                                      'Display names are only visible to your contacts and group members.',
+                                      style: GoogleFonts.getFont(
+                                        'Geist',
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        color: GridTokens.text2,
+                                        height: 1.35,
                                       ),
                                     ),
                                   ),
@@ -933,98 +1120,32 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ),
-                    
-                    // Actions Section
-                    Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: colorScheme.outline.withOpacity(0.1),
-                            width: 1,
-                          ),
-                        ),
-                      ),
+
+                    // Actions
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                       child: Row(
                         children: [
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: colorScheme.outline.withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
+                            child: GridButton(
+                              label: 'Cancel',
+                              style: GridButtonStyle.secondary,
+                              onPressed: () => Navigator.pop(context),
                             ),
                           ),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    hasError 
-                                        ? Colors.grey 
-                                        : colorScheme.primary,
-                                    hasError 
-                                        ? Colors.grey.withOpacity(0.8)
-                                        : colorScheme.primary.withOpacity(0.8),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: hasError ? [] : [
-                                  BoxShadow(
-                                    color: colorScheme.primary.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: TextButton(
-                                onPressed: hasError ? null : () {
-                                  if (isValidName(controller.text)) {
-                                    Navigator.pop(context, controller.text.trim());
-                                  }
-                                },
-                                style: TextButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Save',
-                                  style: TextStyle(
-                                    color: hasError 
-                                        ? Colors.white.withOpacity(0.5)
-                                        : Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
+                            child: GridButton(
+                              label: 'Save',
+                              style: GridButtonStyle.primary,
+                              onPressed: hasError
+                                  ? null
+                                  : () {
+                                      if (isValidName(controller.text)) {
+                                        Navigator.pop(
+                                            context, controller.text.trim());
+                                      }
+                                    },
                             ),
                           ),
                         ],
@@ -2123,14 +2244,13 @@ class _SettingsPageState extends State<SettingsPage> {
                   colorScheme: colorScheme,
                 ),
                 _buildSettingsDivider(),
-                // TODO: needs server-side support (auto-pause / geofencing).
+                // TODO: geofence trigger — needs platform geofencing setup.
                 _buildToggleOption(
                   icon: Icons.home_outlined,
                   title: 'Auto-pause when phone is at home',
                   subtitle: 'Saves battery',
-                  value: false,
-                  onChanged: (_) {},
-                  enabled: false,
+                  value: _autoPauseAtHome,
+                  onChanged: _onAutoPauseAtHomeToggled,
                   colorScheme: colorScheme,
                 ),
                 _buildSettingsDivider(),
@@ -2141,16 +2261,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   value: _batterySaver,
                   onChanged: _toggleBatterySaver,
                   colorScheme: colorScheme,
-                ),
-                _buildSettingsDivider(),
-                _buildValueRow(
-                  icon: Icons.gps_fixed_rounded,
-                  title: 'Precision',
-                  // TODO: needs server-side support (approximate / blurred
-                  // precision). Render fixed to "Exact" until that ships.
-                  value: 'Exact',
-                  enabled: false,
-                  onTap: () {},
                 ),
               ],
             ),
@@ -2166,7 +2276,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: 'Encryption keys',
                   value: deviceID == null || identityKey == null
                       ? 'Loading…'
-                      : 'Device $_shortDeviceId · 1 backed up',
+                      : 'Device $_shortDeviceId',
                   onTap: () => _showInfoModal(
                     'Identity Key',
                     identityKey ?? 'Loading...',
@@ -2202,30 +2312,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     colorScheme: colorScheme,
                   ),
                 ],
-                _buildSettingsDivider(),
-                // TODO: needs server-side support (per-event notification
-                // prefs are not wired up yet on the redesign trunk).
-                _buildMenuOption(
-                  icon: Icons.notifications_none_rounded,
-                  title: 'Notifications',
-                  trailing: 'On',
-                  onTap: () {},
-                  enabled: false,
-                  colorScheme: colorScheme,
-                ),
-                _buildSettingsDivider(),
-                _buildMenuOption(
-                  icon: Icons.dns_outlined,
-                  title: 'Server',
-                  trailing: isCustom ? 'Custom' : 'grid.cloud',
-                  onTap: () => _showInfoModal(
-                    'Server',
-                    isCustom
-                        ? 'You are connected to a custom Matrix homeserver.'
-                        : 'You are connected to the default grid.cloud server.',
-                  ),
-                  colorScheme: colorScheme,
-                ),
               ],
             ),
 
@@ -2386,56 +2472,6 @@ class _SettingsPageState extends State<SettingsPage> {
         height: 1,
         thickness: 1,
         color: GridTokens.hairline,
-      ),
-    );
-  }
-
-  /// A read-only "Title    Value" row used for things like Precision = Exact.
-  Widget _buildValueRow({
-    required IconData icon,
-    required String title,
-    required String value,
-    required VoidCallback onTap,
-    bool enabled = true,
-  }) {
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.45,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: GridTokens.text2),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      color: GridTokens.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.01,
-                    ),
-                  ),
-                ),
-                Text(
-                  value,
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    color: GridTokens.text2,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: -0.01,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -2866,8 +2902,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // Modern Delete Account Dialog Methods
   Widget _buildDeleteConfirmationDialog({bool isCustomServer = false}) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final bullets = <_DangerBullet>[
+      const _DangerBullet(Icons.delete_forever,
+          'Your account will be permanently deleted'),
+      const _DangerBullet(Icons.group_remove,
+          'You will be removed from all groups and contacts'),
+      if (isCustomServer)
+        const _DangerBullet(
+            Icons.storage, 'All your data will be permanently erased'),
+    ];
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -2877,68 +2920,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: GridTokens.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section with Warning
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: GridTokens.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: GridTokens.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
-                    child: Icon(
-                      Icons.warning,
-                      color: Colors.red,
-                      size: 28,
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: GridTokens.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Delete account',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: GridTokens.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
-                          'This action cannot be undone',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          'This action cannot be undone.',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: GridTokens.text2,
                           ),
                         ),
                       ],
@@ -2947,84 +2991,56 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
+
+            // Body
             Flexible(
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Are you sure you want to delete your account?',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onBackground,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: GridTokens.text2,
+                        height: 1.45,
                       ),
                     ),
-                    SizedBox(height: 16),
-                    
-                    // Warning cards
+                    const SizedBox(height: 14),
                     Container(
-                      padding: EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.red.withOpacity(0.2),
-                          width: 1,
-                        ),
+                        color: GridTokens.surface2,
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        border: Border.all(color: GridTokens.hairline),
                       ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(Icons.delete_forever, color: Colors.red, size: 20),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Your account will be permanently deleted',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.group_remove, color: Colors.red, size: 20),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'You will be removed from all groups and contacts',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (isCustomServer) ...[
-                            SizedBox(height: 8),
+                          for (int i = 0; i < bullets.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 10),
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.storage, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
+                                Icon(
+                                  bullets[i].icon,
+                                  color: GridTokens.danger,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'All your data will be permanently erased',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.red,
+                                    bullets[i].text,
+                                    style: GoogleFonts.getFont(
+                                      'Geist',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                      color: GridTokens.text2,
+                                      height: 1.35,
                                     ),
                                   ),
                                 ),
@@ -3038,81 +3054,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, false),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
@@ -3125,9 +3085,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSMSConfirmationDialog(TextEditingController codeController) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -3135,68 +3092,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: GridTokens.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: GridTokens.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: GridTokens.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
-                    child: Icon(
-                      Icons.sms,
-                      color: Colors.red,
-                      size: 24,
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.sms_outlined,
+                      color: GridTokens.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Confirm Deletion',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Confirm deletion',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: GridTokens.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'Enter SMS verification code',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: GridTokens.text2,
                           ),
                         ),
                       ],
@@ -3205,160 +3163,118 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.primary.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: GridTokens.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
                     ),
                     child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.info_outline,
-                          color: colorScheme.primary,
-                          size: 20,
+                          color: GridTokens.text2,
+                          size: 18,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Enter the confirmation code sent to your phone',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.primary,
-                              height: 1.3,
+                            'Enter the confirmation code sent to your phone.',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: GridTokens.text2,
+                              height: 1.35,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
-                  Text(
-                    'SMS Code',
-                    style: TextStyle(
-                      fontSize: 14,
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground.withOpacity(0.7),
+                      letterSpacing: 4,
+                      color: GridTokens.text,
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.3),
-                        width: 1,
+                    cursorColor: GridTokens.mint,
+                    decoration: InputDecoration(
+                      hintText: 'Enter code',
+                      hintStyle: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text3,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0,
                       ),
-                    ),
-                    child: TextField(
-                      controller: codeController,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
+                      filled: true,
+                      fillColor: GridTokens.surface2,
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            const BorderSide(color: GridTokens.hairline),
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter code',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.4),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            const BorderSide(color: GridTokens.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide: const BorderSide(
+                          color: GridTokens.mint,
+                          width: 1.5,
                         ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 16,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, null),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, null),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, codeController.text),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () =>
+                          Navigator.pop(context, codeController.text),
                     ),
                   ),
                 ],
@@ -3371,9 +3287,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildPasswordConfirmationDialog(TextEditingController passwordController) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -3381,68 +3294,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: GridTokens.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: GridTokens.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: GridTokens.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
-                    child: Icon(
-                      Icons.lock,
-                      color: Colors.red,
-                      size: 24,
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.lock_outline,
+                      color: GridTokens.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Confirm Deletion',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Confirm deletion',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: GridTokens.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'Enter your password to continue',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: GridTokens.text2,
                           ),
                         ),
                       ],
@@ -3451,161 +3365,118 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.red.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: GridTokens.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.warning,
-                          color: Colors.red,
-                          size: 20,
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: GridTokens.amber,
+                          size: 18,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'This will permanently delete your account and all associated data',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.red,
-                              height: 1.3,
+                            'This will permanently delete your account and all associated data.',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: GridTokens.text2,
+                              height: 1.35,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
-                  Text(
-                    'Password',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground.withOpacity(0.7),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    autofocus: true,
+                    obscureText: true,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 15,
+                      color: GridTokens.text,
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.3),
-                        width: 1,
+                    cursorColor: GridTokens.mint,
+                    decoration: InputDecoration(
+                      hintText: 'Enter your password',
+                      hintStyle: GoogleFonts.getFont(
+                        'Geist',
+                        color: GridTokens.text3,
+                        fontSize: 15,
                       ),
-                    ),
-                    child: TextField(
-                      controller: passwordController,
-                      obscureText: true,
-                      style: TextStyle(
-                        fontSize: 16,
+                      filled: true,
+                      fillColor: GridTokens.surface2,
+                      prefixIcon: const Icon(
+                        Icons.lock_outline,
+                        color: GridTokens.text3,
+                        size: 20,
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter your password',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.4),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            const BorderSide(color: GridTokens.hairline),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            const BorderSide(color: GridTokens.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide: const BorderSide(
+                          color: GridTokens.mint,
+                          width: 1.5,
                         ),
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          color: colorScheme.onSurface.withOpacity(0.4),
-                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, null),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, null),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, passwordController.text),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(
+                          context, passwordController.text),
                     ),
                   ),
                 ],
@@ -3618,8 +3489,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSignOutDialog() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final bullets = <_DangerBullet>[
+      const _DangerBullet(
+          Icons.location_off, 'Location sharing will be stopped'),
+      const _DangerBullet(Icons.sync_disabled,
+          "You'll need to sign in again to access your account"),
+    ];
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -3628,68 +3503,70 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: GridTokens.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: GridTokens.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.05),
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: GridTokens.mintFaint,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
+                      color: GridTokens.mintSoft,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
                     ),
-                    child: Icon(
+                    alignment: Alignment.center,
+                    child: const Icon(
                       Icons.logout,
-                      color: colorScheme.primary,
-                      size: 24,
+                      color: GridTokens.mint,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onBackground,
+                          'Sign out',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: GridTokens.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'You can always sign back in',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: colorScheme.onBackground.withOpacity(0.6),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: GridTokens.text2,
                           ),
                         ),
                       ],
@@ -3698,167 +3575,87 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Are you sure you want to sign out?',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
                     ),
                   ),
-                  SizedBox(height: 16),
-                  
-                  // Info card
+                  const SizedBox(height: 14),
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceVariant.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: GridTokens.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
                     ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.location_off,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Location sharing will be stopped',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
+                        for (int i = 0; i < bullets.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                bullets[i].icon,
+                                color: GridTokens.text2,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  bullets[i].text,
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                    color: GridTokens.text2,
+                                    height: 1.35,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.sync_disabled,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'You\'ll need to sign in again to access your account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, false),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.logout,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Confirm Sign Out',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    child: GridButton(
+                      label: 'Sign out',
+                      icon: Icons.logout,
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
@@ -3869,4 +3666,10 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
+}
+
+class _DangerBullet {
+  const _DangerBullet(this.icon, this.text);
+  final IconData icon;
+  final String text;
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
+import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
@@ -234,7 +236,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             duration: const Duration(milliseconds: 200),
             child: Container(
               decoration: BoxDecoration(
-                color: colorScheme.surface,
+                // One uniform surface for the entire sheet body (handle,
+                // segmented header, subscreen). GridTokens.surface == #15181B
+                // — matches what the segmented pill renders against so the
+                // top of the sheet doesn't look gray-on-near-black.
+                color: GridTokens.surface,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   topRight: Radius.circular(20),
@@ -278,24 +284,29 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 // Header Section — new segmented tabs.
                 _buildSegmentedHeader(colorScheme),
                 
-                // Content
+                // Content — paint the same surface underneath the subscreen
+                // so the area between the segmented header and the subscreen
+                // body never reveals the underlying scaffold.
                 Expanded(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification.metrics.pixels <= 0 &&
-                          notification is ScrollUpdateNotification &&
-                          notification.dragDetails != null &&
-                          !_isScrollingContent) {
-                        final delta = notification.dragDetails!.delta.dy / 
-                            MediaQuery.of(context).size.height;
-                        final newSize = (_scrollableController.size - delta)
-                            .clamp(0.3, 0.7);
-                        _scrollableController.jumpTo(newSize);
-                        return true;
-                      }
-                      return false;
-                    },
-                    child: _buildSubscreen(scrollController),
+                  child: ColoredBox(
+                    color: GridTokens.surface,
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notification) {
+                        if (notification.metrics.pixels <= 0 &&
+                            notification is ScrollUpdateNotification &&
+                            notification.dragDetails != null &&
+                            !_isScrollingContent) {
+                          final delta = notification.dragDetails!.delta.dy /
+                              MediaQuery.of(context).size.height;
+                          final newSize = (_scrollableController.size - delta)
+                              .clamp(0.3, 0.7);
+                          _scrollableController.jumpTo(newSize);
+                          return true;
+                        }
+                        return false;
+                      },
+                      child: _buildSubscreen(scrollController),
+                    ),
                   ),
                 ),
               ],
@@ -319,7 +330,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     final int groupCount = _groupsCount();
     final int inviteCount = _invitesCount();
 
-    final int selected = _selectedOption == SubscreenOption.groups ? 1 : 0;
+    // groupDetails is a child view of Groups — keep the Groups pill lit when
+    // a specific group is selected so the segmented control doesn't snap
+    // back to People on group-tap.
+    final bool isGroupsView = _selectedOption == SubscreenOption.groups ||
+        _selectedOption == SubscreenOption.groupDetails;
+    final int selected = isGroupsView ? 1 : 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
@@ -347,8 +363,15 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   },
                 ),
               ),
-              const SizedBox(width: 10),
-              _invitesChip(inviteCount),
+              // The People tab has its own '...' overflow for add-friend /
+              // etc actions, so the trailing chip here just clutters the row
+              // and reads as a stray '+'. Only show it on the Groups view
+              // (and its group-details child) where there's no other entry
+              // point to the invites modal from the sheet header.
+              if (isGroupsView) ...[
+                const SizedBox(width: 10),
+                _invitesChip(inviteCount),
+              ],
             ],
           ),
           // Search field lives inside each subscreen — don't render here.
@@ -1415,36 +1438,142 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 onTap: () async {
                   Navigator.pop(context);
                   // Show leave confirmation
+                  final groupName = room.name.split(':').length >= 5
+                      ? room.name.split(':')[3]
+                      : room.name;
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (BuildContext context) {
-                      return AlertDialog(
-                        backgroundColor: colorScheme.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: const Text('Leave Group'),
-                        content: Text('Are you sure you want to leave "${room.name.split(':').length >= 5 ? room.name.split(':')[3] : room.name}"?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            style: TextButton.styleFrom(
-                              foregroundColor: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            child: const Text('Cancel'),
+                      return Dialog(
+                        backgroundColor: Colors.transparent,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth:
+                                MediaQuery.of(context).size.width * 0.9,
                           ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: colorScheme.error,
-                              foregroundColor: colorScheme.onError,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                          decoration: BoxDecoration(
+                            color: GridTokens.surface,
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rXl),
+                            border:
+                                Border.all(color: GridTokens.hairline),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
-                            ),
-                            child: const Text('Leave'),
+                            ],
                           ),
-                        ],
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: const BoxDecoration(
+                                  color: GridTokens.dangerSoft,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft:
+                                        Radius.circular(GridTokens.rXl),
+                                    topRight:
+                                        Radius.circular(GridTokens.rXl),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: GridTokens.danger
+                                            .withOpacity(0.18),
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                                GridTokens.rMd),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Icon(
+                                        Icons.exit_to_app,
+                                        color: GridTokens.danger,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Leave group',
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: -0.015,
+                                              color: GridTokens.text,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "This action cannot be undone.",
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w400,
+                                              color: GridTokens.text2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 0),
+                                child: Text(
+                                  'Are you sure you want to leave "$groupName"?',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: GridTokens.text2,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 20),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Cancel',
+                                        style: GridButtonStyle.secondary,
+                                        onPressed: () => Navigator.of(
+                                                context)
+                                            .pop(false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Leave',
+                                        style: GridButtonStyle.danger,
+                                        onPressed: () => Navigator.of(
+                                                context)
+                                            .pop(true),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   );

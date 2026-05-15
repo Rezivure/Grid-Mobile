@@ -434,137 +434,181 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: GridTokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            side: const BorderSide(color: GridTokens.hairline),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: GridTokens.mintFaint,
-                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-                child: const Icon(
-                  Icons.person_add,
-                  color: GridTokens.mint,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Send friend request',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.015,
-                  color: GridTokens.text,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Send a friend request to:',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 13.5,
-                  color: GridTokens.text2,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: GridTokens.surface2,
-                  borderRadius: BorderRadius.circular(GridTokens.rMd),
-                  border: Border.all(color: GridTokens.hairline),
-                ),
-                child: Row(
-                  children: [
-                    ClipOval(
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: UserAvatarBloc(
-                          userId: user.userId,
-                          size: 48,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.mintFaint,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.mintSoft,
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.person_add,
+                          color: GridTokens.mint,
+                          size: 20,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user.displayName ?? localpart(user.userId),
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: GridTokens.text,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Send friend request',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          GridMono(
-                            showFullMatrixId
-                                ? user.userId
-                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                            color: GridTokens.text3,
-                            size: 11,
-                            uppercase: false,
-                            letterSpacing: 0,
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            Text(
+                              "They'll need to accept the request.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Send a friend request to:',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: GridTokens.text2,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: GridTokens.surface2,
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                          border: Border.all(color: GridTokens.hairline),
+                        ),
+                        child: Row(
+                          children: [
+                            ClipOval(
+                              child: SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: UserAvatarBloc(
+                                  userId: user.userId,
+                                  size: 48,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.displayName ??
+                                        localpart(user.userId),
+                                    style: GoogleFonts.getFont(
+                                      'Geist',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: GridTokens.text,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  GridMono(
+                                    showFullMatrixId
+                                        ? user.userId
+                                        : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
+                                    color: GridTokens.text3,
+                                    size: 11,
+                                    uppercase: false,
+                                    letterSpacing: 0,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Send',
+                          style: GridButtonStyle.primary,
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await _sendFriendRequest(user);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
-                ),
-              ),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await _sendFriendRequest(user);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: GridTokens.mint,
-                foregroundColor: const Color(0xFF04201A),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(GridTokens.rSm),
-                ),
-              ),
-              child: Text(
-                'Send request',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
         );
       },
     );
@@ -601,76 +645,125 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: GridTokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            side: const BorderSide(color: GridTokens.hairline),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: GridTokens.dangerSoft,
-                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-                child: const Icon(
-                  Icons.person_remove_outlined,
-                  color: GridTokens.danger,
-                  size: 18,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.person_remove_outlined,
+                          color: GridTokens.danger,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Remove member',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "They'll lose access to this group.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Remove member',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.015,
-                  color: GridTokens.text,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              color: GridTokens.text2,
-              height: 1.4,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Remove',
+                          style: GridButtonStyle.danger,
+                          onPressed: () async {
+                            Navigator.of(context).pop();
+                            await _kickMember(user.userId);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await _kickMember(user.userId);
-              },
-              child: Text(
-                'Remove',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w600,
-                  color: GridTokens.danger,
-                ),
-              ),
-            ),
-          ],
         );
       },
     );
@@ -703,73 +796,122 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final shouldLeave = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: GridTokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            side: const BorderSide(color: GridTokens.hairline),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: GridTokens.dangerSoft,
-                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-                child: const Icon(
-                  Icons.exit_to_app,
-                  color: GridTokens.danger,
-                  size: 18,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.exit_to_app,
+                          color: GridTokens.danger,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Leave group',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "This action cannot be undone.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Leave group',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.015,
-                  color: GridTokens.text,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'Are you sure you want to leave this group?',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to leave this group? This action cannot be undone.',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              color: GridTokens.text2,
-              height: 1.4,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Leave',
+                          style: GridButtonStyle.danger,
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                'Leave',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontWeight: FontWeight.w600,
-                  color: GridTokens.danger,
-                ),
-              ),
-            ),
-          ],
         );
       },
     );
@@ -1060,26 +1202,15 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final memberCount = _filteredMembers.length;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipOval(
-            child: SizedBox(
-              width: 52,
-              height: 52,
-              child: GroupAvatarBloc(
-                roomId: widget.room.roomId,
-                memberIds: widget.room.members,
-                size: 52,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
                   _groupName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1091,36 +1222,36 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     color: GridTokens.text,
                   ),
                 ),
-                const SizedBox(height: 6),
-                _MonoSummary(
-                  liveCount: liveCount,
-                  memberCount: memberCount,
-                  endsIn: endsIn,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _showGroupDetailsMenu,
-              borderRadius: BorderRadius.circular(GridTokens.rMd),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: GridTokens.surface2,
+              ),
+              const SizedBox(width: 8),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _showGroupDetailsMenu,
                   borderRadius: BorderRadius.circular(GridTokens.rMd),
-                  border: Border.all(color: GridTokens.hairline),
-                ),
-                child: const Icon(
-                  Icons.more_horiz,
-                  color: GridTokens.text2,
-                  size: 18,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: GridTokens.surface2,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: GridTokens.hairline),
+                    ),
+                    child: const Icon(
+                      Icons.more_horiz,
+                      color: GridTokens.text2,
+                      size: 18,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _MonoSummary(
+            liveCount: liveCount,
+            memberCount: memberCount,
+            endsIn: endsIn,
           ),
         ],
       ),
@@ -1134,7 +1265,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         decoration: BoxDecoration(
           color: GridTokens.amberSoft,
           borderRadius: BorderRadius.circular(GridTokens.rMd),
@@ -1144,8 +1275,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: GridTokens.amber.withOpacity(0.18),
                 borderRadius: BorderRadius.circular(GridTokens.rSm),
@@ -1160,9 +1291,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Auto-stops at $endsAt',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 14,
@@ -1173,8 +1307,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Sharing pauses automatically when the trip ends.',
-                    maxLines: 2,
+                    'Sharing pauses automatically',
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.getFont(
                       'Geist',
@@ -1192,7 +1326,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               label: 'Extend',
               style: GridButtonStyle.ghost,
               expand: false,
-              height: 36,
+              height: 32,
               onPressed: _openGroupSettings,
             ),
           ],
@@ -1224,7 +1358,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   }
 
   Widget _buildMemberRow(GridUser user, GroupsLoaded state,
-      List<UserLocation> userLocations) {
+      List<UserLocation> userLocations,
+      {bool showDivider = false}) {
     final userLocation = userLocations
         .cast<UserLocation?>()
         .firstWhere((l) => l?.userId == user.userId, orElse: () => null);
@@ -1295,7 +1430,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             statusLabel: statusLabel,
             live: isLive,
             avatarStatus: avatarStatus,
-            showDivider: false,
+            showDivider: showDivider,
           ),
         ),
       ),
@@ -1375,6 +1510,38 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
+  /// Trailing group-actions block: primary "Add a member" + danger ghost
+  /// "Leave group". The Add button is suppressed when the empty state
+  /// is showing, since that state already surfaces an Add CTA.
+  Widget _buildGroupActions() {
+    final showAdd = _filteredMembers.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 24, 18, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showAdd) ...[
+            GridButton(
+              label: 'Add a member',
+              icon: Icons.person_add_outlined,
+              onPressed: _showAddGroupMemberModal,
+            ),
+            const SizedBox(height: 8),
+          ],
+          Opacity(
+            opacity: _isLeaving ? 0.5 : 1,
+            child: GridButton(
+              label: _isLeaving ? 'Leaving…' : 'Leave group',
+              icon: Icons.exit_to_app_outlined,
+              style: GridButtonStyle.danger,
+              onPressed: _isLeaving ? null : _showLeaveConfirmationDialog,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final userLocations =
@@ -1443,21 +1610,32 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                           borderRadius:
                               BorderRadius.circular(GridTokens.rSm),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
+                            width: 28,
+                            height: 28,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: GridTokens.mintFaint,
+                              borderRadius: BorderRadius.circular(
+                                  GridTokens.rSm),
+                            ),
                             child: const Icon(
                               Icons.add,
                               color: GridTokens.mint,
-                              size: 18,
+                              size: 16,
                             ),
                           ),
                         ),
                       ),
                     ),
-                    CustomSearchBar(
-                      controller: _searchController,
-                      hintText: 'Search members',
-                    ),
+                    // Only show the search bar once the group has enough
+                    // members for it to be useful — keeps the empty / small
+                    // group state cleaner. (`6` is roughly the visible row
+                    // budget in the sheet before scrolling.)
+                    if ((state.selectedRoomMembers?.length ?? 0) > 6)
+                      CustomSearchBar(
+                        controller: _searchController,
+                        hintText: 'Search members',
+                      ),
                   ],
                 ),
               ),
@@ -1468,10 +1646,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   itemCount: _filteredMembers.length,
                   itemBuilder: (context, index) {
                     final user = _filteredMembers[index];
-                    return _buildMemberRow(user, state, userLocations);
+                    final isLast = index == _filteredMembers.length - 1;
+                    return _buildMemberRow(
+                      user,
+                      state,
+                      userLocations,
+                      showDivider: !isLast,
+                    );
                   },
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 28)),
+              SliverToBoxAdapter(
+                child: _buildGroupActions(),
+              ),
             ],
           ),
         );
@@ -1495,48 +1681,43 @@ class _MonoSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final segments = <Widget>[];
-
-    segments.add(_LiveSegment(count: liveCount));
-
-    segments.add(_dot());
-    segments.add(GridMono(
-      '$memberCount MEMBERS',
-      color: GridTokens.text2,
-      size: 10.5,
-      letterSpacing: 0.08,
-    ));
-
-    if (endsIn != null) {
-      segments.add(_dot());
-      segments.add(Flexible(
-        child: GridMono(
-          endsIn!,
-          color: GridTokens.text3,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _LiveSegment(count: liveCount),
+        _dot(),
+        GridMono(
+          '$memberCount MEMBERS',
+          color: GridTokens.text2,
           size: 10.5,
           letterSpacing: 0.08,
-          uppercase: true,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
         ),
-      ));
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.max,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: segments,
+        if (endsIn != null) ...[
+          const Spacer(),
+          Flexible(
+            child: GridMono(
+              endsIn!,
+              color: GridTokens.text3,
+              size: 10.5,
+              letterSpacing: 0.08,
+              uppercase: false,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
-  Widget _dot() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Container(
-          width: 2,
-          height: 2,
-          decoration: const BoxDecoration(
-            color: GridTokens.text4,
-            shape: BoxShape.circle,
+  Widget _dot() => const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 6),
+        child: Text(
+          '·',
+          style: TextStyle(
+            color: GridTokens.text3,
+            fontSize: 11,
+            height: 1,
           ),
         ),
       );

@@ -15,6 +15,10 @@ import 'package:grid_frontend/repositories/room_location_history_repository.dart
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:matrix/matrix.dart';
 
 class LocationHistoryModal extends StatefulWidget {
@@ -59,6 +63,8 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   final SubscriptionService _subscriptionService = SubscriptionService();
   Map<String, String> _userDisplayNames = {}; // Cache for display names
   late RoomLocationHistoryRepository _roomHistoryRepo;
+  int _playbackSpeed = 1; // 1x / 2x / 4x — UI chrome to match design spec
+  static const List<int> _speedOptions = [1, 2, 4];
   
   @override
   void initState() {
@@ -205,56 +211,122 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return AlertDialog(
-          backgroundColor: colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.delete_outline,
-                color: colorScheme.error,
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Clear Location History',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to clear all location history for this group? This action cannot be undone.',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
-              height: 1.4,
+              ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(
-                foregroundColor: colorScheme.onSurface.withOpacity(0.7),
-              ),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                foregroundColor: colorScheme.onError,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.delete_outline,
+                          color: GridTokens.danger,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Clear location history',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "This action cannot be undone.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: const Text('Clear History'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'Are you sure you want to clear all location history for this group?',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(false),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Clear',
+                          style: GridButtonStyle.danger,
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -538,6 +610,92 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     return [];
   }
 
+  /// Compact mono-style total duration, e.g. "2H 14M" or "45M" or "4D".
+  String _formatMonoDuration(DateTime? start, DateTime? end) {
+    if (start == null || end == null) return '--';
+    final d = end.difference(start);
+    if (d.inMinutes < 60) return '${d.inMinutes}M';
+    if (d.inHours < 24) {
+      final h = d.inHours;
+      final m = d.inMinutes % 60;
+      if (m == 0) return '${h}H';
+      return '${h}H ${m}M';
+    }
+    final days = d.inDays;
+    final hours = d.inHours % 24;
+    if (hours == 0) return '${days}D';
+    return '${days}D ${hours}H';
+  }
+
+  /// Format the subtitle next to the title — e.g. "Today · 2h 14m".
+  String _formatHeaderSubtitle() {
+    if (_earliestTime == null || _latestTime == null) return '';
+    final now = DateTime.now();
+    final start = _earliestTime!;
+    final dayDiff = now.difference(start).inDays;
+    String dayLabel;
+    if (dayDiff == 0 && now.day == start.day) {
+      dayLabel = 'Today';
+    } else if (dayDiff == 1 ||
+        (dayDiff == 0 && now.day != start.day)) {
+      dayLabel = 'Yesterday';
+    } else if (dayDiff < 7) {
+      dayLabel = DateFormat('EEEE').format(start);
+    } else {
+      dayLabel = DateFormat('MMM d').format(start);
+    }
+    final duration = _latestTime!.difference(start);
+    String durLabel;
+    if (duration.inMinutes < 60) {
+      durLabel = '${duration.inMinutes}m';
+    } else if (duration.inHours < 24) {
+      final h = duration.inHours;
+      final m = duration.inMinutes % 60;
+      durLabel = m > 0 ? '${h}h ${m}m' : '${h}h';
+    } else {
+      durLabel = '${duration.inDays}d ago';
+    }
+    return '$dayLabel  ·  $durLabel';
+  }
+
+  /// Approximate "stops" — clusters of consecutive points within a small
+  /// radius. Used only for the mono status pill ("2H 14M · 8 STOPS").
+  int _countStops() {
+    Iterable<LocationHistory> sources;
+    if (_locationHistory != null) {
+      sources = [_locationHistory!];
+    } else if (_groupHistories != null) {
+      sources = _groupHistories!.values;
+    } else {
+      return 0;
+    }
+    var total = 0;
+    for (final h in sources) {
+      if (h.points.length < 2) continue;
+      var stops = 0;
+      var inStop = false;
+      for (var i = 1; i < h.points.length; i++) {
+        final a = h.points[i - 1];
+        final b = h.points[i];
+        final dLat = (a.latitude - b.latitude).abs();
+        final dLng = (a.longitude - b.longitude).abs();
+        final isStill = dLat < 0.0003 && dLng < 0.0003;
+        if (isStill && !inStop) {
+          stops++;
+          inStop = true;
+        } else if (!isStill) {
+          inStop = false;
+        }
+      }
+      total += stops;
+    }
+    return total;
+  }
+
+  String _formatMonoClock(DateTime t) => DateFormat('h:mm').format(t);
+  String _formatMonoMeridiem(DateTime t) =>
+      DateFormat('a').format(t);
+
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
@@ -584,311 +742,245 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
+    final isGroup = widget.memberIds != null;
+    final headerTitle = isGroup
+        ? '${widget.userName} · history'
+        : '${widget.userName}’s history';
+
     return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+      decoration: const BoxDecoration(
+        color: GridTokens.bg,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(GridTokens.r2Xl),
+          topRight: Radius.circular(GridTokens.r2Xl),
         ),
       ),
       child: Column(
         children: [
-          // Handle bar
+          // Grab handle
           Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
+            margin: const EdgeInsets.only(top: 10, bottom: 6),
+            width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+              color: GridTokens.hairlineStrong,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
-          // Header
+
+          // TopBar — close (left), title + mono subtitle (center), trash/more (right)
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (widget.memberIds == null) ...[
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: colorScheme.primary.withOpacity(0.1),
-                    child: UserAvatarBloc(
-                      userId: widget.userId,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
+                _ChromeIconBtn(
+                  icon: Icons.close,
+                  onPressed: () => Navigator.pop(context),
+                ),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        widget.memberIds != null ? 'Group History' : '${widget.userName}\'s History',
-                        style: theme.textTheme.titleLarge?.copyWith(
+                        headerTitle,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: GridTokens.text,
                           fontWeight: FontWeight.w600,
+                          letterSpacing: -0.015,
                         ),
                       ),
-                      if (_currentTime != null)
-                        Text(
-                          _formatDateTime(_currentTime!),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                      const SizedBox(height: 2),
+                      if (_earliestTime != null && _latestTime != null)
+                        GridMono(
+                          _formatHeaderSubtitle(),
+                          color: GridTokens.text3,
+                          size: 10.5,
+                          letterSpacing: 0.08,
+                          uppercase: false,
+                        )
+                      else
+                        GridMono(
+                          'Loading',
+                          color: GridTokens.text3,
+                          size: 10.5,
+                          letterSpacing: 0.08,
+                          uppercase: false,
                         ),
                     ],
                   ),
                 ),
-                // Clear history button for groups
-                if (widget.memberIds != null)
-                  IconButton(
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: colorScheme.error,
-                    ),
+                if (isGroup)
+                  _ChromeIconBtn(
+                    icon: Icons.delete_outline,
+                    iconColor: GridTokens.danger,
                     onPressed: _showClearHistoryDialog,
-                    tooltip: 'Clear History',
+                  )
+                else
+                  _ChromeIconBtn(
+                    icon: Icons.more_horiz_rounded,
+                    onPressed: () {},
                   ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
               ],
             ),
           ),
           
-          // Avatar selector for groups
+          // Member strip — group mode. First tile = ALL.
           if (!_isLoading && !_isMapLoading && _groupHistories != null && _groupHistories!.isNotEmpty)
-            Container(
-              height: 100,
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                border: Border(
-                  bottom: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.2),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  // Avatar scroll list
-                  Expanded(
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      itemCount: widget.memberIds?.length ?? 0,
-                      itemBuilder: (context, index) {
-                        final memberId = widget.memberIds![index];
-                        final isSelected = _showAllMembers || memberId == _selectedMemberId;
-                        final hasHistory = _groupHistories!.containsKey(memberId);
-                        
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              GestureDetector(
-                                onTap: hasHistory ? () {
-                                  setState(() {
-                                    _showAllMembers = false;
-                                    _selectedMemberId = memberId;
-                                    _updateSliderRange();
-
-                                    // Zoom to level 12 on the selected user
-                                    if (_currentPositions.containsKey(memberId)) {
-                                      _mapController.move(_currentPositions[memberId]!, 12.0);
-                                    }
-                                  });
-                                } : null,
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSelected 
-                                              ? colorScheme.primary 
-                                              : Colors.transparent,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      padding: const EdgeInsets.all(2),
-                                      child: Opacity(
-                                        opacity: hasHistory ? 1.0 : 0.5,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: colorScheme.primary.withOpacity(0.1),
-                                          ),
-                                          child: ClipOval(
-                                            child: UserAvatarBloc(
-                                              userId: memberId,
-                                              size: 48,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    if (!hasHistory)
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(2),
-                                          decoration: BoxDecoration(
-                                            color: colorScheme.surface,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            Icons.location_off,
-                                            size: 12,
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              SizedBox(
-                                width: 70,
-                                child: Text(
-                                  _userDisplayNames[memberId] ?? memberId.split(':')[0].substring(1),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: isSelected 
-                                        ? colorScheme.primary 
-                                        : colorScheme.onSurfaceVariant,
-                                    fontSize: 10,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
+            SizedBox(
+              height: 86,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+                itemCount: (widget.memberIds?.length ?? 0) + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    final active = _showAllMembers;
+                    return _MemberTile(
+                      active: active,
+                      underlineColor: GridTokens.mint,
+                      label: 'All',
+                      labelColor: active ? GridTokens.mint : GridTokens.text2,
+                      onTap: () {
+                        setState(() {
+                          _showAllMembers = true;
+                          _selectedMemberId = null;
+                          _updateSliderRange();
+                          _fitAllMembersInView();
+                        });
                       },
-                    ),
-                  ),
-                  // Group view button with tooltip
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      child: const _AllTileContent(),
+                    );
+                  }
+
+                  final memberId = widget.memberIds![index - 1];
+                  final hasHistory = _groupHistories!.containsKey(memberId);
+                  final active = !_showAllMembers && memberId == _selectedMemberId;
+                  final memberColor = _getUserColor(memberId);
+                  final memberLabel = _userDisplayNames[memberId] ??
+                      memberId.split(':').first.replaceFirst('@', '');
+
+                  return _MemberTile(
+                    active: active,
+                    underlineColor: memberColor,
+                    label: memberLabel,
+                    labelColor: active ? GridTokens.text : GridTokens.text2,
+                    onTap: hasHistory
+                        ? () {
+                            setState(() {
+                              _showAllMembers = false;
+                              _selectedMemberId = memberId;
+                              _updateSliderRange();
+                              if (_currentPositions.containsKey(memberId)) {
+                                _mapController.move(
+                                  _currentPositions[memberId]!,
+                                  12.0,
+                                );
+                              }
+                            });
+                          }
+                        : null,
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        Tooltip(
-                          message: _showAllMembers 
-                              ? 'Tap to view individual member\nCurrently showing: All members' 
-                              : 'Tap to view all members together\nCurrently showing: Individual',
-                          preferBelow: false,  // Show tooltip above the button
-                          verticalOffset: -10,  // Adjust position
-                          textStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          triggerMode: TooltipTriggerMode.longPress,  // Show on long press
-                          waitDuration: const Duration(milliseconds: 100),  // Faster show
-                          showDuration: const Duration(seconds: 3),  // Show longer
-                          child: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _showAllMembers = !_showAllMembers;
-                                _updateSliderRange();
-                                if (_showAllMembers) {
-                                  _fitAllMembersInView();
-                                }
-                              });
-                            },
-                            icon: Icon(
-                              _showAllMembers ? Icons.person : Icons.groups,
-                              color: _showAllMembers 
-                                  ? colorScheme.primary 
-                                  : colorScheme.onSurfaceVariant,
-                              size: 24,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: _showAllMembers 
-                                  ? colorScheme.primary.withOpacity(0.1)
-                                  : colorScheme.surfaceVariant.withOpacity(0.5),
+                        Opacity(
+                          opacity: hasHistory ? 1.0 : 0.45,
+                          child: ClipOval(
+                            child: UserAvatarBloc(
+                              userId: memberId,
+                              size: 48,
                             ),
                           ),
                         ),
-                        Text(
-                          _showAllMembers ? 'Group' : 'Individual',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 10,
+                        if (!hasHistory)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: GridTokens.surface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.location_off,
+                                size: 10,
+                                color: GridTokens.text3,
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           
-          // Map
+          // Map area — rLg rounded, surface2 bg
           Expanded(
-            child: Stack(
-              children: [
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(14, 4, 14, 10),
+              decoration: BoxDecoration(
+                color: GridTokens.surface2,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+                border: Border.all(color: GridTokens.hairline),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
                 if (_isLoading || _isMapLoading)
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircularProgressIndicator(
-                          color: colorScheme.primary,
+                        const CircularProgressIndicator(
+                          color: GridTokens.mint,
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          _isLoading ? 'Loading history...' : 'Preparing map...',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        GridMono(
+                          _isLoading ? 'Loading history' : 'Preparing map',
+                          color: GridTokens.text3,
+                          size: 11,
+                          letterSpacing: 0.08,
+                          uppercase: false,
                         ),
                       ],
                     ),
                   )
-                else if ((_locationHistory == null && _groupHistories == null) || 
+                else if ((_locationHistory == null && _groupHistories == null) ||
                          (_locationHistory == null && _groupHistories != null && _groupHistories!.isEmpty))
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.location_off,
-                          size: 64,
-                          color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          size: 56,
+                          color: GridTokens.text3,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         Text(
                           'No location history available',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: GridTokens.text2,
                           ),
                         ),
                       ],
                     ),
                   )
                 else if (_currentMapStyle == 'base' && _tileProvider == null)
-                  Center(
+                  const Center(
                     child: CircularProgressIndicator(
-                      color: colorScheme.primary,
+                      color: GridTokens.mint,
                     ),
                   )
-                else if ((_currentMapStyle == 'base' && _tileProvider != null) || 
+                else if ((_currentMapStyle == 'base' && _tileProvider != null) ||
                          (_currentMapStyle == 'satellite' && _satelliteMapToken != null))
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(GridTokens.rLg),
                     child: FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
@@ -995,74 +1087,90 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       ],
                     ),
                   ),
-                
+
               ],
             ),
+            ),
           ),
-          
-          // Timeline slider
+
+          // Timeline scrubber — surface bg, top hairline
           if (!_isLoading && !_isMapLoading &&
               ((_locationHistory != null && _locationHistory!.points.isNotEmpty) ||
                (_groupHistories != null && _groupHistories!.isNotEmpty)))
             Container(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
+              decoration: const BoxDecoration(
+                color: GridTokens.surface,
+                border: Border(
+                  top: BorderSide(color: GridTokens.hairline),
+                ),
               ),
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
                   child: Column(
                     children: [
-                      // Time range indicator
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.timeline,
-                              size: 16,
-                              color: colorScheme.onPrimaryContainer,
+                      // Status row: mono pill (duration + stops) · speed pills
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: GridTokens.surface2,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: GridTokens.hairline),
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _formatTimeRange(_earliestTime, _latestTime),
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 12,
+                                  color: GridTokens.mint,
+                                ),
+                                const SizedBox(width: 6),
+                                GridMono(
+                                  '${_formatMonoDuration(_earliestTime, _latestTime)} · ${_countStops()} STOPS',
+                                  color: GridTokens.text2,
+                                  size: 10.5,
+                                  letterSpacing: 0.08,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final speed in _speedOptions) ...[
+                                _SpeedPill(
+                                  speed: speed,
+                                  active: _playbackSpeed == speed,
+                                  onTap: () => setState(() => _playbackSpeed = speed),
+                                ),
+                                if (speed != _speedOptions.last)
+                                  const SizedBox(width: 6),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      // Slider with custom styling
+                      const SizedBox(height: 14),
+                      // Slider — mint track + white thumb with mint-soft halo
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
-                          trackHeight: 4,
+                          trackHeight: 3,
+                          activeTrackColor: GridTokens.mint,
+                          inactiveTrackColor: GridTokens.surface3,
+                          thumbColor: Colors.white,
+                          overlayColor: GridTokens.mintSoft,
                           thumbShape: const RoundSliderThumbShape(
                             enabledThumbRadius: 8,
-                            elevation: 2,
+                            elevation: 0,
                           ),
                           overlayShape: const RoundSliderOverlayShape(
                             overlayRadius: 16,
                           ),
-                          activeTrackColor: colorScheme.primary,
-                          inactiveTrackColor: colorScheme.primary.withOpacity(0.2),
-                          thumbColor: colorScheme.primary,
-                          overlayColor: colorScheme.primary.withOpacity(0.12),
                         ),
                         child: Slider(
                           value: _sliderValue,
@@ -1075,26 +1183,38 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // Start and end labels
+                      // Mono start · current (mint, 600) · end
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _earliestTime != null 
-                                ? DateFormat('MMM d, h:mm a').format(_earliestTime!)
-                                : 'Start',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
-                            ),
+                          _ScrubberTimeLabel(
+                            top: _earliestTime != null
+                                ? _formatMonoClock(_earliestTime!)
+                                : '--:--',
+                            bottom: _earliestTime != null
+                                ? _formatMonoMeridiem(_earliestTime!)
+                                : '',
+                            color: GridTokens.text3,
                           ),
-                          Text(
-                            _latestTime != null 
-                                ? DateFormat('MMM d, h:mm a').format(_latestTime!)
-                                : 'Now',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
-                              fontWeight: FontWeight.w500,
-                            ),
+                          _ScrubberTimeLabel(
+                            top: _currentTime != null
+                                ? _formatMonoClock(_currentTime!)
+                                : '--:--',
+                            bottom: _currentTime != null
+                                ? _formatMonoMeridiem(_currentTime!)
+                                : '',
+                            color: GridTokens.mint,
+                            bold: true,
+                          ),
+                          _ScrubberTimeLabel(
+                            top: _latestTime != null
+                                ? _formatMonoClock(_latestTime!)
+                                : '--:--',
+                            bottom: _latestTime != null
+                                ? _formatMonoMeridiem(_latestTime!)
+                                : '',
+                            color: GridTokens.text3,
                           ),
                         ],
                       ),
@@ -1258,5 +1378,226 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     }
     
     return LatLng(sumLat / points.length, sumLng / points.length);
+  }
+}
+
+// ─── Local chrome atoms ─────────────────────────────────────────────────────
+
+/// Small surface-bg square button used in the top bar (close / more / trash).
+class _ChromeIconBtn extends StatelessWidget {
+  const _ChromeIconBtn({
+    required this.icon,
+    required this.onPressed,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: Icon(
+            icon,
+            size: 18,
+            color: iconColor ?? GridTokens.text,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Avatar tile in the member strip — 52pt with optional 2pt mint ring + 16×2
+/// colored pill underline when active.
+class _MemberTile extends StatelessWidget {
+  const _MemberTile({
+    required this.active,
+    required this.underlineColor,
+    required this.label,
+    required this.labelColor,
+    required this.child,
+    this.onTap,
+  });
+
+  final bool active;
+  final Color underlineColor;
+  final String label;
+  final Color labelColor;
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  width: 2,
+                  color: active ? GridTokens.mint : Colors.transparent,
+                ),
+              ),
+              child: ClipOval(child: child),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'Geist',
+                fontSize: 10.5,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: -0.01,
+                color: labelColor,
+              ),
+            ),
+            const SizedBox(height: 3),
+            // Underline pill — visible only when active.
+            Container(
+              width: 16,
+              height: 2,
+              decoration: BoxDecoration(
+                color: active ? underlineColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "ALL" content tile — mint text on surface2.
+class _AllTileContent extends StatelessWidget {
+  const _AllTileContent();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: GridTokens.surface2,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'ALL',
+        style: TextStyle(
+          fontFamily: 'GeistMono',
+          color: GridTokens.mint,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.12,
+        ),
+      ),
+    );
+  }
+}
+
+/// Speed pill — 1× / 2× / 4× in the scrubber row.
+class _SpeedPill extends StatelessWidget {
+  const _SpeedPill({
+    required this.speed,
+    required this.active,
+    required this.onTap,
+  });
+
+  final int speed;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active ? GridTokens.mintSoft : GridTokens.surface2,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: active ? GridTokens.mint : GridTokens.hairline,
+            ),
+          ),
+          child: GridMono(
+            '${speed}x',
+            color: active ? GridTokens.mint : GridTokens.text2,
+            size: 10.5,
+            letterSpacing: 0.04,
+            uppercase: false,
+            weight: active ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Two-line mono time label (e.g. "6:42" over "AM") below the scrubber.
+class _ScrubberTimeLabel extends StatelessWidget {
+  const _ScrubberTimeLabel({
+    required this.top,
+    required this.bottom,
+    required this.color,
+    this.bold = false,
+  });
+
+  final String top;
+  final String bottom;
+  final Color color;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        GridMono(
+          top,
+          color: color,
+          size: 13,
+          letterSpacing: 0.02,
+          uppercase: false,
+          weight: bold ? FontWeight.w600 : FontWeight.w500,
+        ),
+        const SizedBox(height: 2),
+        GridMono(
+          bottom,
+          color: color.withOpacity(0.8),
+          size: 9,
+          letterSpacing: 0.08,
+        ),
+      ],
+    );
   }
 }

@@ -51,6 +51,7 @@ class _AddFriendModalState extends State<AddFriendModal>
     with TickerProviderStateMixin {
   // ── Add Contact state ────────────────────────────────────────────────
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _handleFocus = FocusNode();
   bool _isProcessing = false;
   String? _contactError;
   String? _matrixUserId = "";
@@ -130,6 +131,10 @@ class _AddFriendModalState extends State<AddFriendModal>
       }
     });
 
+    _handleFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     _memberInputController.addListener(() {
       if (_memberLimitError != null) {
         setState(() {
@@ -150,6 +155,7 @@ class _AddFriendModalState extends State<AddFriendModal>
     _slideController.dispose();
     _scanLineController.dispose();
     _controller.dispose();
+    _handleFocus.dispose();
     _qrController?.dispose();
     _groupNameController.dispose();
     _memberInputController.dispose();
@@ -1323,8 +1329,20 @@ class _AddFriendModalState extends State<AddFriendModal>
 
   // ─────────────────────────────────────────────────────────────────────
   // Handle-input sub-view (reachable from "Type a handle")
+  // Visual style mirrors §3 "Pick a handle." onboarding card: mint-bordered
+  // input with subtle glow, @-prefix inside, inline error block underneath.
   // ─────────────────────────────────────────────────────────────────────
   Widget _buildHandleView() {
+    final hasError = _contactError != null;
+    final isFocused = _handleFocus.hasFocus;
+    final borderColor = hasError
+        ? GridTokens.danger
+        : (isFocused ? GridTokens.mint : GridTokens.hairlineStrong);
+    final showGlow = !hasError && isFocused;
+    final helperText = isCustomHomeserver()
+        ? 'Full Matrix ID · user:homeserver.io'
+        : 'Lowercase only · letters, numbers, . _ -';
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1345,103 +1363,153 @@ class _AddFriendModalState extends State<AddFriendModal>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                  decoration: BoxDecoration(
-                    color: GridTokens.surface,
-                    borderRadius: BorderRadius.circular(GridTokens.rLg),
-                    border: Border.all(
-                      color: _contactError != null
-                          ? GridTokens.danger
-                          : GridTokens.hairline,
-                    ),
+                // Heading mirrors the onboarding "Pick a handle." vibe.
+                Text(
+                  "Who's the friend?",
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.02,
+                    color: GridTokens.text,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Enter their handle on Grid. Nothing is shared until they confirm.',
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    height: 1.4,
+                    color: GridTokens.text2,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                // Mint-bordered input card (matches §3 signup).
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: GridTokens.surface2,
+                    borderRadius: BorderRadius.circular(GridTokens.rMd),
+                    border: Border.all(color: borderColor, width: 1.5),
+                    boxShadow: showGlow
+                        ? [
+                            BoxShadow(
+                              color: GridTokens.mint.withValues(alpha: 0.18),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      GridMono(
-                        'HANDLE',
-                        size: 10,
-                        color: GridTokens.text3,
-                        letterSpacing: 0.14,
+                      Text(
+                        '@',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: GridTokens.text3,
+                          height: 1.0,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            '@',
-                            style: GoogleFonts.getFont(
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _handleFocus,
+                          autofocus: true,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          textCapitalization: TextCapitalization.none,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _addContact(),
+                          cursorColor: GridTokens.mint,
+                          cursorWidth: 2,
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            color: GridTokens.text,
+                            height: 1.0,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            hintText: isCustomHomeserver()
+                                ? 'user:homeserver.io'
+                                : 'anya.beech',
+                            hintStyle: GoogleFonts.getFont(
                               'Geist',
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
                               color: GridTokens.text3,
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: TextField(
-                              controller: _controller,
-                              autofocus: true,
-                              textInputAction: TextInputAction.done,
-                              onSubmitted: (_) => _addContact(),
-                              cursorColor: GridTokens.mint,
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                                color: GridTokens.text,
-                              ),
-                              decoration: InputDecoration(
-                                isCollapsed: true,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 4),
-                                hintText: isCustomHomeserver()
-                                    ? 'user:homeserver.io'
-                                    : 'username',
-                                hintStyle: GoogleFonts.getFont(
-                                  'Geist',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                  color: GridTokens.text4,
-                                ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (_contactError != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.error_outline_rounded,
-                          color: GridTokens.danger, size: 14),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _contactError!,
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w500,
-                            color: GridTokens.danger,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
                           ),
                         ),
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    helperText,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 12,
+                      color: GridTokens.text3,
+                    ),
+                  ),
+                ),
+                if (_contactError != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: GridTokens.dangerSoft,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(
+                        color: GridTokens.danger.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline_rounded,
+                            color: GridTokens.danger, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _contactError!,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              height: 1.35,
+                              color: GridTokens.danger,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _buildSafetyTip(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
                 GridButton(
-                  label: 'Send friend request',
+                  label: _isProcessing ? 'Sending…' : 'Send friend request',
                   icon: Icons.send_rounded,
                   onPressed: _isProcessing ? null : _addContact,
                 ),
@@ -1541,25 +1609,38 @@ class _AddFriendModalState extends State<AddFriendModal>
   }
 
   Widget _buildStepIndicator() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (index) {
-        final isActive = index <= _currentGroupStep;
-        final isCurrent = index == _currentGroupStep;
+    const labels = ['NAME', 'DURATION', 'MEMBERS', 'REVIEW'];
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(4, (index) {
+            final isActive = index <= _currentGroupStep;
+            final isCurrent = index == _currentGroupStep;
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: isCurrent ? 24 : 8,
-            height: 6,
-            decoration: BoxDecoration(
-              color: isActive ? GridTokens.mint : GridTokens.hairlineStrong,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        );
-      }),
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: isCurrent ? 24 : 8,
+                height: 6,
+                decoration: BoxDecoration(
+                  color:
+                      isActive ? GridTokens.mint : GridTokens.hairlineStrong,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 10),
+        GridMono(
+          'STEP ${_currentGroupStep + 1} OF 4 · ${labels[_currentGroupStep]}',
+          size: 10,
+          color: GridTokens.text3,
+          letterSpacing: 0.18,
+        ),
+      ],
     );
   }
 
@@ -1579,24 +1660,53 @@ class _AddFriendModalState extends State<AddFriendModal>
   }
 
   Widget _buildGroupNameStep() {
+    final count = _groupNameController.text.characters.length;
     return _buildGroupCard(
       title: 'Name the group',
       subtitle: 'Choose a memorable name for your group',
-      child: TextField(
-        controller: _groupNameController,
-        maxLength: 14,
-        onChanged: (value) => setState(() {}),
-        cursorColor: GridTokens.mint,
-        style: GoogleFonts.getFont(
-          'Geist',
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: GridTokens.text,
-        ),
-        decoration: _groupInputDecoration(
-          hintText: 'Group name',
-          counterText: '',
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _groupNameController,
+            maxLength: 14,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            onChanged: (value) => setState(() {}),
+            onSubmitted: (_) {
+              if (_canProceedFromStep(0)) _nextGroupStep();
+            },
+            cursorColor: GridTokens.mint,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: GridTokens.text,
+            ),
+            decoration: _groupInputDecoration(
+              hintText: 'e.g. Climbing crew',
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GridMono(
+                'MAX 14 CHARS',
+                size: 10,
+                color: GridTokens.text3,
+                letterSpacing: 0.14,
+              ),
+              GridMono(
+                '$count / 14',
+                size: 10,
+                color: count >= 14 ? GridTokens.mint : GridTokens.text3,
+                letterSpacing: 0.14,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1725,6 +1835,7 @@ class _AddFriendModalState extends State<AddFriendModal>
   }
 
   Widget _buildGroupMembersStep() {
+    final errorMessage = _usernameError ?? _memberLimitError;
     return _buildGroupCard(
       title: 'Add members',
       subtitle: 'Invite up to 5 friends',
@@ -1734,6 +1845,9 @@ class _AddFriendModalState extends State<AddFriendModal>
           TextField(
             controller: _memberInputController,
             textInputAction: TextInputAction.done,
+            autocorrect: false,
+            enableSuggestions: false,
+            textCapitalization: TextCapitalization.none,
             onSubmitted: (_) => _addMember(),
             cursorColor: GridTokens.mint,
             style: GoogleFonts.getFont(
@@ -1747,7 +1861,6 @@ class _AddFriendModalState extends State<AddFriendModal>
                   ? 'user:homeserver.io'
                   : 'username',
               prefixText: '@',
-              errorText: _usernameError ?? _memberLimitError,
               suffix: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -1762,13 +1875,47 @@ class _AddFriendModalState extends State<AddFriendModal>
               ),
             ),
           ),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: GridTokens.dangerSoft,
+                borderRadius: BorderRadius.circular(GridTokens.rMd),
+                border: Border.all(
+                  color: GridTokens.danger.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: GridTokens.danger, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                        color: GridTokens.danger,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           if (_members.isEmpty)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: GridTokens.bg,
                 borderRadius: BorderRadius.circular(GridTokens.rMd),
                 border: Border.all(color: GridTokens.hairline),
               ),
@@ -1776,7 +1923,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.people_outline_rounded,
-                      color: GridTokens.text3, size: 32),
+                      color: GridTokens.text3, size: 28),
                   const SizedBox(height: 8),
                   Text(
                     'No members added yet',
@@ -1785,6 +1932,15 @@ class _AddFriendModalState extends State<AddFriendModal>
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       color: GridTokens.text2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Type a handle and tap +',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 12,
+                      color: GridTokens.text3,
                     ),
                   ),
                 ],
@@ -1798,15 +1954,14 @@ class _AddFriendModalState extends State<AddFriendModal>
                   .map((username) => _buildMemberChip(username))
                   .toList(),
             ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: GridMono(
-              '${_members.length}/5 MEMBERS',
-              size: 10,
-              color: GridTokens.text3,
-              letterSpacing: 0.14,
-            ),
+          const SizedBox(height: 12),
+          GridMono(
+            '${_members.length} / 5 MEMBERS',
+            size: 10,
+            color: _members.length >= 5
+                ? GridTokens.mint
+                : GridTokens.text3,
+            letterSpacing: 0.16,
           ),
         ],
       ),

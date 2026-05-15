@@ -34,20 +34,11 @@ class GroupsSubscreen extends StatefulWidget {
 }
 
 class _GroupsSubscreenState extends State<GroupsSubscreen> {
-  final TextEditingController _searchController = TextEditingController();
-  String _query = '';
-
   @override
   void initState() {
     super.initState();
     // Make sure the BLoC has up-to-date data.
     context.read<GroupsBloc>().add(LoadGroups());
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   /// "Grid:Group:<expiration>:<name>:<creator>" → human group name.
@@ -94,102 +85,34 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
           return _errorState(state.message);
         }
 
-        final allGroups = state is GroupsLoaded ? state.groups : <gr.Room>[];
-        final groups = _query.isEmpty
-            ? allGroups
-            : allGroups
-                .where((r) =>
-                    _parseGroupName(r).toLowerCase().contains(_query))
-                .toList();
+        final groups = state is GroupsLoaded ? state.groups : <gr.Room>[];
 
-        if (allGroups.isEmpty) {
+        if (groups.isEmpty) {
           return _emptyState();
         }
 
-        return Column(
-          children: [
-            _searchField(),
-            if (groups.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Text(
-                  'No groups match "$_query".',
-                  style: TextStyle(color: GridTokens.text3, fontSize: 14),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  controller: widget.scrollController,
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
-                  itemCount: groups.length,
-                  itemBuilder: (context, index) {
-                    final room = groups[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _GroupCard(
-                        name: _parseGroupName(room),
-                        memberIds: room.members,
-                        memberCount: room.members.length,
-                        place: _placeFor(room),
-                        timerLabel: _timerFor(room),
-                        isTrip: _isTripGroup(room),
-                        featured: index == 0,
-                        onTap: () => widget.onGroupSelected?.call(room),
-                      ),
-                    );
-                  },
-                ),
+        return ListView.builder(
+          controller: widget.scrollController,
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+          itemCount: groups.length,
+          itemBuilder: (context, index) {
+            final room = groups[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _GroupCard(
+                name: _parseGroupName(room),
+                memberIds: room.members,
+                memberCount: room.members.length,
+                place: _placeFor(room),
+                timerLabel: _timerFor(room),
+                isTrip: _isTripGroup(room),
+                featured: index == 0,
+                onTap: () => widget.onGroupSelected?.call(room),
               ),
-          ],
+            );
+          },
         );
       },
-    );
-  }
-
-  Widget _searchField() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: GridTokens.surface2,
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(color: GridTokens.hairline),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.search_rounded,
-              size: 18,
-              color: GridTokens.text3,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onChanged: (v) => setState(() => _query = v.toLowerCase()),
-                style: const TextStyle(
-                  color: GridTokens.text,
-                  fontSize: 14,
-                ),
-                cursorColor: GridTokens.mint,
-                decoration: const InputDecoration(
-                  hintText: 'Find a group',
-                  hintStyle:
-                      TextStyle(color: GridTokens.text3, fontSize: 14),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

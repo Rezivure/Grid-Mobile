@@ -50,7 +50,6 @@ class ContactsSubscreen extends StatefulWidget {
 }
 
 class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProviderStateMixin {
-  TextEditingController _searchController = TextEditingController();
   Timer? _timer;
   bool _isRefreshing = false;
   late AnimationController _dotsAnimationController;
@@ -114,8 +113,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
     });
-
-    _searchController.addListener(_onSearchChanged);
   }
 
   @override
@@ -123,8 +120,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     _timer?.cancel();
     _dotsAnimationController.dispose();
     _checkmarkAnimationController.dispose();
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -143,10 +138,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
-  }
-
-  void _onSearchChanged() {
-    context.read<ContactsBloc>().add(SearchContacts(_searchController.text));
   }
 
   void _showOptionsDialog(ContactDisplay contact) {
@@ -270,171 +261,106 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: GridTokens.bg,
-      child: Column(
-        children: [
-          _buildSearchField(),
-          Expanded(
-            child: BlocListener<AvatarBloc, AvatarState>(
-              listenWhen: (previous, current) =>
-                  previous.updateCounter != current.updateCounter,
-              listener: (context, avatarState) {
-                // Force rebuild when avatar updates occur
-                setState(() {});
-              },
-              child: BlocConsumer<ContactsBloc, ContactsState>(
-                listener: (context, state) {
-                  if (state is ContactsError) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error: ${state.message}'),
-                        backgroundColor: GridTokens.danger,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    );
-                  }
-                },
-                builder: (context, state) {
-                  if (state is ContactsLoading && !_hasShownInitialLoading) {
-                    _hasShownInitialLoading = true;
-                    return _buildLoadingState();
-                  }
-
-                  if (state is ContactsError) {
-                    return _buildErrorState(state.message);
-                  }
-
-                  if (state is ContactsLoaded) {
-                    return Consumer<UserLocationProvider>(
-                      builder: (context, locationProvider, child) {
-                        final contactsWithLocation =
-                            _getContactsWithCurrentLocation(
-                          state.contacts,
-                          locationProvider,
-                        );
-
-                        return contactsWithLocation.isEmpty
-                            ? _buildEmptyState()
-                            : Consumer<SyncManager>(
-                                builder: (context, syncManager, child) {
-                                  final isSyncing = syncManager.syncState !=
-                                      SyncState.ready;
-
-                                  // Handle sync state transitions
-                                  if (_previousSyncState != null &&
-                                      _previousSyncState != SyncState.ready &&
-                                      syncManager.syncState ==
-                                          SyncState.ready) {
-                                    _syncJustCompleted = true;
-                                    _showCheckmark = true;
-                                    _checkmarkAnimationController
-                                        .forward()
-                                        .then((_) {
-                                      if (mounted) {
-                                        Future.delayed(
-                                            const Duration(milliseconds: 200),
-                                            () {
-                                          if (mounted) {
-                                            setState(() {
-                                              _showCheckmark = false;
-                                              _syncJustCompleted = false;
-                                            });
-                                            _checkmarkAnimationController
-                                                .reset();
-                                          }
-                                        });
-                                      }
-                                    });
-                                  }
-                                  _previousSyncState = syncManager.syncState;
-
-                                  return _buildContactsList(
-                                    contactsWithLocation,
-                                    isSyncing: isSyncing,
-                                  );
-                                },
-                              );
-                      },
-                    );
-                  }
-
-                  return Center(
-                    child: Text(
-                      'No contacts',
-                      style: GoogleFonts.getFont(
-                        'Geist',
-                        color: GridTokens.text2,
-                        fontSize: 14,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Search field (overlapping the hero by 8pt — the parent map sheet
-  // already provides that visual context, so we just render the field). ──
-  Widget _buildSearchField() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: GridTokens.surface2,
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(color: GridTokens.hairline),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 12),
-            const Icon(Icons.search, size: 18, color: GridTokens.text3),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                cursorColor: GridTokens.mint,
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 14,
-                  color: GridTokens.text,
-                  letterSpacing: -0.01,
-                ),
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  hintText: 'Search contacts',
-                  hintStyle: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 14,
-                    color: GridTokens.text3,
-                    letterSpacing: -0.01,
+    // Single uniform surface for the whole subscreen — the Scaffold,
+    // the outer container, and every list background all resolve to
+    // GridTokens.surface so the sheet doesn't bleed to a darker tone
+    // as the user scrolls past the bottom of the contact rows.
+    return Material(
+      color: GridTokens.surface,
+      child: BlocListener<AvatarBloc, AvatarState>(
+        listenWhen: (previous, current) =>
+            previous.updateCounter != current.updateCounter,
+        listener: (context, avatarState) {
+          // Force rebuild when avatar updates occur
+          setState(() {});
+        },
+        child: BlocConsumer<ContactsBloc, ContactsState>(
+          listener: (context, state) {
+            if (state is ContactsError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: ${state.message}'),
+                  backgroundColor: GridTokens.danger,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-              ),
-            ),
-            if (_searchController.text.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  _searchController.clear();
+              );
+            }
+          },
+          builder: (context, state) {
+            if (state is ContactsLoading && !_hasShownInitialLoading) {
+              _hasShownInitialLoading = true;
+              return _buildLoadingState();
+            }
+
+            if (state is ContactsError) {
+              return _buildErrorState(state.message);
+            }
+
+            if (state is ContactsLoaded) {
+              return Consumer<UserLocationProvider>(
+                builder: (context, locationProvider, child) {
+                  final contactsWithLocation =
+                      _getContactsWithCurrentLocation(
+                    state.contacts,
+                    locationProvider,
+                  );
+
+                  return contactsWithLocation.isEmpty
+                      ? _buildEmptyState()
+                      : Consumer<SyncManager>(
+                          builder: (context, syncManager, child) {
+                            final isSyncing =
+                                syncManager.syncState != SyncState.ready;
+
+                            // Handle sync state transitions
+                            if (_previousSyncState != null &&
+                                _previousSyncState != SyncState.ready &&
+                                syncManager.syncState == SyncState.ready) {
+                              _syncJustCompleted = true;
+                              _showCheckmark = true;
+                              _checkmarkAnimationController
+                                  .forward()
+                                  .then((_) {
+                                if (mounted) {
+                                  Future.delayed(
+                                      const Duration(milliseconds: 200), () {
+                                    if (mounted) {
+                                      setState(() {
+                                        _showCheckmark = false;
+                                        _syncJustCompleted = false;
+                                      });
+                                      _checkmarkAnimationController.reset();
+                                    }
+                                  });
+                                }
+                              });
+                            }
+                            _previousSyncState = syncManager.syncState;
+
+                            return _buildContactsList(
+                              contactsWithLocation,
+                              isSyncing: isSyncing,
+                            );
+                          },
+                        );
                 },
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  child: Icon(Icons.close_rounded,
-                      size: 16, color: GridTokens.text3),
+              );
+            }
+
+            return Center(
+              child: Text(
+                'No contacts',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  color: GridTokens.text2,
+                  fontSize: 14,
                 ),
-              )
-            else
-              const SizedBox(width: 12),
-          ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -488,31 +414,35 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       }
     }
 
-    return ListView.builder(
-      controller: widget.scrollController,
-      itemCount: items.length,
-      padding: const EdgeInsets.only(top: 4, bottom: 32),
-      itemBuilder: (context, index) {
+    return Container(
+      color: GridTokens.surface,
+      child: ListView.builder(
+        controller: widget.scrollController,
+        itemCount: items.length,
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
+        itemBuilder: (context, index) {
         final item = items[index];
-        switch (item.kind) {
-          case _ListItemKind.syncing:
-            return _buildSyncingIndicator(isSyncing: isSyncing);
-          case _ListItemKind.section:
-            return GridSectionHeader(
-              text: item.sectionTitle!,
-              trailing: item.trailingCount != null && item.trailingCount! > 0
-                  ? GridMono(
-                      '${item.trailingCount}',
-                      color: GridTokens.text3,
-                      size: 10.5,
-                      letterSpacing: 0.12,
-                    )
-                  : null,
-            );
-          case _ListItemKind.contact:
-            return _buildContactRow(item.contact!, isLast: item.isLast);
-        }
-      },
+          switch (item.kind) {
+            case _ListItemKind.syncing:
+              return _buildSyncingIndicator(isSyncing: isSyncing);
+            case _ListItemKind.section:
+              return GridSectionHeader(
+                text: item.sectionTitle!,
+                trailing:
+                    item.trailingCount != null && item.trailingCount! > 0
+                        ? GridMono(
+                            '${item.trailingCount}',
+                            color: GridTokens.text3,
+                            size: 10.5,
+                            letterSpacing: 0.12,
+                          )
+                        : null,
+              );
+            case _ListItemKind.contact:
+              return _buildContactRow(item.contact!, isLast: item.isLast);
+          }
+        },
+      ),
     );
   }
 
@@ -601,13 +531,16 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   Widget _buildLoadingState() {
-    return ListView.builder(
-      controller: widget.scrollController,
-      padding: const EdgeInsets.only(top: 8),
-      itemCount: 6,
-      itemBuilder: (context, index) {
-        return _buildSkeletonContactRow();
-      },
+    return Container(
+      color: GridTokens.surface,
+      child: ListView.builder(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.only(top: 8),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return _buildSkeletonContactRow();
+        },
+      ),
     );
   }
 
@@ -669,7 +602,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   Widget _buildErrorState(String message) {
-    return Padding(
+    return Container(
+      color: GridTokens.surface,
       padding: const EdgeInsets.all(24),
       child: Center(
         child: Column(
@@ -717,60 +651,70 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   Widget _buildEmptyState() {
-    return ListView(
-      controller: widget.scrollController,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-      children: [
-        const SizedBox(height: 24),
-        Center(
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
-              borderRadius: BorderRadius.circular(GridTokens.r2Xl),
+    // Calm, generous empty state — see design_handoff/09-map-empty.png.
+    // The 88×88 mint-faint tile (24pt rounded), Geist 22/600/-0.02 headline,
+    // and a steady GridButton CTA that opens the existing AddFriendModal.
+    return Container(
+      color: GridTokens.surface,
+      child: ListView(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+        children: [
+          const SizedBox(height: 32),
+          Center(
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: GridTokens.mintFaint,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Icon(
+                Icons.waving_hand_rounded,
+                size: 40,
+                color: GridTokens.mint,
+              ),
             ),
-            child: const Icon(
-              Icons.people_alt_outlined,
-              size: 40,
-              color: GridTokens.mint,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Just you out here.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              color: GridTokens.text,
+              letterSpacing: -0.02,
             ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'No people yet',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.getFont(
-            'Geist',
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-            color: GridTokens.text,
-            letterSpacing: -0.02,
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Add a friend so you can see each other on the map. '
+              'Nothing is shared until both of you confirm.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 14,
+                color: GridTokens.text2,
+                height: 1.45,
+                letterSpacing: -0.01,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Add a friend with a code, a link, or a handle. '
-          'Nothing is shared until you both confirm.',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.getFont(
-            'Geist',
-            fontSize: 14,
-            color: GridTokens.text2,
-            height: 1.45,
+          const SizedBox(height: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GridButton(
+              label: 'Add a friend',
+              icon: Icons.person_add_alt_1_rounded,
+              onPressed: () => _showAddFriendModal(context),
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: GridButton(
-            label: 'Add a friend',
-            icon: Icons.person_add_alt_1_rounded,
-            onPressed: () => _showAddFriendModal(context),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -952,94 +896,146 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: GridTokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            side: const BorderSide(color: GridTokens.hairline),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: GridTokens.dangerSoft,
-                  borderRadius: BorderRadius.circular(GridTokens.rSm),
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  color: GridTokens.danger,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Remove contact',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: GridTokens.text,
-                  letterSpacing: -0.01,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Remove "${contact.displayName}" from your contacts? '
-            'You can always add them back later.',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              color: GridTokens.text2,
-              height: 1.45,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
-          ),
-          actionsPadding:
-              const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: GridTokens.text2,
-              ),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: GridTokens.text2,
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-              ),
+              ],
             ),
-            GridButton(
-              label: 'Remove',
-              expand: false,
-              height: 40,
-              style: GridButtonStyle.danger,
-              onPressed: () {
-                Navigator.of(context).pop();
-                final contactName = contact.displayName;
-
-                context
-                    .read<ContactsBloc>()
-                    .add(DeleteContact(contact.userId));
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Removing $contactName from contacts...'),
-                    backgroundColor: GridTokens.surface2,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: GridTokens.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
                     ),
                   ),
-                );
-              },
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: GridTokens.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.warning_amber_rounded,
+                          color: GridTokens.danger,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Remove contact',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: GridTokens.text,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "You can always add them back later.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: GridTokens.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Body
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'Remove "${contact.displayName}" from your contacts?',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: GridTokens.text2,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+
+                // Actions
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Remove',
+                          style: GridButtonStyle.danger,
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            final contactName = contact.displayName;
+
+                            context
+                                .read<ContactsBloc>()
+                                .add(DeleteContact(contact.userId));
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'Removing $contactName from contacts...'),
+                                backgroundColor: GridTokens.surface2,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
