@@ -21,6 +21,9 @@ class LocationManager with ChangeNotifier {
   bool _batterySaverEnabled = false;
   bool _isMoving = false;
   DateTime? _lastLocationUpdate;
+  // True when tracking was paused by the background lifecycle handler (not by
+  // an explicit user action), so we know to resume it on foreground.
+  bool _pausedForBackground = false;
 
   late final AppLifecycleListener _lifecycleListener;
   StreamSubscription<LocationUpdate>? _locationSubscription;
@@ -42,10 +45,14 @@ class LocationManager with ChangeNotifier {
             _updateTrackingConfig();
             break;
           case AppLifecycleState.paused:
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
+            // App is fully backgrounded — pause location updates.
             _isInForeground = false;
             _updateTrackingConfig();
+            break;
+          case AppLifecycleState.inactive:
+          case AppLifecycleState.detached:
+            // Transient states (notification shade, app switcher, pre-termination)
+            // — do not stop tracking here.
             break;
           default:
             break;
@@ -107,8 +114,25 @@ class LocationManager with ChangeNotifier {
     });
   }
 
-  // Apply the appropriate config based on battery-saver mode
+  // Apply the appropriate config based on battery-saver mode, and
+  // stop/resume tracking when the app is backgrounded/foregrounded.
   void _updateTrackingConfig() {
+    if (!_isInForeground) {
+      // App went to background — stop location polling to avoid draining battery.
+      if (_isTracking) {
+        _pausedForBackground = true;
+        stopTracking();
+      }
+      return;
+    }
+
+    // App is in foreground — resume if we paused it for the background.
+    if (_pausedForBackground && !_isTracking) {
+      _pausedForBackground = false;
+      startTracking();
+      return;
+    }
+
     if (!_isTracking) return;
 
     final mode = _batterySaverEnabled ? TrackingMode.batterySaver : TrackingMode.normal;
@@ -117,7 +141,7 @@ class LocationManager with ChangeNotifier {
       enableHeadless: true,
       startOnBoot: true,
     );
-    
+
     _locationService.setConfig(config);
   }
 
