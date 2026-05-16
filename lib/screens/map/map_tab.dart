@@ -39,7 +39,6 @@ import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
-import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
@@ -2305,30 +2304,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
             ),
 
-            // Top-left: settings (menu) — the original UX.
-            Positioned(
-              top: 100,
-              left: 16,
-              child: FloatingActionButton(
-                heroTag: 'settingsBtn',
-                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => SettingsPage()),
-                  ).then((_) => _reloadHomeLocation());
-                },
-                tooltip: 'Settings',
-                elevation: 2,
-                mini: true,
-                child: Icon(
-                  Icons.menu_rounded,
-                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                ),
-              ),
-            ),
-
-            // Right column FAB stack — compass, ping, center-on-me, globe reset.
+            // Right column FAB stack — compass, globe reset, center-on-me.
             Positioned(
               right: 16,
               top: 100,
@@ -2337,48 +2313,21 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 children: [
                   _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
-                  // Ping
+                  // Globe reset
                   FloatingActionButton(
-                    heroTag: 'pingBtn',
-                    backgroundColor: _isPingOnCooldown
-                        ? Colors.grey
+                    heroTag: 'reset_view_fab',
+                    backgroundColor: _isAtResetView
+                        ? colorScheme.primary
                         : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
-                    onPressed: _isPingOnCooldown ? null : _sendPing,
-                    tooltip: 'Ping',
-                    elevation: 2,
+                    onPressed: _resetToInitialZoom,
+                    tooltip: 'Reset view',
+                    elevation: _isAtResetView ? 6 : 2,
                     mini: true,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (_isPingOnCooldown)
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              value: _pingCooldownSeconds / 10,
-                              strokeWidth: 2,
-                              color: isDarkMode ? colorScheme.primary : Colors.black,
-                              backgroundColor: isDarkMode
-                                  ? colorScheme.surfaceContainerHighest
-                                  : Colors.grey.withOpacity(0.3),
-                            ),
-                          )
-                        else
-                          Icon(
-                            Icons.sensors_rounded,
-                            color: isDarkMode ? colorScheme.primary : Colors.black,
-                            size: 22,
-                          ),
-                        if (_isPingOnCooldown)
-                          Text(
-                            '$_pingCooldownSeconds',
-                            style: TextStyle(
-                              color: isDarkMode ? colorScheme.primary : Colors.black,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 10,
-                            ),
-                          ),
-                      ],
+                    child: Icon(
+                      Icons.public_rounded,
+                      color: _isAtResetView
+                          ? Colors.white
+                          : (isDarkMode ? colorScheme.primary : Colors.black),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -2404,24 +2353,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     child: Icon(
                       Icons.my_location_rounded,
                       color: _followUser
-                          ? Colors.white
-                          : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Globe reset
-                  FloatingActionButton(
-                    heroTag: 'reset_view_fab',
-                    backgroundColor: _isAtResetView
-                        ? colorScheme.primary
-                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
-                    onPressed: _resetToInitialZoom,
-                    tooltip: 'Reset view',
-                    elevation: _isAtResetView ? 6 : 2,
-                    mini: true,
-                    child: Icon(
-                      Icons.public_rounded,
-                      color: _isAtResetView
                           ? Colors.white
                           : (isDarkMode ? colorScheme.primary : Colors.black),
                     ),

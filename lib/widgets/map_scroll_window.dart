@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
-import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
@@ -43,6 +42,7 @@ import 'add_group_member_modal.dart';
 import 'group_markers_modal.dart';
 import '../repositories/map_icon_repository.dart';
 import '../services/database_service.dart';
+import 'package:grid_frontend/screens/settings/settings_page.dart';
 
 class MapScrollWindow extends StatefulWidget {
   final bool isEditingMapIcon;
@@ -343,7 +343,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               GridSegmented(
                 selected: selected,
@@ -361,61 +361,34 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                       .setSelectedSubscreen(i == 1 ? 'groups' : 'contacts');
                 },
               ),
-              const SizedBox(width: 10),
-              _invitesChip(inviteCount),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GridNavIconButton(
+                    icon: Icons.mail_outline_rounded,
+                    size: 40,
+                    badgeCount: inviteCount,
+                    badgeColor: GridTokens.amber,
+                    onPressed: () => _showInvitesModal(context),
+                  ),
+                  const SizedBox(width: 8),
+                  GridNavIconButton(
+                    icon: Icons.settings_outlined,
+                    size: 40,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
           // Search field lives inside each subscreen — don't render here.
         ],
-      ),
-    );
-  }
-
-  Widget _invitesChip(int count) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: () => _showInvitesModal(context),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: count > 0 ? GridTokens.amberSoft : GridTokens.surface2,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: count > 0 ? GridTokens.amber.withOpacity(0.4) : GridTokens.hairline,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.mail_outline_rounded,
-                size: 14,
-                color: count > 0 ? GridTokens.amber : GridTokens.text2,
-              ),
-              const SizedBox(width: 6),
-              GridMono(
-                'INVITES',
-                color: count > 0 ? GridTokens.amber : GridTokens.text2,
-                size: 10.5,
-                letterSpacing: 0.1,
-                weight: FontWeight.w600,
-              ),
-              if (count > 0) ...[
-                const SizedBox(width: 6),
-                GridMono(
-                  '$count',
-                  color: GridTokens.amber,
-                  size: 10.5,
-                  letterSpacing: 0,
-                  uppercase: false,
-                  weight: FontWeight.w700,
-                ),
-              ],
-            ],
-          ),
-        ),
       ),
     );
   }

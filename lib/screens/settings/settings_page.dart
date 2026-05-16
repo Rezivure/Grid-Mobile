@@ -40,7 +40,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
+import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
+import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -1232,12 +1234,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _pickAndUploadAvatar() async {
+  Future<void> _pickAndUploadAvatar({ImageSource? presetSource}) async {
     final colorScheme = Theme.of(context).colorScheme;
     final ImagePicker picker = ImagePicker();
 
-    // Show dialog to choose between camera and gallery
-    final source = await showDialog<ImageSource>(
+    // When called from the new ProfilePhotoScreen we already know which
+    // source the user picked, so skip the legacy in-method chooser.
+    final ImageSource? source = presetSource ?? await showDialog<ImageSource>(
       context: context,
       builder: (BuildContext context) {
         final theme = Theme.of(context);
@@ -1895,6 +1898,65 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// Wipes the locally stored avatar entry. Used by ProfilePhotoScreen's
+  /// "Remove photo" action. Server-side avatar deletion isn't supported by
+  /// the current Matrix flow, so we just clear the cached pointer here —
+  /// the UI will fall back to the deterministic GridAvatar.
+  Future<void> _removeAvatar() async {
+    final client = Provider.of<Client>(context, listen: false);
+    final userId = client.userID ?? '';
+    final secureStorage = const FlutterSecureStorage();
+
+    try {
+      await secureStorage.delete(key: 'avatar_$userId');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('avatar_uri');
+      await prefs.remove('avatar_is_matrix');
+      await prefs.remove('avatar_is_matrix_$userId');
+      await prefs.remove('avatar_fallback_$userId');
+
+      _avatarBytes = null;
+      _cachedAvatarUri = null;
+      _hasLoadedAvatar = false;
+      _avatarCache.remove(userId);
+      _avatarUriCache.remove(userId);
+
+      if (!mounted) return;
+      setState(() {
+        _avatarUpdateCounter += 1;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Profile photo removed',
+            style: GoogleFonts.getFont(
+              'Geist',
+              color: const Color(0xFF04201A),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: GridTokens.mint,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to remove avatar: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _loadCachedAvatar() async {
     final client = Provider.of<Client>(context, listen: false);
     final userId = client.userID ?? '';
@@ -2308,10 +2370,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   value: deviceID == null || identityKey == null
                       ? 'Loading…'
                       : 'Device $_shortDeviceId',
-                  onTap: () => _showInfoModal(
-                    'Identity Key',
-                    identityKey ?? 'Loading...',
-                  ),
+                  onTap: _openEncryptionKeys,
                   colorScheme: colorScheme,
                 ),
                 _buildSettingsDivider(),
@@ -2319,10 +2378,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.fingerprint_rounded,
                   title: 'Device ID',
                   value: deviceID ?? 'Loading…',
-                  onTap: () => _showInfoModal(
-                    'Device ID',
-                    deviceID ?? 'Loading...',
-                  ),
+                  onTap: _openEncryptionKeys,
                   colorScheme: colorScheme,
                   mono: true,
                 ),
@@ -2378,13 +2434,6 @@ class _SettingsPageState extends State<SettingsPage> {
               theme: theme,
               colorScheme: colorScheme,
               children: [
-                _buildMenuOption(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Help & support',
-                  onTap: () => _launchURL('https://mygrid.app/feedback'),
-                  colorScheme: colorScheme,
-                ),
-                _buildSettingsDivider(),
                 _buildMenuOption(
                   icon: Icons.code_rounded,
                   title: 'Open source',
@@ -2463,6 +2512,36 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 12),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openEncryptionKeys() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EncryptionKeysScreen(
+          deviceId: deviceID,
+          identityKey: identityKey,
+        ),
+      ),
+    );
+  }
+
+  void _openProfilePhoto() {
+    final client = Provider.of<Client>(context, listen: false);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfilePhotoScreen(
+          userId: client.userID ?? '',
+          displayName: _displayName ?? _username ?? 'Grid',
+          onTakePhoto: () =>
+              _pickAndUploadAvatar(presetSource: ImageSource.camera),
+          onChooseFromGallery: () =>
+              _pickAndUploadAvatar(presetSource: ImageSource.gallery),
+          onRemovePhoto: _removeAvatar,
         ),
       ),
     );
@@ -2619,7 +2698,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: _pickAndUploadAvatar,
+              onTap: _openProfilePhoto,
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 width: 40,
