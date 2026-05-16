@@ -937,14 +937,6 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             Provider.of<SelectedSubscreenProvider>(context, listen: false)
                 .setSelectedSubscreen('group:${room.roomId}');
           },
-          onGroupMenu: (room) {
-            // Set selection so existing menu items (which read _selectedRoom)
-            // operate on the right group, then surface the action menu.
-            setState(() {
-              _selectedRoom = room;
-            });
-            _showGroupDetailsMenu(context, room);
-          },
         );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
