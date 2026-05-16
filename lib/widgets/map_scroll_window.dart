@@ -287,7 +287,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                           notification is ScrollUpdateNotification &&
                           notification.dragDetails != null &&
                           !_isScrollingContent) {
-                        final delta = notification.dragDetails!.delta.dy / 
+                        final delta = notification.dragDetails!.delta.dy /
                             MediaQuery.of(context).size.height;
                         final newSize = (_scrollableController.size - delta)
                             .clamp(0.3, 0.7);
@@ -299,6 +299,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     child: _buildSubscreen(scrollController),
                   ),
                 ),
+                // Reserve space for the Android system navigation bar so
+                // the sheet content is not drawn behind the virtual buttons.
+                SizedBox(height: MediaQuery.of(context).padding.bottom),
               ],
             ),
           ),
