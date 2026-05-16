@@ -187,3 +187,76 @@ class GridAvatar extends StatelessWidget {
         ),
       );
 }
+
+/// Deterministic gradient avatar with a single capital initial — the
+/// fallback the app uses when no real profile photo is cached. Stable
+/// per `name` so the same user always gets the same palette across
+/// People/Groups/Invites/map. Use this in place of `RandomAvatar`.
+class GridAvatarFallback extends StatelessWidget {
+  const GridAvatarFallback({
+    super.key,
+    required this.name,
+    this.size = 44,
+  });
+
+  final String name;
+  final double size;
+
+  // Same 8-color palette as [GridAvatar] so the two helpers always
+  // agree on which color belongs to a given name.
+  static const _palettes = <List<Color>>[
+    [Color(0xFF00DBA4), Color(0xFF0F7B5E)],
+    [Color(0xFF6DD3F5), Color(0xFF1F6E8F)],
+    [Color(0xFFB79EFF), Color(0xFF5B4690)],
+    [Color(0xFFF5B947), Color(0xFF8A5E15)],
+    [Color(0xFFFF8E72), Color(0xFF8A3F2A)],
+    [Color(0xFF7DD181), Color(0xFF2F6B33)],
+    [Color(0xFFE879C1), Color(0xFF7B2E60)],
+    [Color(0xFF9DC3FF), Color(0xFF34619D)],
+  ];
+
+  static int _stableHash(String s) {
+    var h = 5381;
+    for (final code in s.codeUnits) {
+      h = ((h << 5) + h + code) & 0x7fffffff;
+    }
+    return h;
+  }
+
+  String get _initial {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '·';
+    final cleaned = trimmed.replaceFirst(RegExp(r'^@'), '');
+    if (cleaned.isEmpty) return '·';
+    return cleaned.substring(0, 1).toUpperCase();
+  }
+
+  List<Color> get _palette =>
+      _palettes[_stableHash(name) % _palettes.length];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          center: const Alignment(-0.4, -0.5),
+          radius: 0.95,
+          colors: _palette,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        _initial,
+        style: TextStyle(
+          fontFamily: 'Geist',
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: size * 0.40,
+        ),
+      ),
+    );
+  }
+}

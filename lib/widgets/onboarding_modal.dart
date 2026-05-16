@@ -1,10 +1,12 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../styles/tokens.dart';
 import 'grid/grid_button.dart';
@@ -220,7 +222,7 @@ class _OnboardingModalState extends State<OnboardingModal>
             maxWidth: 460,
           ),
           decoration: BoxDecoration(
-            color: GridTokens.bg,
+            color: GridTokens.surface,
             borderRadius: BorderRadius.circular(GridTokens.r2Xl),
             border: Border.all(color: GridTokens.hairline),
           ),
@@ -390,11 +392,13 @@ class _OnboardingModalState extends State<OnboardingModal>
             iconColor: GridTokens.amber,
             iconBg: GridTokens.amberSoft,
             title: Platform.isIOS ? 'Motion & Fitness' : 'Motion',
-            subtitle: 'Saves battery. Optional.',
+            subtitle: 'Saves battery',
             state: _motion,
             requiredAction: false,
             onAllow: _requestMotion,
           ),
+          const SizedBox(height: 14),
+          _PrivacyPolicyLine(),
           const Spacer(),
         ],
       ),
@@ -521,7 +525,7 @@ class _PermissionRow extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: GridTokens.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
             border: Border.all(
               color: granted && requiredAction
@@ -727,6 +731,45 @@ class _Chip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PrivacyPolicyLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 12,
+            color: GridTokens.text3,
+            height: 1.4,
+          ),
+          children: [
+            const TextSpan(text: 'Skeptical? Read our '),
+            TextSpan(
+              text: 'Privacy Policy',
+              style: const TextStyle(
+                color: GridTokens.mint,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () async {
+                  final uri = Uri.parse('https://mygrid.app/privacy');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri,
+                        mode: LaunchMode.externalApplication);
+                  }
+                },
+            ),
+            const TextSpan(text: '.'),
+          ],
+        ),
       ),
     );
   }

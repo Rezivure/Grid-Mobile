@@ -5,8 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:http/http.dart' as http;
-import 'package:random_avatar/random_avatar.dart';
 import 'dart:convert';
+import 'grid/grid_avatar.dart';
 import 'dart:typed_data';
 import '../utilities/utils.dart';
 import '../services/avatar_cache_service.dart';
@@ -312,15 +312,11 @@ class _UserAvatarState extends State<UserAvatar> {
       );
     }
 
-    // Fallback to random avatar only after we've checked for a profile pic
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: RandomAvatar(
-        localpart(widget.userId),
-        height: widget.size,
-        width: widget.size,
-      ),
+    // Fallback to the deterministic gradient + initial once we've ruled
+    // out a real profile photo.
+    return GridAvatarFallback(
+      name: localpart(widget.userId),
+      size: widget.size,
     );
   }
 }

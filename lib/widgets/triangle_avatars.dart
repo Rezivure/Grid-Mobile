@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:random_avatar/random_avatar.dart';
+
 import '../utilities/utils.dart';
+import 'grid/grid_avatar.dart';
 import 'two_user_avatars.dart';
 
 class TriangleAvatars extends StatelessWidget {
@@ -12,7 +13,6 @@ class TriangleAvatars extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Handle empty case
     if (userIds.isEmpty) {
       return CircleAvatar(
         radius: 30,
@@ -25,32 +25,24 @@ class TriangleAvatars extends StatelessWidget {
       );
     }
 
-    // Handle single member case
     if (userIds.length == 1) {
       return CircleAvatar(
         radius: 30,
         backgroundColor: colorScheme.primary.withOpacity(0.1),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            RandomAvatar(
-              localpart(userIds[0]),
-              height: 40,
-              width: 40,
-            ),
-
-          ],
+        child: ClipOval(
+          child: GridAvatarFallback(
+            name: localpart(userIds[0]),
+            size: 40,
+          ),
         ),
       );
     }
 
-    // Handle two member case
     if (userIds.length == 2) {
       return TwoUserAvatars(userIds: userIds);
     }
 
-    // Handle three or more members case
-    List<String> displayedUserIds = userIds.take(3).toList();
+    final displayedUserIds = userIds.take(3).toList();
 
     return CircleAvatar(
       radius: 30,
@@ -60,28 +52,31 @@ class TriangleAvatars extends StatelessWidget {
         children: [
           Positioned(
             top: 6,
-            child: RandomAvatar(
-              localpart(displayedUserIds[0]),
-              height: 28,
-              width: 28,
+            child: ClipOval(
+              child: GridAvatarFallback(
+                name: localpart(displayedUserIds[0]),
+                size: 28,
+              ),
             ),
           ),
           Positioned(
             bottom: 6,
             left: 6,
-            child: RandomAvatar(
-              localpart(displayedUserIds[1]),
-              height: 28,
-              width: 28,
+            child: ClipOval(
+              child: GridAvatarFallback(
+                name: localpart(displayedUserIds[1]),
+                size: 28,
+              ),
             ),
           ),
           Positioned(
             bottom: 6,
             right: 6,
-            child: RandomAvatar(
-              localpart(displayedUserIds[2]),
-              height: 28,
-              width: 28,
+            child: ClipOval(
+              child: GridAvatarFallback(
+                name: localpart(displayedUserIds[2]),
+                size: 28,
+              ),
             ),
           ),
         ],

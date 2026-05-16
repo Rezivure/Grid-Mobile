@@ -1161,7 +1161,32 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final isPm = hour >= 12;
     final h12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     final mm = minute.toString().padLeft(2, '0');
-    return '$h12:$mm ${isPm ? 'PM' : 'AM'}';
+    final clock = '$h12:$mm ${isPm ? 'PM' : 'AM'}';
+
+    // Anything later than tomorrow is hard to interpret as a bare clock
+    // time — prefix it with the weekday (or the date if it's > 6 days
+    // out) so the user knows we mean Monday, not "today at 8:58 PM".
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final endDay = DateTime(at.year, at.month, at.day);
+    final daysUntil = endDay.difference(today).inDays;
+    if (daysUntil <= 0) return clock;
+    if (daysUntil == 1) return 'tomorrow, $clock';
+    if (daysUntil < 7) return '${_weekday(at.weekday)}, $clock';
+    return '${at.month}/${at.day}, $clock';
+  }
+
+  String _weekday(int weekday) {
+    const names = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return names[(weekday - 1) % 7];
   }
 
   // ── builders ───────────────────────────────────────────────────────

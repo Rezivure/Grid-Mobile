@@ -509,11 +509,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               cursorColor: GridTokens.mint,
               cursorWidth: 2,
               style: GoogleFonts.getFont(
-                'Geist Mono',
-                fontSize: 16,
+                'Geist',
+                fontSize: 18,
                 fontWeight: FontWeight.w500,
                 color: GridTokens.text,
-                height: 1.0,
               ),
               decoration: InputDecoration(
                 isDense: true,
@@ -525,8 +524,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                         ? 'john:homeserver.io'
                         : 'username'),
                 hintStyle: GoogleFonts.getFont(
-                  'Geist Mono',
-                  fontSize: 16,
+                  'Geist',
+                  fontSize: 18,
                   fontWeight: FontWeight.w500,
                   color: GridTokens.text3,
                 ),

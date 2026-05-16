@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:random_avatar/random_avatar.dart';
 import '../utilities/utils.dart';
 import '../blocs/avatar/avatar_bloc.dart';
 import '../blocs/avatar/avatar_event.dart';
 import '../blocs/avatar/avatar_state.dart';
+import 'grid/grid_avatar.dart';
 
 class UserAvatarBloc extends StatefulWidget {
   final String userId;
@@ -109,15 +109,10 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> with WidgetsBindingObse
                     }
                   });
                 }
-                // Fall back to RandomAvatar on error
-                return SizedBox(
-                  width: widget.size,
-                  height: widget.size,
-                  child: RandomAvatar(
-                    localpart(widget.userId),
-                    height: widget.size,
-                    width: widget.size,
-                  ),
+                // Fall back to the deterministic gradient + initial.
+                return GridAvatarFallback(
+                  name: localpart(widget.userId),
+                  size: widget.size,
                 );
               },
             ),
@@ -154,15 +149,10 @@ class _UserAvatarBlocState extends State<UserAvatarBloc> with WidgetsBindingObse
           );
         }
         
-        // Fallback to random avatar
-        return SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: RandomAvatar(
-            localpart(widget.userId),
-            height: widget.size,
-            width: widget.size,
-          ),
+        // Fallback to the deterministic gradient + initial.
+        return GridAvatarFallback(
+          name: localpart(widget.userId),
+          size: widget.size,
         );
       },
     );

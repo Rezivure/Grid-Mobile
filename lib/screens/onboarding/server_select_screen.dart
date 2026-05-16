@@ -7,7 +7,6 @@ import 'package:lottie/lottie.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';

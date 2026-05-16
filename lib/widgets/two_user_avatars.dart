@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:random_avatar/random_avatar.dart';
 
 import '../utilities/utils.dart';
+import 'grid/grid_avatar.dart';
 
 class TwoUserAvatars extends StatelessWidget {
   final List<String> userIds;
@@ -33,19 +33,21 @@ class TwoUserAvatars extends StatelessWidget {
           Positioned(
             top: 6,
             left: 6,
-            child: RandomAvatar(
-              localpart(displayedUserIds[0]),
-              height: 32,
-              width: 32,
+            child: ClipOval(
+              child: GridAvatarFallback(
+                name: localpart(displayedUserIds[0]),
+                size: 32,
+              ),
             ),
           ),
           Positioned(
             bottom: 6,
             right: 6,
-            child: RandomAvatar(
-              localpart(displayedUserIds[1]),
-              height: 32,
-              width: 32,
+            child: ClipOval(
+              child: GridAvatarFallback(
+                name: localpart(displayedUserIds[1]),
+                size: 32,
+              ),
             ),
           ),
         ],

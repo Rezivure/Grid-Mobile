@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
@@ -761,10 +760,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildAvatar(String username) {
-    return CircleAvatar(
-      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-      child: RandomAvatar(_localpart!, height: 80.0, width: 80.0), // Increased size
-      radius: 50,  // Slightly larger radius
+    return ClipOval(
+      child: GridAvatarFallback(
+        name: _localpart!,
+        size: 100,
+      ),
     );
   }
 
