@@ -1008,6 +1008,8 @@ class _ExpiredInviteCard extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
+              _DismissXButton(onTap: onRemove),
             ],
           ),
           const SizedBox(height: 12),
@@ -1028,21 +1030,41 @@ class _ExpiredInviteCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: GridButton(
-                  label: 'Remove',
-                  icon: Icons.close_rounded,
-                  style: GridButtonStyle.secondary,
-                  height: 44,
-                  onPressed: onRemove,
-                ),
-              ),
-            ],
-          ),
         ],
+      ),
+    );
+  }
+}
+
+/// 28×28 inline X used in the corner of an expired invite card to
+/// drop the user from the dead matrix room.
+class _DismissXButton extends StatelessWidget {
+  const _DismissXButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rSm),
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rSm),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.close_rounded,
+            size: 16,
+            color: GridTokens.text3,
+          ),
+        ),
       ),
     );
   }
