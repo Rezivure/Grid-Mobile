@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
@@ -93,12 +95,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       final Uri homeserverUri = homeserver.startsWith('http://') || homeserver.startsWith('https://')
           ? Uri.parse(homeserver)
           : Uri.https(homeserver, '');
-      await client.checkHomeserver(homeserverUri);
+      await client.checkHomeserver(homeserverUri)
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw TimeoutException('Homeserver check timed out. Please check your connection and try again.');
+      });
       await client.login(
         LoginType.mLoginPassword,
         password: _passwordController.text,
         identifier: AuthenticationUserIdentifier(user: _usernameController.text),
-      );
+      ).timeout(const Duration(seconds: 30), onTimeout: () {
+        throw TimeoutException('Login timed out. Please check your connection and try again.');
+      });
 
       setState(() {
         _isLoading = false;

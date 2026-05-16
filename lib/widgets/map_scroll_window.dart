@@ -299,6 +299,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     child: _buildSubscreen(scrollController),
                   ),
                 ),
+                SizedBox(height: MediaQuery.of(context).padding.bottom),
               ],
             ),
           ),

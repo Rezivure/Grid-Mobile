@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
@@ -54,6 +55,7 @@ import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/widgets/battery_optimization_prompt.dart';
 
 import '../../services/backwards_compatibility_service.dart';
 
@@ -195,13 +197,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
           // Check if user needs passkey migration warning (default homeserver only)
           _checkPasskeyWarning();
+
+          // Remind Android users to disable battery optimization (shown once)
+          BatteryOptimizationPrompt.showIfNeeded(context);
         },
       ).then((_) {
         // For existing users who already completed onboarding,
         // the onComplete callback won't fire — check here instead
         if (!mounted) return;
         OnboardingModal.shouldShowOnboarding().then((shouldShow) {
-          if (!shouldShow) _checkPasskeyWarning();
+          if (!shouldShow) {
+            _checkPasskeyWarning();
+            BatteryOptimizationPrompt.showIfNeeded(context);
+          }
         });
       });
 
@@ -1054,7 +1062,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _tileProvider = null;
 
       _mapTheme = ProtomapsThemes.light();
-      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
+      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl)
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        throw TimeoutException('Map provider load timed out. Please check your connection.');
+      });
 
       context.read<MapBloc>().add(MapInitialize());
       setState(() {});
@@ -1722,7 +1733,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
                   TileLayer(
                     urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
-                    tileProvider: NetworkTileProvider(
+                    tileProvider: CancellableTileProvider(
                       headers: {
                         'Authorization': 'Bearer $_satelliteMapToken',
                       },

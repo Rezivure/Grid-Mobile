@@ -132,7 +132,11 @@ class RoomService {
         initialState: [
           StateEvent(
             type: 'm.room.encryption',
-            content: {"algorithm": "m.megolm.v1.aes-sha2"},
+            content: {
+              "algorithm": "m.megolm.v1.aes-sha2",
+              "rotation_period_ms": 604800000,
+              "rotation_period_msgs": 100,
+            },
           ),
         ],
       );
@@ -593,7 +597,11 @@ class RoomService {
         initialState: [
           StateEvent(
             type: EventTypes.Encryption,
-            content: {'algorithm': 'm.megolm.v1.aes-sha2'},
+            content: {
+              'algorithm': 'm.megolm.v1.aes-sha2',
+              'rotation_period_ms': 604800000,
+              'rotation_period_msgs': 100,
+            },
           ),
           StateEvent(
             type: EventTypes.RoomPowerLevels,
