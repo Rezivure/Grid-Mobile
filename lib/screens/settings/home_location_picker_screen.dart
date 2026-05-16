@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -7,15 +9,28 @@ import 'package:provider/provider.dart';
 import '../../services/location_manager.dart';
 import '../../styles/tokens.dart';
 import '../../widgets/grid/grid_button.dart';
+import '../../widgets/grid/grid_mono.dart';
 import '../map/grid_map_style.dart';
 
-/// Screen that lets the user pick the lat/lng of their "home" by panning a
-/// MapLibre map. A mint pin is anchored to the screen center as a visual
-/// indicator; the user moves the map until the pin overlays their home, then
-/// taps "Confirm home location". The lat/lng of the final camera target is
-/// returned to the caller via `Navigator.pop`.
+/// Returned by [HomeLocationPickerScreen] — pairs the chosen lat/lng with
+/// the geofence radius the user selected for it.
+class HomeLocationResult {
+  const HomeLocationResult({required this.latLng, required this.radiusMeters});
+  final ll.LatLng latLng;
+  final double radiusMeters;
+}
+
+/// Screen that lets the user pick the lat/lng of their "home" and the
+/// geofence radius around it. A mint pin is anchored to the screen center
+/// and the radius circle is drawn around it live, so panning the map keeps
+/// the pin+circle pinned to the center while the world moves beneath them.
 class HomeLocationPickerScreen extends StatefulWidget {
-  const HomeLocationPickerScreen({super.key});
+  const HomeLocationPickerScreen({
+    super.key,
+    this.initialRadiusMeters = 25,
+  });
+
+  final double initialRadiusMeters;
 
   @override
   State<HomeLocationPickerScreen> createState() =>
@@ -25,12 +40,17 @@ class HomeLocationPickerScreen extends StatefulWidget {
 class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
     with SingleTickerProviderStateMixin {
   ml.MapLibreMapController? _mlController;
-  late final AnimationController _pulseController;
+  late final AnimationController _tick;
   late final Animation<double> _pulseAnimation;
   bool _isInteracting = false;
   bool _confirming = false;
   bool? _isDarkStyle;
   String? _styleJson;
+
+  late double _radiusMeters = widget.initialRadiusMeters.clamp(_minRadius, _maxRadius);
+
+  static const double _minRadius = 10;
+  static const double _maxRadius = 200;
 
   // Fallback if the user has no last known location yet.
   static const ll.LatLng _fallbackCenter = ll.LatLng(37.7749, -122.4194);
@@ -38,19 +58,22 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
+    // Continuously running ticker drives both the pin pulse and the live
+    // radius-circle redraw while the camera is moving (maplibre doesn't
+    // expose a per-frame camera callback).
+    _tick = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat();
     _pulseAnimation = CurvedAnimation(
-      parent: _pulseController,
+      parent: _tick,
       curve: Curves.easeInOut,
     );
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _tick.dispose();
     super.dispose();
   }
 
@@ -72,9 +95,23 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
       return;
     }
 
-    Navigator.of(context).pop<ll.LatLng>(
-      ll.LatLng(target.latitude, target.longitude),
+    Navigator.of(context).pop<HomeLocationResult>(
+      HomeLocationResult(
+        latLng: ll.LatLng(target.latitude, target.longitude),
+        radiusMeters: _radiusMeters,
+      ),
     );
+  }
+
+  /// Web Mercator resolution at the current camera target — meters covered
+  /// by a single screen pixel. Used to draw the geofence circle at the
+  /// correct on-screen size for the current zoom.
+  double _metersPerPixel() {
+    final cam = _mlController?.cameraPosition;
+    if (cam == null) return 0;
+    final lat = cam.target.latitude * math.pi / 180.0;
+    final zoom = cam.zoom;
+    return 78271.516 * math.cos(lat) / math.pow(2, zoom);
   }
 
   @override
@@ -129,7 +166,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                   initialCenter.latitude,
                   initialCenter.longitude,
                 ),
-                zoom: 15.5,
+                zoom: 16,
               ),
               myLocationEnabled: false,
               trackCameraPosition: true,
@@ -166,7 +203,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                       Colors.transparent,
                       GridTokens.bg.withOpacity(0.65),
                     ],
-                    stops: const [0.0, 0.15, 0.55, 1.0],
+                    stops: const [0.0, 0.15, 0.5, 1.0],
                   ),
                 ),
               ),
@@ -183,6 +220,39 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                 }
               },
               child: const SizedBox.expand(),
+            ),
+          ),
+
+          // Centered radius circle — redrawn every tick so it stays sized
+          // correctly while the user zooms / pans.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _tick,
+                builder: (context, _) {
+                  final mpp = _metersPerPixel();
+                  if (mpp <= 0) return const SizedBox.shrink();
+                  final radiusPx = _radiusMeters / mpp;
+                  final diameter = radiusPx * 2;
+                  if (diameter < 4) return const SizedBox.shrink();
+                  return Center(
+                    child: SizedBox(
+                      width: diameter,
+                      height: diameter,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: GridTokens.mint.withOpacity(0.12),
+                          border: Border.all(
+                            color: GridTokens.mint.withOpacity(0.65),
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
 
@@ -234,7 +304,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
             ),
           ),
 
-          // Bottom confirm button.
+          // Bottom card: radius slider + confirm button.
           Positioned(
             left: 0,
             right: 0,
@@ -242,12 +312,80 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                child: GridButton(
-                  label:
-                      _confirming ? 'Saving…' : 'Confirm home location',
-                  icon: Icons.check_rounded,
-                  onPressed: _confirming ? null : _confirm,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  decoration: BoxDecoration(
+                    color: GridTokens.surface.withOpacity(0.96),
+                    borderRadius:
+                        BorderRadius.circular(GridTokens.rLg),
+                    border:
+                        Border.all(color: GridTokens.hairlineStrong),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.radio_button_checked_rounded,
+                            size: 16,
+                            color: GridTokens.mint,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Geofence radius',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              color: GridTokens.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.01,
+                            ),
+                          ),
+                          const Spacer(),
+                          GridMono(
+                            '${_radiusMeters.round()} M',
+                            size: 11,
+                            letterSpacing: 0.08,
+                            color: GridTokens.mint,
+                          ),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 3,
+                          activeTrackColor: GridTokens.mint,
+                          inactiveTrackColor: GridTokens.hairlineStrong,
+                          thumbColor: GridTokens.mint,
+                          overlayColor:
+                              GridTokens.mint.withOpacity(0.16),
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 9,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 18,
+                          ),
+                        ),
+                        child: Slider(
+                          value: _radiusMeters,
+                          min: _minRadius,
+                          max: _maxRadius,
+                          divisions: ((_maxRadius - _minRadius) / 5).round(),
+                          onChanged: (v) =>
+                              setState(() => _radiusMeters = v),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GridButton(
+                        label:
+                            _confirming ? 'Saving…' : 'Confirm home location',
+                        icon: Icons.check_rounded,
+                        onPressed: _confirming ? null : _confirm,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

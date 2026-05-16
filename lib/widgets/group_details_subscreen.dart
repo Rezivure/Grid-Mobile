@@ -1396,53 +1396,72 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   Widget _buildEmptyState() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
-              borderRadius: BorderRadius.circular(GridTokens.r2Xl),
-            ),
-            child: const Icon(
-              Icons.group_outlined,
-              size: 36,
-              color: GridTokens.mint,
-            ),
+      padding: const EdgeInsets.fromLTRB(18, 24, 18, 28),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [GridTokens.mintFaint, GridTokens.surface],
           ),
-          const SizedBox(height: 16),
-          Text(
-            "It's lonely here.",
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.015,
-              color: GridTokens.text,
+          borderRadius: BorderRadius.circular(GridTokens.rLg),
+          border: Border.all(color: GridTokens.mintSoft),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    GridTokens.mint.withValues(alpha: 0.22),
+                    GridTokens.mint.withValues(alpha: 0.08),
+                  ],
+                ),
+                shape: BoxShape.circle,
+                border: Border.all(color: GridTokens.mintSoft),
+              ),
+              child: const Icon(
+                Icons.person_add_alt_1_rounded,
+                size: 28,
+                color: GridTokens.mint,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Invite friends to join this group.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13.5,
-              color: GridTokens.text2,
+            const SizedBox(height: 16),
+            Text(
+              'Just you in here',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.015,
+                color: GridTokens.text,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          GridButton(
-            label: 'Add member',
-            icon: Icons.person_add_outlined,
-            style: GridButtonStyle.secondary,
-            expand: false,
-            onPressed: _showAddGroupMemberModal,
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              'Add people so you can see each other on the map.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                color: GridTokens.text2,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 18),
+            GridButton(
+              label: 'Add a member',
+              icon: Icons.person_add_outlined,
+              height: 46,
+              onPressed: _showAddGroupMemberModal,
+            ),
+          ],
+        ),
       ),
     );
   }

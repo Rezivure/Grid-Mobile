@@ -43,7 +43,6 @@ import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
 import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -317,21 +316,23 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   /// Pushes the home-location picker so the user can re-pick their saved
-  /// home spot. Overwrites the `home_location` preference exactly the way
-  /// the initial set does.
+  /// home spot. Overwrites the `home_location` + `home_radius` preferences.
   Future<void> _changeHomeLocation() async {
-    final picked = await Navigator.of(context).push<LatLng>(
+    final prefs = await SharedPreferences.getInstance();
+    final initialRadius = prefs.getDouble('home_radius') ?? 25;
+    final picked = await Navigator.of(context).push<HomeLocationResult>(
       MaterialPageRoute(
-        builder: (_) => const HomeLocationPickerScreen(),
+        builder: (_) =>
+            HomeLocationPickerScreen(initialRadiusMeters: initialRadius),
       ),
     );
     if (picked == null || !mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       'home_location',
-      '${picked.latitude},${picked.longitude}',
+      '${picked.latLng.latitude},${picked.latLng.longitude}',
     );
+    await prefs.setDouble('home_radius', picked.radiusMeters);
     if (!mounted) return;
     setState(() => _homeLocationSet = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -344,6 +345,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _clearHomeLocation() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('home_location');
+    await prefs.remove('home_radius');
     await prefs.setBool('auto_pause_at_home_enabled', false);
     if (!mounted) return;
     setState(() {
@@ -450,7 +452,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (shouldPick != true || !mounted) return false;
 
-    final picked = await Navigator.of(context).push<LatLng>(
+    final picked = await Navigator.of(context).push<HomeLocationResult>(
       MaterialPageRoute(
         builder: (_) => const HomeLocationPickerScreen(),
       ),
@@ -461,8 +463,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       'home_location',
-      '${picked.latitude},${picked.longitude}',
+      '${picked.latLng.latitude},${picked.latLng.longitude}',
     );
+    await prefs.setDouble('home_radius', picked.radiusMeters);
     return true;
   }
 

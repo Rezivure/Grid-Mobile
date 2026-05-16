@@ -181,7 +181,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   // Saved "home" location from Settings → auto-pause feature. Null if unset.
   LatLng? _homeLocation;
-  static const double _homeRadiusMeters = 25;
+  double _homeRadiusMeters = 25;
 
   @override
   void initState() {
@@ -1413,15 +1413,20 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _markerScreenPositions[_latLngKey(p)] ??
       _mapController.camera.latLngToScreenPoint(p);
 
-  /// Reload the "home" location from SharedPreferences (key: `home_location`,
-  /// format `"lat,lng"`). Called on init and after returning from Settings.
+  /// Reload the "home" location + geofence radius from SharedPreferences
+  /// (keys: `home_location` = "lat,lng", `home_radius` = double meters).
+  /// Called on init and after returning from Settings.
   Future<void> _reloadHomeLocation() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('home_location');
+      final radius = prefs.getDouble('home_radius') ?? 25;
       if (raw == null || raw.isEmpty) {
         if (_homeLocation != null && mounted) {
-          setState(() => _homeLocation = null);
+          setState(() {
+            _homeLocation = null;
+            _homeRadiusMeters = radius;
+          });
         }
         return;
       }
@@ -1432,10 +1437,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       if (lat == null || lng == null) return;
       final parsed = LatLng(lat, lng);
       if (!mounted) return;
-      if (_homeLocation == null ||
+      final locChanged = _homeLocation == null ||
           _homeLocation!.latitude != parsed.latitude ||
-          _homeLocation!.longitude != parsed.longitude) {
-        setState(() => _homeLocation = parsed);
+          _homeLocation!.longitude != parsed.longitude;
+      if (locChanged || _homeRadiusMeters != radius) {
+        setState(() {
+          _homeLocation = parsed;
+          _homeRadiusMeters = radius;
+        });
       }
     } catch (_) {
       // Swallow — pref-read failure shouldn't break the map.
