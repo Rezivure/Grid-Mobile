@@ -437,15 +437,6 @@ class UserInfoBubble extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: _MiniBtn(
-                                icon: Icons.history_rounded,
-                                label: 'History',
-                                // TODO: needs location-history entry point
-                                onTap: null,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: _MiniBtn(
                                 icon: Icons.near_me_rounded,
                                 label: 'Route',
                                 onTap: () => _openInMaps(context, position),

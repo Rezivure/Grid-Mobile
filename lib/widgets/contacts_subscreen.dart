@@ -462,6 +462,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       child: GridContactRow(
         name: contact.displayName,
         handle: handle,
+        userId: contact.userId,
         placeLine: _placeLineFor(contact),
         timeText: _timeTextFor(contact),
         live: _isLive(contact),

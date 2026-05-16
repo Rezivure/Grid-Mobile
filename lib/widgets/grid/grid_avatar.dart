@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../styles/tokens.dart';
+import '../user_avatar_bloc.dart';
 
 /// Status indicator at the bottom-right of an avatar.
 enum GridAvatarStatus { none, live, paused, offline }
@@ -15,6 +16,7 @@ class GridAvatar extends StatelessWidget {
     required this.name,
     this.size = 44,
     this.imageUrl,
+    this.userId,
     this.status = GridAvatarStatus.none,
     this.ring = false,
     this.padding = 0,
@@ -23,6 +25,12 @@ class GridAvatar extends StatelessWidget {
   final String name;
   final double size;
   final String? imageUrl;
+
+  /// When provided, the avatar pulls the user's image from `AvatarBloc`
+  /// (same source the map markers use) and falls back to the deterministic
+  /// gradient + initial if no bytes are cached. Lets contacts list + map
+  /// share a single avatar pipeline.
+  final String? userId;
   final GridAvatarStatus status;
 
   /// Outer halo ring; mint when [status] is live, otherwise hairlineStrong.
@@ -81,17 +89,25 @@ class GridAvatar extends StatelessWidget {
         ],
       ),
       alignment: Alignment.center,
-      child: imageUrl != null
+      child: userId != null
           ? ClipOval(
-              child: Image.network(
-                imageUrl!,
+              child: SizedBox(
                 width: size,
                 height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _fallbackInitial(),
+                child: UserAvatarBloc(userId: userId!, size: size),
               ),
             )
-          : _fallbackInitial(),
+          : imageUrl != null
+              ? ClipOval(
+                  child: Image.network(
+                    imageUrl!,
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _fallbackInitial(),
+                  ),
+                )
+              : _fallbackInitial(),
     );
 
     Widget body = inner;

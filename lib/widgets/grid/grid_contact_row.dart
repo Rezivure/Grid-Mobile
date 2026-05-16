@@ -21,6 +21,7 @@ class GridContactRow extends StatelessWidget {
     this.live = false,
     this.avatarStatus = GridAvatarStatus.live,
     this.imageUrl,
+    this.userId,
     this.highlighted = false,
     this.onTap,
     this.showDivider = true,
@@ -36,6 +37,7 @@ class GridContactRow extends StatelessWidget {
   final bool live;
   final GridAvatarStatus avatarStatus;
   final String? imageUrl;
+  final String? userId;
   final bool highlighted;
   final VoidCallback? onTap;
   final bool showDivider;
@@ -64,6 +66,7 @@ class GridContactRow extends StatelessWidget {
                 size: 44,
                 status: avatarStatus,
                 imageUrl: imageUrl,
+                userId: userId,
               ),
               const SizedBox(width: 12),
               Expanded(
