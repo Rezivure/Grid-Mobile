@@ -1,10 +1,8 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../styles/tokens.dart';
 import 'grid/grid_button.dart';
@@ -343,26 +341,18 @@ class _OnboardingModalState extends State<OnboardingModal>
 
   Widget _buildLocationPage() {
     String body;
-    Widget? extras;
     switch (_permission) {
       case _PermissionState.deniedForever:
         body =
-            'iOS is blocking the location prompt. Open Settings, set Grid '
-            'to Always, then come back here.';
-        extras = const SizedBox.shrink();
+            'Open Settings → Grid → Location and pick Always, then come back.';
         break;
       case _PermissionState.granted:
-        body =
-            'Always-on lets friends see your dot move even when the app is '
-            'closed. Nothing leaves your phone unencrypted.';
-        extras = const SizedBox.shrink();
+        body = 'You can change this any time in Settings.';
         break;
       default:
         body =
-            'We use this so you can share your location with the people you '
-            'choose — even when the app is closed. It\'s end-to-end '
-            'encrypted; only your contacts can decrypt it.';
-        extras = _PrivacyTip();
+            'Share your location with people you choose — end-to-end encrypted, '
+            'on or off in one tap.';
     }
     return _StepLayout(
       hero: _PermissionHero(state: _permission),
@@ -370,7 +360,6 @@ class _OnboardingModalState extends State<OnboardingModal>
           ? 'You\'re good.'
           : 'Allow location access',
       body: body,
-      extras: extras,
     );
   }
 
@@ -403,45 +392,55 @@ class _StepLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FittedBox with `scale: BoxFit.scaleDown` is the trick: lets us write
+    // a fixed comfortable layout, and if the available vertical space is
+    // too small for it (small phones, accessibility text scale, etc.),
+    // the whole step shrinks proportionally instead of scrolling.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(),
-          hero,
-          const SizedBox(height: 28),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 28,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.025 * 28,
-              color: GridTokens.text,
-              height: 1.1,
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                hero,
+                const SizedBox(height: 22),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 26,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.025 * 26,
+                    color: GridTokens.text,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: GridTokens.text2,
+                    height: 1.45,
+                    letterSpacing: -0.005,
+                  ),
+                ),
+                if (extras != null) ...[
+                  const SizedBox(height: 16),
+                  extras!,
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14.5,
-              fontWeight: FontWeight.w400,
-              color: GridTokens.text2,
-              height: 1.5,
-              letterSpacing: -0.005,
-            ),
-          ),
-          if (extras != null) ...[
-            const SizedBox(height: 18),
-            extras!,
-          ],
-          const Spacer(flex: 2),
-        ],
+        ),
       ),
     );
   }
@@ -455,8 +454,8 @@ class _LogoHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 144,
-      height: 144,
+      width: 116,
+      height: 116,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
@@ -471,8 +470,8 @@ class _LogoHero extends StatelessWidget {
       alignment: Alignment.center,
       child: Image.asset(
         'assets/logos/png-file-2.png',
-        width: 92,
-        height: 92,
+        width: 76,
+        height: 76,
         fit: BoxFit.contain,
       ),
     );
@@ -498,8 +497,8 @@ class _PermissionHero extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
-      width: 128,
-      height: 128,
+      width: 108,
+      height: 108,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
@@ -522,8 +521,8 @@ class _PermissionHero extends StatelessWidget {
               ),
             )
           : Container(
-              width: 70,
-              height: 70,
+              width: 60,
+              height: 60,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: accent.withOpacity(0.16),
@@ -637,63 +636,6 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _PrivacyTip extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: GridTokens.surface,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.hairline),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.verified_user_outlined,
-              size: 16, color: GridTokens.mint),
-          const SizedBox(width: 10),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 12.5,
-                  height: 1.45,
-                  color: GridTokens.text2,
-                ),
-                children: [
-                  const TextSpan(
-                    text:
-                        'Your location is end-to-end encrypted and only visible to the people you pick. ',
-                  ),
-                  TextSpan(
-                    text: 'Read our Privacy Policy',
-                    style: const TextStyle(
-                      color: GridTokens.mint,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                    ),
-                    recognizer: TapGestureRecognizer()
-                      ..onTap = () async {
-                        final uri = Uri.parse('https://mygrid.app/privacy');
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri,
-                              mode: LaunchMode.externalApplication);
-                        }
-                      },
-                  ),
-                  const TextSpan(text: '.'),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _PageDots extends StatelessWidget {
   const _PageDots({required this.active, required this.count});
