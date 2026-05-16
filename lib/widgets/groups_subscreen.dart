@@ -13,6 +13,7 @@ import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 
 /// Bottom-sheet body that lists the user's real groups (driven by
 /// `GroupsBloc`) using the Grid redesign card pattern.
@@ -93,14 +94,35 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
           return _emptyState();
         }
 
+        // Section header + cards. The header keeps groups in vertical
+        // alignment with People (which always has a SHARING NOW/PAUSED/
+        // OFFLINE header) and Invites (FROM PEOPLE/GROUP INVITES/EXPIRED)
+        // so the first card lands at the same Y across all three pills.
         return ListView.builder(
           controller: widget.scrollController,
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
-          itemCount: groups.length,
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          itemCount: groups.length + 1,
           itemBuilder: (context, index) {
-            final room = groups[index];
+            if (index == 0) {
+              return GridSectionHeader(
+                text: 'MY GROUPS',
+                trailing: GridMono(
+                  '${groups.length}',
+                  color: GridTokens.text3,
+                  size: 10.5,
+                  letterSpacing: 0.08,
+                ),
+              );
+            }
+            final groupIndex = index - 1;
+            final room = groups[groupIndex];
             return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: EdgeInsets.fromLTRB(
+                14,
+                0,
+                14,
+                groupIndex == groups.length - 1 ? 0 : 12,
+              ),
               child: _GroupCard(
                 name: _parseGroupName(room),
                 memberIds: room.members,
@@ -108,7 +130,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
                 place: _placeFor(room),
                 timerLabel: _timerFor(room),
                 isTrip: _isTripGroup(room),
-                featured: index == 0,
+                featured: groupIndex == 0,
                 onTap: () => widget.onGroupSelected?.call(room),
                 onMenu: widget.onGroupMenu == null
                     ? null
