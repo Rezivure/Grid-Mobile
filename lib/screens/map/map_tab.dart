@@ -1242,11 +1242,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       zoomLevel = 2.0; // Intercontinental
     }
 
-    // Cap zoom at country level for faster loading (3.5 for full USA view)
-    if (zoomLevel > 3.5) {
-      zoomLevel = 3.5;
-    }
-
     // Estimate viewport size at this zoom level (degrees of lat/lng visible on screen)
     // These are rough approximations for a typical phone screen
     double viewportRadius;
@@ -1562,7 +1557,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       ? ml.MyLocationTrackingMode.tracking
                       : ml.MyLocationTrackingMode.none,
                   trackCameraPosition: true,
-                  minMaxZoomPreference: const ml.MinMaxZoomPreference(3.5, 17),
+                  minMaxZoomPreference: const ml.MinMaxZoomPreference(1.0, 17),
                   rotateGesturesEnabled: true,
                   tiltGesturesEnabled: false,
                   attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
