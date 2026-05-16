@@ -238,13 +238,28 @@ class _InvitesModalState extends State<InvitesModal> {
   }) {
     final directInvites = <Map<String, dynamic>>[];
     final groupInvites = <Map<String, dynamic>>[];
+    final expiredGroupInvites = <Map<String, dynamic>>[];
+    final nowEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     for (final raw in invites) {
       final invite = Map<String, dynamic>.from(raw as Map);
       final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
       if (roomName.startsWith('Grid:Direct')) {
         directInvites.add(invite);
       } else {
-        groupInvites.add(invite);
+        // Mirror _GroupInviteCard.build parsing: expiration sits at index 2 of
+        // a colon-split roomName when the group invite includes one.
+        final parts = roomName.split(':');
+        int expiration = -1;
+        if (parts.length > 3) {
+          expiration = int.tryParse(parts[2]) ?? -1;
+        }
+        // expiration of -1 means "permanent"; anything else that's already
+        // <= now is dead and belongs in the EXPIRED bucket.
+        if (expiration != -1 && expiration <= nowEpoch) {
+          expiredGroupInvites.add(invite);
+        } else {
+          groupInvites.add(invite);
+        }
       }
     }
 
@@ -314,10 +329,46 @@ class _InvitesModalState extends State<InvitesModal> {
       }
     }
 
+    if (expiredGroupInvites.isNotEmpty) {
+      children.add(const GridSectionHeader(text: 'EXPIRED'));
+      for (final invite in expiredGroupInvites) {
+        final roomId = (invite['roomId'] as String?) ?? 'Unknown';
+        children.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _ExpiredInviteRow(
+              invite: invite,
+              onRemove: () => _dismissExpiredInvite(context, roomId),
+            ),
+          ),
+        );
+      }
+    }
+
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
       children: children,
     );
+  }
+
+  Future<void> _dismissExpiredInvite(
+    BuildContext context,
+    String roomId,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final ok = await widget.roomService.leaveRoom(roomId);
+    if (!mounted) return;
+    if (ok) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Expired invite removed')),
+      );
+    } else {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Could not remove invite — try again')),
+      );
+    }
+    await widget.onInviteHandled();
+    if (mounted) setState(() {});
   }
 }
 
@@ -588,6 +639,101 @@ class _InviteShell extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// Compact row for an expired group invite. No accept path — just a tag and
+/// an X button that drops the user from the dead matrix room.
+class _ExpiredInviteRow extends StatelessWidget {
+  const _ExpiredInviteRow({
+    required this.invite,
+    required this.onRemove,
+  });
+
+  final Map<String, dynamic> invite;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
+    String groupName = 'Unnamed Group';
+    final parts = roomName.split(':');
+    if (parts.length > 3) {
+      groupName = parts[3];
+    } else {
+      groupName = roomName;
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: GridTokens.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: GridTokens.hairline, width: 1),
+      ),
+      child: Row(
+        children: [
+          GridAvatar(name: groupName, size: 32),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              groupName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: GridTokens.fontUi,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.01,
+                color: GridTokens.text2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: GridTokens.dangerSoft,
+              borderRadius: BorderRadius.circular(GridTokens.rSm),
+            ),
+            child: const GridMono(
+              'EXPIRED',
+              size: 10,
+              letterSpacing: 0.08,
+              color: GridTokens.danger,
+            ),
+          ),
+          const SizedBox(width: 4),
+          _XButton(onPressed: onRemove),
+        ],
+      ),
+    );
+  }
+}
+
+/// 32×32 ghost X button used to clear expired invites.
+class _XButton extends StatelessWidget {
+  const _XButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        splashRadius: 18,
+        tooltip: 'Remove expired invite',
+        icon: const Icon(
+          Icons.close_rounded,
+          size: 18,
+          color: GridTokens.text3,
+        ),
+        onPressed: onPressed,
+      ),
     );
   }
 }

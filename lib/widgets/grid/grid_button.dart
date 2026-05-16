@@ -32,18 +32,19 @@ class GridButton extends StatelessWidget {
     final isGhost = style == GridButtonStyle.ghost;
 
     final Color bg = switch (style) {
-      GridButtonStyle.primary => GridTokens.mint,
+      GridButtonStyle.primary => GridTokens.surface2,
       GridButtonStyle.secondary => GridTokens.surface2,
       GridButtonStyle.ghost => Colors.transparent,
       GridButtonStyle.danger => GridTokens.dangerSoft,
     };
     final Color fg = switch (style) {
-      GridButtonStyle.primary => const Color(0xFF04201A),
+      GridButtonStyle.primary => GridTokens.mint,
       GridButtonStyle.secondary => GridTokens.text,
       GridButtonStyle.ghost => GridTokens.mint,
       GridButtonStyle.danger => GridTokens.danger,
     };
     final Border? border = switch (style) {
+      GridButtonStyle.primary => Border.all(color: GridTokens.mint, width: 1.5),
       GridButtonStyle.secondary => Border.all(color: GridTokens.hairlineStrong),
       _ => null,
     };
@@ -53,21 +54,13 @@ class GridButton extends StatelessWidget {
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(14),
+        highlightColor: isPrimary ? GridTokens.mint.withValues(alpha: 0.08) : null,
         child: Ink(
           height: height,
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(14),
             border: border,
-            boxShadow: isPrimary
-                ? [
-                    BoxShadow(
-                      color: GridTokens.mint.withOpacity(0.22),
-                      offset: const Offset(0, 8),
-                      blurRadius: 24,
-                    ),
-                  ]
-                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

@@ -23,7 +23,6 @@ import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
-import 'group_details_subscreen.dart';
 import 'triangle_avatars.dart';
 import 'add_friend_modal.dart';
 import '../providers/selected_subscreen_provider.dart';
@@ -36,7 +35,6 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'group_avatar.dart';
 import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
-import 'group_profile_modal.dart';
 import 'location_history_modal.dart';
 import 'add_group_member_modal.dart';
 import 'group_markers_modal.dart';
@@ -56,7 +54,7 @@ class MapScrollWindow extends StatefulWidget {
   _MapScrollWindowState createState() => _MapScrollWindowState();
 }
 
-enum SubscreenOption { contacts, groups, invites, groupDetails }
+enum SubscreenOption { contacts, groups, invites }
 
 class _MapScrollWindowState extends State<MapScrollWindow> 
     with TickerProviderStateMixin {
@@ -330,11 +328,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     final int groupCount = _groupsCount();
     final int inviteCount = _invitesCount();
 
-    // groupDetails is a child view of Groups — keep the Groups pill lit when
-    // a specific group is selected so the segmented control doesn't snap
-    // back to People on group-tap.
-    final bool isGroupsView = _selectedOption == SubscreenOption.groups ||
-        _selectedOption == SubscreenOption.groupDetails;
+    // Tapping a group no longer routes to a child view; the Groups pill is
+    // lit whenever the Groups subscreen is active.
+    final bool isGroupsView = _selectedOption == SubscreenOption.groups;
     final int selected = isGroupsView ? 1 : 0;
 
     return Padding(
@@ -487,20 +483,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Show group icon when viewing a group, otherwise show add contact
-              _selectedOption == SubscreenOption.groupDetails && _selectedRoom != null
-                ? _buildGroupActionButton(
-                    icon: Icons.group_outlined,
-                    onPressed: () => _showGroupDetailsMenu(context),
-                    colorScheme: colorScheme,
-                    tooltip: 'Group Settings',
-                  )
-                : _buildActionButton(
-                    icon: Icons.person_add_outlined,
-                    onPressed: () => _showAddFriendModal(context),
-                    colorScheme: colorScheme,
-                    tooltip: 'Add Contact',
-                  ),
+              _buildActionButton(
+                icon: Icons.person_add_outlined,
+                onPressed: () => _showAddFriendModal(context),
+                colorScheme: colorScheme,
+                tooltip: 'Add Contact',
+              ),
               const SizedBox(width: 8),
               _buildActionButton(
                 icon: Icons.qr_code_scanner_outlined,
@@ -807,15 +795,16 @@ class _MapScrollWindowState extends State<MapScrollWindow>
       return GestureDetector(
         onTap: () {
           setState(() {
-            _selectedOption = SubscreenOption.groupDetails;
+            _selectedOption = SubscreenOption.groups;
             _selectedLabel = groupName;
             _selectedRoom = room;
             _isDropdownExpanded = false;
             _expandController.reverse();
             _fadeController.reverse();
-            Provider.of<SelectedSubscreenProvider>(context, listen: false)
-                .setSelectedSubscreen('group:${room.roomId}');
           });
+          Provider.of<SelectedSubscreenProvider>(context, listen: false)
+              .setSelectedSubscreen('group:${room.roomId}');
+          _showGroupActionMenu(context, room);
         },
         child: Container(
           width: 80,
@@ -914,36 +903,21 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         return GroupsSubscreen(
           scrollController: scrollController,
           onGroupSelected: (room) {
+            // Tapping a group no longer routes to a separate details view —
+            // we just record this group as the current context (so the map
+            // filters its markers to group members) and surface a small
+            // action sheet for group-level operations (add member, leave).
+            // The Groups list view stays in place beneath the sheet.
             setState(() {
               _selectedRoom = room;
-              _selectedOption = SubscreenOption.groupDetails;
               _selectedLabel = room.name.split(':').length > 3
                   ? room.name.split(':')[3]
                   : room.name;
             });
             Provider.of<SelectedSubscreenProvider>(context, listen: false)
                 .setSelectedSubscreen('group:${room.roomId}');
+            _showGroupActionMenu(context, room);
           },
-        );
-      case SubscreenOption.groupDetails:
-        if (_selectedRoom != null) {
-          return GroupDetailsSubscreen(
-            roomService: _roomService,
-            userService: _userService,
-            userRepository: _userRepository,
-            sharingPreferencesRepository: sharingPreferencesRepository,
-            scrollController: scrollController,
-            room: _selectedRoom!,
-            onGroupLeft: _navigateToContacts,
-          );
-        }
-        return Center(
-          child: Text(
-            'No group selected',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-            ),
-          ),
         );
       case SubscreenOption.contacts:
       default:
@@ -1077,12 +1051,13 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
 
-  void _showGroupDetailsMenu(BuildContext context) {
-    if (_selectedRoom == null) return;
-
+  /// Bottom-sheet of per-group actions surfaced when the user taps a group
+  /// card. Replaces the old dedicated group-details subscreen; gives the
+  /// user a way to add a member, view history/markers, or leave the group
+  /// without leaving the Groups list view underneath.
+  void _showGroupActionMenu(BuildContext context, GridRoom.Room room) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final room = _selectedRoom!;
 
     // Get current members from the groups bloc
     final groupsState = context.read<GroupsBloc>().state;
@@ -1161,75 +1136,6 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     ),
                   ],
                 ),
-              ),
-
-              // Menu options - EXACT MATCH to GroupDetailsSubscreen menu
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'Group Settings',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.95,
-                      ),
-                      child: GroupProfileModal(
-                        room: room,
-                        roomService: _roomService,
-                        sharingPreferencesRepo: sharingPreferencesRepository,
-                        onMemberAdded: () {
-                          Navigator.pop(context);
-                          // Show add member modal
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => Container(
-                              constraints: BoxConstraints(
-                                maxHeight: MediaQuery.of(context).size.height * 0.95,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                              ),
-                              child: AddGroupMemberModal(
-                                roomId: room.roomId,
-                                groupName: room.name.split(':').length >= 5
-                                    ? room.name.split(':')[3]
-                                    : room.name,
-                                roomService: _roomService,
-                                userService: _userService,
-                                userRepository: _userRepository,
-                                onInviteSent: null,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
               ),
 
               // Add Member

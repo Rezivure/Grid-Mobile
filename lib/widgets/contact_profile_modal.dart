@@ -669,11 +669,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         ),
         const SizedBox(width: 10),
         Expanded(
+          // "Sharing windows" entry point. Previously this lived inside the
+          // group three-dot menu on the (now-removed) group details page —
+          // it's surfaced per-contact here so users can schedule when their
+          // location is shared with this specific contact.
           child: _ActionTile(
-            icon: Icons.notifications_none_rounded,
-            label: 'Alerts',
-            // TODO: needs backend
-            onTap: null,
+            icon: Icons.schedule_rounded,
+            label: 'Sharing',
+            onTap: _openAddSharingPreferenceModal,
           ),
         ),
       ],

@@ -1585,21 +1585,24 @@ class _AddFriendModalState extends State<AddFriendModal>
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: GridButton(
-                  label: _currentGroupStep == 3 ? 'Create group' : 'Next',
-                  icon: _currentGroupStep == 3
-                      ? Icons.check_rounded
-                      : Icons.arrow_forward_rounded,
-                  onPressed: _isProcessing
-                      ? null
-                      : (_currentGroupStep == 3
-                          ? (_canProceedFromStep(_currentGroupStep)
-                              ? _createGroup
-                              : null)
-                          : (_canProceedFromStep(_currentGroupStep)
-                              ? _nextGroupStep
-                              : null)),
-                ),
+                child: (_currentGroupStep == 3 && _isProcessing)
+                    ? const _LoadingButton()
+                    : GridButton(
+                        label:
+                            _currentGroupStep == 3 ? 'Create group' : 'Next',
+                        icon: _currentGroupStep == 3
+                            ? Icons.check_rounded
+                            : Icons.arrow_forward_rounded,
+                        onPressed: _isProcessing
+                            ? null
+                            : (_currentGroupStep == 3
+                                ? (_canProceedFromStep(_currentGroupStep)
+                                    ? _createGroup
+                                    : null)
+                                : (_canProceedFromStep(_currentGroupStep)
+                                    ? _nextGroupStep
+                                    : null)),
+                      ),
               ),
             ],
           ),
@@ -2216,6 +2219,47 @@ class _AddFriendModalState extends State<AddFriendModal>
         borderSide: const BorderSide(color: GridTokens.danger, width: 1.5),
       ),
       suffixIcon: suffix,
+    );
+  }
+}
+
+/// Disabled, loading-state mirror of [GridButton] primary style. Renders a
+/// mint [CircularProgressIndicator] in place of the label so users get
+/// immediate feedback on tap while the underlying async work runs. Outer
+/// dimensions match `GridButton(height: 52, expand: true)` so swapping in
+/// this widget doesn't cause layout jump.
+class _LoadingButton extends StatelessWidget {
+  const _LoadingButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: null,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            height: 52,
+            decoration: BoxDecoration(
+              color: GridTokens.surface2,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: GridTokens.mint, width: 1.5),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(GridTokens.mint),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

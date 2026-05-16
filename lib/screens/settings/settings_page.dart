@@ -74,6 +74,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _incognitoMode = false;
   bool _batterySaver = false;
   bool _autoPauseAtHome = false;
+  bool _homeLocationSet = false;
   String? _userID;
   String? _username;
   String? _localpart;
@@ -174,9 +175,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadAutoPauseAtHomeState() async {
     final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('home_location');
     setState(() {
       _autoPauseAtHome =
           prefs.getBool('auto_pause_at_home_enabled') ?? false;
+      _homeLocationSet = saved != null && saved.trim().isNotEmpty;
     });
   }
 
@@ -307,7 +310,49 @@ class _SettingsPageState extends State<SettingsPage> {
 
     await prefs.setBool('auto_pause_at_home_enabled', true);
     if (!mounted) return;
-    setState(() => _autoPauseAtHome = true);
+    setState(() {
+      _autoPauseAtHome = true;
+      _homeLocationSet = true;
+    });
+  }
+
+  /// Pushes the home-location picker so the user can re-pick their saved
+  /// home spot. Overwrites the `home_location` preference exactly the way
+  /// the initial set does.
+  Future<void> _changeHomeLocation() async {
+    final picked = await Navigator.of(context).push<LatLng>(
+      MaterialPageRoute(
+        builder: (_) => const HomeLocationPickerScreen(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'home_location',
+      '${picked.latitude},${picked.longitude}',
+    );
+    if (!mounted) return;
+    setState(() => _homeLocationSet = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Home location updated.')),
+    );
+  }
+
+  /// Clears the saved home location and turns the auto-pause toggle off,
+  /// since the feature can't work without a saved location.
+  Future<void> _clearHomeLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('home_location');
+    await prefs.setBool('auto_pause_at_home_enabled', false);
+    if (!mounted) return;
+    setState(() {
+      _homeLocationSet = false;
+      _autoPauseAtHome = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Home location cleared.')),
+    );
   }
 
   /// Shows the "Set your home location" bottom sheet and, if the user
@@ -2346,6 +2391,24 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: _onAutoPauseAtHomeToggled,
                   colorScheme: colorScheme,
                 ),
+                if (_autoPauseAtHome && _homeLocationSet) ...[
+                  _buildSettingsDivider(),
+                  _buildMenuOption(
+                    icon: Icons.edit_location_alt_outlined,
+                    title: 'Home location',
+                    trailing: 'Change',
+                    onTap: _changeHomeLocation,
+                    colorScheme: colorScheme,
+                  ),
+                  _buildSettingsDivider(),
+                  _buildMenuOption(
+                    icon: Icons.location_off_outlined,
+                    title: 'Clear home location',
+                    onTap: _clearHomeLocation,
+                    colorScheme: colorScheme,
+                    isDestructive: true,
+                  ),
+                ],
                 _buildSettingsDivider(),
                 _buildToggleOption(
                   icon: Icons.battery_saver_outlined,
