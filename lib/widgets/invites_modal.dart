@@ -335,8 +335,8 @@ class _InvitesModalState extends State<InvitesModal> {
         final roomId = (invite['roomId'] as String?) ?? 'Unknown';
         children.add(
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: _ExpiredInviteRow(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _ExpiredInviteCard(
               invite: invite,
               onRemove: () => _dismissExpiredInvite(context, roomId),
             ),
@@ -643,10 +643,11 @@ class _InviteShell extends StatelessWidget {
   }
 }
 
-/// Compact row for an expired group invite. No accept path — just a tag and
-/// an X button that drops the user from the dead matrix room.
-class _ExpiredInviteRow extends StatelessWidget {
-  const _ExpiredInviteRow({
+/// Card for an expired group invite — mirrors `_GroupInviteCard` so the user
+/// sees the same info (avatars, group name, inviter), but the Join path is
+/// replaced with a single Remove action that drops them from the dead room.
+class _ExpiredInviteCard extends StatelessWidget {
+  const _ExpiredInviteCard({
     required this.invite,
     required this.onRemove,
   });
@@ -656,7 +657,13 @@ class _ExpiredInviteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final inviterId = (invite['inviter'] as String?) ?? 'Unknown';
     final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
+    final inviterHandle = localpart(inviterId);
+    final inviterDisplay = inviterHandle.isEmpty
+        ? 'Someone'
+        : (inviterHandle[0].toUpperCase() + inviterHandle.substring(1));
+
     String groupName = 'Unnamed Group';
     final parts = roomName.split(':');
     if (parts.length > 3) {
@@ -665,74 +672,81 @@ class _ExpiredInviteRow extends StatelessWidget {
       groupName = roomName;
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: GridTokens.surface,
-        borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline, width: 1),
-      ),
-      child: Row(
+    return _InviteShell(
+      featured: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GridAvatar(name: groupName, size: 32),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              groupName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: GridTokens.fontUi,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.01,
-                color: GridTokens.text2,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StackedAvatars(seeds: [inviterHandle, groupName, roomName]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      groupName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: GridTokens.fontUi,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$inviterDisplay invited you',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: GridTokens.fontUi,
+                        fontSize: 13,
+                        color: GridTokens.text2,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: GridTokens.dangerSoft,
-              borderRadius: BorderRadius.circular(GridTokens.rSm),
-            ),
-            child: const GridMono(
-              'EXPIRED',
-              size: 10,
-              letterSpacing: 0.08,
-              color: GridTokens.danger,
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule_rounded,
+                size: 13,
+                color: GridTokens.danger,
+              ),
+              const SizedBox(width: 6),
+              const GridMono(
+                'expired',
+                uppercase: false,
+                size: 11,
+                letterSpacing: 0.04,
+                color: GridTokens.danger,
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
-          _XButton(onPressed: onRemove),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: 'Remove',
+                  icon: Icons.close_rounded,
+                  style: GridButtonStyle.secondary,
+                  height: 44,
+                  onPressed: onRemove,
+                ),
+              ),
+            ],
+          ),
         ],
-      ),
-    );
-  }
-}
-
-/// 32×32 ghost X button used to clear expired invites.
-class _XButton extends StatelessWidget {
-  const _XButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 32,
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        splashRadius: 18,
-        tooltip: 'Remove expired invite',
-        icon: const Icon(
-          Icons.close_rounded,
-          size: 18,
-          color: GridTokens.text3,
-        ),
-        onPressed: onPressed,
       ),
     );
   }
