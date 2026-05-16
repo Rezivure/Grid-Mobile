@@ -83,6 +83,25 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _codeController.addListener(_onCodeChanged);
   }
 
+  bool _didReadRouteArgs = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Welcome screen pushes us with `{isLoginFlow: true}` when the user
+    // tapped "I already have an account". Without this, _isLoginFlow
+    // stayed false and the screen rendered the username (signup) step.
+    if (_didReadRouteArgs) return;
+    _didReadRouteArgs = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args['isLoginFlow'] == true) {
+      setState(() {
+        _isLoginFlow = true;
+        _currentStep = 1; // land on passkey login, not username
+      });
+    }
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
