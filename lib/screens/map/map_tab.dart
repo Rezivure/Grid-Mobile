@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -181,7 +182,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   // Saved "home" location from Settings → auto-pause feature. Null if unset.
   LatLng? _homeLocation;
-  static const double _homeRadiusMeters = 100;
+  static const double _homeRadiusMeters = 25;
 
   @override
   void initState() {
@@ -1728,13 +1729,45 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     final pt = _screenPosFor(home);
                     final accent = inside ? GridTokens.mint : GridTokens.amber;
                     final label = inside ? 'AT HOME' : 'HOME';
+
+                    // Geofence radius circle in screen pixels — Web Mercator
+                    // resolution at 512-pixel world tiles (matches maplibre's
+                    // internal convention used elsewhere in this file).
+                    final zoom = _mapController.camera.zoom;
+                    final lat = home.latitude * math.pi / 180.0;
+                    final metersPerPixel =
+                        78271.516 * math.cos(lat) / math.pow(2, zoom);
+                    final radiusPx = metersPerPixel <= 0
+                        ? 0.0
+                        : _homeRadiusMeters / metersPerPixel;
+                    final diameter = radiusPx * 2;
+
                     return IgnorePointer(
                       ignoring: true,
                       child: Stack(
                         children: [
+                          // Geofence radius (under the pin).
+                          if (diameter > 4)
+                            Positioned(
+                              left: pt.dx - radiusPx,
+                              top: pt.dy - radiusPx,
+                              width: diameter,
+                              height: diameter,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: accent.withOpacity(0.12),
+                                  border: Border.all(
+                                    color: accent.withOpacity(0.55),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Pin + label.
                           Positioned(
                             left: pt.dx - 30,
-                            top: pt.dy - 30,
+                            top: pt.dy - 18,
                             width: 60,
                             height: 60,
                             child: Column(
@@ -2262,9 +2295,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
               ),
 
-            // Floating chrome — top-center "SHARING WITH N" pill.
-            // Anchored to the top safe-area inset so it clears the notch on
-            // every device without depending on a hardcoded offset.
+            // Top-center "SHARING WITH N" pill (with paused-state from notifier).
             Positioned(
               top: 60,
               left: 0,
@@ -2274,58 +2305,128 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
             ),
 
-            // Right rail — search / notifications / settings.
+            // Top-left: settings (menu) — the original UX.
             Positioned(
-              right: 16,
               top: 100,
-              child: SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    GridNavIconButton(
-                      icon: Icons.search_rounded,
-                      onPressed: () {
-                        // TODO: surface a search affordance (contacts, places).
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    GridNavIconButton(
-                      icon: Icons.notifications_outlined,
-                      badgeCount: _invitesBadgeCount(context),
-                      onPressed: () {
-                        context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    GridNavIconButton(
-                      icon: Icons.settings_outlined,
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => SettingsPage()),
-                      ).then((_) => _reloadHomeLocation()),
-                    ),
-                  ],
+              left: 16,
+              child: FloatingActionButton(
+                heroTag: 'settingsBtn',
+                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => SettingsPage()),
+                  ).then((_) => _reloadHomeLocation());
+                },
+                tooltip: 'Settings',
+                elevation: 2,
+                mini: true,
+                child: Icon(
+                  Icons.menu_rounded,
+                  color: isDarkMode ? colorScheme.primary : Colors.black,
                 ),
               ),
             ),
 
-            // Bottom-left center-on-me crosshair.
+            // Right column FAB stack — compass, ping, center-on-me, globe reset.
             Positioned(
-              left: 16,
-              bottom: MediaQuery.of(context).size.height * 1 / 4 + 16,
-              child: GridNavIconButton(
-                icon: Icons.my_location_rounded,
-                onPressed: () {
-                  final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
-                  if (target != null) {
-                    _mapController.move(target, 16.0);
-                  }
-                  setState(() {
-                    _followUser = true;
-                    _isAtResetView = false;
-                  });
-                },
+              right: 16,
+              top: 100,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildCompassButton(isDarkMode, colorScheme),
+                  const SizedBox(height: 10),
+                  // Ping
+                  FloatingActionButton(
+                    heroTag: 'pingBtn',
+                    backgroundColor: _isPingOnCooldown
+                        ? Colors.grey
+                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
+                    onPressed: _isPingOnCooldown ? null : _sendPing,
+                    tooltip: 'Ping',
+                    elevation: 2,
+                    mini: true,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (_isPingOnCooldown)
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              value: _pingCooldownSeconds / 10,
+                              strokeWidth: 2,
+                              color: isDarkMode ? colorScheme.primary : Colors.black,
+                              backgroundColor: isDarkMode
+                                  ? colorScheme.surfaceContainerHighest
+                                  : Colors.grey.withOpacity(0.3),
+                            ),
+                          )
+                        else
+                          Icon(
+                            Icons.sensors_rounded,
+                            color: isDarkMode ? colorScheme.primary : Colors.black,
+                            size: 22,
+                          ),
+                        if (_isPingOnCooldown)
+                          Text(
+                            '$_pingCooldownSeconds',
+                            style: TextStyle(
+                              color: isDarkMode ? colorScheme.primary : Colors.black,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Center on user
+                  FloatingActionButton(
+                    heroTag: 'center_on_user_fab',
+                    backgroundColor: _followUser
+                        ? colorScheme.primary
+                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
+                    onPressed: () {
+                      final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
+                      if (target != null) {
+                        _mapController.move(target, 16.0);
+                      }
+                      setState(() {
+                        _followUser = true;
+                        _isAtResetView = false;
+                      });
+                    },
+                    tooltip: 'Center on me',
+                    elevation: _followUser ? 6 : 2,
+                    mini: true,
+                    child: Icon(
+                      Icons.my_location_rounded,
+                      color: _followUser
+                          ? Colors.white
+                          : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Globe reset
+                  FloatingActionButton(
+                    heroTag: 'reset_view_fab',
+                    backgroundColor: _isAtResetView
+                        ? colorScheme.primary
+                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
+                    onPressed: _resetToInitialZoom,
+                    tooltip: 'Reset view',
+                    elevation: _isAtResetView ? 6 : 2,
+                    mini: true,
+                    child: Icon(
+                      Icons.public_rounded,
+                      color: _isAtResetView
+                          ? Colors.white
+                          : (isDarkMode ? colorScheme.primary : Colors.black),
+                    ),
+                  ),
+                ],
               ),
             ),
 
