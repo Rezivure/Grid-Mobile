@@ -292,7 +292,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                 child: SizedBox(
                   width: 300,
                   child: Text(
-                    'Share your location only with the people you choose — encrypted, on your own infrastructure if you want.',
+                    'Share your location only with the people you choose. End-to-end encrypted by default.',
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 15,

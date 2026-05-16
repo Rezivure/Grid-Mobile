@@ -321,8 +321,8 @@ class _OnboardingModalState extends State<OnboardingModal>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Location sharing without compromise — encrypted, '
-                  'private, on your own server if you want.',
+                  'Location sharing without compromise — '
+                  'encrypted, private, fully yours.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.getFont(
                     'Geist',

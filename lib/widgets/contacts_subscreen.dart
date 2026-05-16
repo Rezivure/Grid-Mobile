@@ -859,6 +859,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         tag: 'contact_menu_avatar_${contact.userId}',
                         child: GridAvatar(
                           name: contact.displayName,
+                          userId: contact.userId,
                           size: 48,
                           status: _avatarStatusFor(contact),
                           imageUrl: contact.avatarUrl,

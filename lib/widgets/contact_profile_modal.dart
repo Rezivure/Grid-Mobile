@@ -1,7 +1,10 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
@@ -10,6 +13,11 @@ import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../screens/map/grid_map_style.dart';
 
 import '../models/sharing_window.dart';
 import '../models/sharing_preferences.dart';
@@ -289,33 +297,39 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildMapHero() {
-    // We don't have a real map widget in scope here (no controller, no route
-    // service exposed to this modal), so we render a stylized dark surface
-    // that matches the design handoff's map aesthetic — a faint grid pattern
-    // plus the focused pin in the center, with a gradient fade to bg at the
-    // bottom edge.
+    // If we have an actual location for this contact, embed a tiny
+    // non-interactive MapLibre map centered on them. Otherwise fall back
+    // to the stylized dark surface + grid (which used to be the only
+    // thing rendered here).
+    final position =
+        Provider.of<UserLocationProvider>(context, listen: false)
+            .getUserLocation(widget.contact.userId);
     return SizedBox(
       height: 280,
       child: Stack(
         children: [
-          // Base surface
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [GridTokens.mapBg, GridTokens.mapLand],
-                ),
+          if (position != null)
+            Positioned.fill(child: _MapSnapshot(position: position))
+          else
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [GridTokens.mapBg, GridTokens.mapLand],
+                      ),
+                    ),
+                  ),
+                  CustomPaint(
+                    painter: _MapGridPainter(),
+                    size: Size.infinite,
+                  ),
+                ],
               ),
             ),
-          ),
-          // Faint grid overlay
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _MapGridPainter(),
-            ),
-          ),
           // Gradient fade at the bottom into bg, so the identity row floats.
           Positioned(
             left: 0,
@@ -383,7 +397,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           ),
         ),
         const SizedBox(height: 6),
-        // Pin: ringed avatar with downward tail
+        // Pin: ringed avatar with downward tail. Uses UserAvatarBloc so
+        // the contact's real photo (if any) shows up here too.
         SizedBox(
           width: 64,
           height: 80,
@@ -392,6 +407,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             children: [
               GridAvatar(
                 name: widget.contact.displayName,
+                userId: widget.contact.userId,
                 size: 48,
                 ring: true,
                 status: live ? GridAvatarStatus.live : GridAvatarStatus.paused,
@@ -484,7 +500,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   children: [
                     Flexible(
                       child: GridMono(
-                        '@$handle',
+                        handle.startsWith('@') ? handle : '@$handle',
                         uppercase: false,
                         size: 12,
                         color: GridTokens.text3,
@@ -555,77 +571,63 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         borderRadius: BorderRadius.circular(GridTokens.rLg),
         border: Border.all(color: GridTokens.mintSoft, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: GridTokens.mintSoft,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                alignment: Alignment.center,
-                child: const Icon(Icons.verified_user_rounded, size: 13, color: GridTokens.mint),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Mutual sharing',
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: GridTokens.mintSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.shield_outlined,
+              size: 18,
+              color: GridTokens.mint,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _alwaysShare
+                      ? 'Sharing with $firstName'
+                      : 'Paused with $firstName',
                   style: GoogleFonts.getFont(
                     'Geist',
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.01,
                     color: GridTokens.text,
                   ),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: GridTokens.mintSoft,
-                  borderRadius: BorderRadius.circular(999),
+                const SizedBox(height: 2),
+                Text(
+                  _alwaysShare
+                      ? 'End-to-end encrypted. Toggle off any time.'
+                      : '$firstName won\'t see your location until you turn it back on.',
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 12.5,
+                    color: GridTokens.text2,
+                    height: 1.35,
+                    letterSpacing: -0.005,
+                  ),
                 ),
-                child: GridMono('E2EE', color: GridTokens.mint, size: 9, letterSpacing: 0.12),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _ShareToggle(
-                  label: 'You',
-                  arrow: '→',
-                  other: firstName,
-                  value: _alwaysShare,
-                  onChanged: (value) async {
-                    // Wire to the existing share-prefs flow used by the
-                    // legacy "always share" switch — flips activeSharing on
-                    // the user's SharingPreferences row.
-                    setState(() => _alwaysShare = value);
-                    await _saveToDatabase();
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                // TODO: needs backend — there is no incoming-share toggle
-                // accessor on RoomService / SharingPreferencesRepository
-                // for the contact's direction toward us. Render as
-                // read-only "on" since the contact relationship exists.
-                child: _ShareToggle(
-                  label: firstName,
-                  arrow: '→',
-                  other: 'You',
-                  value: true,
-                  onChanged: null,
-                ),
-              ),
-            ],
+          const SizedBox(width: 10),
+          Switch.adaptive(
+            value: _alwaysShare,
+            activeColor: GridTokens.mint,
+            onChanged: (value) async {
+              setState(() => _alwaysShare = value);
+              await _saveToDatabase();
+            },
           ),
         ],
       ),
@@ -637,42 +639,30 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildActionGrid() {
+    // Stripped to the two actions the app actually supports today.
+    // Message + History are intentionally absent — Grid doesn't keep a
+    // per-contact message thread or location history yet, so showing
+    // them as disabled tiles was just teasing functionality that
+    // doesn't exist.
+    final position =
+        Provider.of<UserLocationProvider>(context, listen: false)
+            .getUserLocation(widget.contact.userId);
     return Row(
       children: [
         Expanded(
           child: _ActionTile(
-            icon: Icons.chat_bubble_outline_rounded,
-            label: 'Message',
-            // TODO: needs backend — no DM/chat surface wired into this
-            // widget. Wire to room_service.directMessage(...) when surfaced.
-            onTap: null,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _ActionTile(
-            icon: Icons.history_rounded,
-            label: 'History',
-            // TODO: needs backend — location history modal isn't routed
-            // from this widget. Wire when surfaced.
-            onTap: null,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _ActionTile(
             icon: Icons.alt_route_rounded,
             label: 'Route',
-            // TODO: needs backend
-            onTap: null,
+            onTap: position == null
+                ? null
+                : () => _openInMaps(
+                      lat: position.latitude,
+                      lng: position.longitude,
+                    ),
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          // "Sharing windows" entry point. Previously this lived inside the
-          // group three-dot menu on the (now-removed) group details page —
-          // it's surfaced per-contact here so users can schedule when their
-          // location is shared with this specific contact.
           child: _ActionTile(
             icon: Icons.schedule_rounded,
             label: 'Sharing',
@@ -681,6 +671,24 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         ),
       ],
     );
+  }
+
+  Future<void> _openInMaps({
+    required double lat,
+    required double lng,
+  }) async {
+    final iosUri = Uri.parse('maps://?q=$lat,$lng');
+    final fallbackUri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    try {
+      if (Platform.isIOS) {
+        if (await canLaunchUrl(iosUri)) {
+          await launchUrl(iosUri);
+          return;
+        }
+      }
+      await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -1515,4 +1523,46 @@ class _PinTailPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PinTailPainter old) => old.color != color;
+}
+
+/// Non-interactive MapLibre snapshot used as the hero background of the
+/// contact profile sheet. Uses the same Protomaps style as the main map
+/// so the dark / light theming matches.
+class _MapSnapshot extends StatefulWidget {
+  const _MapSnapshot({required this.position});
+  final dynamic position;
+
+  @override
+  State<_MapSnapshot> createState() => _MapSnapshotState();
+}
+
+class _MapSnapshotState extends State<_MapSnapshot> {
+  String? _styleJson;
+  bool? _isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_isDark != isDark) {
+      _isDark = isDark;
+      _styleJson = buildGridMapStyle(dark: isDark);
+    }
+    final pos = widget.position;
+    return IgnorePointer(
+      child: ml.MapLibreMap(
+        styleString: _styleJson!,
+        initialCameraPosition: ml.CameraPosition(
+          target: ml.LatLng(pos.latitude, pos.longitude),
+          zoom: 14,
+        ),
+        myLocationEnabled: false,
+        rotateGesturesEnabled: false,
+        tiltGesturesEnabled: false,
+        zoomGesturesEnabled: false,
+        scrollGesturesEnabled: false,
+        compassEnabled: false,
+        attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+      ),
+    );
+  }
 }
