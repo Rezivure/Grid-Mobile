@@ -18,9 +18,305 @@ class InvitesModal extends StatefulWidget {
   final Future<void> Function() onInviteHandled;
 
   InvitesModal({required this.onInviteHandled, required this.roomService});
-  
+
   @override
   _InvitesModalState createState() => _InvitesModalState();
+}
+
+/// Inline (non-modal) version of the invites list used as the third
+/// subscreen in the map sheet's segmented control. Renders only the
+/// list + empty state — the outer sheet supplies the scroll controller
+/// and any chrome (handle bar, header).
+class InvitesSubscreen extends StatefulWidget {
+  const InvitesSubscreen({
+    super.key,
+    required this.scrollController,
+    required this.roomService,
+    required this.onInviteHandled,
+  });
+
+  final ScrollController scrollController;
+  final RoomService roomService;
+  final Future<void> Function() onInviteHandled;
+
+  @override
+  State<InvitesSubscreen> createState() => _InvitesSubscreenState();
+}
+
+class _InvitesSubscreenState extends State<InvitesSubscreen> {
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<InvitationsBloc, InvitationsState>(
+      buildWhen: (_, __) => true,
+      builder: (context, state) {
+        final invites = state is InvitationsLoaded ? state.invitations : [];
+
+        if (invites.isEmpty) {
+          return ListView(
+            controller: widget.scrollController,
+            padding: const EdgeInsets.symmetric(vertical: 48),
+            children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: GridTokens.mintFaint,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.mail_outline_rounded,
+                          color: GridTokens.mint,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Inbox is quiet.',
+                        style: TextStyle(
+                          fontFamily: GridTokens.fontUi,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.015,
+                          color: GridTokens.text,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'New friend requests and group invites land here first.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: GridTokens.fontUi,
+                          fontSize: 13,
+                          height: 1.45,
+                          color: GridTokens.text2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return _buildInvitesList(
+          context: context,
+          invites: invites,
+          handleInviteTap: (ctx, roomId, roomName, inviterId, isDirect) {
+            _routeInviteTap(
+              context: ctx,
+              roomId: roomId,
+              roomName: roomName,
+              inviterId: inviterId,
+              isDirectInvite: isDirect,
+              roomService: widget.roomService,
+              onInviteHandled: widget.onInviteHandled,
+              onRefresh: () {
+                if (mounted) setState(() {});
+              },
+            );
+          },
+          scrollController: widget.scrollController,
+          roomService: widget.roomService,
+          onInviteHandled: widget.onInviteHandled,
+          onRefresh: () {
+            if (mounted) setState(() {});
+          },
+        );
+      },
+    );
+  }
+}
+
+void _routeInviteTap({
+  required BuildContext context,
+  required String roomId,
+  required String roomName,
+  required String inviterId,
+  required bool isDirectInvite,
+  required RoomService roomService,
+  required Future<void> Function() onInviteHandled,
+  required VoidCallback onRefresh,
+}) {
+  if (isDirectInvite) {
+    final displayName =
+        inviterId.split(':').first.replaceFirst('@', '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FriendRequestModal(
+        userId: inviterId,
+        displayName: displayName,
+        roomId: roomId,
+        roomService: roomService,
+        onResponse: () async {
+          onRefresh();
+          await onInviteHandled();
+        },
+      ),
+    );
+  } else {
+    int expiration = -1;
+    String groupName = 'Unnamed Group';
+    final parts = roomName.split(':');
+    if (parts.length > 3) {
+      expiration = int.tryParse(parts[2]) ?? -1;
+      groupName = parts[3];
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => GroupInvitationModal(
+        roomId: roomId,
+        groupName: groupName,
+        inviter: inviterId,
+        expiration: expiration,
+        roomService: roomService,
+        refreshCallback: () async {
+          onRefresh();
+          await onInviteHandled();
+        },
+      ),
+    );
+  }
+}
+
+Widget _buildInvitesList({
+  required BuildContext context,
+  required List<dynamic> invites,
+  required void Function(
+    BuildContext context,
+    String roomId,
+    String roomName,
+    String inviterId,
+    bool isDirectInvite,
+  ) handleInviteTap,
+  required ScrollController? scrollController,
+  required RoomService roomService,
+  required Future<void> Function() onInviteHandled,
+  required VoidCallback onRefresh,
+}) {
+  final directInvites = <Map<String, dynamic>>[];
+  final groupInvites = <Map<String, dynamic>>[];
+  final expiredGroupInvites = <Map<String, dynamic>>[];
+  final nowEpoch = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  for (final raw in invites) {
+    final invite = Map<String, dynamic>.from(raw as Map);
+    final roomName = (invite['roomName'] as String?) ?? 'Unnamed Room';
+    if (roomName.startsWith('Grid:Direct')) {
+      directInvites.add(invite);
+    } else {
+      final parts = roomName.split(':');
+      int expiration = -1;
+      if (parts.length > 3) {
+        expiration = int.tryParse(parts[2]) ?? -1;
+      }
+      if (expiration != -1 && expiration <= nowEpoch) {
+        expiredGroupInvites.add(invite);
+      } else {
+        groupInvites.add(invite);
+      }
+    }
+  }
+
+  final Object? featuredId =
+      invites.isNotEmpty ? (invites.first as Map)['roomId'] : null;
+  final children = <Widget>[];
+
+  if (directInvites.isNotEmpty) {
+    children.add(const GridSectionHeader(text: 'FROM PEOPLE'));
+    for (final invite in directInvites) {
+      children.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: _PersonInviteCard(
+          invite: invite,
+          featured: invite['roomId'] == featuredId,
+          onAccept: () => handleInviteTap(
+            context,
+            (invite['roomId'] as String?) ?? 'Unknown',
+            (invite['roomName'] as String?) ?? 'Unnamed Room',
+            (invite['inviter'] as String?) ?? 'Unknown',
+            true,
+          ),
+          onDecline: () => handleInviteTap(
+            context,
+            (invite['roomId'] as String?) ?? 'Unknown',
+            (invite['roomName'] as String?) ?? 'Unnamed Room',
+            (invite['inviter'] as String?) ?? 'Unknown',
+            true,
+          ),
+        ),
+      ));
+    }
+  }
+
+  if (groupInvites.isNotEmpty) {
+    children.add(const GridSectionHeader(text: 'GROUP INVITES'));
+    for (final invite in groupInvites) {
+      children.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: _GroupInviteCard(
+          invite: invite,
+          featured: invite['roomId'] == featuredId,
+          onJoin: () => handleInviteTap(
+            context,
+            (invite['roomId'] as String?) ?? 'Unknown',
+            (invite['roomName'] as String?) ?? 'Unnamed Room',
+            (invite['inviter'] as String?) ?? 'Unknown',
+            false,
+          ),
+          onDismiss: () => handleInviteTap(
+            context,
+            (invite['roomId'] as String?) ?? 'Unknown',
+            (invite['roomName'] as String?) ?? 'Unnamed Room',
+            (invite['inviter'] as String?) ?? 'Unknown',
+            false,
+          ),
+        ),
+      ));
+    }
+  }
+
+  if (expiredGroupInvites.isNotEmpty) {
+    children.add(const GridSectionHeader(text: 'EXPIRED'));
+    for (final invite in expiredGroupInvites) {
+      final roomId = (invite['roomId'] as String?) ?? 'Unknown';
+      children.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: _ExpiredInviteCard(
+          invite: invite,
+          onRemove: () async {
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            final ok = await roomService.leaveRoom(roomId);
+            if (ok) {
+              messenger?.showSnackBar(const SnackBar(
+                  content: Text('Expired invite removed')));
+            } else {
+              messenger?.showSnackBar(const SnackBar(
+                  content:
+                      Text('Could not remove invite — try again')));
+            }
+            await onInviteHandled();
+            onRefresh();
+          },
+        ),
+      ));
+    }
+  }
+
+  return ListView(
+    controller: scrollController,
+    padding: const EdgeInsets.only(top: 8, bottom: 24),
+    children: children,
+  );
 }
 
 class _InvitesModalState extends State<InvitesModal> {

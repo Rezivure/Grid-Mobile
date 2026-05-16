@@ -22,11 +22,13 @@ import 'package:grid_frontend/widgets/grid/grid_button.dart';
 class GroupsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
   final void Function(gr.Room room)? onGroupSelected;
+  final void Function(gr.Room room)? onGroupMenu;
 
   const GroupsSubscreen({
     super.key,
     required this.scrollController,
     this.onGroupSelected,
+    this.onGroupMenu,
   });
 
   @override
@@ -108,6 +110,9 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
                 isTrip: _isTripGroup(room),
                 featured: index == 0,
                 onTap: () => widget.onGroupSelected?.call(room),
+                onMenu: widget.onGroupMenu == null
+                    ? null
+                    : () => widget.onGroupMenu!.call(room),
               ),
             );
           },
@@ -219,6 +224,7 @@ class _GroupCard extends StatelessWidget {
     required this.isTrip,
     required this.featured,
     required this.onTap,
+    this.onMenu,
   });
 
   final String name;
@@ -229,6 +235,7 @@ class _GroupCard extends StatelessWidget {
   final bool isTrip;
   final bool featured;
   final VoidCallback onTap;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -291,6 +298,10 @@ class _GroupCard extends StatelessWidget {
                                   label: 'TRIP',
                                   kind: GridStatusKind.trip,
                                 ),
+                              ],
+                              if (onMenu != null) ...[
+                                const SizedBox(width: 6),
+                                _MenuChip(onTap: onMenu!),
                               ],
                             ],
                           ),
@@ -386,11 +397,45 @@ class _StackedAvatars extends StatelessWidget {
               top: 0,
               child: GridAvatar(
                 name: visible[i],
+                userId: visible[i],
                 size: _avatarSize,
                 padding: 3,
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// 28×28 inline … button used next to a group name to open its action
+/// menu without entering the group's details view.
+class _MenuChip extends StatelessWidget {
+  const _MenuChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rSm),
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rSm),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: const Icon(
+            Icons.more_horiz_rounded,
+            size: 16,
+            color: GridTokens.text2,
+          ),
+        ),
       ),
     );
   }

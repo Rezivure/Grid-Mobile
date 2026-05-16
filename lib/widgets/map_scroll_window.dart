@@ -17,8 +17,7 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
-import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
@@ -334,7 +333,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     // back to People on group-tap.
     final bool isGroupsView = _selectedOption == SubscreenOption.groups ||
         _selectedOption == SubscreenOption.groupDetails;
-    final int selected = isGroupsView ? 1 : 0;
+    final bool isInvitesView = _selectedOption == SubscreenOption.invites;
+    final int selected =
+        isInvitesView ? 2 : (isGroupsView ? 1 : 0);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
@@ -357,21 +358,20 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     ),
                   ],
                   onChanged: (i) {
-                    // Invites stays a modal — tapping the pill opens it
-                    // without changing the underlying subscreen selection.
-                    if (i == 2) {
-                      _showInvitesModal(context);
-                      return;
-                    }
                     setState(() {
-                      _selectedOption = i == 1
-                          ? SubscreenOption.groups
-                          : SubscreenOption.contacts;
+                      _selectedOption = switch (i) {
+                        2 => SubscreenOption.invites,
+                        1 => SubscreenOption.groups,
+                        _ => SubscreenOption.contacts,
+                      };
                     });
                     Provider.of<SelectedSubscreenProvider>(context,
                             listen: false)
-                        .setSelectedSubscreen(
-                            i == 1 ? 'groups' : 'contacts');
+                        .setSelectedSubscreen(switch (i) {
+                      2 => 'invites',
+                      1 => 'groups',
+                      _ => 'contacts',
+                    });
                   },
                 ),
               ),
@@ -937,6 +937,14 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             Provider.of<SelectedSubscreenProvider>(context, listen: false)
                 .setSelectedSubscreen('group:${room.roomId}');
           },
+          onGroupMenu: (room) {
+            // Set selection so existing menu items (which read _selectedRoom)
+            // operate on the right group, then surface the action menu.
+            setState(() {
+              _selectedRoom = room;
+            });
+            _showGroupDetailsMenu(context, room);
+          },
         );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
@@ -957,6 +965,16 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
           ),
+        );
+      case SubscreenOption.invites:
+        return InvitesSubscreen(
+          scrollController: scrollController,
+          roomService: _roomService,
+          onInviteHandled: () async {
+            try {
+              context.read<InvitationsBloc>().add(LoadInvitations());
+            } catch (_) {}
+          },
         );
       case SubscreenOption.contacts:
       default:
@@ -1090,12 +1108,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
 
-  void _showGroupDetailsMenu(BuildContext context) {
-    if (_selectedRoom == null) return;
+  void _showGroupDetailsMenu(BuildContext context, [GridRoom.Room? roomOverride]) {
+    final room = roomOverride ?? _selectedRoom;
+    if (room == null) return;
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final room = _selectedRoom!;
 
     // Get current members from the groups bloc
     final groupsState = context.read<GroupsBloc>().state;
