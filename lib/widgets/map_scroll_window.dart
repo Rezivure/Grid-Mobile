@@ -343,35 +343,26 @@ class _MapScrollWindowState extends State<MapScrollWindow>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Expanded(
-                child: GridSegmented(
-                  selected: selected,
-                  tabs: [
-                    GridSegmentedTab(label: 'People', badgeCount: contactCount),
-                    GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
-                  ],
-                  onChanged: (i) {
-                    setState(() {
-                      _selectedOption = i == 1
-                          ? SubscreenOption.groups
-                          : SubscreenOption.contacts;
-                    });
-                    Provider.of<SelectedSubscreenProvider>(context, listen: false)
-                        .setSelectedSubscreen(i == 1 ? 'groups' : 'contacts');
-                  },
-                ),
+              GridSegmented(
+                selected: selected,
+                tabs: [
+                  GridSegmentedTab(label: 'People', badgeCount: contactCount),
+                  GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
+                ],
+                onChanged: (i) {
+                  setState(() {
+                    _selectedOption = i == 1
+                        ? SubscreenOption.groups
+                        : SubscreenOption.contacts;
+                  });
+                  Provider.of<SelectedSubscreenProvider>(context, listen: false)
+                      .setSelectedSubscreen(i == 1 ? 'groups' : 'contacts');
+                },
               ),
-              // The People tab has its own '...' overflow for add-friend /
-              // etc actions, so the trailing chip here just clutters the row
-              // and reads as a stray '+'. Only show it on the Groups view
-              // (and its group-details child) where there's no other entry
-              // point to the invites modal from the sheet header.
-              if (isGroupsView) ...[
-                const SizedBox(width: 10),
-                _invitesChip(inviteCount),
-              ],
+              const SizedBox(width: 10),
+              _invitesChip(inviteCount),
             ],
           ),
           // Search field lives inside each subscreen — don't render here.

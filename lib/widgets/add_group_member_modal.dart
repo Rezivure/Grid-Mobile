@@ -555,26 +555,14 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       color: GridTokens.text3,
     );
     if (isCustomHomeserver()) {
-      return RichText(
-        text: TextSpan(
-          style: body,
-          children: [
-            const TextSpan(text: 'Full Matrix ID  ·  '),
-            TextSpan(text: 'user:domain.com', style: mono),
-          ],
-        ),
+      return Text(
+        'Enter the full Matrix ID (user:domain).',
+        style: body,
       );
     }
-    return RichText(
-      text: TextSpan(
-        style: body,
-        children: [
-          const TextSpan(text: 'Just the handle  ·  no '),
-          TextSpan(text: '@', style: mono),
-          const TextSpan(text: ', no '),
-          TextSpan(text: ':homeserver', style: mono),
-        ],
-      ),
+    return Text(
+      'Enter your friend\'s handle.',
+      style: body,
     );
   }
 
@@ -610,31 +598,14 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     );
   }
 
-  // ── Secondary row: scan QR, share invite ────────────────────────────────
+  // ── Secondary row: scan QR ──────────────────────────────────────────────
 
   Widget _buildSecondaryRow() {
-    final actions = <Widget>[
-      Expanded(
-        child: _SecondaryAction(
-          icon: Icons.qr_code_scanner_rounded,
-          label: 'Scan QR',
-          onTap: _scanQRCode,
-        ),
-      ),
-    ];
-    if (!isCustomHomeserver()) {
-      actions.addAll([
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SecondaryAction(
-            icon: Icons.ios_share_rounded,
-            label: 'Share invite',
-            onTap: _shareGroupInvite,
-          ),
-        ),
-      ]);
-    }
-    return Row(children: actions);
+    return _SecondaryAction(
+      icon: Icons.qr_code_scanner_rounded,
+      label: 'Scan QR',
+      onTap: _scanQRCode,
+    );
   }
 
   // ── QR Scanner panel ────────────────────────────────────────────────────

@@ -1367,7 +1367,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final memberStatus = state.getMemberStatus(user.userId);
     final timeAgoText = userLocation != null
         ? TimeAgoFormatter.format(userLocation.timestamp)
-        : 'Off Grid';
+        : 'Offline';
 
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = isCustomHomeserver(currentHomeserver);
@@ -1398,7 +1398,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     if (isInvited) {
       statusKind = GridStatusKind.paused;
       statusLabel = 'INVITED';
-    } else if (timeAgoText == 'Off Grid') {
+    } else if (timeAgoText == 'Offline') {
       // no pill — offline avatar dot conveys it
     } else if (isLive) {
       // live badge is already shown next to the name
@@ -1424,7 +1424,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
             placeLine: _placeLine(timeAgoText, isInvited),
             timeText: isInvited
                 ? null
-                : (timeAgoText == 'Off Grid' ? null : timeAgoText),
+                : (timeAgoText == 'Offline' ? null : timeAgoText),
             distanceText: null,
             statusKind: statusKind,
             statusLabel: statusLabel,
@@ -1439,7 +1439,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
   String? _placeLine(String timeAgoText, bool isInvited) {
     if (isInvited) return 'pending invite';
-    if (timeAgoText == 'Off Grid') return 'off grid';
+    if (timeAgoText == 'Offline') return 'offline';
     return null;
   }
 
@@ -1601,32 +1601,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     _buildHeader(liveCount),
                     if (autoStopCard != null) autoStopCard,
                     const SizedBox(height: 4),
-                    GridSectionHeader(
-                      text: 'MEMBERS',
-                      trailing: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: _showAddGroupMemberModal,
-                          borderRadius:
-                              BorderRadius.circular(GridTokens.rSm),
-                          child: Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: GridTokens.mintFaint,
-                              borderRadius: BorderRadius.circular(
-                                  GridTokens.rSm),
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: GridTokens.mint,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    const GridSectionHeader(text: 'MEMBERS'),
                     // Only show the search bar once the group has enough
                     // members for it to be useful — keeps the empty / small
                     // group state cleaner. (`6` is roughly the visible row
@@ -1655,9 +1630,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     );
                   },
                 ),
-              SliverToBoxAdapter(
-                child: _buildGroupActions(),
-              ),
             ],
           ),
         );

@@ -625,61 +625,46 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   }
 
   Widget _buildContent() {
-    return Column(
-      children: [
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadPasskeys,
-            color: GridTokens.mint,
-            backgroundColor: GridTokens.surface,
-            strokeWidth: 2.5,
-            displacement: 20,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                _buildInfoCard(),
-                const SizedBox(height: 8),
-                GridSectionHeader(
-                  text: 'YOUR PASSKEYS',
-                  trailing: _passkeys.isEmpty
-                      ? null
-                      : GridMono(
-                          '${_passkeys.length} ACTIVE',
-                          color: GridTokens.text3,
-                          size: 10.5,
-                          letterSpacing: 0.12,
-                        ),
+    return RefreshIndicator(
+      onRefresh: _loadPasskeys,
+      color: GridTokens.mint,
+      backgroundColor: GridTokens.surface,
+      strokeWidth: 2.5,
+      displacement: 20,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          _buildInfoCard(),
+          const SizedBox(height: 8),
+          GridSectionHeader(
+            text: 'YOUR PASSKEYS',
+            trailing: _passkeys.isEmpty
+                ? null
+                : GridMono(
+                    '${_passkeys.length} ACTIVE',
+                    color: GridTokens.text3,
+                    size: 10.5,
+                    letterSpacing: 0.12,
+                  ),
+          ),
+          if (_passkeys.isEmpty)
+            _buildEmptyState()
+          else
+            ..._passkeys.asMap().entries.map((entry) {
+              final isFirst = entry.key == 0;
+              return Padding(
+                padding: EdgeInsets.only(
+                  top: entry.key == 0 ? 4 : 10,
                 ),
-                if (_passkeys.isEmpty)
-                  _buildEmptyState()
-                else
-                  ..._passkeys.asMap().entries.map((entry) {
-                    final isFirst = entry.key == 0;
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        top: entry.key == 0 ? 4 : 10,
-                      ),
-                      child: _buildPasskeyCard(
-                        entry.value,
-                        isCurrentDevice: isFirst,
-                      ),
-                    );
-                  }),
-              ],
-            ),
-          ),
-        ),
-        SafeArea(
-          top: false,
-          minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: GridButton(
-            label: 'Add a passkey',
-            icon: Icons.add,
-            onPressed: _addPasskey,
-          ),
-        ),
-      ],
+                child: _buildPasskeyCard(
+                  entry.value,
+                  isCurrentDevice: isFirst,
+                ),
+              );
+            }),
+        ],
+      ),
     );
   }
 

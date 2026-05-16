@@ -8,6 +8,7 @@ import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
@@ -38,7 +39,7 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
-import 'package:grid_frontend/screens/settings/developer_settings_screen.dart';
+import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:io' show Platform;
@@ -81,6 +82,32 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _cachedAvatarUri; // Track the URI to avoid re-downloading
   bool _hasLoadedAvatar = false; // Track if we've attempted to load avatar
   int _avatarUpdateCounter = 0; // Force UserAvatar widget rebuild
+
+  // Hidden dev-tools easter egg: 5 taps on the footer within a 3s rolling
+  // window opens the Developer Tools screen.
+  int _devTapCount = 0;
+  DateTime? _lastDevTapAt;
+
+  void _onFooterTapped() {
+    final now = DateTime.now();
+    if (_lastDevTapAt != null &&
+        now.difference(_lastDevTapAt!) <= const Duration(seconds: 3)) {
+      _devTapCount += 1;
+    } else {
+      _devTapCount = 1;
+    }
+    _lastDevTapAt = now;
+    if (_devTapCount >= 5) {
+      _devTapCount = 0;
+      _lastDevTapAt = null;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DeveloperToolsScreen(),
+        ),
+      );
+    }
+  }
 
 
   @override
@@ -216,13 +243,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
+    final sharingState = context.read<SharingStateNotifier>();
     final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       _incognitoMode = value;
     });
 
+    // Keep the pref-write so on-disk state stays correct even if the
+    // notifier write races; setPaused() also writes the same key.
     await prefs.setBool('incognito_mode', value);
+    await sharingState.setPaused(value);
 
     if (value) {
       locationManager.stopTracking();
@@ -2377,21 +2408,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.bug_report_outlined,
-                  title: 'Debug logging',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const DeveloperSettingsScreen(),
-                      ),
-                    );
-                  },
-                  colorScheme: colorScheme,
-                ),
-                _buildSettingsDivider(),
-                _buildMenuOption(
                   icon: Icons.logout_rounded,
                   title: 'Sign out',
                   onTap: _logout,
@@ -2413,31 +2429,36 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 28),
 
             // Footer: mono "Grid vX.X · build XXX" with Grid mark.
+            // Easter egg: 5 quick taps opens the hidden Developer Tools screen.
             Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: GridTokens.mint.withOpacity(0.18),
-                      border: Border.all(
-                        color: GridTokens.mint,
-                        width: 1.4,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _onFooterTapped,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: GridTokens.mint.withOpacity(0.18),
+                        border: Border.all(
+                          color: GridTokens.mint,
+                          width: 1.4,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GridMono(
-                    _buildFooterText(),
-                    color: GridTokens.text3,
-                    size: 11,
-                    letterSpacing: 0.04,
-                    uppercase: false,
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    GridMono(
+                      _buildFooterText(),
+                      color: GridTokens.text3,
+                      size: 11,
+                      letterSpacing: 0.04,
+                      uppercase: false,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -2479,12 +2500,9 @@ class _SettingsPageState extends State<SettingsPage> {
   // Helper Methods for New UI
   Widget _buildProfileSection(ThemeData theme, ColorScheme colorScheme) {
     final client = Provider.of<Client>(context, listen: false);
-    final isCustom = isCustomHomeserver();
     final handle = _username ?? '';
     final handlePrefix = handle.startsWith('@') ? handle : '@$handle';
-    final handleLine = isCustom
-        ? handlePrefix
-        : '$handlePrefix · grid.cloud';
+    final handleLine = handlePrefix;
 
     return Container(
       margin: const EdgeInsets.only(top: 8),

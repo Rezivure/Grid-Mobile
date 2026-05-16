@@ -42,6 +42,7 @@ import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/widgets/onboarding_modal.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
@@ -178,12 +179,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // SharedPreferences keys
   static const String _mapStyleKey = 'selected_map_style';
 
+  // Saved "home" location from Settings → auto-pause feature. Null if unset.
+  LatLng? _homeLocation;
+  static const double _homeRadiusMeters = 100;
+
   @override
   void initState() {
     super.initState();
     print('[MapTab] Initializing - hasInitialized: $_hasInitialized');
     WidgetsBinding.instance.addObserver(this);
     _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+
+    // Load saved home location (set in Settings).
+    _reloadHomeLocation();
 
     // Check if app was properly initialized
     _checkAndInitialize().then((_) {
@@ -1277,52 +1285,66 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   /// "SHARING WITH N" pill rendered top-center over the map.
+  ///
+  /// When the user has paused sharing (incognito on), the mint glow dot
+  /// is swapped for a purple dot with no glow and the label reads
+  /// "SHARING PAUSED" instead of the contact count.
   Widget _buildSharingPill() {
     return BlocBuilder<MapBloc, MapState>(
       buildWhen: (p, c) => p.userLocations.length != c.userLocations.length,
       builder: (context, state) {
         final count = state.userLocations.length;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: GridTokens.surface.withOpacity(0.92),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: GridTokens.hairlineStrong),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.4),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+        return Consumer<SharingStateNotifier>(
+          builder: (context, sharingState, _) {
+            final paused = sharingState.isPaused;
+            final dotColor = paused ? GridTokens.paused : GridTokens.mint;
+            final textColor = paused ? GridTokens.paused : GridTokens.text;
+            final label = paused ? 'SHARING PAUSED' : 'SHARING WITH $count';
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: GridTokens.surface.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: GridTokens.hairlineStrong),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: GridTokens.mint,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: GridTokens.mint.withOpacity(0.55),
-                      blurRadius: 6,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                      boxShadow: paused
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: GridTokens.mint.withOpacity(0.55),
+                                blurRadius: 6,
+                              ),
+                            ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 7),
+                  GridMono(
+                    label,
+                    color: textColor,
+                    size: 10.5,
+                    letterSpacing: 0.1,
+                    weight: FontWeight.w600,
+                  ),
+                ],
               ),
-              const SizedBox(width: 7),
-              GridMono(
-                'SHARING WITH $count',
-                color: GridTokens.text,
-                size: 10.5,
-                letterSpacing: 0.1,
-                weight: FontWeight.w600,
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1390,6 +1412,35 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   Offset _screenPosFor(LatLng p) =>
       _markerScreenPositions[_latLngKey(p)] ??
       _mapController.camera.latLngToScreenPoint(p);
+
+  /// Reload the "home" location from SharedPreferences (key: `home_location`,
+  /// format `"lat,lng"`). Called on init and after returning from Settings.
+  Future<void> _reloadHomeLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('home_location');
+      if (raw == null || raw.isEmpty) {
+        if (_homeLocation != null && mounted) {
+          setState(() => _homeLocation = null);
+        }
+        return;
+      }
+      final parts = raw.split(',');
+      if (parts.length != 2) return;
+      final lat = double.tryParse(parts[0].trim());
+      final lng = double.tryParse(parts[1].trim());
+      if (lat == null || lng == null) return;
+      final parsed = LatLng(lat, lng);
+      if (!mounted) return;
+      if (_homeLocation == null ||
+          _homeLocation!.latitude != parsed.latitude ||
+          _homeLocation!.longitude != parsed.longitude) {
+        setState(() => _homeLocation = parsed);
+      }
+    } catch (_) {
+      // Swallow — pref-read failure shouldn't break the map.
+    }
+  }
 
   void _onMarkerTap(String userId, LatLng position) async {
     // Update map state with selected user
@@ -1657,6 +1708,79 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   },
                   onCameraTrackingDismissed: () {
                     if (_followUser) setState(() => _followUser = false);
+                  },
+                ),
+                // Home-location pin overlay (under user-location markers).
+                Builder(
+                  builder: (context) {
+                    if (!_isMapReady || _homeLocation == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final home = _homeLocation!;
+                    final current = _locationManager?.currentLatLng;
+                    final inside = current != null &&
+                        const Distance().as(
+                              LengthUnit.Meter,
+                              home,
+                              current,
+                            ) <=
+                            _homeRadiusMeters;
+                    final pt = _screenPosFor(home);
+                    final accent = inside ? GridTokens.mint : GridTokens.amber;
+                    final label = inside ? 'AT HOME' : 'HOME';
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: pt.dx - 30,
+                            top: pt.dy - 30,
+                            width: 60,
+                            height: 60,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: GridTokens.amberSoft,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: GridTokens.amber,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (inside
+                                                ? GridTokens.mint
+                                                : Colors.white)
+                                            .withOpacity(inside ? 0.55 : 0.85),
+                                        blurRadius: inside ? 12 : 6,
+                                        spreadRadius: inside ? 1 : 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.home_rounded,
+                                    size: 20,
+                                    color: accent,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                GridMono(
+                                  label,
+                                  color: accent,
+                                  size: 9,
+                                  letterSpacing: 0.4,
+                                  weight: FontWeight.w700,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
                   },
                 ),
                 // User-location markers (Stack overlay).
@@ -2142,60 +2266,54 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             // Anchored to the top safe-area inset so it clears the notch on
             // every device without depending on a hardcoded offset.
             Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
+              top: 60,
               left: 0,
               right: 0,
-              child: Center(child: _buildSharingPill()),
+              child: SafeArea(
+                child: Center(child: _buildSharingPill()),
+              ),
             ),
 
             // Right rail — search / notifications / settings.
-            // Sits just below the pill (pill is ~28px tall + 8px top inset
-            // padding + 20px gap) and uses the top safe-area inset directly so
-            // the rail never collides with the status bar / notch.
             Positioned(
               right: 16,
-              top: MediaQuery.of(context).padding.top + 56,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  GridNavIconButton(
-                    icon: Icons.search_rounded,
-                    onPressed: () {
-                      // TODO: surface a search affordance (contacts, places).
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  GridNavIconButton(
-                    icon: Icons.notifications_outlined,
-                    badgeCount: _invitesBadgeCount(context),
-                    onPressed: () {
-                      // Existing invites surface — keeps current navigation.
-                      context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  GridNavIconButton(
-                    icon: Icons.settings_outlined,
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => SettingsPage()),
+              top: 100,
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    GridNavIconButton(
+                      icon: Icons.search_rounded,
+                      onPressed: () {
+                        // TODO: surface a search affordance (contacts, places).
+                      },
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    GridNavIconButton(
+                      icon: Icons.notifications_outlined,
+                      badgeCount: _invitesBadgeCount(context),
+                      onPressed: () {
+                        context.read<SelectedSubscreenProvider>().setSelectedSubscreen('invites');
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    GridNavIconButton(
+                      icon: Icons.settings_outlined,
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SettingsPage()),
+                      ).then((_) => _reloadHomeLocation()),
+                    ),
+                  ],
+                ),
               ),
             ),
 
             // Bottom-left center-on-me crosshair.
-            // The MapScrollWindow's DraggableScrollableSheet collapses at
-            // initialChildSize = 0.45 of screen height, so anchor this button
-            // just above that collapsed top edge (~12px breathing room) so it
-            // remains visible when the sheet is at rest. The sheet itself
-            // already extends into the bottom safe area, so no extra inset is
-            // needed here.
             Positioned(
               left: 16,
-              bottom: MediaQuery.of(context).size.height * 0.45 + 12,
+              bottom: MediaQuery.of(context).size.height * 1 / 4 + 16,
               child: GridNavIconButton(
                 icon: Icons.my_location_rounded,
                 onPressed: () {

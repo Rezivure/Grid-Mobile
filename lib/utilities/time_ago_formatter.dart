@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class TimeAgoFormatter {
   static String format(String? timestamp) {
     if (timestamp == null || timestamp == 'Offline') {
-      return 'Off Grid';
+      return 'Offline';
     }
 
     try {
@@ -12,7 +12,7 @@ class TimeAgoFormatter {
 
       if (lastSeenDateTime.isAfter(now)) {
         print("Warning: Future timestamp detected: $timestamp");
-        return 'Off Grid';
+        return 'Offline';
       }
 
       final difference = now.difference(lastSeenDateTime);
@@ -28,16 +28,16 @@ class TimeAgoFormatter {
       } else if (difference.inDays < 7) {
         return '${difference.inDays}d ago';
       } else {
-        return 'Off Grid';
+        return 'Offline';
       }
     } catch (e) {
       print("Error parsing timestamp: $e");
-      return 'Off Grid';
+      return 'Offline';
     }
   }
 
   static Color getStatusColor(String timeAgoText, ColorScheme colorScheme) {
-    if (timeAgoText == 'Off Grid' || timeAgoText == 'Invitation Sent') {
+    if (timeAgoText == 'Offline' || timeAgoText == 'Invitation Sent') {
       return colorScheme.onSurface.withOpacity(0.5);
     } else if (timeAgoText.contains('m ago') ||
         timeAgoText.contains('s ago') ||

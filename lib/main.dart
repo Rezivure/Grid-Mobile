@@ -34,6 +34,7 @@ import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
 
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
@@ -179,6 +180,12 @@ void main() async {
         // Provide the LocationManager
         ChangeNotifierProvider<LocationManager>(
           create: (context) => LocationManager(),
+        ),
+
+        // Tracks the user's "sharing paused" state (incognito toggle).
+        // Settings writes it; the map's SHARING pill watches it.
+        ChangeNotifierProvider<SharingStateNotifier>(
+          create: (_) => SharingStateNotifier(),
         ),
 
         // Provide the RoomService
