@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../styles/tokens.dart';
 import '../../widgets/grid/grid_segmented.dart';
 import 'developer_settings_screen.dart';
+import 'synapse_logs_screen.dart';
 
 /// Hidden developer tools page, reached by tapping the version footer in
 /// Settings 5 times in quick succession. Mirrors the dark-mode Geist styling
@@ -63,6 +64,25 @@ class DeveloperToolsScreen extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const DeveloperSettingsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: GridTokens.hairline,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+                  _DevMenuOption(
+                    icon: Icons.terminal_rounded,
+                    title: 'Synapse Logs',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SynapseLogsScreen(),
                         ),
                       );
                     },

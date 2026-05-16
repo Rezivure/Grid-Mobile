@@ -43,6 +43,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/widgets/onboarding_modal.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
@@ -1927,6 +1928,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 userId: _selectedUserId!,
                 userName: _selectedUserName!,
                 position: _bubblePosition!,
+                lastUpdate: Provider.of<UserLocationProvider>(context)
+                    .getLastSeen(_selectedUserId!),
                 onClose: () {
                   setState(() {
                     _bubblePosition = null;
@@ -2304,16 +2307,21 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
 
             // Top-center "SHARING WITH N" pill (with paused-state from notifier).
-            Positioned(
-              top: 60,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                child: Center(child: _buildSharingPill()),
+            // Hidden while the user info bubble is up so they don't collide.
+            if (_selectedUserId == null)
+              Positioned(
+                top: 60,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Center(child: _buildSharingPill()),
+                ),
               ),
-            ),
 
-            // Right column FAB stack — compass, globe reset, center-on-me.
+            // Right column overlay stack — compass, globe reset, center-on-me.
+            // Chrome matches the bottom sheet's `GridNavIconButton` (40×40,
+            // surface 0.92, hairline border, soft shadow, rMd radius) so the
+            // map's floating chrome reads as one design system with the drawer.
             Positioned(
               right: 16,
               top: 100,
@@ -2322,32 +2330,20 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 children: [
                   _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
-                  // Globe reset
-                  FloatingActionButton(
-                    heroTag: 'reset_view_fab',
-                    backgroundColor: _isAtResetView
-                        ? colorScheme.primary
-                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
+                  _MapOverlayIconButton(
+                    icon: Icons.public_rounded,
+                    active: _isAtResetView,
                     onPressed: _resetToInitialZoom,
                     tooltip: 'Reset view',
-                    elevation: _isAtResetView ? 6 : 2,
-                    mini: true,
-                    child: Icon(
-                      Icons.public_rounded,
-                      color: _isAtResetView
-                          ? Colors.white
-                          : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
                   ),
                   const SizedBox(height: 10),
-                  // Center on user
-                  FloatingActionButton(
-                    heroTag: 'center_on_user_fab',
-                    backgroundColor: _followUser
-                        ? colorScheme.primary
-                        : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.85)),
+                  _MapOverlayIconButton(
+                    icon: Icons.my_location_rounded,
+                    active: _followUser,
+                    tooltip: 'Center on me',
                     onPressed: () {
-                      final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
+                      final target = _locationManager?.currentLatLng ??
+                          _mapController.camera.center;
                       if (target != null) {
                         _mapController.move(target, 16.0);
                       }
@@ -2356,15 +2352,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         _isAtResetView = false;
                       });
                     },
-                    tooltip: 'Center on me',
-                    elevation: _followUser ? 6 : 2,
-                    mini: true,
-                    child: Icon(
-                      Icons.my_location_rounded,
-                      color: _followUser
-                          ? Colors.white
-                          : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
                   ),
                 ],
               ),
@@ -2427,74 +2414,64 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
-    return GestureDetector(
-      onTap: () {
-        // Orient north when tapped.
-        final center = _mapController.camera.center;
-        if (center != null) {
-          _mapController.moveAndRotate(
-            center,
-            _mapController.camera.zoom,
-            0,
-          );
-        }
-        setState(() {
-          _currentMapRotation = 0.0;
-        });
-      },
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Compass circle background
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDarkMode ? colorScheme.outline.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
-                  width: 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        onTap: () {
+          final center = _mapController.camera.center;
+          if (center != null) {
+            _mapController.moveAndRotate(
+              center,
+              _mapController.camera.zoom,
+              0,
+            );
+          }
+          setState(() {
+            _currentMapRotation = 0.0;
+          });
+        },
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: GridTokens.surface.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.rotate(
+                angle: _currentMapRotation * (math.pi / 180),
+                child: CustomPaint(
+                  size: const Size(26, 26),
+                  painter: CompassPainter(
+                    northColor: GridTokens.danger,
+                    southColor: GridTokens.text2,
+                  ),
                 ),
               ),
-            ),
-            // Rotating compass needle
-            Transform.rotate(
-              angle: _currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
-              child: CustomPaint(
-                size: Size(28, 28),
-                painter: CompassPainter(
-                  northColor: Colors.red,
-                  southColor: isDarkMode ? colorScheme.onSurface.withOpacity(0.6) : Colors.black.withOpacity(0.6),
+              const Positioned(
+                top: 4,
+                child: Text(
+                  'N',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: GridTokens.text2,
+                  ),
                 ),
               ),
-            ),
-            // North indicator (N)
-            Positioned(
-              top: 4,
-              child: Text(
-                'N',
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2535,7 +2512,68 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       ),
     );
   }
-  
+
+}
+
+/// Floating map-overlay icon button styled to match the bottom sheet's
+/// `GridNavIconButton`. Used for the globe/center buttons in the right
+/// FAB column — the compass keeps its own builder because it carries the
+/// rotating compass rose inside the same chrome.
+class _MapOverlayIconButton extends StatelessWidget {
+  const _MapOverlayIconButton({
+    required this.icon,
+    required this.active,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final bool active;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final btn = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: active
+                ? GridTokens.mintFaint
+                : GridTokens.surface.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(
+              color: active
+                  ? GridTokens.mint
+                  : GridTokens.hairlineStrong,
+              width: active ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Icon(
+            icon,
+            color: active ? GridTokens.mint : GridTokens.text,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip!, child: btn);
+    }
+    return btn;
+  }
 }
 
 class CompassPainter extends CustomPainter {

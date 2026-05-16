@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -35,6 +37,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/log_stream_service.dart';
 
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
@@ -154,7 +157,13 @@ void main() async {
 
   final messageParser = MessageParser();
 
-  runApp(
+  // Start the in-app log stream so Developer Tools → Synapse Logs can
+  // tail matrix-sdk events. Matrix logs are pulled via a ticker; raw
+  // `print()` calls land in here via the Zone hook below.
+  LogStreamService.instance.start();
+
+  runZonedGuarded(
+    () => runApp(
     MultiProvider(
       providers: [
         Provider<Client>.value(value: client),
@@ -346,6 +355,17 @@ void main() async {
           },
         ),
       ),
+    ),
+  ),
+    (error, stack) {
+      LogStreamService.instance
+          .capturePrint('UNCAUGHT: $error\n$stack');
+    },
+    zoneSpecification: ZoneSpecification(
+      print: (self, parent, zone, line) {
+        LogStreamService.instance.capturePrint(line);
+        parent.print(zone, line);
+      },
     ),
   );
 }

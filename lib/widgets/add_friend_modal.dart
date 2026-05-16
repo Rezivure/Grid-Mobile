@@ -799,13 +799,6 @@ class _AddFriendModalState extends State<AddFriendModal>
                   ),
                   const SizedBox(height: 10),
                   _buildMethodRow(
-                    icon: Icons.link_rounded,
-                    title: 'Share an invite link',
-                    subtitle: 'Expires in 24 hours',
-                    onTap: _shareInviteLink,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildMethodRow(
                     icon: Icons.search_rounded,
                     title: 'Type a handle',
                     subtitle: isCustomHomeserver()
@@ -1049,7 +1042,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  TextSpan(text: ' confirm. Verify with a 4-digit safety number.'),
+                  TextSpan(text: ' confirm.'),
                 ],
               ),
             ),
@@ -1265,24 +1258,6 @@ class _AddFriendModalState extends State<AddFriendModal>
                     icon: Icons.qr_code_rounded,
                     style: GridButtonStyle.secondary,
                     onPressed: _closeScanner,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextButton(
-                  onPressed: () {
-                    _closeScanner();
-                    setState(() {
-                      _view = _AddFriendView.handle;
-                    });
-                  },
-                  child: Text(
-                    'Or paste a Grid link',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: GridTokens.mint,
-                    ),
                   ),
                 ),
               ],

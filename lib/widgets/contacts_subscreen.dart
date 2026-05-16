@@ -30,6 +30,9 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
@@ -651,71 +654,106 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   Widget _buildEmptyState() {
-    // Calm, generous empty state — see design_handoff/09-map-empty.png.
-    // The 88×88 mint-faint tile (24pt rounded), Geist 22/600/-0.02 headline,
-    // and a steady GridButton CTA that opens the existing AddFriendModal.
+    final myUserId = widget.roomService.getMyUserId();
+    final handle = myUserId == null
+        ? '@…'
+        : '@${utils.localpart(myUserId)}';
+    final qrData = myUserId ?? handle;
+
     return Container(
       color: GridTokens.surface,
       child: ListView(
         controller: widget.scrollController,
-        padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         children: [
-          const SizedBox(height: 32),
-          Center(
-            child: Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: GridTokens.mintFaint,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Icon(
-                Icons.waving_hand_rounded,
-                size: 40,
-                color: GridTokens.mint,
-              ),
-            ),
+          // Handle / QR hero — gradient card with a tappable handle pill and
+          // an inline QR tile. Designed to be the obvious first move when
+          // there are no contacts yet.
+          _HandleHeroCard(
+            handle: handle,
+            qrData: qrData,
+            onCopy: () => _copyHandle(handle),
+            onShare: () => _shareInviteLink(handle),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Just you out here.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: GridTokens.text,
-              letterSpacing: -0.02,
-            ),
+          const SizedBox(height: 18),
+          GridButton(
+            label: 'Share invite link',
+            icon: Icons.ios_share_rounded,
+            onPressed: () => _shareInviteLink(handle),
           ),
           const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: 'Scan code',
+                  icon: Icons.qr_code_scanner_rounded,
+                  style: GridButtonStyle.secondary,
+                  onPressed: () => _showAddFriendModal(context),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GridButton(
+                  label: 'Type handle',
+                  icon: Icons.alternate_email_rounded,
+                  style: GridButtonStyle.secondary,
+                  onPressed: () => _showAddFriendModal(context),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              'Add a friend so you can see each other on the map. '
               'Nothing is shared until both of you confirm.',
               textAlign: TextAlign.center,
               style: GoogleFonts.getFont(
                 'Geist',
-                fontSize: 14,
-                color: GridTokens.text2,
+                fontSize: 12.5,
+                color: GridTokens.text3,
                 height: 1.45,
-                letterSpacing: -0.01,
+                letterSpacing: -0.005,
               ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: GridButton(
-              label: 'Add a friend',
-              icon: Icons.person_add_alt_1_rounded,
-              onPressed: () => _showAddFriendModal(context),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _copyHandle(String handle) async {
+    await Clipboard.setData(ClipboardData(text: handle));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied $handle'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareInviteLink(String handle) async {
+    try {
+      await Share.share(
+        'Join me on Grid! Download it at https://get.grid.lat and send $handle a friend request!',
+        subject: 'Join me on Grid: Private Location Sharing!',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to share invite'),
+          backgroundColor: GridTokens.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showExpandedAvatar(BuildContext context, String userId, String name) {
@@ -1150,6 +1188,187 @@ class _MenuRow extends StatelessWidget {
               ),
               const Icon(Icons.chevron_right_rounded,
                   color: GridTokens.text3, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Empty-state hero: gradient card with the user's @handle (tap to copy)
+/// alongside an inline QR tile that the user can show to a friend.
+class _HandleHeroCard extends StatelessWidget {
+  const _HandleHeroCard({
+    required this.handle,
+    required this.qrData,
+    required this.onCopy,
+    required this.onShare,
+  });
+
+  final String handle;
+  final String qrData;
+  final VoidCallback onCopy;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [GridTokens.mintFaint, GridTokens.surface],
+        ),
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: GridTokens.mintSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 92,
+                height: 92,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.28),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    QrImageView(
+                      data: qrData,
+                      version: QrVersions.auto,
+                      size: 76,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: Colors.black,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: Colors.black,
+                      ),
+                    ),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: const BoxDecoration(
+                        color: GridTokens.mint,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.location_on_rounded,
+                        size: 9,
+                        color: Color(0xFF04201A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GridMono(
+                      'YOUR HANDLE',
+                      size: 10,
+                      letterSpacing: 0.12,
+                      color: GridTokens.text3,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      handle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Send this to a friend so they can find you.',
+                      maxLines: 2,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12,
+                        color: GridTokens.text2,
+                        height: 1.35,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _CopyChip(handle: handle, onTap: onCopy),
+        ],
+      ),
+    );
+  }
+}
+
+class _CopyChip extends StatelessWidget {
+  const _CopyChip({required this.handle, required this.onTap});
+
+  final String handle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairlineStrong),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.copy_rounded,
+                size: 14,
+                color: GridTokens.mint,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Copy $handle',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.005,
+                  color: GridTokens.text,
+                ),
+              ),
             ],
           ),
         ),

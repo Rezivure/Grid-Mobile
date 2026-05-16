@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:ui' show ImageFilter;
 import 'dart:io' show Platform;
@@ -8,7 +9,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
@@ -21,6 +26,7 @@ class UserInfoBubble extends StatelessWidget {
   final String userId;
   final String userName;
   final LatLng position;
+  final String? lastUpdate;
   final VoidCallback? onClose;
 
   const UserInfoBubble({
@@ -28,8 +34,35 @@ class UserInfoBubble extends StatelessWidget {
     required this.userId,
     required this.userName,
     required this.position,
+    this.lastUpdate,
     this.onClose,
   });
+
+  /// `null` when we don't know the user's own location yet (so the cell is
+  /// hidden rather than showing a fake number).
+  String? _formatDistance(LatLng? from, LatLng to) {
+    if (from == null) return null;
+    final meters = const Distance().as(LengthUnit.Meter, from, to);
+    if (meters < 100) return '${meters.round()} m';
+    if (meters < 1000) return '${(meters / 10).round() * 10} m';
+    final km = meters / 1000;
+    if (km < 10) return '${km.toStringAsFixed(1)} km';
+    return '${km.round()} km';
+  }
+
+  String? _formatBearing(LatLng? from, LatLng to) {
+    if (from == null) return null;
+    final dLon = (to.longitude - from.longitude) * (math.pi / 180);
+    final fromLat = from.latitude * (math.pi / 180);
+    final toLat = to.latitude * (math.pi / 180);
+    final y = math.sin(dLon) * math.cos(toLat);
+    final x = math.cos(fromLat) * math.sin(toLat) -
+        math.sin(fromLat) * math.cos(toLat) * math.cos(dLon);
+    var bearing = math.atan2(y, x) * (180 / math.pi);
+    bearing = (bearing + 360) % 360;
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[((bearing + 22.5) ~/ 45) % 8];
+  }
 
   void _copyCoordinates(BuildContext context, LatLng position) {
     final coordinates =
@@ -324,13 +357,26 @@ class UserInfoBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    // Preserve the parent-driven positioning envelope: anchored near the
-    // top of the map with the card centered horizontally.
+    final media = MediaQuery.of(context);
+    final screenWidth = media.size.width;
+    // Width up to 340, with at least 16pt margin per side. Centered.
+    final bubbleWidth =
+        (screenWidth - 32).clamp(260.0, 340.0).toDouble();
+    // Sit well below the top-of-map "SHARING WITH N" pill (which is at
+    // SafeArea + 60 + ~30 tall). Push the bubble below that comfortably.
+    final topOffset = media.padding.top + 96;
+    final myLocation =
+        Provider.of<LocationManager>(context, listen: false).currentLatLng;
+    final distanceLabel = _formatDistance(myLocation, position);
+    final bearingLabel = _formatBearing(myLocation, position);
+    final updatedLabel = lastUpdate == null
+        ? null
+        : TimeAgoFormatter.format(lastUpdate);
+
     return Positioned(
-      top: 100,
-      left: (screenWidth - 280) / 2,
-      width: 280,
+      top: topOffset,
+      left: (screenWidth - bubbleWidth) / 2,
+      width: bubbleWidth,
       child: Material(
         color: Colors.transparent,
         child: Column(
@@ -372,7 +418,11 @@ class UserInfoBubble extends StatelessWidget {
                           onClose: onClose,
                         ),
                         const SizedBox(height: 12),
-                        _StatusRow(),
+                        _StatusRow(
+                          distance: distanceLabel,
+                          bearing: bearingLabel,
+                          updated: updatedLabel,
+                        ),
                         const SizedBox(height: 10),
                         Row(
                           children: [
@@ -568,32 +618,46 @@ class _CloseButton extends StatelessWidget {
 }
 
 class _StatusRow extends StatelessWidget {
-  // NOTE: this row is rendered with placeholder values matching the design
-  // handoff. Driving/bearing/distance/last-update wiring is owned by a
-  // higher-level data source that doesn't reach this widget yet — keep the
-  // visual scaffolding so the layout lands; wire data later.
+  const _StatusRow({
+    required this.distance,
+    required this.bearing,
+    required this.updated,
+  });
+
+  /// All three are optional: we only render the cells we have real data for.
+  /// Driving/walking pills were intentionally removed — the app doesn't pass
+  /// speed through `UserLocation` today, so any motion label here would be
+  /// made up.
+  final String? distance;
+  final String? bearing;
+  final String? updated;
+
   @override
   Widget build(BuildContext context) {
+    final cells = <Widget>[];
+    if (distance != null) {
+      cells.add(
+        _MonoCell(
+          primary: distance!,
+          secondary: bearing ?? '',
+        ),
+      );
+    }
+    if (updated != null) {
+      cells.add(
+        _MonoCell(
+          primary: 'updated',
+          secondary: updated!,
+        ),
+      );
+    }
+    if (cells.isEmpty) return const SizedBox.shrink();
     return Row(
       children: [
-        const GridStatusPill(
-          label: 'Driving',
-          kind: GridStatusKind.driving,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _MonoCell(
-            primary: '0.4 mi',
-            secondary: 'NE',
-          ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _MonoCell(
-            primary: 'updated',
-            secondary: '12s',
-          ),
-        ),
+        for (var i = 0; i < cells.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(child: cells[i]),
+        ],
       ],
     );
   }

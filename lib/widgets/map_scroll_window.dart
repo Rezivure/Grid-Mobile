@@ -344,31 +344,45 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GridSegmented(
-                selected: selected,
-                tabs: [
-                  GridSegmentedTab(label: 'People', badgeCount: contactCount),
-                  GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
-                ],
-                onChanged: (i) {
-                  setState(() {
-                    _selectedOption = i == 1
-                        ? SubscreenOption.groups
-                        : SubscreenOption.contacts;
-                  });
-                  Provider.of<SelectedSubscreenProvider>(context, listen: false)
-                      .setSelectedSubscreen(i == 1 ? 'groups' : 'contacts');
-                },
+              Flexible(
+                child: GridSegmented(
+                  selected: selected,
+                  tabs: [
+                    GridSegmentedTab(label: 'People', badgeCount: contactCount),
+                    GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
+                    GridSegmentedTab(
+                      label: 'Invites',
+                      badgeCount: inviteCount,
+                      badgeColor: GridTokens.amber,
+                    ),
+                  ],
+                  onChanged: (i) {
+                    // Invites stays a modal — tapping the pill opens it
+                    // without changing the underlying subscreen selection.
+                    if (i == 2) {
+                      _showInvitesModal(context);
+                      return;
+                    }
+                    setState(() {
+                      _selectedOption = i == 1
+                          ? SubscreenOption.groups
+                          : SubscreenOption.contacts;
+                    });
+                    Provider.of<SelectedSubscreenProvider>(context,
+                            listen: false)
+                        .setSelectedSubscreen(
+                            i == 1 ? 'groups' : 'contacts');
+                  },
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GridNavIconButton(
-                    icon: Icons.mail_outline_rounded,
+                    icon: Icons.person_add_outlined,
                     size: 40,
-                    badgeCount: inviteCount,
-                    badgeColor: GridTokens.amber,
-                    onPressed: () => _showInvitesModal(context),
+                    onPressed: () => _showAddFriendModal(context),
                   ),
                   const SizedBox(width: 8),
                   GridNavIconButton(
