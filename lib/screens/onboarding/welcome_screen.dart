@@ -293,12 +293,35 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
           child: Column(
             children: [
               const Spacer(flex: 2),
-              // 8-avatar constellation hero.
+              // Grid logo hero.
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
                   scale: _scaleAnimation,
-                  child: const _AvatarConstellation(),
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        center: Alignment.center,
+                        radius: 0.85,
+                        colors: [
+                          GridTokens.mint.withOpacity(0.16),
+                          GridTokens.mint.withOpacity(0.06),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.55, 1.0],
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Image.asset(
+                      'assets/logos/png-file-2.png',
+                      width: 132,
+                      height: 132,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
               ),
               const Spacer(flex: 2),

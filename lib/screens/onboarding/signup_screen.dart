@@ -403,48 +403,61 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     );
   }
 
-  // ── Password field (kept; signup logic still requires it) ─────────────────
+  // ── Password field — same chrome as the handle input above so the two
+  //    fields read as one cohesive form instead of two unrelated cards.
 
   Widget _buildPasswordInput() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono('Password',
-            color: GridTokens.text3, size: 10, letterSpacing: 0.12),
-        const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: GridTokens.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(color: GridTokens.hairline, width: 1),
           ),
-          child: TextField(
-            controller: _passwordController,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            cursorColor: GridTokens.mint,
-            cursorWidth: 2,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: GridTokens.text,
-              height: 1.0,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: EdgeInsets.zero,
-              border: InputBorder.none,
-              hintText: 'Create a secure password',
-              hintStyle: GoogleFonts.getFont(
-                'Geist',
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.lock_outline_rounded,
+                size: 18,
                 color: GridTokens.text3,
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  cursorColor: GridTokens.mint,
+                  cursorWidth: 2,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: GridTokens.text,
+                    height: 1.0,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                    hintText: 'Password',
+                    hintStyle: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: GridTokens.text3,
+                    ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -500,7 +513,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
       _handleState != _HandleState.taken;
 
   Widget _buildBottomBar() {
-    final label = _handle.isEmpty ? 'Claim handle' : 'Claim @$_handle';
+    final label = _handle.isEmpty ? 'Sign up' : 'Sign up as @$_handle';
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
       decoration: const BoxDecoration(

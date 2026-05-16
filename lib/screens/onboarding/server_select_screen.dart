@@ -423,18 +423,31 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           icon: Icons.fingerprint,
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        _buildModernButton(
-          text: 'Sign in with SMS instead',
+        // SMS is the fallback — demote it to a small text link instead
+        // of a full secondary button so passkey is clearly the default.
+        TextButton(
           onPressed: () {
             setState(() {
               _currentStep = 2;
             });
             _animateToNextStep();
           },
-          isPrimary: false,
-          icon: Icons.sms,
+          style: TextButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: colorScheme.onSurface.withOpacity(0.55),
+          ),
+          child: const Text(
+            'Sign in with SMS instead',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
 
         const SizedBox(height: 40),
@@ -444,44 +457,32 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
   Widget _buildUsernameStep() {
     final colorScheme = Theme.of(context).colorScheme;
-    String username = _usernameController.text.isNotEmpty ? _usernameController.text : 'default';
 
     return Column(
       children: [
         _buildStepHeader(
           title: 'Choose Your Username',
           subtitle: 'This is how others can find and add you on Grid',
-          illustration: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      colorScheme.primary.withOpacity(0.1),
-                      colorScheme.primary.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: RandomAvatar(
-                  username.toLowerCase(),
-                  height: 80,
-                  width: 80,
-                ),
+          illustration: Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.14),
+                  colorScheme.primary.withOpacity(0.05),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.6, 1.0],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Your unique avatar!',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.alternate_email_rounded,
+              size: 40,
+              color: colorScheme.primary,
+            ),
           ),
         ),
         
@@ -582,7 +583,13 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
         _buildModernButton(
           text: 'Sign up with Passkey',
-          onPressed: (_usernameStatusMessage == 'Username is available' &&
+          // Stays disabled (grey) until the user has typed at least 5
+          // characters, has a confirmed-available username, and has
+          // cleared turnstile. The 5-char floor blocks anyone hitting the
+          // button on a clearly-too-short handle before the availability
+          // check has even fired.
+          onPressed: (_usernameController.text.trim().length >= 5 &&
+                  _usernameStatusMessage == 'Username is available' &&
                   _turnstileToken != null &&
                   !_isPasskeyLoading)
               ? _signupWithPasskey
@@ -590,21 +597,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isPrimary: true,
           isLoading: _isPasskeyLoading,
           icon: Icons.fingerprint,
-        ),
-
-        const SizedBox(height: 16),
-
-        _buildModernButton(
-          text: 'Already have an account? Sign In',
-          onPressed: () {
-            setState(() {
-              _isLoginFlow = true;
-              _currentStep = 1;
-            });
-            _animateToNextStep();
-          },
-          isPrimary: false,
-          icon: Icons.login,
         ),
 
         const SizedBox(height: 40),

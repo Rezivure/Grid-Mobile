@@ -276,6 +276,61 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     );
   }
 
+  Widget _buildMapsIconButton(ColorScheme colorScheme) {
+    final active = !_useDefaultMapsUrl;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _useDefaultMapsUrl = !_useDefaultMapsUrl;
+          });
+        },
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? colorScheme.primary.withOpacity(0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: (active
+                      ? colorScheme.primary
+                      : colorScheme.onSurface)
+                  .withOpacity(active ? 0.4 : 0.12),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.map_outlined,
+                size: 13,
+                color: active
+                    ? colorScheme.primary
+                    : colorScheme.onSurface.withOpacity(0.55),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                active ? 'Custom map source' : 'Custom map source?',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: active
+                      ? colorScheme.primary
+                      : colorScheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapsSelectionCard() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -627,11 +682,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     const SizedBox(height: 24),
                   ],
                   
-                  // Maps Selection
-                  _buildMapsSelectionCard(),
-                  
-                  const SizedBox(height: 24),
-                  
                   // Server URL
                   _buildModernTextField(
                     controller: _homeserverController,
@@ -639,10 +689,21 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     hint: 'matrix.example.com',
                     icon: Icons.dns_outlined,
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Custom Maps URL (if selected)
+
+                  // Custom map source is an obscure power-user setting —
+                  // 99.9% of users want Grid's hosted tiles. Surface it as a
+                  // tiny aligned icon button that pops the field on tap.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _buildMapsIconButton(colorScheme),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Custom Maps URL field, only when the user opts in.
                   if (!_useDefaultMapsUrl) ...[
                     _buildModernTextField(
                       controller: _mapsUrlController,
