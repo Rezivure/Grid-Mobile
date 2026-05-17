@@ -2238,7 +2238,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 width: 24,
                                 height: 24,
                                 child: CircularProgressIndicator(
-                                  value: _pingCooldownSeconds / 5,
+                                  value: _pingCooldownSeconds / 10,
                                   strokeWidth: 2,
                                   color: isDarkMode ? colorScheme.primary : Colors.black,
                                   backgroundColor: isDarkMode ? colorScheme.surfaceVariant : Colors.grey.withOpacity(0.3),

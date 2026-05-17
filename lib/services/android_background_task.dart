@@ -191,8 +191,8 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
 }
 
 Future<void> _sendLocationUpdate(Room room, double latitude, double longitude, double accuracy) async {
-  // Filter out low-accuracy locations to save battery and improve quality
-  if (accuracy > 100) {
+  // Filter out extremely low-accuracy locations only; 500m allows urban/indoor fixes
+  if (accuracy > 500) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
     return;
   }
