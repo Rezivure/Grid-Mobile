@@ -162,11 +162,12 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
         print("ContactsBloc: No direct room found for contact ${contact.userId}");
       }
       
+      final lastSeenTimestamp = userLocationProvider.getLastSeen(contact.userId);
       contactDisplays.add(ContactDisplay(
         userId: contact.userId,
         displayName: contact.displayName ?? 'Deleted User',
         avatarUrl: contact.avatarUrl,
-        lastSeen: 'Offline',
+        lastSeen: lastSeenTimestamp ?? 'Offline',
         membershipStatus: membershipStatus,
       ));
     }
