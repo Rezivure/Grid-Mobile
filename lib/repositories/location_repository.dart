@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:sqflite/sqflite.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/services/database_service.dart';
@@ -30,13 +31,23 @@ class LocationRepository {
   Future<void> insertLocation(UserLocation location) async {
     final db = await _databaseService.database;
     final encryptionKey = await _databaseService.getEncryptionKey();
+    // Generate a fresh IV when the caller did not supply one.
+    final effective = location.iv.isEmpty
+        ? UserLocation(
+            userId: location.userId,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            timestamp: location.timestamp,
+            iv: encrypt.IV.fromSecureRandom(16).base64,
+          )
+        : location;
     await db.insert(
       'UserLocations',
-      location.toMap(encryptionKey),
+      effective.toMap(encryptionKey),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     // Notify that a location was updated
-    _locationUpdatesController.add(location);
+    _locationUpdatesController.add(effective);
   }
 
   /// Delete all location data for a specific user
