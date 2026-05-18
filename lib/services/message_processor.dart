@@ -73,11 +73,16 @@ class MessageProcessor {
     }
     final Event decryptedEvent = await enc.decryptRoomEvent(finalEvent);
 
-    // Check for decryption failure
-    if (decryptedEvent.type == 'm.room.encrypted' &&
-        decryptedEvent.content['msgtype'] == 'm.bad.encrypted') {
-      print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}');
+    // Check for decryption failure — covers both the explicit m.bad.encrypted
+    // msgtype and the silent case where the SDK leaves the event as
+    // m.room.encrypted without setting that msgtype (e.g. missing Olm session
+    // on Android when receiving from an iOS peer for the first time).
+    if (decryptedEvent.type == 'm.room.encrypted') {
+      final badEncrypted = decryptedEvent.content['msgtype'] == 'm.bad.encrypted';
+      print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}'
+          '${badEncrypted ? " (m.bad.encrypted)" : " (session key not available)"}');
       _onDecryptionError?.call(finalEvent.senderId ?? 'unknown', roomId);
+      return null;
     }
 
     // Check if the decrypted event is now a message
