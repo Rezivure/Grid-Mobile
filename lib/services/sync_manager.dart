@@ -319,22 +319,49 @@ class SyncManager with ChangeNotifier {
 
 
   StreamSubscription<SyncUpdate>? _syncSubscription;
-  
+
+  // Exponential backoff state for sync stream errors
+  int _syncErrorCount = 0;
+  static const int _maxSyncBackoffSeconds = 300; // cap at 5 minutes
+  static const int _syncBackoffBaseSeconds = 2;
+
   Future<void> _startSyncStream() async {
     if (_syncSubscription != null) return;
-    
+
     _syncSubscription = client.onSync.stream.listen(
       (syncUpdate) async {
+        // Successful sync: reset error counter
+        _syncErrorCount = 0;
         await _processSyncUpdate(syncUpdate);
       },
-      onError: (error) {
+      onError: (error) async {
         print("Sync stream error: $error");
         if (_isAuthenticationError(error)) {
           _handleAuthenticationFailure();
+          return;
+        }
+
+        // Non-auth error (e.g. server offline): apply exponential backoff before
+        // allowing the stream to be restarted, preventing a hot retry loop.
+        _syncErrorCount++;
+        final delaySecs = (_syncBackoffBaseSeconds * (1 << (_syncErrorCount - 1)))
+            .clamp(0, _maxSyncBackoffSeconds);
+        print("[SyncManager] Sync error #$_syncErrorCount, backing off ${delaySecs}s before retry");
+
+        // Cancel the current subscription so _startSyncStream can be called again.
+        _syncSubscription?.cancel();
+        _syncSubscription = null;
+
+        await Future.delayed(Duration(seconds: delaySecs));
+
+        // Only restart if the manager is still active and the user is logged in.
+        if (_isActive && client.isLogged() && !_authenticationFailed) {
+          print("[SyncManager] Retrying sync stream after backoff");
+          await _startSyncStream();
         }
       },
     );
-    
+
     // Check if the client is already syncing before starting a new sync
     if (!client.syncPending) {
       _isSyncing = true;
@@ -391,11 +418,12 @@ class SyncManager with ChangeNotifier {
 
   Future<void> stopSync() async {
     if (!_isSyncing && !client.syncPending) return;
-    
+
     _isSyncing = false;
+    _syncErrorCount = 0;
     _syncSubscription?.cancel();
     _syncSubscription = null;
-    
+
     if (client.syncPending) {
       client.abortSync();
     }
@@ -423,6 +451,7 @@ class SyncManager with ChangeNotifier {
     _pendingMessages.clear();
     _isInitialized = false;
     _isSyncing = false;
+    _syncErrorCount = 0;
 
     // Clear the sync token so next login does a full sync
     _sinceToken = null;
