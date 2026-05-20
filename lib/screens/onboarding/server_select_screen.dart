@@ -631,6 +631,22 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         const SizedBox(height: 16),
 
         _buildModernButton(
+          text: 'Sign up with SMS instead',
+          onPressed: _usernameStatusMessage == 'Username is available'
+              ? () {
+                  setState(() {
+                    _currentStep = 1;
+                  });
+                  _animateToNextStep();
+                }
+              : null,
+          isPrimary: false,
+          icon: Icons.sms,
+        ),
+
+        const SizedBox(height: 16),
+
+        _buildModernButton(
           text: 'Already have an account? Sign In',
           onPressed: () {
             setState(() {
