@@ -344,7 +344,8 @@ class SyncManager with ChangeNotifier {
         // Non-auth error (e.g. server offline): apply exponential backoff before
         // allowing the stream to be restarted, preventing a hot retry loop.
         _syncErrorCount++;
-        final delaySecs = (_syncBackoffBaseSeconds * (1 << (_syncErrorCount - 1)))
+        final shiftBy = (_syncErrorCount - 1).clamp(0, 7);
+        final delaySecs = (_syncBackoffBaseSeconds * (1 << shiftBy))
             .clamp(0, _maxSyncBackoffSeconds);
         print("[SyncManager] Sync error #$_syncErrorCount, backing off ${delaySecs}s before retry");
 
