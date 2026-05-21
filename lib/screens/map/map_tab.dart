@@ -41,6 +41,7 @@ import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/widgets/contact_profile_modal.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/services/map_camera_signals.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -199,6 +200,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // this notifier. We only need the pulse — the int value itself
     // doesn't matter.
     MapCameraSignals.resetRequested.addListener(_onResetSignal);
+
+    // Inline contact profile sheet — rendered as part of the map's
+    // own Stack rather than as a modal route so the map remains
+    // interactive while it's up.
+    ContactSheetController.instance.addListener(_onSheetChanged);
 
     // Load saved home location (set in Settings).
     _reloadHomeLocation();
@@ -787,6 +793,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
     MapCameraSignals.resetRequested.removeListener(_onResetSignal);
+    ContactSheetController.instance.removeListener(_onSheetChanged);
     WidgetsBinding.instance.removeObserver(this);
     _locationManager?.removeListener(_onLocationUpdate);
     _syncManager?.removeListener(_checkAuthenticationStatus);
@@ -1462,12 +1469,50 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _resetToInitialZoom();
   }
 
-  void _onMarkerTap(String userId, LatLng position) async {
-    // Center the map on the tapped contact so when the profile sheet
-    // slides up, the visible map above it is already focused on them.
-    context.read<MapBloc>().add(MapMoveToUser(userId));
+  Widget _buildInlineContactSheet() {
+    final contact = ContactSheetController.instance.contact!;
+    final sharingRepo = sharingPreferencesRepository;
+    if (sharingRepo == null) return const SizedBox.shrink();
+    final roomService = context.read<RoomService>();
 
-    // Best-effort display name resolution.
+    return DraggableScrollableSheet(
+      initialChildSize: 0.62,
+      minChildSize: 0.2,
+      maxChildSize: 0.95,
+      snap: true,
+      snapSizes: const [0.2, 0.62, 0.95],
+      builder: (_, scrollController) {
+        return ContactProfileModal(
+          contact: contact,
+          roomService: roomService,
+          sharingPreferencesRepo: sharingRepo,
+          fromMapTap: true,
+          scrollController: scrollController,
+          onClose: () {
+            ContactSheetController.instance.close();
+            MapCameraSignals.requestReset();
+          },
+        );
+      },
+    );
+  }
+
+  void _onSheetChanged() {
+    if (!mounted) return;
+    // No camera changes here — opening sets the contact, closing
+    // hands off to MapCameraSignals from the sheet's own close
+    // handler. We just rebuild to mount/unmount the sheet widget.
+    setState(() {});
+  }
+
+  void _onMarkerTap(String userId, LatLng position) async {
+    // Marker tap zooms in (preserves the user's "show me their
+    // street" intent). Drawer tap doesn't change zoom — see
+    // contacts_subscreen._openContactSheet.
+    context.read<MapBloc>().add(
+          MapCenterOnLocation(position, zoom: 15),
+        );
+
     String displayName = userId.split(':')[0].replaceFirst('@', '');
     String? avatarUrl;
     String lastSeen = '';
@@ -1484,46 +1529,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     if (!mounted) return;
 
-    final contact = ContactDisplay(
-      userId: userId,
-      displayName: displayName,
-      avatarUrl: avatarUrl,
-      lastSeen: lastSeen,
-    );
-
-    // Open the full profile sheet straight from the marker tap — the
-    // old user_info_bubble + 'View Profile' two-step was redundant
-    // since the bubble already showed everything the sheet does.
-    final roomService = context.read<RoomService>();
-    final sharingRepo = sharingPreferencesRepository;
-    if (sharingRepo == null) return;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      // Tap-through on the top transparent fade reveals the live map
-      // behind the sheet. The map is already centered on the contact.
-      builder: (sheetContext) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.62,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        builder: (_, scrollController) {
-          return ContactProfileModal(
-            contact: contact,
-            roomService: roomService,
-            sharingPreferencesRepo: sharingRepo,
-            fromMapTap: true,
-          );
-        },
+    ContactSheetController.instance.open(
+      ContactDisplay(
+        userId: userId,
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+        lastSeen: lastSeen,
       ),
-    ).whenComplete(() {
-      if (!mounted) return;
-      // Globe-reset on close — smart-zooms back out to fit all
-      // contacts so the view doesn't stay locked on one person.
-      _resetToInitialZoom();
-    });
+    );
   }
 
   @override
@@ -2407,7 +2420,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 isEditingMapIcon: _isEditingIconDescription,
               ),
             ),
-            
+
+            // Inline contact profile sheet. Lives inside the Stack
+            // (not pushed as a modal route) so the map underneath
+            // remains tappable / pannable while the sheet is up. The
+            // sheet is rendered with IgnorePointer:false so it gets
+            // its own gestures; the area above the sheet falls
+            // through to the map.
+            if (ContactSheetController.instance.contact != null)
+              _buildInlineContactSheet(),
+
             // Icon selection wheel overlay
             if (_showIconWheel && _iconWheelPosition != null)
               IconSelectionWheel(

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
+import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,12 +47,24 @@ class ContactProfileModal extends StatefulWidget {
   ///      being retired in favor of this consolidated screen.
   final bool fromMapTap;
 
+  /// Provided by `DraggableScrollableSheet` when rendered inline by
+  /// MapTab. Threaded into the SingleChildScrollView so swipe-down on
+  /// the drag handle dismisses the sheet correctly.
+  final ScrollController? scrollController;
+
+  /// Called when the close button is tapped or the sheet is dismissed.
+  /// MapTab uses this to clear the controller + trigger
+  /// MapCameraSignals.requestReset.
+  final VoidCallback? onClose;
+
   const ContactProfileModal({
     Key? key,
     required this.contact,
     required this.roomService,
     required this.sharingPreferencesRepo,
     this.fromMapTap = false,
+    this.scrollController,
+    this.onClose,
   }) : super(key: key);
 
   @override
@@ -235,17 +248,20 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       decoration: BoxDecoration(
         // Transparent top edge when opened from a map tap so the real
         // map peeks through into the gradient fade defined below.
+        // Body color uses `surface` (matches the rest of the dark Grid
+        // 2.0 sheets) rather than pure `bg`.
         color: widget.fromMapTap
             ? Colors.transparent
-            : GridTokens.bg,
+            : GridTokens.surface,
         borderRadius: const BorderRadius.vertical(
             top: Radius.circular(GridTokens.r2Xl)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Grab handle. When opened from the map, it floats over the
-          // gradient fade rather than sitting on a solid card.
+          // Grab handle for list-entry presentation only — the map-tap
+          // variant uses its own gradient fade with an integrated
+          // handle to keep the chrome minimal.
           if (!widget.fromMapTap)
             Container(
               margin: const EdgeInsets.only(top: 10),
@@ -259,6 +275,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
           Flexible(
             child: SingleChildScrollView(
+              controller: widget.scrollController,
               padding: EdgeInsets.zero,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,7 +296,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   // Solid background for the rest of the sheet (so it
                   // doesn't bleed into the map when opened from a tap).
                   Container(
-                    color: GridTokens.bg,
+                    color: GridTokens.surface,
                     child: Transform.translate(
                       offset: widget.fromMapTap
                           ? Offset.zero
@@ -293,7 +310,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   ),
 
                   Container(
-                    color: GridTokens.bg,
+                    color: GridTokens.surface,
                     child: Transform.translate(
                       offset: widget.fromMapTap
                           ? Offset.zero
@@ -342,47 +359,26 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // hero
   // ────────────────────────────────────────────────────────────────────
 
-  /// Used when the sheet was opened from a map-marker tap. The live map
-  /// is already visible underneath; we just need a soft gradient fade
-  /// from transparent → bg so the map's bottom edge melts into the
-  /// sheet's content surface. A draggable grab handle floats on the
-  /// transparent part.
+  /// Used when the sheet was opened from a map-marker / drawer tap.
+  /// The live map is visible underneath; we just need a soft gradient
+  /// fade from transparent → surface so the map's bottom edge melts
+  /// into the sheet's content. No grab handle — the user asked for
+  /// the knob to be removed and the drag-to-dismiss gesture still
+  /// works anywhere on the sheet body.
   Widget _buildMapFade() {
     return SizedBox(
-      height: 96,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    GridTokens.bg.withAlpha(0),
-                    GridTokens.bg,
-                  ],
-                ),
-              ),
-            ),
+      height: 64,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              GridTokens.surface.withAlpha(0),
+              GridTokens.surface,
+            ],
           ),
-          // Floating grab handle.
-          Positioned(
-            top: 10,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.55),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -584,6 +580,37 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         child: GridLiveBadge(),
                       ),
                     ],
+                    const SizedBox(width: 8),
+                    // X close button on the right side of the name
+                    // row when the sheet is rendered inline by
+                    // MapTab. Calls back so the controller clears +
+                    // the camera resets.
+                    if (widget.onClose != null)
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: widget.onClose,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: GridTokens.surface2,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: GridTokens.hairline,
+                                width: 1,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: GridTokens.text2,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -630,9 +657,12 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
   Widget _buildStatusRow() {
     final live = _alwaysShare;
-    final updatedLabel = widget.contact.lastSeen.isEmpty
-        ? 'JUST NOW'
-        : 'UPDATED ${widget.contact.lastSeen}';
+    // Run lastSeen through TimeAgoFormatter so the pill reads
+    // "UPDATED 3 MIN AGO" instead of dumping a raw ISO timestamp.
+    final timeAgo = widget.contact.lastSeen.isEmpty
+        ? 'Just now'
+        : TimeAgoFormatter.format(widget.contact.lastSeen);
+    final updatedLabel = 'UPDATED ${timeAgo.toUpperCase()}';
 
     // gridv 2: pull live device-status (motion / speed / battery) from
     // the cache. Subscribe so the row rebuilds as fresh fixes land

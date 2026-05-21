@@ -30,10 +30,9 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/services/map_camera_signals.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
@@ -148,56 +147,17 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   /// Tap-on-contact handler. Centers the underlying map on the
-  /// contact's last-known location (zoom 15) and slides the profile
-  /// sheet up over the drawer. The bottom sheet uses a transparent
-  /// top fade so the live map remains visible above it. When the
-  /// sheet closes — via the X, drag-down, or backdrop — we ask the
-  /// map to smart-zoom back out via MapCameraSignals so the camera
-  /// doesn't stay locked on the one contact.
+  /// contact (zoom unchanged — drawer-tap intent is "show me on the
+  /// map I'm already looking at," not "zoom me in to a specific
+  /// place"; that's reserved for marker-tap). The profile sheet is
+  /// rendered by MapTab inside its own Stack so the map underneath
+  /// stays interactive while the sheet is up.
   void _openContactSheet(ContactDisplay contact) {
-    final locationProvider =
-        Provider.of<UserLocationProvider>(context, listen: false);
-    final ll = locationProvider.getUserLocation(contact.userId);
-    if (ll != null) {
-      context.read<MapBloc>().add(
-            MapCenterOnLocation(
-              LatLng(ll.latitude, ll.longitude),
-              zoom: 15,
-            ),
-          );
-    } else {
-      // No location yet — at least record the selection so the map
-      // shows whatever it can.
-      context.read<MapBloc>().add(MapMoveToUser(contact.userId));
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.62,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        builder: (_, scrollController) {
-          return ContactProfileModal(
-            contact: contact,
-            roomService: widget.roomService,
-            sharingPreferencesRepo: widget.sharingPreferencesRepository,
-            fromMapTap: true,
-          );
-        },
-      ),
-    ).whenComplete(() {
-      // Globe-reset so the camera doesn't stay zoomed on this one
-      // contact — matches the marker-tap flow's behavior.
-      MapCameraSignals.requestReset();
-    });
+    // Just nudge the camera center; preserve the user's current zoom.
+    context.read<MapBloc>().add(MapMoveToUser(contact.userId));
+    ContactSheetController.instance.open(contact);
   }
 
-  // Kept as a thin alias so any other call sites still compile while
-  // we phase the old long-press menu out.
   void _showOptionsDialog(ContactDisplay contact) =>
       _openContactSheet(contact);
 
