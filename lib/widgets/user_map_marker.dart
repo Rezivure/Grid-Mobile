@@ -184,35 +184,30 @@ class _UserMapMarkerState extends State<UserMapMarker>
                   // halos.
                   if (widget.showPulse)
                     Positioned(
-                      bottom: 16,
+                      bottom: 14,
                       child: _PulseHalos(
                         animation: _pulseAnimation,
                         color: accent,
                       ),
                     ),
 
-                  // Name pill above the avatar.
-                  Positioned(
-                    top: 0,
-                    child: _NamePill(label: label, accent: accent),
-                  ),
+                  // Name pill above the avatar — only when this
+                  // marker is the currently-selected contact (i.e.
+                  // the profile sheet is up). Otherwise the map
+                  // stays uncluttered.
+                  if (widget.isSelected)
+                    Positioned(
+                      top: 0,
+                      child: _NamePill(label: label, accent: accent),
+                    ),
 
-                  // Avatar bubble + tail.
+                  // Avatar bubble + tail anchored at the bottom.
                   Positioned(
                     bottom: 0,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _AvatarBubble(
-                          userId: widget.userId,
-                          accent: accent,
-                          selected: widget.isSelected,
-                        ),
-                        CustomPaint(
-                          size: const Size(14, 9),
-                          painter: _TailPainter(color: accent),
-                        ),
-                      ],
+                    child: _PinBody(
+                      userId: widget.userId,
+                      accent: accent,
+                      selected: widget.isSelected,
                     ),
                   ),
                 ],
@@ -319,8 +314,12 @@ class _PulseHalos extends StatelessWidget {
   }
 }
 
-class _AvatarBubble extends StatelessWidget {
-  const _AvatarBubble({
+/// Pin body: circular avatar in a thin Grid-styled ring, with a
+/// small accent dot below where the avatar bottom meets the lat/lng
+/// anchor. Drops the chunky teardrop tail in favor of a minimal
+/// anchor dot for a cleaner, Life360-ish silhouette.
+class _PinBody extends StatelessWidget {
+  const _PinBody({
     required this.userId,
     required this.accent,
     required this.selected,
@@ -332,69 +331,77 @@ class _AvatarBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        // Tight surface ring around the avatar so the image sits
-        // inside a clean halo, no white 3D mock-up.
-        color: GridTokens.surface,
-        border: Border.all(
-          color: accent,
-          width: selected ? 3 : 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.35),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-          if (selected)
-            BoxShadow(
-              color: accent.withOpacity(0.45),
-              blurRadius: 14,
-              spreadRadius: 1,
+    return SizedBox(
+      width: 60,
+      height: 64,
+      child: Stack(
+        alignment: Alignment.topCenter,
+        clipBehavior: Clip.none,
+        children: [
+          // Avatar bubble — thin mint/amber ring, dark inner well,
+          // soft drop shadow that gives it lift without the dated
+          // white 3D look. Selected state thickens the ring and
+          // adds a colored glow.
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: GridTokens.surface,
+              border: Border.all(
+                color: accent,
+                width: selected ? 2.5 : 1.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.30),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+                if (selected)
+                  BoxShadow(
+                    color: accent.withOpacity(0.45),
+                    blurRadius: 16,
+                    spreadRadius: 1,
+                  ),
+              ],
             ),
+            padding: const EdgeInsets.all(2),
+            child: ClipOval(
+              child: UserAvatarBloc(
+                key: ValueKey('marker_avatar_$userId'),
+                userId: userId,
+                size: 50,
+              ),
+            ),
+          ),
+          // Anchor dot — sits at the bottom of the cell where the
+          // contact's actual lat/lng is. Reads as a clean "I am
+          // here" point rather than a chunky teardrop.
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent,
+                border: Border.all(
+                  color: GridTokens.surface,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.35),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
-      ),
-      padding: const EdgeInsets.all(2),
-      child: ClipOval(
-        child: UserAvatarBloc(
-          key: ValueKey('marker_avatar_$userId'),
-          userId: userId,
-          size: 46,
-        ),
       ),
     );
   }
-}
-
-class _TailPainter extends CustomPainter {
-  _TailPainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-    final fillPaint = Paint()..color = color;
-
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-
-    canvas.save();
-    canvas.translate(0, 1);
-    canvas.drawPath(path, shadowPaint);
-    canvas.restore();
-
-    canvas.drawPath(path, fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TailPainter old) => old.color != color;
 }
