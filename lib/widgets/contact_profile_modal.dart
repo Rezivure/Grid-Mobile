@@ -244,112 +244,110 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         : utils.formatUserId(widget.contact.userId);
     final firstName = widget.contact.displayName.split(' ').first;
 
-    return Container(
-      decoration: BoxDecoration(
-        // Transparent top edge when opened from a map tap so the real
-        // map peeks through into the gradient fade defined below.
-        // Body color uses `surface` (matches the rest of the dark Grid
-        // 2.0 sheets) rather than pure `bg`.
-        color: widget.fromMapTap
-            ? Colors.transparent
-            : GridTokens.surface,
-        borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(GridTokens.r2Xl)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    final inline = widget.fromMapTap;
+
+    // ClipRRect gives a real rounded top edge — the previous straight
+    // hard cut is replaced by a softly curved corner that reads as
+    // "the map dives behind this sheet" rather than a guillotine.
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(GridTokens.r2Xl)),
+      child: Stack(
         children: [
-          // Grab handle for list-entry presentation only — the map-tap
-          // variant uses its own gradient fade with an integrated
-          // handle to keep the chrome minimal.
-          if (!widget.fromMapTap)
-            Container(
-              margin: const EdgeInsets.only(top: 10),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: GridTokens.text4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+          // Solid sheet body — `surface` matches the Grid 2.0 sheets
+          // sitting on `bg`. Buttons inside use `surface2` for
+          // hierarchy.
+          Positioned.fill(
+            child: ColoredBox(color: GridTokens.surface),
+          ),
 
-          Flexible(
-            child: SingleChildScrollView(
-              controller: widget.scrollController,
-              padding: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.fromMapTap)
-                    // Gradient fade so the bottom of the live map
-                    // (still visible behind this sheet) smoothly
-                    // transitions into the solid bg of the profile
-                    // content.
-                    _buildMapFade()
-                  else
-                    // 280pt fake-map hero with the focused pin —
-                    // shown only when invoked from a contact list
-                    // entry point where we don't already have the
-                    // live map behind us.
-                    _buildMapHero(),
-
-                  // Solid background for the rest of the sheet (so it
-                  // doesn't bleed into the map when opened from a tap).
-                  Container(
-                    color: GridTokens.surface,
-                    child: Transform.translate(
-                      offset: widget.fromMapTap
-                          ? Offset.zero
-                          : const Offset(0, -32),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                        child: _buildIdentityRow(
-                            userLocalpart, handle, showFullMatrixId),
+          // Scrollable content.
+          SingleChildScrollView(
+            controller: widget.scrollController,
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (inline) ...[
+                  // Tight top spacer so the name row sits below the
+                  // rounded corner without the avatar getting clipped.
+                  // No drag handle (user asked for it gone) and no
+                  // fake-map hero — the real map is right above us.
+                  const SizedBox(height: 18),
+                ] else ...[
+                  // Drag handle for list-entry presentation only.
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: GridTokens.text4,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-
-                  Container(
-                    color: GridTokens.surface,
-                    child: Transform.translate(
-                      offset: widget.fromMapTap
-                          ? Offset.zero
-                          : const Offset(0, -32),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 14),
-                            _buildStatusRow(),
-                            const SizedBox(height: 18),
-                            _buildMutualSharingCard(firstName),
-                            const SizedBox(height: 14),
-                            _buildActionGrid(),
-                            const SizedBox(height: 22),
-                            _buildSharedGroups(),
-                            if (!_alwaysShare) ...[
-                              const SizedBox(height: 22),
-                              _buildSectionLabel('SHARING WINDOWS'),
-                              const SizedBox(height: 10),
-                              _buildSharingWindows(),
-                            ],
-                            const SizedBox(height: 22),
-                            _buildSectionLabel('SECURITY'),
-                            const SizedBox(height: 10),
-                            _buildSecurityCard(),
-                            const SizedBox(height: 22),
-                            _buildRemoveContactButton(),
-                            const SizedBox(height: 16),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  // 280pt fake-map hero with the focused pin — shown
+                  // when invoked from a contact list entry point
+                  // where we don't already have the live map behind.
+                  _buildMapHero(),
                 ],
-              ),
+
+                Transform.translate(
+                  offset: inline ? Offset.zero : const Offset(0, -32),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                    child: _buildIdentityRow(
+                        userLocalpart, handle, showFullMatrixId),
+                  ),
+                ),
+
+                Transform.translate(
+                  offset: inline ? Offset.zero : const Offset(0, -32),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 14),
+                        _buildStatusRow(),
+                        const SizedBox(height: 18),
+                        _buildMutualSharingCard(firstName),
+                        const SizedBox(height: 14),
+                        _buildActionGrid(),
+                        const SizedBox(height: 22),
+                        _buildSharedGroups(),
+                        if (!_alwaysShare) ...[
+                          const SizedBox(height: 22),
+                          _buildSectionLabel('SHARING WINDOWS'),
+                          const SizedBox(height: 10),
+                          _buildSharingWindows(),
+                        ],
+                        const SizedBox(height: 22),
+                        _buildSectionLabel('SECURITY'),
+                        const SizedBox(height: 10),
+                        _buildSecurityCard(),
+                        const SizedBox(height: 22),
+                        _buildRemoveContactButton(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+
+          // Floating close X — clearly visible and easy to tap.
+          // Sits in the top-right with safe distance from the
+          // rounded corner. Only rendered when an onClose callback
+          // is provided (inline-from-map flow).
+          if (widget.onClose != null)
+            Positioned(
+              top: 14,
+              right: 14,
+              child: _FloatingCloseButton(onTap: widget.onClose!),
+            ),
         ],
       ),
     );
@@ -358,30 +356,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
   // hero
   // ────────────────────────────────────────────────────────────────────
-
-  /// Used when the sheet was opened from a map-marker / drawer tap.
-  /// The live map is visible underneath; we just need a soft gradient
-  /// fade from transparent → surface so the map's bottom edge melts
-  /// into the sheet's content. No grab handle — the user asked for
-  /// the knob to be removed and the drag-to-dismiss gesture still
-  /// works anywhere on the sheet body.
-  Widget _buildMapFade() {
-    return SizedBox(
-      height: 64,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              GridTokens.surface.withAlpha(0),
-              GridTokens.surface,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMapHero() {
     // If we have an actual location for this contact, embed a tiny
@@ -580,37 +554,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         child: GridLiveBadge(),
                       ),
                     ],
-                    const SizedBox(width: 8),
-                    // X close button on the right side of the name
-                    // row when the sheet is rendered inline by
-                    // MapTab. Calls back so the controller clears +
-                    // the camera resets.
-                    if (widget.onClose != null)
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: widget.onClose,
-                          borderRadius: BorderRadius.circular(999),
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: GridTokens.surface2,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: GridTokens.hairline,
-                                width: 1,
-                              ),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              Icons.close_rounded,
-                              size: 16,
-                              color: GridTokens.text2,
-                            ),
-                          ),
-                        ),
-                      ),
+                    // Reserve enough trailing space for the floating
+                    // close X so the name doesn't run into it.
+                    if (widget.onClose != null) const SizedBox(width: 48),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -1805,6 +1751,50 @@ class _MiniSwitch extends StatelessWidget {
 
 /// One of the 4 action tiles in the action grid (Message / History / Route /
 /// Alerts). Disabled when `onTap` is null.
+/// Prominent floating X close button. Sits in the top-right of the
+/// inline profile sheet on top of the rounded corner so it reads as a
+/// distinct affordance, not a tucked-away link. 44pt tap target with
+/// a subtle hairline border so it's visible against both the sheet
+/// surface and the map underneath when scrolled.
+class _FloatingCloseButton extends StatelessWidget {
+  const _FloatingCloseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            shape: BoxShape.circle,
+            border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.close_rounded,
+            size: 20,
+            color: GridTokens.text,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.icon,
@@ -1827,7 +1817,7 @@ class _ActionTile extends StatelessWidget {
         child: Ink(
           height: 64,
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: GridTokens.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(color: GridTokens.hairline, width: 1),
           ),

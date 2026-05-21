@@ -1903,11 +1903,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       child: Stack(
                         children: state.userLocations.map((userLocation) {
                           final pt = _screenPosFor(userLocation.position);
+                          // Marker box is 140 wide × 110 tall; the
+                          // pin tip sits at the bottom-center of the
+                          // box, which we want anchored at the lat/lng
+                          // screen point.
                           return Positioned(
-                            left: pt.dx - 50,
-                            top: pt.dy - 50,
-                            width: 100,
-                            height: 100,
+                            left: pt.dx - 70,
+                            top: pt.dy - 110,
+                            width: 140,
+                            height: 110,
                             child: GestureDetector(
                               behavior: HitTestBehavior.translucent,
                               onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
