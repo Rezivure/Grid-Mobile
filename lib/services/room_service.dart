@@ -697,14 +697,28 @@ class RoomService {
           return;
         }
 
-        // Build the event content
-        final eventContent = {
+        // Build the event content. `gridv: 2` flags the additive payload:
+        // accuracy/speed/heading and an optional battery block. Old
+        // clients reading the event still only consume `geo_uri` and
+        // ignore unknown fields, so this is backwards-compatible in
+        // both directions.
+        final eventContent = <String, dynamic>{
           'msgtype': 'm.location',
           'body': 'Current location',
           'geo_uri': 'geo:$latitude,$longitude',
           'description': 'Current location',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'gridv': 2,
+          'accuracy': accuracy,
+          'speed': location.speed,
+          'heading': location.heading,
         };
+        if (location.batteryLevel != null) {
+          eventContent['battery'] = <String, dynamic>{
+            'level': location.batteryLevel,
+            if (location.isCharging != null) 'charging': location.isCharging,
+          };
+        }
 
         try {
           await room.sendEvent(eventContent);

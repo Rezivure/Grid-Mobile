@@ -39,6 +39,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/services/log_stream_service.dart';
 
 import 'screens/onboarding/splash_screen.dart';
@@ -226,6 +227,14 @@ void main() async {
         // the user changes home / radius / the master toggle so the
         // monitored region tracks the prefs without a restart.
         Provider<HomeGeofenceService>.value(value: homeGeofenceService),
+
+        // In-memory speed / battery / accuracy snapshot per contact,
+        // populated by MessageProcessor on every inbound m.location.
+        // Watched by user_info_bubble + contact_profile_modal so the
+        // UI reflects the latest gridv 2 payload.
+        ChangeNotifierProvider<UserDeviceStatusCache>.value(
+          value: UserDeviceStatusCache.instance,
+        ),
 
         // Provide the RoomService
         ProxyProvider<LocationManager, RoomService>(

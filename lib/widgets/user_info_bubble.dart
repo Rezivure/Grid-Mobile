@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
@@ -347,6 +348,25 @@ class UserInfoBubble extends StatelessWidget {
     }
   }
 
+  /// "DRIVING" / "WALKING" / null. Bands chosen so the label maps to
+  /// what the user can actually tell from looking out the window:
+  ///   <1.4 m/s (~3 mph) → not moving, suppress
+  ///   1.4–5 m/s         → WALKING
+  ///   ≥5 m/s (~11 mph)  → DRIVING
+  String? _formatMotion(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    if (speedMps < 5) return 'WALKING';
+    return 'DRIVING';
+  }
+
+  /// Speed as "12 mph". Null when no useful motion or speed isn't
+  /// known.
+  String? _formatSpeed(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    final mph = speedMps * 2.236936;
+    return '${mph.round()} mph';
+  }
+
   String _formatCoordinates(LatLng p) {
     final lat = p.latitude;
     final lng = p.longitude;
@@ -372,6 +392,14 @@ class UserInfoBubble extends StatelessWidget {
     final updatedLabel = lastUpdate == null
         ? null
         : TimeAgoFormatter.format(lastUpdate);
+
+    // gridv 2: opportunistic speed + battery from the sender's last
+    // m.location. context.watch so the bubble rebuilds as new fixes
+    // arrive while it's open.
+    final status =
+        context.watch<UserDeviceStatusCache>().statusFor(userId);
+    final motionLabel = _formatMotion(status?.speed);
+    final speedLabel = _formatSpeed(status?.speed);
 
     return Positioned(
       top: topOffset,
@@ -416,9 +444,13 @@ class UserInfoBubble extends StatelessWidget {
                           onCopyCoordinates: () =>
                               _copyCoordinates(context, position),
                           onClose: onClose,
+                          batteryLevel: status?.batteryLevel,
+                          isCharging: status?.isCharging,
                         ),
                         const SizedBox(height: 12),
                         _StatusRow(
+                          motion: motionLabel,
+                          speed: speedLabel,
                           distance: distanceLabel,
                           bearing: bearingLabel,
                           updated: updatedLabel,
@@ -469,6 +501,8 @@ class _IdentityRow extends StatelessWidget {
     required this.coordinatesLabel,
     required this.onCopyCoordinates,
     required this.onClose,
+    this.batteryLevel,
+    this.isCharging,
   });
 
   final String userId;
@@ -476,6 +510,8 @@ class _IdentityRow extends StatelessWidget {
   final String coordinatesLabel;
   final VoidCallback onCopyCoordinates;
   final VoidCallback? onClose;
+  final double? batteryLevel;
+  final bool? isCharging;
 
   @override
   Widget build(BuildContext context) {
@@ -546,6 +582,13 @@ class _IdentityRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   const GridLiveBadge(),
+                  if (batteryLevel != null) ...[
+                    const SizedBox(width: 6),
+                    _BatteryGlyph(
+                      level: batteryLevel!,
+                      charging: isCharging ?? false,
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 2),
@@ -610,15 +653,20 @@ class _CloseButton extends StatelessWidget {
 
 class _StatusRow extends StatelessWidget {
   const _StatusRow({
+    required this.motion,
+    required this.speed,
     required this.distance,
     required this.bearing,
     required this.updated,
   });
 
-  /// All three are optional: we only render the cells we have real data for.
-  /// Driving/walking pills were intentionally removed — the app doesn't pass
-  /// speed through `UserLocation` today, so any motion label here would be
-  /// made up.
+  /// All optional — we only render the cells we have real data for.
+  /// `motion` becomes a mint pill (DRIVING / WALKING). `speed` rides
+  /// next to it as a secondary mono cell. `distance/bearing/updated`
+  /// remain as before. With gridv 2 the sender ships speed in
+  /// m.location so the pill is no longer a placeholder.
+  final String? motion;
+  final String? speed;
   final String? distance;
   final String? bearing;
   final String? updated;
@@ -626,6 +674,15 @@ class _StatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = <Widget>[];
+
+    // Motion pill takes the leftmost slot when present so it visually
+    // groups with the avatar/identity column above it.
+    if (motion != null) {
+      cells.add(_MotionPill(
+        label: motion!,
+        trailing: speed,
+      ));
+    }
     if (distance != null) {
       cells.add(
         _MonoCell(
@@ -650,6 +707,118 @@ class _StatusRow extends StatelessWidget {
           Expanded(child: cells[i]),
         ],
       ],
+    );
+  }
+}
+
+/// Mint pill rendering "DRIVING · 38 mph" / "WALKING · 3 mph" using
+/// real speed from the gridv-2 sender. Stays out of the layout when
+/// the sender didn't ship a speed value.
+class _MotionPill extends StatelessWidget {
+  const _MotionPill({required this.label, this.trailing});
+
+  final String label;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: GridTokens.mintSoft,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: GridTokens.mintSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.directions_car_filled_rounded,
+            color: GridTokens.mint,
+            size: 11,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: GridMono(
+              label,
+              size: 10,
+              letterSpacing: 0.08,
+              color: GridTokens.mint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 4),
+            Flexible(
+              child: GridMono(
+                trailing!,
+                uppercase: false,
+                size: 10,
+                letterSpacing: 0.02,
+                color: GridTokens.mint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Tiny battery glyph + percentage, e.g. "🔋 14%". Color shifts based
+/// on level — danger red <20%, amber 20–40%, mint otherwise. Charging
+/// always shows a bolt and the mint tone regardless of level.
+class _BatteryGlyph extends StatelessWidget {
+  const _BatteryGlyph({required this.level, required this.charging});
+
+  final double level; // 0.0–1.0
+  final bool charging;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (level * 100).round();
+    final Color color;
+    final IconData icon;
+    if (charging) {
+      color = GridTokens.mint;
+      icon = Icons.bolt_rounded;
+    } else if (level < 0.20) {
+      color = GridTokens.danger;
+      icon = Icons.battery_alert_rounded;
+    } else if (level < 0.40) {
+      color = GridTokens.amber;
+      icon = Icons.battery_3_bar_rounded;
+    } else {
+      color = GridTokens.text2;
+      icon = Icons.battery_5_bar_rounded;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text(
+            '$pct%',
+            style: TextStyle(
+              fontFamily: GridTokens.fontMono,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: 0.06,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

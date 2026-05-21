@@ -281,7 +281,10 @@ class LibreLocationService implements LocationService {
   }
 
   /// Maps libre_location Position to our platform-agnostic LocationUpdate.
+  /// Surfaces battery + charging from `position.battery` so the location
+  /// post path can include them in the `m.location` payload.
   LocationUpdate _mapPositionToLocationUpdate(libre.Position position) {
+    final battery = position.battery;
     return LocationUpdate(
       latitude: position.latitude,
       longitude: position.longitude,
@@ -291,6 +294,8 @@ class LibreLocationService implements LocationService {
       altitude: position.altitude,
       timestamp: position.timestamp,
       isMoving: position.isMoving,
+      batteryLevel: battery?.level,
+      isCharging: battery?.isCharging,
     );
   }
 

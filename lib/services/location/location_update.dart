@@ -10,6 +10,14 @@ class LocationUpdate {
   final DateTime timestamp;
   final bool isMoving;
 
+  /// Battery level reported by the OS at the time of the fix, 0.0–1.0.
+  /// Null if the plugin couldn't read it (rare).
+  final double? batteryLevel;
+
+  /// True if the device was plugged in / on a wireless charger. Null when
+  /// unknown.
+  final bool? isCharging;
+
   const LocationUpdate({
     required this.latitude,
     required this.longitude,
@@ -19,6 +27,8 @@ class LocationUpdate {
     required this.altitude,
     required this.timestamp,
     required this.isMoving,
+    this.batteryLevel,
+    this.isCharging,
   });
 
   /// Create a LocationUpdate from a map (for serialization).
@@ -34,6 +44,8 @@ class LocationUpdate {
         (map['timestamp'] as num).toInt(),
       ),
       isMoving: map['isMoving'] as bool? ?? false,
+      batteryLevel: (map['batteryLevel'] as num?)?.toDouble(),
+      isCharging: map['isCharging'] as bool?,
     );
   }
 
@@ -48,6 +60,8 @@ class LocationUpdate {
       'altitude': altitude,
       'timestamp': timestamp.millisecondsSinceEpoch,
       'isMoving': isMoving,
+      if (batteryLevel != null) 'batteryLevel': batteryLevel,
+      if (isCharging != null) 'isCharging': isCharging,
     };
   }
 
@@ -60,6 +74,8 @@ class LocationUpdate {
     double? altitude,
     DateTime? timestamp,
     bool? isMoving,
+    double? batteryLevel,
+    bool? isCharging,
   }) {
     return LocationUpdate(
       latitude: latitude ?? this.latitude,
@@ -70,6 +86,8 @@ class LocationUpdate {
       altitude: altitude ?? this.altitude,
       timestamp: timestamp ?? this.timestamp,
       isMoving: isMoving ?? this.isMoving,
+      batteryLevel: batteryLevel ?? this.batteryLevel,
+      isCharging: isCharging ?? this.isCharging,
     );
   }
 
