@@ -30,6 +30,11 @@ class AddFriendModal extends StatefulWidget {
   final VoidCallback? onGroupCreated;
   final VoidCallback? onContactAdded;
 
+  /// If true the modal opens straight into the group-create flow,
+  /// bypassing the hub. Used by the drawer's contextual Create-Group
+  /// button when the Groups pill is active.
+  final bool startInGroupCreate;
+
   const AddFriendModal({
     required this.userService,
     Key? key,
@@ -37,6 +42,7 @@ class AddFriendModal extends StatefulWidget {
     required this.groupsBloc,
     required this.onGroupCreated,
     this.onContactAdded,
+    this.startInGroupCreate = false,
   }) : super(key: key);
 
   @override
@@ -57,7 +63,8 @@ class _AddFriendModalState extends State<AddFriendModal>
   String? _matrixUserId = "";
   String? _friendQrCodeScan;
 
-  // The currently visible sub-view.
+  // The currently visible sub-view. Overridden in initState when the
+  // caller asked to open straight into the group-create flow.
   _AddFriendView _view = _AddFriendView.hub;
 
   // ── User identity (for the hero QR card) ─────────────────────────────
@@ -145,6 +152,11 @@ class _AddFriendModalState extends State<AddFriendModal>
 
     _fadeController.forward();
     _slideController.forward();
+
+    if (widget.startInGroupCreate) {
+      _view = _AddFriendView.groupCreate;
+      _currentGroupStep = 0;
+    }
 
     _loadMyIdentity();
   }
@@ -768,19 +780,9 @@ class _AddFriendModalState extends State<AddFriendModal>
         _buildTopBar(
           title: 'Add a friend',
           onClose: () => Navigator.of(context).pop(),
-          trailing: IconButton(
-            icon: const Icon(Icons.group_add_outlined,
-                color: GridTokens.text2, size: 22),
-            tooltip: 'Create a group',
-            onPressed: () {
-              setState(() {
-                _currentGroupStep = 0;
-                _view = _AddFriendView.groupCreate;
-              });
-              _slideController.reset();
-              _slideController.forward();
-            },
-          ),
+          // Create-group lives on the Groups pill's drawer header
+          // now — the contextual icon swaps between Add Friend and
+          // Create Group based on which pill is active.
         ),
         Flexible(
           child: SingleChildScrollView(

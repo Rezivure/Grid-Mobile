@@ -582,13 +582,15 @@ class _IdentityRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   const GridLiveBadge(),
-                  if (batteryLevel != null) ...[
-                    const SizedBox(width: 6),
-                    _BatteryGlyph(
-                      level: batteryLevel!,
-                      charging: isCharging ?? false,
-                    ),
-                  ],
+                  const SizedBox(width: 6),
+                  // Always rendered. Pre-gridv-2 senders leave level
+                  // null, in which case we show a grey "?" placeholder
+                  // so the slot is visible and consistent across
+                  // contacts even before everyone is on the new build.
+                  _BatteryGlyph(
+                    level: batteryLevel,
+                    charging: isCharging ?? false,
+                  ),
                 ],
               ),
               const SizedBox(height: 2),
@@ -675,14 +677,15 @@ class _StatusRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cells = <Widget>[];
 
-    // Motion pill takes the leftmost slot when present so it visually
-    // groups with the avatar/identity column above it.
-    if (motion != null) {
-      cells.add(_MotionPill(
-        label: motion!,
-        trailing: speed,
-      ));
-    }
+    // Motion pill is always rendered. When `motion` is null (sender
+    // hasn't shipped gridv 2 yet, or is currently still), the pill
+    // shows a grey '— mph' placeholder so the affordance is visible
+    // and consistent across contacts.
+    cells.add(_MotionPill(
+      label: motion ?? 'IDLE',
+      trailing: speed,
+      muted: motion == null,
+    ));
     if (distance != null) {
       cells.add(
         _MonoCell(
@@ -699,7 +702,6 @@ class _StatusRow extends StatelessWidget {
         ),
       );
     }
-    if (cells.isEmpty) return const SizedBox.shrink();
     return Row(
       children: [
         for (var i = 0; i < cells.length; i++) ...[
@@ -712,30 +714,41 @@ class _StatusRow extends StatelessWidget {
 }
 
 /// Mint pill rendering "DRIVING · 38 mph" / "WALKING · 3 mph" using
-/// real speed from the gridv-2 sender. Stays out of the layout when
-/// the sender didn't ship a speed value.
+/// real speed from the gridv-2 sender. When [muted] is true (no data
+/// available yet) the pill is rendered in grey/hairline tones so the
+/// slot is still visible but doesn't suggest the contact is moving.
 class _MotionPill extends StatelessWidget {
-  const _MotionPill({required this.label, this.trailing});
+  const _MotionPill({
+    required this.label,
+    this.trailing,
+    this.muted = false,
+  });
 
   final String label;
   final String? trailing;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
+    final color = muted ? GridTokens.text3 : GridTokens.mint;
+    final bg = muted ? GridTokens.surface2 : GridTokens.mintSoft;
+    final border = muted ? GridTokens.hairline : GridTokens.mintSoft;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: GridTokens.mintSoft,
+        color: bg,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.mintSoft),
+        border: Border.all(color: border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.directions_car_filled_rounded,
-            color: GridTokens.mint,
+          Icon(
+            muted
+                ? Icons.do_not_disturb_on_total_silence_rounded
+                : Icons.directions_car_filled_rounded,
+            color: color,
             size: 11,
           ),
           const SizedBox(width: 4),
@@ -744,7 +757,7 @@ class _MotionPill extends StatelessWidget {
               label,
               size: 10,
               letterSpacing: 0.08,
-              color: GridTokens.mint,
+              color: color,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -757,7 +770,7 @@ class _MotionPill extends StatelessWidget {
                 uppercase: false,
                 size: 10,
                 letterSpacing: 0.02,
-                color: GridTokens.mint,
+                color: color,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -771,30 +784,42 @@ class _MotionPill extends StatelessWidget {
 
 /// Tiny battery glyph + percentage, e.g. "🔋 14%". Color shifts based
 /// on level — danger red <20%, amber 20–40%, mint otherwise. Charging
-/// always shows a bolt and the mint tone regardless of level.
+/// always shows a bolt and the mint tone regardless of level. When
+/// `level` is null (sender on a pre-gridv-2 build) we still render a
+/// grey "?" pill so the slot is always present and the user can spot
+/// the affordance even before everyone is upgraded.
 class _BatteryGlyph extends StatelessWidget {
   const _BatteryGlyph({required this.level, required this.charging});
 
-  final double level; // 0.0–1.0
+  final double? level; // 0.0–1.0, or null when unknown
   final bool charging;
 
   @override
   Widget build(BuildContext context) {
-    final pct = (level * 100).round();
     final Color color;
     final IconData icon;
-    if (charging) {
+    final String label;
+
+    if (level == null) {
+      color = GridTokens.text3;
+      icon = Icons.battery_unknown_rounded;
+      label = '?';
+    } else if (charging) {
       color = GridTokens.mint;
       icon = Icons.bolt_rounded;
-    } else if (level < 0.20) {
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.20) {
       color = GridTokens.danger;
       icon = Icons.battery_alert_rounded;
-    } else if (level < 0.40) {
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.40) {
       color = GridTokens.amber;
       icon = Icons.battery_3_bar_rounded;
+      label = '${(level! * 100).round()}%';
     } else {
       color = GridTokens.text2;
       icon = Icons.battery_5_bar_rounded;
+      label = '${(level! * 100).round()}%';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -808,7 +833,7 @@ class _BatteryGlyph extends StatelessWidget {
           Icon(icon, size: 10, color: color),
           const SizedBox(width: 3),
           Text(
-            '$pct%',
+            label,
             style: TextStyle(
               fontFamily: GridTokens.fontMono,
               fontSize: 9.5,

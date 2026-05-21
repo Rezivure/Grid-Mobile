@@ -378,10 +378,17 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Swap based on the active pill — Add Friend on
+                  // People, Create Group on Groups. Defaults to Add
+                  // Friend on Invites (since Invites is read-only).
                   GridNavIconButton(
-                    icon: Icons.person_add_outlined,
+                    icon: isGroupsView
+                        ? Icons.group_add_outlined
+                        : Icons.person_add_outlined,
                     size: 40,
-                    onPressed: () => _showAddFriendModal(context),
+                    onPressed: () => isGroupsView
+                        ? _showCreateGroupModal(context)
+                        : _showAddFriendModal(context),
                   ),
                   const SizedBox(width: 8),
                   GridNavIconButton(
@@ -1026,6 +1033,36 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),
         );
       },
+    );
+  }
+
+  /// Opens the Add Friend modal pre-routed to the group-create flow.
+  /// Used by the drawer header's contextual icon when the Groups pill
+  /// is selected — `startInGroupCreate: true` skips the hub entirely.
+  void _showCreateGroupModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: AddFriendModal(
+          roomService: _roomService,
+          userService: _userService,
+          groupsBloc: _groupsBloc,
+          startInGroupCreate: true,
+          onGroupCreated: () {
+            _groupsBloc.add(RefreshGroups());
+          },
+        ),
+      ),
     );
   }
 
