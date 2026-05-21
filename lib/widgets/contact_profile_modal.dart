@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
@@ -31,11 +32,22 @@ class ContactProfileModal extends StatefulWidget {
   final RoomService roomService;
   final SharingPreferencesRepository sharingPreferencesRepo;
 
+  /// True when the modal was opened by tapping the contact's marker on
+  /// the map. In that case:
+  ///   1. The internal map hero is suppressed — the real map sits
+  ///      directly behind the sheet and fades into it.
+  ///   2. Speed / motion / battery are pulled from
+  ///      UserDeviceStatusCache and shown inline with the identity
+  ///      row, since the user_info_bubble that used to surface them is
+  ///      being retired in favor of this consolidated screen.
+  final bool fromMapTap;
+
   const ContactProfileModal({
     Key? key,
     required this.contact,
     required this.roomService,
     required this.sharingPreferencesRepo,
+    this.fromMapTap = false,
   }) : super(key: key);
 
   @override
@@ -216,23 +228,30 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     final firstName = widget.contact.displayName.split(' ').first;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: GridTokens.bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(GridTokens.r2Xl)),
+      decoration: BoxDecoration(
+        // Transparent top edge when opened from a map tap so the real
+        // map peeks through into the gradient fade defined below.
+        color: widget.fromMapTap
+            ? Colors.transparent
+            : GridTokens.bg,
+        borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(GridTokens.r2Xl)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Grab handle
-          Container(
-            margin: const EdgeInsets.only(top: 10),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: GridTokens.text4,
-              borderRadius: BorderRadius.circular(2),
+          // Grab handle. When opened from the map, it floats over the
+          // gradient fade rather than sitting on a solid card.
+          if (!widget.fromMapTap)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: GridTokens.text4,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
 
           Flexible(
             child: SingleChildScrollView(
@@ -240,46 +259,67 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 280pt map hero with the focused pin.
-                  _buildMapHero(),
+                  if (widget.fromMapTap)
+                    // Gradient fade so the bottom of the live map
+                    // (still visible behind this sheet) smoothly
+                    // transitions into the solid bg of the profile
+                    // content.
+                    _buildMapFade()
+                  else
+                    // 280pt fake-map hero with the focused pin —
+                    // shown only when invoked from a contact list
+                    // entry point where we don't already have the
+                    // live map behind us.
+                    _buildMapHero(),
 
-                  // Identity row overlaps the hero by 32pt.
-                  Transform.translate(
-                    offset: const Offset(0, -32),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                      child: _buildIdentityRow(userLocalpart, handle, showFullMatrixId),
+                  // Solid background for the rest of the sheet (so it
+                  // doesn't bleed into the map when opened from a tap).
+                  Container(
+                    color: GridTokens.bg,
+                    child: Transform.translate(
+                      offset: widget.fromMapTap
+                          ? Offset.zero
+                          : const Offset(0, -32),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                        child: _buildIdentityRow(
+                            userLocalpart, handle, showFullMatrixId),
+                      ),
                     ),
                   ),
 
-                  // Pull subsequent content up so we don't have a 32pt gap.
-                  Transform.translate(
-                    offset: const Offset(0, -32),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 14),
-                          _buildStatusRow(),
-                          const SizedBox(height: 18),
-                          _buildMutualSharingCard(firstName),
-                          const SizedBox(height: 14),
-                          _buildActionGrid(),
-                          const SizedBox(height: 22),
-                          _buildSharedGroups(),
-                          if (!_alwaysShare) ...[
+                  Container(
+                    color: GridTokens.bg,
+                    child: Transform.translate(
+                      offset: widget.fromMapTap
+                          ? Offset.zero
+                          : const Offset(0, -32),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 14),
+                            _buildStatusRow(),
+                            const SizedBox(height: 18),
+                            _buildMutualSharingCard(firstName),
+                            const SizedBox(height: 14),
+                            _buildActionGrid(),
                             const SizedBox(height: 22),
-                            _buildSectionLabel('SHARING WINDOWS'),
+                            _buildSharedGroups(),
+                            if (!_alwaysShare) ...[
+                              const SizedBox(height: 22),
+                              _buildSectionLabel('SHARING WINDOWS'),
+                              const SizedBox(height: 10),
+                              _buildSharingWindows(),
+                            ],
+                            const SizedBox(height: 22),
+                            _buildSectionLabel('SECURITY'),
                             const SizedBox(height: 10),
-                            _buildSharingWindows(),
+                            _buildSecurityCard(),
+                            const SizedBox(height: 16),
                           ],
-                          const SizedBox(height: 22),
-                          _buildSectionLabel('SECURITY'),
-                          const SizedBox(height: 10),
-                          _buildSecurityCard(),
-                          const SizedBox(height: 16),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -295,6 +335,51 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
   // hero
   // ────────────────────────────────────────────────────────────────────
+
+  /// Used when the sheet was opened from a map-marker tap. The live map
+  /// is already visible underneath; we just need a soft gradient fade
+  /// from transparent → bg so the map's bottom edge melts into the
+  /// sheet's content surface. A draggable grab handle floats on the
+  /// transparent part.
+  Widget _buildMapFade() {
+    return SizedBox(
+      height: 96,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    GridTokens.bg.withAlpha(0),
+                    GridTokens.bg,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Floating grab handle.
+          Positioned(
+            top: 10,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildMapHero() {
     // If we have an actual location for this contact, embed a tiny
@@ -538,14 +623,21 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildStatusRow() {
-    // We don't have access to motion/speed/distance/bearing data in this
-    // widget's inputs, so we render the pills we can ground in real state:
-    // the active/paused state derived from `_alwaysShare` and the "updated"
-    // age from `contact.lastSeen`.
     final live = _alwaysShare;
     final updatedLabel = widget.contact.lastSeen.isEmpty
         ? 'JUST NOW'
         : 'UPDATED ${widget.contact.lastSeen}';
+
+    // gridv 2: pull live device-status (motion / speed / battery) from
+    // the cache. Subscribe so the row rebuilds as fresh fixes land
+    // while the sheet is open. Always renders the placeholder pills so
+    // the shape of the row is consistent even before the sender is on
+    // a gridv-2 build.
+    final status =
+        context.watch<UserDeviceStatusCache>().statusFor(widget.contact.userId);
+    final motionLabel = _formatMotion(status?.speed);
+    final speedLabel = _formatSpeed(status?.speed);
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -554,9 +646,26 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           label: live ? 'SHARING' : 'PAUSED',
           kind: live ? GridStatusKind.live : GridStatusKind.paused,
         ),
+        _MotionStatusPill(motion: motionLabel, speed: speedLabel),
+        _BatteryStatusPill(
+          level: status?.batteryLevel,
+          charging: status?.isCharging ?? false,
+        ),
         _MonoPill(label: updatedLabel),
       ],
     );
+  }
+
+  // Same banding as the old user_info_bubble.
+  String? _formatMotion(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    if (speedMps < 5) return 'WALKING';
+    return 'DRIVING';
+  }
+
+  String? _formatSpeed(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    return '${(speedMps * 2.236936).round()} mph';
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -1241,6 +1350,115 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 // ─────────────────────────────────────────────────────────────────────
 // helpers
 // ─────────────────────────────────────────────────────────────────────
+
+/// Mint pill showing DRIVING / WALKING / IDLE + mph next to it.
+/// Falls back to a muted IDLE pill when speed is unknown so the slot
+/// is always visible.
+class _MotionStatusPill extends StatelessWidget {
+  const _MotionStatusPill({required this.motion, this.speed});
+
+  final String? motion;
+  final String? speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = motion == null;
+    final color = muted ? GridTokens.text3 : GridTokens.mint;
+    final bg = muted ? GridTokens.surface2 : GridTokens.mintFaint;
+    final border = muted ? GridTokens.hairline : GridTokens.mintSoft;
+    final IconData icon;
+    if (motion == 'DRIVING') {
+      icon = Icons.directions_car_filled_rounded;
+    } else if (motion == 'WALKING') {
+      icon = Icons.directions_walk_rounded;
+    } else {
+      icon = Icons.do_not_disturb_on_total_silence_rounded;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          GridMono(motion ?? 'IDLE',
+              size: 10, color: color, letterSpacing: 0.08),
+          if (speed != null) ...[
+            const SizedBox(width: 5),
+            GridMono(speed!,
+                uppercase: false,
+                size: 10,
+                color: color,
+                letterSpacing: 0.02),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Battery pill — same banding as the user_info_bubble glyph (danger
+/// red < 20 %, amber < 40 %, mint when charging, text2 otherwise).
+/// Grey "?" placeholder when the sender hasn't shipped gridv 2 yet.
+class _BatteryStatusPill extends StatelessWidget {
+  const _BatteryStatusPill({required this.level, required this.charging});
+
+  final double? level;
+  final bool charging;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final IconData icon;
+    final String label;
+    if (level == null) {
+      color = GridTokens.text3;
+      icon = Icons.battery_unknown_rounded;
+      label = '?';
+    } else if (charging) {
+      color = GridTokens.mint;
+      icon = Icons.bolt_rounded;
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.20) {
+      color = GridTokens.danger;
+      icon = Icons.battery_alert_rounded;
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.40) {
+      color = GridTokens.amber;
+      icon = Icons.battery_3_bar_rounded;
+      label = '${(level! * 100).round()}%';
+    } else {
+      color = GridTokens.text2;
+      icon = Icons.battery_5_bar_rounded;
+      label = '${(level! * 100).round()}%';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          GridMono(label,
+              uppercase: false,
+              size: 10,
+              color: color,
+              letterSpacing: 0.06),
+        ],
+      ),
+    );
+  }
+}
 
 /// Small mono pill (matches the "updated 12s" / "0.4 mi · NE" surface pills
 /// in the design — text3 on surface2 with a hairline outline).

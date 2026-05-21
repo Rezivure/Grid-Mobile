@@ -38,6 +38,8 @@ import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
+import 'package:grid_frontend/widgets/contact_profile_modal.dart';
+import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -1448,23 +1450,66 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _onMarkerTap(String userId, LatLng position) async {
-    // Update map state with selected user
+    // Center the map on the tapped contact so when the profile sheet
+    // slides up, the visible map above it is already focused on them.
     context.read<MapBloc>().add(MapMoveToUser(userId));
-    
-    // Fetch user display name
-    String displayName = userId.split(':')[0].replaceFirst('@', ''); // Default fallback
+
+    // Best-effort display name resolution.
+    String displayName = userId.split(':')[0].replaceFirst('@', '');
+    String? avatarUrl;
+    String lastSeen = '';
     try {
       final user = await userRepository?.getUserById(userId);
-      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-        displayName = user.displayName!;
+      if (user != null) {
+        if (user.displayName != null && user.displayName!.isNotEmpty) {
+          displayName = user.displayName!;
+        }
+        avatarUrl = user.profileStatus;
+        lastSeen = user.lastSeen;
       }
-    } catch (e) {
-    }
-    
-    setState(() {
-      _selectedUserId = userId;
-      _bubblePosition = position;
-      _selectedUserName = displayName;
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final contact = ContactDisplay(
+      userId: userId,
+      displayName: displayName,
+      avatarUrl: avatarUrl,
+      lastSeen: lastSeen,
+    );
+
+    // Open the full profile sheet straight from the marker tap — the
+    // old user_info_bubble + 'View Profile' two-step was redundant
+    // since the bubble already showed everything the sheet does.
+    final roomService = context.read<RoomService>();
+    final sharingRepo = sharingPreferencesRepository;
+    if (sharingRepo == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      // Tap-through on the top transparent fade reveals the live map
+      // behind the sheet. The map is already centered on the contact.
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.62,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, scrollController) {
+          return ContactProfileModal(
+            contact: contact,
+            roomService: roomService,
+            sharingPreferencesRepo: sharingRepo,
+            fromMapTap: true,
+          );
+        },
+      ),
+    ).whenComplete(() {
+      if (!mounted) return;
+      // Globe-reset on close — smart-zooms back out to fit all
+      // contacts so the view doesn't stay locked on one person.
+      _resetToInitialZoom();
     });
   }
 
@@ -1918,22 +1963,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ]);
             })),  // close Stack, LayoutBuilder builder, LayoutBuilder, SizedBox
 
-            if (_bubblePosition != null && _selectedUserId != null)
-              UserInfoBubble(
-                userId: _selectedUserId!,
-                userName: _selectedUserName!,
-                position: _bubblePosition!,
-                lastUpdate: Provider.of<UserLocationProvider>(context)
-                    .getLastSeen(_selectedUserId!),
-                onClose: () {
-                  setState(() {
-                    _bubblePosition = null;
-                    _selectedUserId = null;
-                    _selectedUserName = null;
-                  });
-                },
-              ),
-            
+            // user_info_bubble is retired — marker tap opens the
+            // ContactProfileModal directly via `_onMarkerTap`.
+
+
             // Icon action wheel
             if (_showIconActionWheel && _iconActionWheelPosition != null && _selectedMapIcon != null)
               IconActionWheel(
@@ -2301,10 +2334,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
               ),
 
-            // Top-center "SHARING WITH N" pill (with paused-state from notifier).
-            // Hidden while the user info bubble is up so they don't collide.
-            if (_selectedUserId == null)
-              Positioned(
+            // Top-center "SHARING WITH N" pill. The user_info_bubble
+            // that used to overlap this is gone — marker taps now open
+            // the profile sheet at the bottom, leaving the top clear.
+            Positioned(
                 top: 60,
                 left: 0,
                 right: 0,
