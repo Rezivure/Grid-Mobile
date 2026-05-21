@@ -611,13 +611,16 @@ class RoomService {
       );
 
       for (final user in userIds) {
-        var fullMatrixId = user;
+        // Strip any stray leading '@' before constructing the full Matrix ID
+        // so that stored usernames and copy-pasted IDs are handled consistently.
+        final cleanUser = user.startsWith('@') ? user.substring(1) : user;
+        final String fullMatrixId;
         final isCustomServ = isCustomHomeserver();
         if (isCustomServ) {
-          fullMatrixId = '@$fullMatrixId';
+          fullMatrixId = '@$cleanUser';
         } else {
           final homeserver = getMyHomeserver().replaceFirst('https://', '');
-          fullMatrixId = '@$user:$homeserver';
+          fullMatrixId = '@$cleanUser:$homeserver';
         }
         await client.inviteUser(roomId, fullMatrixId);
       }
