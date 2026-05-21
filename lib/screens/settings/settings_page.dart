@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
+import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
@@ -72,6 +73,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String _buildNumber = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
+  SharingMode _sharingMode = SharingMode.balanced;
   bool _autoPauseAtHome = false;
   bool _homeLocationSet = false;
   String? _userID;
@@ -169,6 +171,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _batterySaver = prefs.getBool('battery_saver') ?? false;
+      _sharingMode =
+          SharingModePref.fromPrefValue(prefs.getString('sharing_mode'));
     });
   }
 
@@ -219,6 +223,28 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  /// Drives the user-facing 'Sharing mode' slider. Persists the choice,
+  /// swaps the underlying `libre_location` preset at runtime via
+  /// LocationDispatch, and keeps the legacy `battery_saver` pref in sync
+  /// for any consumer that still reads it.
+  Future<void> _setSharingMode(SharingMode mode) async {
+    if (_sharingMode == mode) return;
+    setState(() => _sharingMode = mode);
+    try {
+      await context.read<LocationDispatch>().setMode(mode);
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    final wantBatterySaver = mode == SharingMode.light;
+    if (_batterySaver != wantBatterySaver) {
+      await prefs.setBool('battery_saver', wantBatterySaver);
+      if (mounted) setState(() => _batterySaver = wantBatterySaver);
+      try {
+        Provider.of<LocationManager>(context, listen: false)
+            .toggleBatterySaverMode(wantBatterySaver);
+      } catch (_) {}
+    }
   }
 
   Future<void> _toggleBatterySaver(bool value) async {
@@ -2399,11 +2425,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   colorScheme: colorScheme,
                 ),
                 _buildSettingsDivider(),
-                // TODO: geofence trigger — needs platform geofencing setup.
+                _SharingModeRow(
+                  selected: _sharingMode,
+                  onChanged: _setSharingMode,
+                ),
+                _buildSettingsDivider(),
                 _buildToggleOption(
                   icon: Icons.home_outlined,
-                  title: 'Auto-pause when phone is at home',
-                  subtitle: 'Saves battery',
+                  title: 'Pause sharing at home',
+                  subtitle:
+                      'Pauses automatically when you cross the geofence',
                   value: _autoPauseAtHome,
                   onChanged: _onAutoPauseAtHomeToggled,
                   colorScheme: colorScheme,
@@ -2426,15 +2457,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     isDestructive: true,
                   ),
                 ],
-                _buildSettingsDivider(),
-                _buildToggleOption(
-                  icon: Icons.battery_saver_outlined,
-                  title: 'Battery saver',
-                  subtitle: 'Less accurate, less power',
-                  value: _batterySaver,
-                  onChanged: _toggleBatterySaver,
-                  colorScheme: colorScheme,
-                ),
               ],
             ),
 
@@ -3849,4 +3871,208 @@ class _DangerBullet {
   const _DangerBullet(this.icon, this.text);
   final IconData icon;
   final String text;
+}
+
+/// The "Sharing mode" row inside the Sharing card. Renders a 3-position
+/// segmented control plus a description of the selected mode (what
+/// friends see + the battery estimate). Designed so the selected mode
+/// owns the screen without forcing the user to read all three.
+class _SharingModeRow extends StatelessWidget {
+  const _SharingModeRow({required this.selected, required this.onChanged});
+
+  final SharingMode selected;
+  final ValueChanged<SharingMode> onChanged;
+
+  static const _modes = <_ModeInfo>[
+    _ModeInfo(
+      mode: SharingMode.light,
+      label: 'Light',
+      icon: Icons.bedtime_outlined,
+      tagline: 'Updates only when you change places.',
+      friendsSee: 'Friends see when you arrive somewhere new.',
+      battery: '~1% per day',
+    ),
+    _ModeInfo(
+      mode: SharingMode.balanced,
+      label: 'Balanced',
+      icon: Icons.balance_outlined,
+      tagline: 'Updates every ~60s while moving.',
+      friendsSee: 'Your dot lags real life by 1–2 minutes.',
+      battery: '~2–4% per day',
+    ),
+    _ModeInfo(
+      mode: SharingMode.live,
+      label: 'Live',
+      icon: Icons.gps_fixed_rounded,
+      tagline: 'Updates every ~30s while driving.',
+      friendsSee: 'Navigation-grade. For trips.',
+      battery: '~5–8% per day',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _modes.firstWhere((m) => m.mode == selected);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.tune_rounded,
+                size: 18,
+                color: GridTokens.text2,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Sharing mode',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.01,
+                  color: GridTokens.text,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: GridTokens.surface2,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: GridTokens.hairline),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final m in _modes)
+                  Expanded(
+                    child: _SharingModeChip(
+                      info: m,
+                      active: m.mode == selected,
+                      onTap: () => onChanged(m.mode),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            info.tagline,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+              color: GridTokens.text,
+              letterSpacing: -0.005,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            info.friendsSee,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 12.5,
+              color: GridTokens.text2,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(
+                Icons.battery_5_bar_rounded,
+                size: 13,
+                color: GridTokens.mint,
+              ),
+              const SizedBox(width: 6),
+              GridMono(
+                info.battery,
+                size: 10.5,
+                letterSpacing: 0.08,
+                color: GridTokens.mint,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SharingModeChip extends StatelessWidget {
+  const _SharingModeChip({
+    required this.info,
+    required this.active,
+    required this.onTap,
+  });
+
+  final _ModeInfo info;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? GridTokens.mintFaint : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: active
+                ? Border.all(color: GridTokens.mintSoft, width: 1)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                info.icon,
+                size: 14,
+                color: active ? GridTokens.mint : GridTokens.text3,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                info.label,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.005,
+                  color: active ? GridTokens.mint : GridTokens.text2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeInfo {
+  const _ModeInfo({
+    required this.mode,
+    required this.label,
+    required this.icon,
+    required this.tagline,
+    required this.friendsSee,
+    required this.battery,
+  });
+
+  final SharingMode mode;
+  final String label;
+  final IconData icon;
+  final String tagline;
+  final String friendsSee;
+  final String battery;
 }

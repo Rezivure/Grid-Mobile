@@ -49,8 +49,11 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
 
   late double _radiusMeters = widget.initialRadiusMeters.clamp(_minRadius, _maxRadius);
 
-  static const double _minRadius = 10;
-  static const double _maxRadius = 200;
+  // Floor at 50m: platform geofence accuracy is ~50–100m on most phones,
+  // and HomeGeofenceService clamps the monitored region to this floor
+  // anyway. Letting the slider go lower just makes the visual circle lie.
+  static const double _minRadius = 50;
+  static const double _maxRadius = 300;
 
   // Fallback if the user has no last known location yet.
   static const ll.LatLng _fallbackCenter = ll.LatLng(37.7749, -122.4194);
