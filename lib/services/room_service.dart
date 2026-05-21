@@ -18,6 +18,7 @@ import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
+import 'location/location_dispatch.dart';
 import 'location/location_update.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 
@@ -45,10 +46,14 @@ class RoomService {
 
   LocationUpdate? _currentLocation;
   DateTime? _lastUpdateTime;
-  
+
   LocationUpdate? get currentLocation => _currentLocation;
 
-
+  /// Activity-aware throttle that decides which raw fixes become Matrix
+  /// posts. Settable so existing wiring in `main.dart` (which constructs
+  /// `RoomService` before `LocationDispatch`) doesn't need a giant
+  /// constructor refactor — bootstrap sets this once at app boot.
+  LocationDispatch? locationDispatch;
 
   RoomService(
       this.client,
@@ -64,10 +69,16 @@ class RoomService {
       ) {
     // Subscribe to location updates
     locationManager.locationStream.listen((location) {
-      // Update current location in room service
+      // Always keep `_currentLocation` warm — it's read by callers like
+      // `pingNow()` regardless of whether we choose to post this fix.
       _currentLocation = location;
-      // Defer updates until appropriate time
-      _handleLocationUpdate(location);
+      // Defer to the dispatcher's activity-aware throttle. When unset
+      // (very brief window during boot before `main.dart` wires it),
+      // fall through to the old "post every fix" behavior so we don't
+      // black-hole updates.
+      if (locationDispatch == null || locationDispatch!.shouldPost(location)) {
+        _handleLocationUpdate(location);
+      }
     });
   }
   

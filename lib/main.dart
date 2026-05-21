@@ -37,6 +37,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:grid_frontend/services/log_stream_service.dart';
 
 import 'screens/onboarding/splash_screen.dart';
@@ -140,20 +141,30 @@ void main() async {
   final roomLocationHistoryRepository = RoomLocationHistoryRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
+
+  // Shared SharingStateNotifier instance — the same notifier is provided
+  // to the widget tree (so settings can flip it) and given to
+  // LocationDispatch (so the post-throttle respects it). Closes the
+  // long-standing bug where flipping incognito mid-session didn't
+  // actually stop location posts.
+  final sharingStateNotifier = SharingStateNotifier();
+  final locationDispatch = LocationDispatch(sharingStateNotifier);
+  await locationDispatch.start();
+
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
   final roomService = RoomService(
-    client, 
-    userService, 
-    userRepository, 
-    userKeysRepository, 
-    roomRepository, 
-    locationRepository, 
-    locationHistoryRepository, 
-    sharingPreferencesRepository, 
+    client,
+    userService,
+    userRepository,
+    userKeysRepository,
+    roomRepository,
+    locationRepository,
+    locationHistoryRepository,
+    sharingPreferencesRepository,
     locationManager,
     roomLocationHistoryRepository: roomLocationHistoryRepository,
-  );
+  )..locationDispatch = locationDispatch;
 
   final messageParser = MessageParser();
 
@@ -192,15 +203,21 @@ void main() async {
         ),
 
         // Tracks the user's "sharing paused" state (incognito toggle).
-        // Settings writes it; the map's SHARING pill watches it.
-        ChangeNotifierProvider<SharingStateNotifier>(
-          create: (_) => SharingStateNotifier(),
+        // Settings writes it; the map's SHARING pill watches it; and
+        // LocationDispatch reads it on every fix.
+        ChangeNotifierProvider<SharingStateNotifier>.value(
+          value: sharingStateNotifier,
         ),
+
+        // Activity-aware throttle that decides which raw GPS fixes
+        // become Matrix posts. Surfaced via Provider so the slider in
+        // settings can call setMode().
+        Provider<LocationDispatch>.value(value: locationDispatch),
 
         // Provide the RoomService
         ProxyProvider<LocationManager, RoomService>(
           update: (context, locationManager, previousRoomService) {
-            return previousRoomService ?? RoomService(
+            final rs = previousRoomService ?? RoomService(
               client,
               context.read<UserService>(),
               userRepository,
@@ -212,6 +229,8 @@ void main() async {
               locationManager,
               roomLocationHistoryRepository: roomLocationHistoryRepository,
             );
+            rs.locationDispatch = locationDispatch;
+            return rs;
           },
         ),
       ],
