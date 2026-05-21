@@ -38,6 +38,7 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/services/location/location_dispatch.dart';
+import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/log_stream_service.dart';
 
 import 'screens/onboarding/splash_screen.dart';
@@ -151,6 +152,12 @@ void main() async {
   final locationDispatch = LocationDispatch(sharingStateNotifier);
   await locationDispatch.start();
 
+  // Watches the user's saved home geofence and flips `sharingStateNotifier`
+  // on enter/exit. Reads `home_location` + `home_radius` +
+  // `auto_pause_at_home_enabled` prefs (owned by SettingsPage).
+  final homeGeofenceService = HomeGeofenceService(sharingStateNotifier);
+  await homeGeofenceService.start();
+
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
   final roomService = RoomService(
@@ -213,6 +220,12 @@ void main() async {
         // become Matrix posts. Surfaced via Provider so the slider in
         // settings can call setMode().
         Provider<LocationDispatch>.value(value: locationDispatch),
+
+        // Home geofence wiring. Settings calls
+        // `context.read<HomeGeofenceService>().syncFromPrefs()` after
+        // the user changes home / radius / the master toggle so the
+        // monitored region tracks the prefs without a restart.
+        Provider<HomeGeofenceService>.value(value: homeGeofenceService),
 
         // Provide the RoomService
         ProxyProvider<LocationManager, RoomService>(

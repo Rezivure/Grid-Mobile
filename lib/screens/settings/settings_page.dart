@@ -8,6 +8,7 @@ import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
@@ -273,16 +274,24 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // ── Auto-pause at home ─────────────────────────────────
   //
-  // The toggle only flips a local preference. The actual geofence detection
-  // (waking the location service when the user enters/leaves the home
-  // region) is handled platform-side.
-  // TODO: geofence trigger — needs platform geofencing setup.
+  // Toggle + home-location prefs are owned here; the actual platform
+  // geofence is registered by HomeGeofenceService, which we resync any
+  // time any of these prefs change so add/remove happens immediately.
+  Future<void> _syncHomeGeofence() async {
+    try {
+      await context.read<HomeGeofenceService>().syncFromPrefs();
+    } catch (_) {
+      // Provider may not be mounted in some test/preview surfaces — fine.
+    }
+  }
+
   Future<void> _onAutoPauseAtHomeToggled(bool requested) async {
     final prefs = await SharedPreferences.getInstance();
 
     if (!requested) {
       // Turning off: keep the saved home location, just clear the enabled flag.
       await prefs.setBool('auto_pause_at_home_enabled', false);
+      await _syncHomeGeofence();
       if (!mounted) return;
       setState(() => _autoPauseAtHome = false);
       return;
@@ -292,6 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final existing = prefs.getString('home_location');
     if (existing != null && existing.trim().isNotEmpty) {
       await prefs.setBool('auto_pause_at_home_enabled', true);
+      await _syncHomeGeofence();
       if (!mounted) return;
       setState(() => _autoPauseAtHome = true);
       return;
@@ -307,6 +317,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     await prefs.setBool('auto_pause_at_home_enabled', true);
+    await _syncHomeGeofence();
     if (!mounted) return;
     setState(() {
       _autoPauseAtHome = true;
@@ -332,6 +343,7 @@ class _SettingsPageState extends State<SettingsPage> {
       '${picked.latLng.latitude},${picked.latLng.longitude}',
     );
     await prefs.setDouble('home_radius', picked.radiusMeters);
+    await _syncHomeGeofence();
     if (!mounted) return;
     setState(() => _homeLocationSet = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -346,6 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.remove('home_location');
     await prefs.remove('home_radius');
     await prefs.setBool('auto_pause_at_home_enabled', false);
+    await _syncHomeGeofence();
     if (!mounted) return;
     setState(() {
       _homeLocationSet = false;
@@ -465,6 +478,7 @@ class _SettingsPageState extends State<SettingsPage> {
       '${picked.latLng.latitude},${picked.latLng.longitude}',
     );
     await prefs.setDouble('home_radius', picked.radiusMeters);
+    await _syncHomeGeofence();
     return true;
   }
 
