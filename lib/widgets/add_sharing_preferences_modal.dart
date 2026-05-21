@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../styles/tokens.dart';
+import 'grid/grid_button.dart';
+import 'grid/grid_mono.dart';
+
+/// Bottom sheet for adding a single sharing window. Restyled to the Grid
+/// 2.0 dark token system (was tracking system light/dark via the
+/// ColorScheme, which looked alien against the rest of the now-dark app).
 class AddSharingPreferenceModal extends StatefulWidget {
-  // 1) Callback uses TimeOfDay
-  final Function(
-      String label,
-      List<bool> selectedDays,
-      bool isAllDay,
-      TimeOfDay? startTime,
-      TimeOfDay? endTime,
-      ) onSave;
+  /// onSave fires after Add is tapped. `startTime` / `endTime` are null
+  /// when `isAllDay` is true.
+  final void Function(
+    String label,
+    List<bool> selectedDays,
+    bool isAllDay,
+    TimeOfDay? startTime,
+    TimeOfDay? endTime,
+  ) onSave;
 
   const AddSharingPreferenceModal({
     Key? key,
@@ -16,30 +25,75 @@ class AddSharingPreferenceModal extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _AddSharingPreferenceModalState createState() => _AddSharingPreferenceModalState();
+  State<AddSharingPreferenceModal> createState() =>
+      _AddSharingPreferenceModalState();
 }
 
-class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
+class _AddSharingPreferenceModalState
+    extends State<AddSharingPreferenceModal> {
   final TextEditingController _labelController = TextEditingController();
+  final FocusNode _labelFocus = FocusNode();
   final List<bool> _selectedDays = List.generate(7, (_) => false);
-  final List<String> _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  static const List<String> _weekdays = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
 
   bool _isAllDay = false;
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
 
   @override
+  void initState() {
+    super.initState();
+    _labelController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _labelController.dispose();
+    _labelFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _selectTime(BuildContext context, bool isStart) async {
+  bool get _hasDays => _selectedDays.contains(true);
+
+  bool get _isValid {
+    if (_labelController.text.trim().isEmpty) return false;
+    if (!_hasDays) return false;
+    if (_isAllDay) return true;
+    final s = _startTime.hour * 60 + _startTime.minute;
+    final e = _endTime.hour * 60 + _endTime.minute;
+    return e > s;
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    // Theme the system picker so it doesn't pop a Material-3 light dialog
+    // in the middle of a dark sheet.
     final picked = await showTimePicker(
       context: context,
       initialTime: isStart ? _startTime : _endTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: GridTokens.mint,
+              onPrimary: const Color(0xFF04201A),
+              surface: GridTokens.surface,
+              onSurface: GridTokens.text,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         if (isStart) {
           _startTime = picked;
@@ -50,456 +104,690 @@ class _AddSharingPreferenceModalState extends State<AddSharingPreferenceModal> {
     }
   }
 
-  bool get isValid {
-    if (_labelController.text.isEmpty) return false;
-    if (!_selectedDays.contains(true)) return false;
-
-    // If not all day, ensure start < end
-    if (!_isAllDay) {
-      if (_startTime.hour > _endTime.hour) return false;
-      if (_startTime.hour == _endTime.hour &&
-          _startTime.minute >= _endTime.minute) {
-        return false;
+  void _quickPreset(String label, List<int> days, TimeOfDay s, TimeOfDay e,
+      bool allDay) {
+    setState(() {
+      _labelController.text = label;
+      for (var i = 0; i < 7; i++) {
+        _selectedDays[i] = days.contains(i);
       }
-    }
-    return true;
+      _isAllDay = allDay;
+      _startTime = s;
+      _endTime = e;
+    });
   }
 
-  Widget _buildModernSection({
-    required String title,
-    required Widget child,
-    required ThemeData theme,
-    required ColorScheme colorScheme,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Material(
+      color: Colors.transparent,
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: GridTokens.bg,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(GridTokens.r2Xl),
+            ),
+            border: Border(
+              top: BorderSide(color: GridTokens.hairline),
+              left: BorderSide(color: GridTokens.hairline),
+              right: BorderSide(color: GridTokens.hairline),
+            ),
           ),
-        ],
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHandle(),
+                _buildHeader(),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildLabelField(),
+                        const SizedBox(height: 18),
+                        _buildPresetsRow(),
+                        const SizedBox(height: 18),
+                        _buildDaysSection(),
+                        const SizedBox(height: 18),
+                        _buildTimeSection(),
+                      ],
+                    ),
+                  ),
+                ),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Column(
+    );
+  }
+
+  Widget _buildHandle() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10, bottom: 4),
+      width: 36,
+      height: 4,
+      decoration: BoxDecoration(
+        color: GridTokens.hairlineStrong,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: GridTokens.mintFaint,
+              borderRadius: BorderRadius.circular(GridTokens.rSm),
+              border: Border.all(color: GridTokens.mintSoft),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.schedule_rounded,
+              size: 18,
+              color: GridTokens.mint,
             ),
           ),
-          const SizedBox(height: 16),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernDayChips(ColorScheme colorScheme) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: List.generate(7, (index) {
-        final isSelected = _selectedDays[index];
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedDays[index] = !_selectedDays[index];
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? colorScheme.primary
-                  : Colors.transparent,
-              border: Border.all(
-                color: isSelected
-                    ? colorScheme.primary
-                    : colorScheme.outline.withOpacity(0.3),
-                width: 1,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _weekdays[index],
-              style: TextStyle(
-                color: isSelected
-                    ? colorScheme.onPrimary
-                    : colorScheme.onSurface,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildModernTimeSelector(ColorScheme colorScheme, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () {
-            setState(() => _isAllDay = !_isAllDay);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.outline.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            child: Row(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: _isAllDay ? colorScheme.primary : Colors.transparent,
-                    border: Border.all(
-                      color: _isAllDay ? colorScheme.primary : colorScheme.outline,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(4),
+                Text(
+                  'New sharing window',
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.015,
+                    color: GridTokens.text,
+                    height: 1.15,
                   ),
-                  child: _isAllDay
-                      ? Icon(
-                          Icons.check,
-                          size: 16,
-                          color: colorScheme.onPrimary,
-                        )
-                      : null,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'All Day',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      Text(
-                        'Share location for the entire day',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 2),
+                Text(
+                  'Pick when your location is shared.',
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 12.5,
+                    color: GridTokens.text2,
                   ),
                 ),
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(
+              Icons.close_rounded,
+              color: GridTokens.text2,
+              size: 22,
+            ),
+            tooltip: 'Close',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabelField() {
+    final hasContent = _labelController.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const GridMono(
+          'LABEL',
+          size: 10,
+          color: GridTokens.text3,
+          letterSpacing: 0.12,
         ),
-        
-        if (!_isAllDay) ...[
-          const SizedBox(height: 16),
-          Row(
+        const SizedBox(height: 8),
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: GridTokens.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(
+              color: _labelFocus.hasFocus
+                  ? GridTokens.mint
+                  : GridTokens.hairline,
+              width: _labelFocus.hasFocus ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
             children: [
-              Expanded(
-                child: _buildTimeButton(
-                  context: context,
-                  label: 'Start Time',
-                  time: _startTime,
-                  onTap: () => _selectTime(context, true),
-                  colorScheme: colorScheme,
-                  theme: theme,
-                ),
+              const Icon(
+                Icons.label_outline_rounded,
+                size: 18,
+                color: GridTokens.text3,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
-                child: _buildTimeButton(
-                  context: context,
-                  label: 'End Time',
-                  time: _endTime,
-                  onTap: () => _selectTime(context, false),
-                  colorScheme: colorScheme,
-                  theme: theme,
+                child: TextField(
+                  controller: _labelController,
+                  focusNode: _labelFocus,
+                  autocorrect: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  cursorColor: GridTokens.mint,
+                  cursorWidth: 2,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: GridTokens.text,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                    hintText: hasContent ? null : 'Work hours, Trip, Gym…',
+                    hintStyle: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: GridTokens.text3,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPresetsRow() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const GridMono(
+          'QUICK START',
+          size: 10,
+          color: GridTokens.text3,
+          letterSpacing: 0.12,
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _PresetChip(
+                icon: Icons.work_outline_rounded,
+                label: 'Workdays 9–5',
+                onTap: () => _quickPreset(
+                  'Work hours',
+                  const [0, 1, 2, 3, 4],
+                  const TimeOfDay(hour: 9, minute: 0),
+                  const TimeOfDay(hour: 17, minute: 0),
+                  false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _PresetChip(
+                icon: Icons.weekend_outlined,
+                label: 'Weekends',
+                onTap: () => _quickPreset(
+                  'Weekends',
+                  const [5, 6],
+                  const TimeOfDay(hour: 0, minute: 0),
+                  const TimeOfDay(hour: 23, minute: 59),
+                  true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _PresetChip(
+                icon: Icons.bedtime_outlined,
+                label: 'Evenings',
+                onTap: () => _quickPreset(
+                  'Evenings',
+                  const [0, 1, 2, 3, 4, 5, 6],
+                  const TimeOfDay(hour: 18, minute: 0),
+                  const TimeOfDay(hour: 23, minute: 0),
+                  false,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDaysSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const GridMono(
+              'DAYS',
+              size: 10,
+              color: GridTokens.text3,
+              letterSpacing: 0.12,
+            ),
+            const Spacer(),
+            _MiniLink(
+              label: _hasDays ? 'Clear' : 'Every day',
+              onTap: () {
+                setState(() {
+                  if (_hasDays) {
+                    for (var i = 0; i < 7; i++) {
+                      _selectedDays[i] = false;
+                    }
+                  } else {
+                    for (var i = 0; i < 7; i++) {
+                      _selectedDays[i] = true;
+                    }
+                  }
+                });
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (var i = 0; i < 7; i++) ...[
+              Expanded(
+                child: _DayChip(
+                  label: _weekdays[i],
+                  active: _selectedDays[i],
+                  onTap: () => setState(
+                      () => _selectedDays[i] = !_selectedDays[i]),
+                ),
+              ),
+              if (i < 6) const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const GridMono(
+          'TIME',
+          size: 10,
+          color: GridTokens.text3,
+          letterSpacing: 0.12,
+        ),
+        const SizedBox(height: 10),
+        // All-day toggle row.
+        _ToggleRow(
+          title: 'All day',
+          subtitle: 'Share for the entire day on the selected days',
+          value: _isAllDay,
+          onChanged: (v) => setState(() => _isAllDay = v),
+        ),
+        if (!_isAllDay) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _TimeButton(
+                  label: 'Starts',
+                  time: _startTime,
+                  onTap: () => _pickTime(true),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _TimeButton(
+                  label: 'Ends',
+                  time: _endTime,
+                  onTap: () => _pickTime(false),
+                ),
+              ),
+            ],
+          ),
+          if (!_isValid && _labelController.text.trim().isNotEmpty &&
+              _hasDays)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    size: 13,
+                    color: GridTokens.danger,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'End time must be after start.',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 12,
+                      color: GridTokens.danger,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ],
     );
   }
 
-  Widget _buildTimeButton({
-    required BuildContext context,
-    required String label,
-    required TimeOfDay time,
-    required VoidCallback onTap,
-    required ColorScheme colorScheme,
-    required ThemeData theme,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outline.withOpacity(0.2),
-            width: 1,
+  Widget _buildFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: GridButton(
+              label: 'Cancel',
+              style: GridButtonStyle.secondary,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: colorScheme.onSurface.withOpacity(0.6),
-              ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: GridButton(
+              label: 'Add window',
+              icon: Icons.add_rounded,
+              onPressed: _isValid
+                  ? () {
+                      widget.onSave(
+                        _labelController.text.trim(),
+                        _selectedDays,
+                        _isAllDay,
+                        _isAllDay ? null : _startTime,
+                        _isAllDay ? null : _endTime,
+                      );
+                      Navigator.of(context).pop();
+                    }
+                  : null,
             ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  size: 16,
-                  color: colorScheme.primary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  time.format(context),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-              ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Small bits
+// ─────────────────────────────────────────────────────────────────────
+
+class _DayChip extends StatelessWidget {
+  const _DayChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rSm),
+        child: Container(
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? GridTokens.mintFaint : GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rSm),
+            border: Border.all(
+              color: active ? GridTokens.mint : GridTokens.hairline,
+              width: active ? 1.4 : 1,
             ),
-          ],
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.005,
+              color: active ? GridTokens.mint : GridTokens.text2,
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _PresetChip extends StatelessWidget {
+  const _PresetChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle indicator
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 32,
-            height: 4,
-            decoration: BoxDecoration(
-              color: colorScheme.onSurfaceVariant.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: GridTokens.hairlineStrong),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: GridTokens.mint),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.005,
+                  color: GridTokens.text,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Modern Header
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.schedule,
-                          color: colorScheme.primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Add Sharing Window',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onSurface,
-                              ),
-                            ),
-                            Text(
-                              'Set when to share your location',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurface.withOpacity(0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 32),
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
 
-                  // Label Section
-                  _buildModernSection(
-                    title: 'Window Label',
-                    theme: theme,
-                    colorScheme: colorScheme,
-                    child: TextField(
-                      controller: _labelController,
-                      decoration: InputDecoration(
-                        hintText: 'e.g., Work Hours, Gym Time, Weekend Mornings',
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: colorScheme.outline.withOpacity(0.2),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: colorScheme.primary,
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.all(16),
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: GridTokens.text,
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Days Section
-                  _buildModernSection(
-                    title: 'Select Days',
-                    theme: theme,
-                    colorScheme: colorScheme,
-                    child: _buildModernDayChips(colorScheme),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Time Section
-                  _buildModernSection(
-                    title: 'Time Range',
-                    theme: theme,
-                    colorScheme: colorScheme,
-                    child: _buildModernTimeSelector(colorScheme, theme),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                          ),
-                        ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12.5,
+                        color: GridTokens.text2,
+                        height: 1.35,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: isValid
-                              ? () {
-                            widget.onSave(
-                              _labelController.text,
-                              _selectedDays,
-                              _isAllDay,
-                              _isAllDay ? null : _startTime,
-                              _isAllDay ? null : _endTime,
-                            );
-                            Navigator.pop(context);
-                          }
-                              : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colorScheme.primary,
-                            foregroundColor: colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add,
-                                size: 20,
-                                color: colorScheme.onPrimary,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Add Window',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Switch.adaptive(
+                value: value,
+                activeColor: GridTokens.mint,
+                onChanged: onChanged,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeButton extends StatelessWidget {
+  const _TimeButton({
+    required this.label,
+    required this.time,
+    required this.onTap,
+  });
+
+  final String label;
+  final TimeOfDay time;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = time.minute.toString().padLeft(2, '0');
+    final isPm = time.hour >= 12;
+    final h12 =
+        time.hour == 0 ? 12 : (time.hour > 12 ? time.hour - 12 : time.hour);
+    final clock = '$h12:$mm ${isPm ? 'PM' : 'AM'}';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: GridTokens.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: GridTokens.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GridMono(
+                label.toUpperCase(),
+                size: 10,
+                color: GridTokens.text3,
+                letterSpacing: 0.12,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.access_time_rounded,
+                    size: 15,
+                    color: GridTokens.mint,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    clock,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.01,
+                      color: GridTokens.text,
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniLink extends StatelessWidget {
+  const _MiniLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: GridTokens.mint,
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.getFont(
+          'Geist',
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: GridTokens.mint,
+        ),
       ),
     );
   }
