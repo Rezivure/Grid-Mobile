@@ -1476,11 +1476,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final roomService = context.read<RoomService>();
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.62,
+      // Matches the height of the People / Groups / Invites drawer by
+      // default so the profile sheet doesn't dominate the map. Two
+      // useful states: docked low (sees most of the map), or pulled
+      // up to ~95% when the user wants to scroll the security card /
+      // remove-contact button.
+      initialChildSize: 0.32,
       minChildSize: 0.2,
       maxChildSize: 0.95,
       snap: true,
-      snapSizes: const [0.2, 0.62, 0.95],
+      snapSizes: const [0.32, 0.95],
       builder: (_, scrollController) {
         return ContactProfileModal(
           contact: contact,
