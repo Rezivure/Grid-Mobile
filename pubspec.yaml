@@ -82,6 +82,8 @@ dev_dependencies:
 dependency_overrides:
   flutter_rust_bridge:
     path: patches/flutter_rust_bridge
+  flutter_intl_phone_field:
+    path: patches/flutter_intl_phone_field
 
 flutter:
   uses-material-design: true
