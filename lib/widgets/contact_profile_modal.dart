@@ -6,6 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
@@ -317,6 +321,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                             _buildSectionLabel('SECURITY'),
                             const SizedBox(height: 10),
                             _buildSecurityCard(),
+                            const SizedBox(height: 22),
+                            _buildRemoveContactButton(),
                             const SizedBox(height: 16),
                           ],
                         ),
@@ -1054,6 +1060,124 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
   // security (device keys) — kept, but restyled
   // ────────────────────────────────────────────────────────────────────
+
+  /// Destructive bottom action — replaces the long-press 'Remove
+  /// contact' menu that we just deleted from contacts_subscreen. Lives
+  /// inside the profile sheet so contact management is all on one
+  /// screen.
+  Widget _buildRemoveContactButton() {
+    return GridButton(
+      label: 'Remove contact',
+      icon: Icons.delete_outline_rounded,
+      style: GridButtonStyle.danger,
+      onPressed: _confirmAndRemoveContact,
+    );
+  }
+
+  Future<void> _confirmAndRemoveContact() async {
+    final firstName = widget.contact.displayName.split(' ').first;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Container(
+            decoration: BoxDecoration(
+              color: GridTokens.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: GridTokens.hairline),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: GridTokens.dangerSoft,
+                        borderRadius: BorderRadius.circular(GridTokens.rSm),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: GridTokens.danger,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Remove $firstName?',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.015,
+                          color: GridTokens.text,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '$firstName will be removed from your contacts. '
+                  "You'll stop sharing location with each other.",
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 13,
+                    color: GridTokens.text2,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GridButton(
+                        label: 'Cancel',
+                        style: GridButtonStyle.secondary,
+                        onPressed: () =>
+                            Navigator.of(dialogContext).pop(false),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GridButton(
+                        label: 'Remove',
+                        style: GridButtonStyle.danger,
+                        onPressed: () =>
+                            Navigator.of(dialogContext).pop(true),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      context.read<ContactsBloc>().add(DeleteContact(widget.contact.userId));
+    } catch (_) {}
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Removing $firstName from contacts…'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
 
   Widget _buildSecurityCard() {
     return Container(

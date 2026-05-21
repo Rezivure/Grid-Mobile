@@ -40,6 +40,7 @@ import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/widgets/contact_profile_modal.dart';
 import 'package:grid_frontend/models/contact_display.dart';
+import 'package:grid_frontend/services/map_camera_signals.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -192,6 +193,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     print('[MapTab] Initializing - hasInitialized: $_hasInitialized');
     WidgetsBinding.instance.addObserver(this);
     _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+
+    // External callers (e.g. the contact profile sheet's close
+    // handler) can ask the camera to smart-zoom back out by ticking
+    // this notifier. We only need the pulse — the int value itself
+    // doesn't matter.
+    MapCameraSignals.resetRequested.addListener(_onResetSignal);
 
     // Load saved home location (set in Settings).
     _reloadHomeLocation();
@@ -779,6 +786,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager?.removeListener(_onSyncStateChanged);
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
+    MapCameraSignals.resetRequested.removeListener(_onResetSignal);
     WidgetsBinding.instance.removeObserver(this);
     _locationManager?.removeListener(_onLocationUpdate);
     _syncManager?.removeListener(_checkAuthenticationStatus);
@@ -1447,6 +1455,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     } catch (_) {
       // Swallow — pref-read failure shouldn't break the map.
     }
+  }
+
+  void _onResetSignal() {
+    if (!mounted) return;
+    _resetToInitialZoom();
   }
 
   void _onMarkerTap(String userId, LatLng position) async {

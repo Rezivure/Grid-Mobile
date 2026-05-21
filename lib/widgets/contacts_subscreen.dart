@@ -30,6 +30,10 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/services/map_camera_signals.dart';
+import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map/map_event.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
@@ -143,19 +147,59 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         .setSelectedSubscreen(subscreen);
   }
 
-  void _showOptionsDialog(ContactDisplay contact) {
+  /// Tap-on-contact handler. Centers the underlying map on the
+  /// contact's last-known location (zoom 15) and slides the profile
+  /// sheet up over the drawer. The bottom sheet uses a transparent
+  /// top fade so the live map remains visible above it. When the
+  /// sheet closes — via the X, drag-down, or backdrop — we ask the
+  /// map to smart-zoom back out via MapCameraSignals so the camera
+  /// doesn't stay locked on the one contact.
+  void _openContactSheet(ContactDisplay contact) {
+    final locationProvider =
+        Provider.of<UserLocationProvider>(context, listen: false);
+    final ll = locationProvider.getUserLocation(contact.userId);
+    if (ll != null) {
+      context.read<MapBloc>().add(
+            MapCenterOnLocation(
+              LatLng(ll.latitude, ll.longitude),
+              zoom: 15,
+            ),
+          );
+    } else {
+      // No location yet — at least record the selection so the map
+      // shows whatever it can.
+      context.read<MapBloc>().add(MapMoveToUser(contact.userId));
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: ContactProfileModal(contact: contact, roomService: widget.roomService, sharingPreferencesRepo: widget.sharingPreferencesRepository),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.62,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, scrollController) {
+          return ContactProfileModal(
+            contact: contact,
+            roomService: widget.roomService,
+            sharingPreferencesRepo: widget.sharingPreferencesRepository,
+            fromMapTap: true,
+          );
+        },
       ),
-    );
+    ).whenComplete(() {
+      // Globe-reset so the camera doesn't stay zoomed on this one
+      // contact — matches the marker-tap flow's behavior.
+      MapCameraSignals.requestReset();
+    });
   }
+
+  // Kept as a thin alias so any other call sites still compile while
+  // we phase the old long-press menu out.
+  void _showOptionsDialog(ContactDisplay contact) =>
+      _openContactSheet(contact);
 
   List<ContactDisplay> _getContactsWithCurrentLocation(
       List<ContactDisplay> contacts,
@@ -457,24 +501,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         ? contact.userId
         : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
 
-    return GestureDetector(
-      onLongPress: () => _showContactMenu(contact),
-      child: GridContactRow(
-        name: contact.displayName,
-        handle: handle,
-        userId: contact.userId,
-        placeLine: _placeLineFor(contact),
-        timeText: _timeTextFor(contact),
-        live: _isLive(contact),
-        avatarStatus: _avatarStatusFor(contact),
-        showDivider: !isLast,
-        statusKind: isInvite ? null : null,
-        statusLabel: null,
-        onTap: () {
-          Provider.of<SelectedUserProvider>(context, listen: false)
-              .setSelectedUserId(contact.userId, context);
-        },
-      ),
+    // Tap = focus the map on them + open the profile sheet. No more
+    // long-press menu — destructive actions (Remove contact) live
+    // inside the sheet itself.
+    return GridContactRow(
+      name: contact.displayName,
+      handle: handle,
+      userId: contact.userId,
+      placeLine: _placeLineFor(contact),
+      timeText: _timeTextFor(contact),
+      live: _isLive(contact),
+      avatarStatus: _avatarStatusFor(contact),
+      showDivider: !isLast,
+      statusKind: isInvite ? null : null,
+      statusLabel: null,
+      onTap: () => _openContactSheet(contact),
     );
   }
 
@@ -757,44 +798,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     }
   }
 
-  void _showExpandedAvatar(BuildContext context, String userId, String name) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
-          child: GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              color: Colors.transparent,
-              child: Center(
-                child: Hero(
-                  tag: 'contact_menu_avatar_$userId',
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    height: MediaQuery.of(context).size.width * 0.8,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: GridTokens.surface,
-                    ),
-                    child: ClipOval(
-                      child: UserAvatarBloc(
-                        userId: userId,
-                        size: MediaQuery.of(context).size.width * 0.8,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _showAddFriendModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -816,119 +819,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           },
         ),
       ),
-    );
-  }
-
-  void _showContactMenu(ContactDisplay contact) {
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
-    final handle = showFullMatrixId
-        ? contact.userId
-        : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
-        return Container(
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: GridTokens.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Identity header
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: const BoxDecoration(
-                  color: GridTokens.surface2,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(GridTokens.rLg),
-                    topRight: Radius.circular(GridTokens.rLg),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _showExpandedAvatar(
-                          context, contact.userId, contact.displayName),
-                      child: Hero(
-                        tag: 'contact_menu_avatar_${contact.userId}',
-                        child: GridAvatar(
-                          name: contact.displayName,
-                          userId: contact.userId,
-                          size: 48,
-                          status: _avatarStatusFor(contact),
-                          imageUrl: contact.avatarUrl,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            contact.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: GridTokens.text,
-                              letterSpacing: -0.01,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          GridMono(
-                            handle,
-                            color: GridTokens.text3,
-                            size: 11,
-                            letterSpacing: 0.02,
-                            uppercase: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              _MenuRow(
-                icon: Icons.person_rounded,
-                iconBg: GridTokens.mintFaint,
-                iconFg: GridTokens.mint,
-                label: 'View profile',
-                onTap: () {
-                  Navigator.pop(context);
-                  _showOptionsDialog(contact);
-                },
-              ),
-
-              const Divider(
-                  height: 1, thickness: 1, color: GridTokens.hairline),
-
-              _MenuRow(
-                icon: Icons.delete_outline_rounded,
-                iconBg: GridTokens.dangerSoft,
-                iconFg: GridTokens.danger,
-                label: 'Remove contact',
-                labelColor: GridTokens.danger,
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteConfirmation(contact);
-                },
-              ),
-
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
     );
   }
 
