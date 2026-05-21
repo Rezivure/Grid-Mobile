@@ -449,8 +449,6 @@ class UserInfoBubble extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         _StatusRow(
-                          motion: motionLabel,
-                          speed: speedLabel,
                           distance: distanceLabel,
                           bearing: bearingLabel,
                           updated: updatedLabel,
@@ -459,11 +457,13 @@ class UserInfoBubble extends StatelessWidget {
                         Row(
                           children: [
                             Expanded(
-                              child: _MiniBtn(
-                                icon: Icons.chat_bubble_outline_rounded,
-                                label: 'Chat',
-                                // TODO: needs chat surface
-                                onTap: null,
+                              // Status cell replaces the old (always-
+                              // disabled) Chat button. Mirrors the
+                              // visual weight of _MiniBtn but it's a
+                              // display rather than a tap target.
+                              child: _StatusCell(
+                                motion: motionLabel,
+                                speed: speedLabel,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -655,20 +655,15 @@ class _CloseButton extends StatelessWidget {
 
 class _StatusRow extends StatelessWidget {
   const _StatusRow({
-    required this.motion,
-    required this.speed,
     required this.distance,
     required this.bearing,
     required this.updated,
   });
 
-  /// All optional — we only render the cells we have real data for.
-  /// `motion` becomes a mint pill (DRIVING / WALKING). `speed` rides
-  /// next to it as a secondary mono cell. `distance/bearing/updated`
-  /// remain as before. With gridv 2 the sender ships speed in
-  /// m.location so the pill is no longer a placeholder.
-  final String? motion;
-  final String? speed;
+  /// Two cells: distance/bearing on the left, "updated Xs ago" on
+  /// the right. Motion + speed used to live here too but moved into
+  /// the action row's left cell since they're meatier UI than tiny
+  /// mono pills justify.
   final String? distance;
   final String? bearing;
   final String? updated;
@@ -676,16 +671,6 @@ class _StatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = <Widget>[];
-
-    // Motion pill is always rendered. When `motion` is null (sender
-    // hasn't shipped gridv 2 yet, or is currently still), the pill
-    // shows a grey '— mph' placeholder so the affordance is visible
-    // and consistent across contacts.
-    cells.add(_MotionPill(
-      label: motion ?? 'IDLE',
-      trailing: speed,
-      muted: motion == null,
-    ));
     if (distance != null) {
       cells.add(
         _MonoCell(
@@ -702,6 +687,7 @@ class _StatusRow extends StatelessWidget {
         ),
       );
     }
+    if (cells.isEmpty) return const SizedBox.shrink();
     return Row(
       children: [
         for (var i = 0; i < cells.length; i++) ...[
@@ -713,62 +699,62 @@ class _StatusRow extends StatelessWidget {
   }
 }
 
-/// Mint pill rendering "DRIVING · 38 mph" / "WALKING · 3 mph" using
-/// real speed from the gridv-2 sender. When [muted] is true (no data
-/// available yet) the pill is rendered in grey/hairline tones so the
-/// slot is still visible but doesn't suggest the contact is moving.
-class _MotionPill extends StatelessWidget {
-  const _MotionPill({
-    required this.label,
-    this.trailing,
-    this.muted = false,
-  });
+/// Action-row status display occupying what used to be the (always
+/// disabled) Chat slot. Matches _MiniBtn's height and chrome but
+/// renders motion + speed instead of being a tap target.
+class _StatusCell extends StatelessWidget {
+  const _StatusCell({required this.motion, this.speed});
 
-  final String label;
-  final String? trailing;
-  final bool muted;
+  final String? motion;
+  final String? speed;
 
   @override
   Widget build(BuildContext context) {
+    final muted = motion == null;
     final color = muted ? GridTokens.text3 : GridTokens.mint;
-    final bg = muted ? GridTokens.surface2 : GridTokens.mintSoft;
+    final bg = muted ? GridTokens.surface2 : GridTokens.mintFaint;
     final border = muted ? GridTokens.hairline : GridTokens.mintSoft;
+
+    final IconData icon;
+    if (motion == 'DRIVING') {
+      icon = Icons.directions_car_filled_rounded;
+    } else if (motion == 'WALKING') {
+      icon = Icons.directions_walk_rounded;
+    } else {
+      icon = Icons.do_not_disturb_on_total_silence_rounded;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 38,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: border, width: 1),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            muted
-                ? Icons.do_not_disturb_on_total_silence_rounded
-                : Icons.directions_car_filled_rounded,
-            color: color,
-            size: 11,
-          ),
-          const SizedBox(width: 4),
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
           Flexible(
             child: GridMono(
-              label,
-              size: 10,
-              letterSpacing: 0.08,
+              motion ?? 'IDLE',
+              size: 10.5,
+              letterSpacing: 0.1,
               color: color,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing != null) ...[
+          if (speed != null) ...[
             const SizedBox(width: 4),
             Flexible(
               child: GridMono(
-                trailing!,
+                speed!,
                 uppercase: false,
-                size: 10,
+                size: 10.5,
                 letterSpacing: 0.02,
                 color: color,
                 maxLines: 1,
