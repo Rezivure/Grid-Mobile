@@ -461,10 +461,11 @@ class _AddFriendModalState extends State<AddFriendModal>
   }
 
   Future<void> _createGroup() async {
-    if (_groupNameController.text.trim().isEmpty || _members.isEmpty) {
+    // Name is required; members aren't — the user can ship a 1-person
+    // group now and invite people later via the group's … menu.
+    if (_groupNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please enter a group name and add members.')),
+        const SnackBar(content: Text('Please enter a group name.')),
       );
       return;
     }
@@ -611,8 +612,10 @@ class _AddFriendModalState extends State<AddFriendModal>
         return _groupNameController.text.trim().isNotEmpty;
       case 1:
         return true;
+      // Members is optional — users can skip and invite from the
+      // group's … menu later.
       case 2:
-        return _members.isNotEmpty;
+        return true;
       case 3:
         return true;
       default:
@@ -1816,7 +1819,7 @@ class _AddFriendModalState extends State<AddFriendModal>
     final errorMessage = _usernameError ?? _memberLimitError;
     return _buildGroupCard(
       title: 'Add members',
-      subtitle: 'Invite up to 5 friends',
+      subtitle: 'Optional — add now or invite later from the group menu',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
