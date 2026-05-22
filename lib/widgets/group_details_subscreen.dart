@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
@@ -15,8 +16,11 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/utilities/utils.dart';
-import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/models/contact_display.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
+import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
 import 'package:grid_frontend/widgets/group_markers_modal.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
@@ -30,7 +34,6 @@ import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 
-import 'user_avatar_bloc.dart';
 import '../blocs/groups/groups_event.dart';
 import '../blocs/groups/groups_state.dart';
 import '../services/user_service.dart';
@@ -142,246 +145,24 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
-  Future<bool> _canCurrentUserKick() async {
-    try {
-      final room = widget.roomService.client.getRoomById(widget.room.roomId);
-      return room?.canKick ?? false;
-    } catch (e) {
-      print('Error checking kick permissions: $e');
-      return false;
-    }
-  }
-
-  Future<bool> _isUserAContact(String userId) async {
-    try {
-      final directRoom =
-          await widget.userRepository.getDirectRoomForContact(userId);
-      return directRoom != null;
-    } catch (e) {
-      print('Error checking if user is contact: $e');
-      return false;
-    }
-  }
-
-  void _showExpandedAvatar(BuildContext context, String userId) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
-          child: GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Center(
-              child: Hero(
-                tag: 'member_menu_avatar_$userId',
-                child: Container(
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  height: MediaQuery.of(context).size.width * 0.8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: context.gridColors.surface,
-                  ),
-                  child: ClipOval(
-                    child: UserAvatarBloc(
-                      userId: userId,
-                      size: MediaQuery.of(context).size.width * 0.8,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+  void _openMemberSheet(GridUser user, String timeAgoText) {
+    if (user.userId == _currentUserId) return;
+    final contact = ContactDisplay(
+      userId: user.userId,
+      displayName: user.displayName ?? localpart(user.userId),
+      avatarUrl: user.profileStatus,
+      lastSeen: timeAgoText,
     );
-  }
-
-  Future<void> _kickMember(String userId) async {
-    try {
-      final success = await widget.roomService
-          .kickMemberFromRoom(widget.room.roomId, userId);
-
-      if (mounted) {
-        if (success) {
-          _showToast('User removed from group', danger: false);
-
-          context.read<GroupsBloc>().add(LoadGroupMembers(widget.room.roomId));
-
-          await context
-              .read<GroupsBloc>()
-              .handleMemberKicked(widget.room.roomId, userId);
-
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              context
-                  .read<GroupsBloc>()
-                  .add(LoadGroupMembers(widget.room.roomId));
-            }
-          });
-        } else {
-          _showToast(
-              'Failed to remove user. You may not have permission.',
-              danger: true);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        _showToast('Error removing user: $e', danger: true);
-      }
-    }
+    context.read<MapBloc>().add(MapMoveToUser(user.userId));
+    ContactSheetController.instance.open(contact);
   }
 
   void _showToast(String text, {required bool danger}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor:
-            danger ? context.gridColors.danger : context.gridColors.mint,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-        ),
-      ),
-    );
-  }
-
-  void _showMemberMenu(GridUser user, String? memberStatus) async {
-    final canKick = await _canCurrentUserKick();
-
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = isCustomHomeserver(currentHomeserver);
-
-    final isAlreadyContact = await _isUserAContact(user.userId);
-
-    if (!mounted) return;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.4,
-          ),
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: context.gridColors.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: context.gridColors.hairline),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Member info header
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: context.gridColors.surface2,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(GridTokens.rLg),
-                    topRight: Radius.circular(GridTokens.rLg),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () =>
-                          _showExpandedAvatar(context, user.userId),
-                      child: Hero(
-                        tag: 'member_menu_avatar_${user.userId}',
-                        child: ClipOval(
-                          child: SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: UserAvatarBloc(
-                              userId: user.userId,
-                              size: 56,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user.displayName ?? localpart(user.userId),
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.015,
-                              color: context.gridColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          GridMono(
-                            showFullMatrixId
-                                ? user.userId
-                                : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                            color: context.gridColors.text3,
-                            size: 11,
-                            uppercase: false,
-                            letterSpacing: 0,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    _menuRow(
-                      icon: Icons.person_add_outlined,
-                      label: isAlreadyContact
-                          ? 'Already in contacts'
-                          : 'Send friend request',
-                      tint: isAlreadyContact
-                          ? context.gridColors.text4
-                          : context.gridColors.mint,
-                      bgTint: isAlreadyContact
-                          ? context.gridColors.surface3
-                          : context.gridColors.mintFaint,
-                      onTap: isAlreadyContact
-                          ? null
-                          : () {
-                              Navigator.pop(context);
-                              _showFriendRequestConfirmation(
-                                  user, showFullMatrixId);
-                            },
-                    ),
-                    _menuRow(
-                      icon: Icons.person_remove_outlined,
-                      label: 'Remove from group',
-                      tint: canKick
-                          ? context.gridColors.danger
-                          : context.gridColors.text4,
-                      bgTint: canKick
-                          ? context.gridColors.dangerSoft
-                          : context.gridColors.surface3,
-                      onTap: canKick
-                          ? () {
-                              Navigator.pop(context);
-                              _showKickConfirmation(user);
-                            }
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    InAppNotifier.instance.show(
+      title: text,
+      variant: danger
+          ? InAppNotificationVariant.error
+          : InAppNotificationVariant.success,
     );
   }
 
@@ -430,345 +211,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
         ),
       ),
-    );
-  }
-
-  void _showFriendRequestConfirmation(GridUser user, bool showFullMatrixId) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.9,
-            ),
-            decoration: BoxDecoration(
-              color: context.gridColors.surface,
-              borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: context.gridColors.hairline),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: context.gridColors.mintFaint,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(GridTokens.rXl),
-                      topRight: Radius.circular(GridTokens.rXl),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: context.gridColors.mintSoft,
-                          borderRadius:
-                              BorderRadius.circular(GridTokens.rMd),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.person_add,
-                          color: context.gridColors.mint,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Send friend request',
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.015,
-                                color: context.gridColors.text,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "They'll need to accept the request.",
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: context.gridColors.text2,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Send a friend request to:',
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: context.gridColors.text2,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: context.gridColors.surface2,
-                          borderRadius:
-                              BorderRadius.circular(GridTokens.rMd),
-                          border: Border.all(color: context.gridColors.hairline),
-                        ),
-                        child: Row(
-                          children: [
-                            ClipOval(
-                              child: SizedBox(
-                                width: 48,
-                                height: 48,
-                                child: UserAvatarBloc(
-                                  userId: user.userId,
-                                  size: 48,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    user.displayName ??
-                                        localpart(user.userId),
-                                    style: GoogleFonts.getFont(
-                                      'Geist',
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.gridColors.text,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  GridMono(
-                                    showFullMatrixId
-                                        ? user.userId
-                                        : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                                    color: context.gridColors.text3,
-                                    size: 11,
-                                    uppercase: false,
-                                    letterSpacing: 0,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GridButton(
-                          label: 'Cancel',
-                          style: GridButtonStyle.secondary,
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GridButton(
-                          label: 'Send',
-                          style: GridButtonStyle.primary,
-                          onPressed: () async {
-                            Navigator.pop(context);
-                            await _sendFriendRequest(user);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _sendFriendRequest(GridUser user) async {
-    try {
-      final success =
-          await widget.roomService.createRoomAndInviteContact(user.userId);
-
-      if (!mounted) return;
-
-      if (success) {
-        _showToast(
-          'Friend request sent to ${user.displayName ?? localpart(user.userId)}',
-          danger: false,
-        );
-      } else {
-        _showToast(
-          'Failed to send friend request. User may not exist or is already a contact.',
-          danger: true,
-        );
-      }
-    } catch (e) {
-      print('Error sending friend request: $e');
-      if (mounted) {
-        _showToast('Error sending friend request: ${e.toString()}',
-            danger: true);
-      }
-    }
-  }
-
-  void _showKickConfirmation(GridUser user) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.9,
-            ),
-            decoration: BoxDecoration(
-              color: context.gridColors.surface,
-              borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: context.gridColors.hairline),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: context.gridColors.dangerSoft,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(GridTokens.rXl),
-                      topRight: Radius.circular(GridTokens.rXl),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: context.gridColors.danger.withOpacity(0.18),
-                          borderRadius:
-                              BorderRadius.circular(GridTokens.rMd),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.person_remove_outlined,
-                          color: context.gridColors.danger,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Remove member',
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.015,
-                                color: context.gridColors.text,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "They'll lose access to this group.",
-                              style: GoogleFonts.getFont(
-                                'Geist',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: context.gridColors.text2,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                  child: Text(
-                    'Are you sure you want to remove "${user.displayName ?? localpart(user.userId)}" from this group?',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: context.gridColors.text2,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GridButton(
-                          label: 'Cancel',
-                          style: GridButtonStyle.secondary,
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GridButton(
-                          label: 'Remove',
-                          style: GridButtonStyle.danger,
-                          onPressed: () async {
-                            Navigator.of(context).pop();
-                            await _kickMember(user.userId);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -1436,34 +878,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       statusLabel = 'PAUSED';
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          Provider.of<SelectedUserProvider>(context, listen: false)
-              .setSelectedUserId(user.userId, context);
-        },
-        onLongPress: () => _showMemberMenu(user, memberStatus),
-        child: IgnorePointer(
-          // Tapping passes through to the InkWell above; ContactRow shouldn't
-          // own its own tap because we need long-press for the action menu.
-          child: GridContactRow(
-            name: name,
-            handle: handle,
-            userId: user.userId,
-            placeLine: _placeLine(timeAgoText, isInvited),
-            timeText: isInvited
-                ? null
-                : (timeAgoText == 'Offline' ? null : timeAgoText),
-            distanceText: null,
-            statusKind: statusKind,
-            statusLabel: statusLabel,
-            live: isLive,
-            avatarStatus: avatarStatus,
-            showDivider: showDivider,
-          ),
-        ),
-      ),
+    return GridContactRow(
+      name: name,
+      handle: handle,
+      userId: user.userId,
+      placeLine: _placeLine(timeAgoText, isInvited),
+      timeText: isInvited
+          ? null
+          : (timeAgoText == 'Offline' ? null : timeAgoText),
+      distanceText: null,
+      statusKind: statusKind,
+      statusLabel: statusLabel,
+      live: isLive,
+      avatarStatus: avatarStatus,
+      showDivider: showDivider,
+      onTap: isInvited ? null : () => _openMemberSheet(user, timeAgoText),
     );
   }
 
