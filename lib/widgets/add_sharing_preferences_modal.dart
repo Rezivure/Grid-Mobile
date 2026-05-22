@@ -5,6 +5,7 @@ import '../styles/tokens.dart';
 import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
+import 'grid/grid_sheet.dart';
 
 /// Bottom sheet for adding a single sharing window. Simplified to a single
 /// decision flow: days → time → optional name.
@@ -116,98 +117,35 @@ class _AddSharingPreferenceModalState
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return Material(
-      color: Colors.transparent,
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.only(bottom: bottomInset),
-        child: Container(
-          decoration: BoxDecoration(
-            color: context.gridColors.bg,
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(GridTokens.r2Xl),
-            ),
-            border: Border(
-              top: BorderSide(color: context.gridColors.hairline),
-              left: BorderSide(color: context.gridColors.hairline),
-              right: BorderSide(color: context.gridColors.hairline),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildHandle(),
-                _buildHeader(),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildPresetsRow(),
-                        const SizedBox(height: 20),
-                        _buildDaysSection(),
-                        const SizedBox(height: 20),
-                        _buildTimeSection(),
-                        const SizedBox(height: 20),
-                        _buildLabelField(),
-                      ],
-                    ),
-                  ),
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: GridSheetContainer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const GridSheetHeader(title: 'New sharing window'),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPresetsRow(),
+                    const SizedBox(height: 20),
+                    _buildDaysSection(),
+                    const SizedBox(height: 20),
+                    _buildTimeSection(),
+                    const SizedBox(height: 20),
+                    _buildLabelField(),
+                  ],
                 ),
-                _buildFooter(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHandle() {
-    return Container(
-      margin: const EdgeInsets.only(top: 10, bottom: 4),
-      width: 36,
-      height: 4,
-      decoration: BoxDecoration(
-        color: context.gridColors.hairlineStrong,
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text(
-              'New sharing window',
-              style: GoogleFonts.getFont(
-                'Geist',
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.015,
-                color: context.gridColors.text,
-                height: 1.15,
               ),
             ),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.close_rounded,
-              color: context.gridColors.text2,
-              size: 22,
-            ),
-            tooltip: 'Close',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
+            _buildFooter(),
+          ],
+        ),
       ),
     );
   }

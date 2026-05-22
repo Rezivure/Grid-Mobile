@@ -1302,13 +1302,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (BuildContext context) {
-                      return Container(
+                      return ConstrainedBox(
                         constraints: BoxConstraints(
                           maxHeight: MediaQuery.of(context).size.height * 0.95,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                         ),
                         child: LocationHistoryModal(
                           userId: room.roomId,

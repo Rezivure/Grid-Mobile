@@ -21,7 +21,6 @@ import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
-import 'package:grid_frontend/widgets/group_avatar_bloc.dart';
 import 'package:grid_frontend/widgets/group_markers_modal.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
@@ -32,6 +31,7 @@ import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/grid_sheet.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 
 import '../blocs/groups/groups_event.dart';
@@ -490,136 +490,89 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       context: context,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: context.gridColors.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: context.gridColors.hairline),
-          ),
+        final memberCount = _filteredMembers.length;
+        return GridSheetContainer(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Group info header
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: context.gridColors.surface2,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(GridTokens.rLg),
-                    topRight: Radius.circular(GridTokens.rLg),
-                  ),
-                ),
-                child: Row(
+              GridSheetHeader(
+                title: _groupName,
+                subtitle:
+                    '$memberCount member${memberCount == 1 ? '' : 's'}',
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    ClipOval(
-                      child: SizedBox(
-                        width: 56,
-                        height: 56,
-                        child: GroupAvatarBloc(
-                          roomId: widget.room.roomId,
-                          memberIds: widget.room.members,
-                          size: 56,
-                        ),
-                      ),
+                    _menuRow(
+                      icon: Icons.person_add_outlined,
+                      label: 'Add member',
+                      tint: context.gridColors.mint,
+                      bgTint: context.gridColors.mintFaint,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showAddGroupMemberModal();
+                      },
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _groupName,
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.015,
-                              color: context.gridColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          GridMono(
-                            '${_filteredMembers.length} MEMBERS',
-                            color: context.gridColors.text3,
-                            size: 10.5,
-                            letterSpacing: 0.08,
-                          ),
-                        ],
-                      ),
+                    _menuRow(
+                      icon: Icons.history,
+                      label: 'View history',
+                      tint: context.gridColors.mint,
+                      bgTint: context.gridColors.mintFaint,
+                      onTap: () {
+                        Navigator.pop(context);
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (BuildContext context) {
+                            return LocationHistoryModal(
+                              userId: widget.room.roomId,
+                              userName: _groupName,
+                              memberIds: _filteredMembers
+                                  .map((m) => m.userId)
+                                  .toList(),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    _menuRow(
+                      icon: Icons.location_on,
+                      label: 'View markers',
+                      tint: context.gridColors.mint,
+                      bgTint: context.gridColors.mintFaint,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showGroupMarkersModal();
+                      },
+                    ),
+                    _menuRow(
+                      icon: Icons.schedule_rounded,
+                      label: 'Sharing windows',
+                      tint: context.gridColors.mint,
+                      bgTint: context.gridColors.mintFaint,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _openGroupSharingWindowModal();
+                      },
+                    ),
+                    _menuRow(
+                      icon: Icons.exit_to_app_outlined,
+                      label: 'Leave group',
+                      tint: context.gridColors.danger,
+                      bgTint: context.gridColors.dangerSoft,
+                      onTap: _isLeaving
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              _showLeaveConfirmationDialog();
+                            },
                     ),
                   ],
                 ),
               ),
-
-              _menuRow(
-                icon: Icons.person_add_outlined,
-                label: 'Add member',
-                tint: context.gridColors.mint,
-                bgTint: context.gridColors.mintFaint,
-                onTap: () {
-                  Navigator.pop(context);
-                  _showAddGroupMemberModal();
-                },
-              ),
-              _menuRow(
-                icon: Icons.history,
-                label: 'View history',
-                tint: context.gridColors.mint,
-                bgTint: context.gridColors.mintFaint,
-                onTap: () {
-                  Navigator.pop(context);
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (BuildContext context) {
-                      return LocationHistoryModal(
-                        userId: widget.room.roomId,
-                        userName: _groupName,
-                        memberIds:
-                            _filteredMembers.map((m) => m.userId).toList(),
-                      );
-                    },
-                  );
-                },
-              ),
-              _menuRow(
-                icon: Icons.location_on,
-                label: 'View markers',
-                tint: context.gridColors.mint,
-                bgTint: context.gridColors.mintFaint,
-                onTap: () {
-                  Navigator.pop(context);
-                  _showGroupMarkersModal();
-                },
-              ),
-              _menuRow(
-                icon: Icons.schedule_rounded,
-                label: 'Sharing windows',
-                tint: context.gridColors.mint,
-                bgTint: context.gridColors.mintFaint,
-                onTap: () {
-                  Navigator.pop(context);
-                  _openGroupSharingWindowModal();
-                },
-              ),
-              _menuRow(
-                icon: Icons.exit_to_app_outlined,
-                label: 'Leave group',
-                tint: context.gridColors.danger,
-                bgTint: context.gridColors.dangerSoft,
-                onTap: _isLeaving
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        _showLeaveConfirmationDialog();
-                      },
-              ),
-              const SizedBox(height: 12),
             ],
           ),
         );

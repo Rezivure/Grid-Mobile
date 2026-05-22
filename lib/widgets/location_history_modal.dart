@@ -21,6 +21,7 @@ import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_sheet.dart';
 import 'package:matrix/matrix.dart';
 
 class LocationHistoryModal extends StatefulWidget {
@@ -734,85 +735,27 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         ? '${widget.userName} · history'
         : '${widget.userName}’s history';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.gridColors.bg,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(GridTokens.r2Xl),
-          topRight: Radius.circular(GridTokens.r2Xl),
-        ),
-      ),
+    final subtitleText = (_earliestTime != null && _latestTime != null)
+        ? _formatHeaderSubtitle()
+        : 'Loading';
+
+    return GridSheetContainer(
       child: Column(
         children: [
-          // Grab handle
-          Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 6),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: context.gridColors.hairlineStrong,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          // TopBar — close (left), title + mono subtitle (center), trash/more (right)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _ChromeIconBtn(
-                  icon: Icons.close,
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        headerTitle,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: context.gridColors.text,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.015,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      if (_earliestTime != null && _latestTime != null)
-                        GridMono(
-                          _formatHeaderSubtitle(),
-                          color: context.gridColors.text3,
-                          size: 10.5,
-                          letterSpacing: 0.08,
-                          uppercase: false,
-                        )
-                      else
-                        GridMono(
-                          'Loading',
-                          color: context.gridColors.text3,
-                          size: 10.5,
-                          letterSpacing: 0.08,
-                          uppercase: false,
-                        ),
-                    ],
-                  ),
-                ),
-                if (isGroup)
-                  _ChromeIconBtn(
-                    icon: Icons.delete_outline,
-                    iconColor: context.gridColors.danger,
+          GridSheetHeader(
+            title: headerTitle,
+            subtitle: subtitleText,
+            trailing: isGroup
+                ? IconButton(
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: context.gridColors.danger,
+                      size: 22,
+                    ),
+                    tooltip: 'Clear history',
                     onPressed: _showClearHistoryDialog,
                   )
-                else
-                  _ChromeIconBtn(
-                    icon: Icons.more_horiz_rounded,
-                    onPressed: () {},
-                  ),
-              ],
-            ),
+                : null,
           ),
           
           // Member strip — group mode. First tile = ALL.
@@ -1369,44 +1312,6 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
 }
 
 // ─── Local chrome atoms ─────────────────────────────────────────────────────
-
-/// Small surface-bg square button used in the top bar (close / more / trash).
-class _ChromeIconBtn extends StatelessWidget {
-  const _ChromeIconBtn({
-    required this.icon,
-    required this.onPressed,
-    this.iconColor,
-  });
-
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-        child: Ink(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: context.gridColors.surface2,
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairline),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: iconColor ?? context.gridColors.text,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Avatar tile in the member strip — 52pt with optional 2pt mint ring + 16×2
 /// colored pill underline when active.

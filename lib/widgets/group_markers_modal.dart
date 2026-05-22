@@ -11,6 +11,8 @@ import 'package:grid_frontend/blocs/map/map_event.dart';
 import '../styles/tokens.dart';
 import '../styles/grid_colors.dart';
 import 'grid/grid_mono.dart';
+import 'grid/grid_segmented.dart';
+import 'grid/grid_sheet.dart';
 
 class GroupMarkersModal extends StatefulWidget {
   final String roomId;
@@ -152,117 +154,26 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.gridColors.bg,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(GridTokens.r2Xl),
-          ),
-          border: Border(
-            top: BorderSide(color: context.gridColors.hairline),
-            left: BorderSide(color: context.gridColors.hairline),
-            right: BorderSide(color: context.gridColors.hairline),
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHandle(),
-              _buildHeader(),
-              Flexible(
-                child: _isLoading
-                    ? _buildLoadingState()
-                    : _markers.isEmpty
-                        ? _buildEmptyState()
-                        : _buildList(),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHandle() {
-    return Container(
-      margin: const EdgeInsets.only(top: 10, bottom: 4),
-      width: 36,
-      height: 4,
-      decoration: BoxDecoration(
-        color: context.gridColors.hairlineStrong,
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
     final count = _markers.length;
     final subtitle = _isLoading
         ? 'Loading markers in ${widget.roomName}'
         : '$count marker${count != 1 ? 's' : ''} in ${widget.roomName}';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return GridSheetContainer(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: context.gridColors.mintFaint,
-              borderRadius: BorderRadius.circular(GridTokens.rSm),
-              border: Border.all(color: context.gridColors.mintSoft),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.location_on_rounded,
-              size: 18,
-              color: context.gridColors.mint,
-            ),
+          GridSheetHeader(
+            title: 'Group markers',
+            subtitle: subtitle,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Group markers',
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.015,
-                    color: context.gridColors.text,
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 12.5,
-                    color: context.gridColors.text2,
-                  ),
-                ),
-              ],
-            ),
+          Flexible(
+            child: _isLoading
+                ? _buildLoadingState()
+                : _markers.isEmpty
+                    ? _buildEmptyState()
+                    : _buildList(),
           ),
-          IconButton(
-            icon: Icon(
-              Icons.close_rounded,
-              color: context.gridColors.text2,
-              size: 22,
-            ),
-            tooltip: 'Close',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -344,39 +255,45 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
   }
 
   Widget _buildList() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
-          child: GridMono(
-            'MARKERS',
-            size: 10,
-            color: context.gridColors.text3,
-            letterSpacing: 0.12,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const GridSectionHeader(text: 'MARKERS'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.gridColors.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rMd),
+                border: Border.all(color: context.gridColors.hairline),
+              ),
+              child: Column(
+                children: [
+                  for (var i = 0; i < _markers.length; i++) ...[
+                    _MarkerTile(
+                      marker: _markers[i],
+                      iconData: _resolveIconData(_markers[i]),
+                      distance: _formatDistance(
+                        _markers[i].latitude,
+                        _markers[i].longitude,
+                      ),
+                      onTap: () => _navigateToMarker(_markers[i]),
+                    ),
+                    if (i < _markers.length - 1)
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: context.gridColors.hairline,
+                      ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-        Flexible(
-          child: ListView.separated(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            itemCount: _markers.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final marker = _markers[index];
-              final distance =
-                  _formatDistance(marker.latitude, marker.longitude);
-              return _MarkerTile(
-                marker: marker,
-                iconData: _resolveIconData(marker),
-                distance: distance,
-                onTap: () => _navigateToMarker(marker),
-              );
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -408,20 +325,14 @@ class _MarkerTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: context.gridColors.surface2,
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairline),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: context.gridColors.mintFaint,
                   borderRadius: BorderRadius.circular(GridTokens.rSm),
