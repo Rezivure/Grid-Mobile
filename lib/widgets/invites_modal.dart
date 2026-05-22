@@ -8,6 +8,7 @@ import 'package:grid_frontend/widgets/group_invitation_modal.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
@@ -295,15 +296,18 @@ Widget _buildInvitesList({
         child: _ExpiredInviteCard(
           invite: invite,
           onRemove: () async {
-            final messenger = ScaffoldMessenger.maybeOf(context);
             final ok = await roomService.leaveRoom(roomId);
             if (ok) {
-              messenger?.showSnackBar(const SnackBar(
-                  content: Text('Expired invite removed')));
+              InAppNotifier.instance.show(
+                title: 'Expired invite removed',
+                variant: InAppNotificationVariant.success,
+              );
             } else {
-              messenger?.showSnackBar(const SnackBar(
-                  content:
-                      Text('Could not remove invite — try again')));
+              InAppNotifier.instance.show(
+                title: 'Could not remove invite',
+                message: 'Try again.',
+                variant: InAppNotificationVariant.error,
+              );
             }
             await onInviteHandled();
             onRefresh();
@@ -652,16 +656,18 @@ class _InvitesModalState extends State<InvitesModal> {
     BuildContext context,
     String roomId,
   ) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final ok = await widget.roomService.leaveRoom(roomId);
     if (!mounted) return;
     if (ok) {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('Expired invite removed')),
+      InAppNotifier.instance.show(
+        title: 'Expired invite removed',
+        variant: InAppNotificationVariant.success,
       );
     } else {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('Could not remove invite — try again')),
+      InAppNotifier.instance.show(
+        title: 'Could not remove invite',
+        message: 'Try again.',
+        variant: InAppNotificationVariant.error,
       );
     }
     await widget.onInviteHandled();

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'in_app_notifier.dart';
 
 class AppleSubscriptionService {
   static const String satelliteMonthlyId = 'app.mygrid.grid_satellite_monthly';
@@ -82,16 +83,10 @@ class AppleSubscriptionService {
       await loadProducts();
       if (_products.isEmpty) {
         print('[IAP] Still no products after loading attempt');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Subscription not available'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Subscription not available',
+          variant: InAppNotificationVariant.error,
+          duration: const Duration(seconds: 2),
         );
         return;
       }
@@ -128,16 +123,10 @@ class AppleSubscriptionService {
       }
     } catch (e) {
       print('[IAP] Error getting UUID: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Failed to initialize purchase'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+      InAppNotifier.instance.show(
+        title: 'Failed to initialize purchase',
+        variant: InAppNotificationVariant.error,
+        duration: const Duration(seconds: 2),
       );
       return;
     }
@@ -245,22 +234,10 @@ class AppleSubscriptionService {
   }
   
   void _showErrorSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
+    InAppNotifier.instance.show(
+      title: message,
+      variant: InAppNotificationVariant.error,
+      duration: const Duration(seconds: 2),
     );
   }
   

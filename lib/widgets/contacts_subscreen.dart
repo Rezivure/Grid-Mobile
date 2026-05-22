@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
@@ -285,15 +286,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         child: BlocConsumer<ContactsBloc, ContactsState>(
           listener: (context, state) {
             if (state is ContactsError) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Error: ${state.message}'),
-                  backgroundColor: context.gridColors.danger,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
+              InAppNotifier.instance.show(
+                title: 'Error',
+                message: state.message,
+                variant: InAppNotificationVariant.error,
               );
             }
           },
@@ -729,15 +725,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   Future<void> _copyHandle(String handle) async {
     await Clipboard.setData(ClipboardData(text: handle));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Copied $handle'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
+    InAppNotifier.instance.show(
+      title: 'Copied $handle',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -749,12 +740,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to share invite'),
-          backgroundColor: context.gridColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Unable to share invite',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -907,16 +895,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                                 .read<ContactsBloc>()
                                 .add(DeleteContact(contact.userId));
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Removing $contactName from contacts...'),
-                                backgroundColor: context.gridColors.surface2,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                            InAppNotifier.instance.show(
+                              title: 'Removing $contactName',
+                              message: 'Removing from contacts…',
+                              variant: InAppNotificationVariant.info,
                             );
                           },
                         ),

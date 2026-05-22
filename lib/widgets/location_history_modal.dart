@@ -13,6 +13,7 @@ import 'package:grid_frontend/models/location_history.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -348,17 +349,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
 
         // Show success message
         if (mounted) {
-          final colorScheme = Theme.of(context).colorScheme;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Location history cleared'),
-              backgroundColor: colorScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              margin: const EdgeInsets.all(8),
-            ),
+          InAppNotifier.instance.show(
+            title: 'Location history cleared',
+            variant: InAppNotificationVariant.success,
           );
         }
       } catch (e) {
@@ -368,17 +361,10 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         });
 
         if (mounted) {
-          final colorScheme = Theme.of(context).colorScheme;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to clear history: $e'),
-              backgroundColor: colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              margin: const EdgeInsets.all(8),
-            ),
+          InAppNotifier.instance.show(
+            title: 'Failed to clear history',
+            message: '$e',
+            variant: InAppNotificationVariant.error,
           );
         }
       }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -107,15 +108,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     } catch (e) {
       print('Error sharing group invite: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Unable to share invite: ${e.toString()}'),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(GridTokens.rMd),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Unable to share invite',
+          message: e.toString(),
+          variant: InAppNotificationVariant.error,
         );
       }
     }
@@ -227,16 +223,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invite sent to @${utils.localpart(username)}'),
-            backgroundColor: context.gridColors.surface2,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(GridTokens.rMd),
-              side: BorderSide(color: context.gridColors.hairlineStrong),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Invite sent',
+          message: 'Sent to @${utils.localpart(username)}',
+          variant: InAppNotificationVariant.success,
         );
       }
 

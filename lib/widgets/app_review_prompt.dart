@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io' show Platform;
 import 'dart:async';
 
+import 'package:grid_frontend/services/in_app_notifier.dart';
+
 class AppReviewPrompt extends StatefulWidget {
   const AppReviewPrompt({Key? key}) : super(key: key);
 
@@ -436,12 +438,11 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
       } else {
         // If we're in simulator/emulator, show a message
         if (mounted && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Thank you! App Store review will open on a real device.'),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              duration: const Duration(seconds: 3),
-            ),
+          InAppNotifier.instance.show(
+            title: 'Thank you!',
+            message: 'App Store review will open on a real device.',
+            variant: InAppNotificationVariant.success,
+            duration: const Duration(seconds: 3),
           );
         }
       }

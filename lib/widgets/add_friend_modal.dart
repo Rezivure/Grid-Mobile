@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
@@ -297,16 +298,10 @@ class _AddFriendModalState extends State<AddFriendModal>
           // Clear _matrixUserId after successful use
           _matrixUserId = null;
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Friend request sent to ${utils.localpart(normalizedUserId)}.'),
-                backgroundColor: context.gridColors.mint,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
+            InAppNotifier.instance.show(
+              title: 'Friend request sent',
+              message: 'Sent to ${utils.localpart(normalizedUserId)}.',
+              variant: InAppNotificationVariant.success,
             );
             // Trigger contact refresh callback
             widget.onContactAdded?.call();
@@ -477,8 +472,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     // Name is required; members aren't — the user can ship a 1-person
     // group now and invite people later via the group's … menu.
     if (_groupNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a group name.')),
+      InAppNotifier.instance.show(
+        title: 'Please enter a group name',
+        variant: InAppNotificationVariant.warning,
       );
       return;
     }
@@ -536,29 +532,10 @@ class _AddFriendModalState extends State<AddFriendModal>
           }
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Group created successfully',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 15,
-              ),
-            ),
-            backgroundColor: context.gridColors.mint,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(
-              bottom: 20,
-              left: 20,
-              right: 20,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            duration: const Duration(seconds: 3),
-            elevation: 6,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Group created',
+          variant: InAppNotificationVariant.success,
+          duration: const Duration(seconds: 3),
         );
       }
     } catch (e) {
@@ -571,23 +548,10 @@ class _AddFriendModalState extends State<AddFriendModal>
           errorMsg = 'Permission denied to create group';
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline,
-                    color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(child: Text(errorMsg)),
-              ],
-            ),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: errorMsg,
+          variant: InAppNotificationVariant.error,
+          duration: const Duration(seconds: 2),
         );
       }
     } finally {
@@ -689,15 +653,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     try {
       final myUserId = widget.roomService.getMyUserId();
       if (myUserId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Unable to get your username'),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Unable to get your username',
+          variant: InAppNotificationVariant.error,
         );
         return;
       }
@@ -714,15 +672,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     } catch (e) {
       print('Error sharing invite link: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Unable to share invite'),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Unable to share invite',
+          variant: InAppNotificationVariant.error,
         );
       }
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
@@ -400,15 +401,9 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         Navigator.of(context).pop(); // Close the modal
         await widget.onResponse(); // Execute callback to refresh any parent components
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Friend request accepted."),
-            backgroundColor: context.gridColors.mint,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Friend request accepted',
+          variant: InAppNotificationVariant.success,
         );
       }
     } catch (e) {
@@ -426,21 +421,10 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
               "This invitation has already been accepted or declined.";
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.info_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(child: Text(errorMessage)),
-              ],
-            ),
-            backgroundColor: context.gridColors.amber,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Invitation unavailable',
+          message: errorMessage,
+          variant: InAppNotificationVariant.warning,
         );
       }
     } finally {
@@ -473,30 +457,18 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Friend request declined."),
-            backgroundColor: context.gridColors.mint,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Friend request declined',
+          variant: InAppNotificationVariant.info,
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error declining the request: $e"),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Error declining the request',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
     } finally {

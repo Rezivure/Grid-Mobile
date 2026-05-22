@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
@@ -1143,15 +1144,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
     if (confirmed != true || !mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       context.read<ContactsBloc>().add(DeleteContact(widget.contact.userId));
     } catch (_) {}
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Removing $firstName from contacts…'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    InAppNotifier.instance.show(
+      title: 'Removing $firstName',
+      message: 'Removing from contacts…',
+      variant: InAppNotificationVariant.info,
     );
     if (mounted) Navigator.of(context).pop();
   }
@@ -1414,16 +1413,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               InkWell(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: keyValue));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$keyType key copied'),
-                      backgroundColor: context.gridColors.surface,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
+                  InAppNotifier.instance.show(
+                    title: '$keyType key copied',
+                    variant: InAppNotificationVariant.success,
+                    duration: const Duration(seconds: 2),
                   );
                 },
                 borderRadius: BorderRadius.circular(6),

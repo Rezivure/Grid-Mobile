@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
 import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
@@ -1538,14 +1539,17 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                       await _roomService.leaveRoom(room.roomId);
                       _navigateToContacts();
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Left group successfully')),
+                        InAppNotifier.instance.show(
+                          title: 'Left group',
+                          variant: InAppNotificationVariant.success,
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error leaving group: $e')),
+                        InAppNotifier.instance.show(
+                          title: 'Error leaving group',
+                          message: '$e',
+                          variant: InAppNotificationVariant.error,
                         );
                       }
                     }

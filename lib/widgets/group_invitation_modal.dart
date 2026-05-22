@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
@@ -368,16 +369,10 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
       // Show success message
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Group invitation accepted."),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Group invitation accepted',
+          variant: InAppNotificationVariant.success,
+          duration: const Duration(seconds: 2),
         );
       }
 
@@ -438,17 +433,10 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             ),
           );
         } else {
-          // For other errors, just show a snackbar
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Error accepting invitation: ${e.toString()}"),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+          InAppNotifier.instance.show(
+            title: 'Error accepting invitation',
+            message: e.toString(),
+            variant: InAppNotificationVariant.error,
           );
         }
       }
@@ -482,30 +470,18 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
         Navigator.of(context).pop(); // Close the modal
         await widget.refreshCallback(); // Trigger the callback to refresh
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Group invitation declined."),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Group invitation declined',
+          variant: InAppNotificationVariant.info,
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to decline group invitation: $e"),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Failed to decline group invitation',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
     } finally {

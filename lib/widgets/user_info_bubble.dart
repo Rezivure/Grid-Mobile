@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/styles/tokens.dart';
@@ -71,16 +72,10 @@ class UserInfoBubble extends StatelessWidget {
         '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
     Clipboard.setData(ClipboardData(text: coordinates));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Coordinates copied to clipboard'),
-        backgroundColor: context.gridColors.mint,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
+    InAppNotifier.instance.show(
+      title: 'Coordinates copied',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -334,16 +329,10 @@ class UserInfoBubble extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not open maps application'),
-            backgroundColor: context.gridColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Could not open maps application',
+          variant: InAppNotificationVariant.error,
+          duration: const Duration(seconds: 2),
         );
       }
     }
