@@ -1478,9 +1478,13 @@ class _AddFriendModalState extends State<AddFriendModal>
         _buildTopBar(
           title: 'Create a group',
           onClose: () {
-            setState(() {
-              _view = _AddFriendView.hub;
-            });
+            if (widget.startInGroupCreate) {
+              Navigator.of(context).pop();
+            } else {
+              setState(() {
+                _view = _AddFriendView.hub;
+              });
+            }
           },
         ),
         Padding(
