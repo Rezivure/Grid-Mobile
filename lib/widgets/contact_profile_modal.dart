@@ -232,9 +232,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return days;
   }
 
-  // Mirrors `_buildMemberRow` / `_isRecentlyActive` in
-  // group_details_subscreen.dart so the header badge tracks the contact's
-  // own live/paused/offline state — not the local user's outgoing toggle.
+  // No real "paused" signal exists for contacts — stale data is offline.
   GridAvatarStatus _contactStatus(BuildContext context) {
     final loc = context
         .watch<UserLocationProvider>()
@@ -242,9 +240,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     if (loc == null) return GridAvatarStatus.offline;
     final ago = TimeAgoFormatter.format(loc.timestamp);
     if (_isRecentlyActive(ago)) return GridAvatarStatus.live;
-    if (ago.contains('m ago') || ago.contains('h ago')) {
-      return GridAvatarStatus.paused;
-    }
     return GridAvatarStatus.offline;
   }
 
@@ -584,15 +579,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         padding: EdgeInsets.only(top: 4),
                         child: GridLiveBadge(),
                       ),
-                    ] else if (status == GridAvatarStatus.paused) ...[
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: GridStatusPill(
-                          label: 'PAUSED',
-                          kind: GridStatusKind.paused,
-                        ),
-                      ),
                     ],
                     // Reserve enough trailing space for the floating
                     // close X so the name doesn't run into it.
@@ -642,12 +628,11 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildStatusRow() {
-    // Run lastSeen through TimeAgoFormatter so the pill reads
-    // "UPDATED 3 MIN AGO" instead of dumping a raw ISO timestamp.
-    final timeAgo = widget.contact.lastSeen.isEmpty
-        ? 'Just now'
-        : TimeAgoFormatter.format(widget.contact.lastSeen);
-    final updatedLabel = 'UPDATED ${timeAgo.toUpperCase()}';
+    // Concrete relative time ("LAST 3H AGO") instead of "UPDATED OFFLINE",
+    // which read like an oxymoron. "NEVER" when we truly have no fix.
+    final loc = Provider.of<UserLocationProvider>(context, listen: false)
+        .getUserLocation(widget.contact.userId);
+    final updatedLabel = _formatFreshness(loc?.timestamp);
 
     // gridv 2: pull live device-status (motion / speed / battery) from
     // the cache for the contact (not the local user). Subscribe so the
@@ -671,6 +656,17 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         _MonoPill(label: updatedLabel),
       ],
     );
+  }
+
+  String _formatFreshness(String? timestamp) {
+    if (timestamp == null) return 'NEVER';
+    final ago = TimeAgoFormatter.format(timestamp);
+    if (ago == 'Offline') return 'NEVER';
+    if (ago == 'Just now') return 'LAST JUST NOW';
+    final stripped = ago.endsWith(' ago')
+        ? ago.substring(0, ago.length - 4)
+        : ago;
+    return 'LAST ${stripped.toUpperCase()} AGO';
   }
 
   // Same banding as the old user_info_bubble.

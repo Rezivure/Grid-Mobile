@@ -848,34 +848,21 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         : '@${user.userId.split(':')[0].replaceFirst('@', '')}';
     final name = user.displayName ?? localpart(user.userId);
 
-    // Map status into avatar dot tokens.
+    // No real "paused" signal exists for contacts. Stale data is offline.
     final isInvited = memberStatus == 'invite';
     final isLive = !isInvited && _isRecentlyActive(timeAgoText);
-    final isPaused = !isInvited &&
-        !isLive &&
-        (timeAgoText.contains('m ago') ||
-            timeAgoText.contains('h ago'));
 
     final avatarStatus = isInvited
         ? GridAvatarStatus.paused
         : isLive
             ? GridAvatarStatus.live
-            : isPaused
-                ? GridAvatarStatus.paused
-                : GridAvatarStatus.offline;
+            : GridAvatarStatus.offline;
 
     String? statusLabel;
     GridStatusKind? statusKind;
     if (isInvited) {
       statusKind = GridStatusKind.paused;
       statusLabel = 'INVITED';
-    } else if (timeAgoText == 'Offline') {
-      // no pill — offline avatar dot conveys it
-    } else if (isLive) {
-      // live badge is already shown next to the name
-    } else if (isPaused) {
-      statusKind = GridStatusKind.paused;
-      statusLabel = 'PAUSED';
     }
 
     return GridContactRow(

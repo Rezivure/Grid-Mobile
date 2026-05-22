@@ -210,14 +210,11 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         .toList();
   }
 
-  // Categorize a contact's section by its time-ago string + membership status.
-  // - SHARING NOW: live / recently active (≤ 10 min, no invite)
-  // - PAUSED: invitation pending OR loosely active (minutes/hours)
-  // - OFFLINE: days/unknown
+  // No real "paused" signal exists for contacts — stale data is offline.
+  // Invites get their own bucket so they don't masquerade as offline.
   _ContactBucket _bucketFor(ContactDisplay c) {
+    if (c.membershipStatus == 'invite') return _ContactBucket.invited;
     final time = c.lastSeen;
-    if (c.membershipStatus == 'invite') return _ContactBucket.paused;
-
     if (time == 'Just now' || time.contains('s ago')) {
       return _ContactBucket.sharingNow;
     }
@@ -227,21 +224,18 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         final minutes = int.tryParse(m.group(1)!) ?? 0;
         if (minutes <= 10) return _ContactBucket.sharingNow;
       }
-      return _ContactBucket.paused;
     }
-    if (time.contains('h ago')) return _ContactBucket.paused;
     return _ContactBucket.offline;
   }
 
   bool _isLive(ContactDisplay c) =>
-      _bucketFor(c) == _ContactBucket.sharingNow &&
-      c.membershipStatus != 'invite';
+      _bucketFor(c) == _ContactBucket.sharingNow;
 
   GridAvatarStatus _avatarStatusFor(ContactDisplay c) {
     switch (_bucketFor(c)) {
       case _ContactBucket.sharingNow:
         return GridAvatarStatus.live;
-      case _ContactBucket.paused:
+      case _ContactBucket.invited:
         return GridAvatarStatus.paused;
       case _ContactBucket.offline:
         return GridAvatarStatus.offline;
@@ -377,15 +371,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }) {
     // Group while preserving the upstream sort order (recent-first).
     final live = <ContactDisplay>[];
-    final paused = <ContactDisplay>[];
+    final invited = <ContactDisplay>[];
     final offline = <ContactDisplay>[];
     for (final c in contacts) {
       switch (_bucketFor(c)) {
         case _ContactBucket.sharingNow:
           live.add(c);
           break;
-        case _ContactBucket.paused:
-          paused.add(c);
+        case _ContactBucket.invited:
+          invited.add(c);
           break;
         case _ContactBucket.offline:
           offline.add(c);
@@ -403,11 +397,11 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         items.add(_ListItem.contact(live[i], isLast: i == live.length - 1));
       }
     }
-    if (paused.isNotEmpty) {
-      items.add(_ListItem.section('PAUSED', trailingCount: paused.length));
-      for (int i = 0; i < paused.length; i++) {
+    if (invited.isNotEmpty) {
+      items.add(_ListItem.section('INVITED', trailingCount: invited.length));
+      for (int i = 0; i < invited.length; i++) {
         items.add(
-            _ListItem.contact(paused[i], isLast: i == paused.length - 1));
+            _ListItem.contact(invited[i], isLast: i == invited.length - 1));
       }
     }
     if (offline.isNotEmpty) {
@@ -932,7 +926,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
 // ── Internal helpers ────────────────────────────────────────────────
 
-enum _ContactBucket { sharingNow, paused, offline }
+enum _ContactBucket { sharingNow, invited, offline }
 
 enum _ListItemKind { syncing, section, contact }
 
