@@ -1554,9 +1554,13 @@ class _AddFriendModalState extends State<AddFriendModal>
                       ? null
                       : () {
                           if (_currentGroupStep == 0) {
-                            setState(() {
-                              _view = _AddFriendView.hub;
-                            });
+                            if (widget.startInGroupCreate) {
+                              Navigator.of(context).pop();
+                            } else {
+                              setState(() {
+                                _view = _AddFriendView.hub;
+                              });
+                            }
                           } else {
                             _previousGroupStep();
                           }

@@ -148,6 +148,7 @@ class MapBloc extends Bloc<MapEvent, MapState> {
     emit(state.copyWith(
       center: event.location,
       zoom: event.zoom,
+      selectedUserId: event.selectedUserId,
     ));
   }
 }

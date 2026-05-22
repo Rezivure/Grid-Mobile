@@ -1466,6 +1466,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   void _onResetSignal() {
     if (!mounted) return;
+    context.read<MapBloc>().add(MapClearSelection());
     _resetToInitialZoom();
   }
 
@@ -1475,30 +1476,34 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     if (sharingRepo == null) return const SizedBox.shrink();
     final roomService = context.read<RoomService>();
 
-    return DraggableScrollableSheet(
-      // Defaults to ~half the screen so the user can see Sharing /
-      // Route / Sharing-windows actions without scrolling, but the
-      // map above remains a solid two-thirds visible. Snaps to a
-      // low dock (still ~the People drawer height) and a full-pull
-      // for security / remove-contact.
-      initialChildSize: 0.5,
-      minChildSize: 0.32,
-      maxChildSize: 0.95,
-      snap: true,
-      snapSizes: const [0.32, 0.5, 0.95],
-      builder: (_, scrollController) {
-        return ContactProfileModal(
-          contact: contact,
-          roomService: roomService,
-          sharingPreferencesRepo: sharingRepo,
-          fromMapTap: true,
-          scrollController: scrollController,
-          onClose: () {
-            ContactSheetController.instance.close();
-            MapCameraSignals.requestReset();
-          },
-        );
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (n) {
+        if (n.extent < 0.20 && ContactSheetController.instance.contact != null) {
+          ContactSheetController.instance.close();
+          MapCameraSignals.requestReset();
+        }
+        return false;
       },
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.0,
+        maxChildSize: 0.95,
+        snap: true,
+        snapSizes: const [0.32, 0.5, 0.95],
+        builder: (_, scrollController) {
+          return ContactProfileModal(
+            contact: contact,
+            roomService: roomService,
+            sharingPreferencesRepo: sharingRepo,
+            fromMapTap: true,
+            scrollController: scrollController,
+            onClose: () {
+              ContactSheetController.instance.close();
+              MapCameraSignals.requestReset();
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -1511,11 +1516,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   void _onMarkerTap(String userId, LatLng position) async {
-    // Marker tap zooms in (preserves the user's "show me their
-    // street" intent). Drawer tap doesn't change zoom — see
-    // contacts_subscreen._openContactSheet.
     context.read<MapBloc>().add(
-          MapCenterOnLocation(position, zoom: 15),
+          MapCenterOnLocation(
+            position,
+            zoom: 15,
+            selectedUserId: userId,
+          ),
         );
 
     String displayName = userId.split(':')[0].replaceFirst('@', '');

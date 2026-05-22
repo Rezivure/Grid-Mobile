@@ -32,9 +32,10 @@ class MapClearSelection extends MapEvent {}
 class MapCenterOnLocation extends MapEvent {
   final LatLng location;
   final double? zoom;
-  
-  const MapCenterOnLocation(this.location, {this.zoom});
-  
+  final String? selectedUserId;
+
+  const MapCenterOnLocation(this.location, {this.zoom, this.selectedUserId});
+
   @override
-  List<Object?> get props => [location, zoom];
+  List<Object?> get props => [location, zoom, selectedUserId];
 }
