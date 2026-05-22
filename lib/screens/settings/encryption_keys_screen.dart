@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 
@@ -25,7 +27,7 @@ class EncryptionKeysScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -37,12 +39,12 @@ class EncryptionKeysScreen extends StatelessWidget {
             'Geist',
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             letterSpacing: -0.01,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: GridTokens.text),
+          icon: Icon(Icons.arrow_back, color: context.gridColors.text),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -51,13 +53,13 @@ class EncryptionKeysScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            _buildInfoCard(),
+            _buildInfoCard(context),
             const GridSectionHeader(text: 'YOUR DEVICE'),
             Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
@@ -67,10 +69,10 @@ class EncryptionKeysScreen extends StatelessWidget {
                     label: 'Device ID',
                     value: deviceId,
                   ),
-                  const Divider(
+                  Divider(
                     height: 1,
                     thickness: 1,
-                    color: GridTokens.hairline,
+                    color: context.gridColors.hairline,
                     indent: 56,
                   ),
                   _KeyRow(
@@ -87,21 +89,21 @@ class EncryptionKeysScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildInfoCard(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.mintSoft),
+        border: Border.all(color: context.gridColors.mintSoft),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.shield_outlined,
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             size: 18,
           ),
           const SizedBox(width: 12),
@@ -112,7 +114,7 @@ class EncryptionKeysScreen extends StatelessWidget {
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 height: 1.4,
               ),
             ),
@@ -140,23 +142,9 @@ class _KeyRow extends StatelessWidget {
     if (_isLoading) return;
     await Clipboard.setData(ClipboardData(text: value!));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$label copied',
-          style: GoogleFonts.getFont(
-            'Geist',
-            color: const Color(0xFF04201A),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: GridTokens.mint,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-        ),
-        margin: const EdgeInsets.all(16),
-      ),
+    InAppNotifier.instance.show(
+      title: '$label copied',
+      variant: InAppNotificationVariant.success,
     );
   }
 
@@ -175,11 +163,11 @@ class _KeyRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: GridTokens.mintFaint,
+                  color: context.gridColors.mintFaint,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 16, color: GridTokens.mint),
+                child: Icon(icon, size: 16, color: context.gridColors.mint),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -191,7 +179,7 @@ class _KeyRow extends StatelessWidget {
                       label,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                         letterSpacing: -0.01,
@@ -202,7 +190,7 @@ class _KeyRow extends StatelessWidget {
                       GridMono(
                         'LOADING…',
                         size: 11,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         letterSpacing: 0.1,
                       )
                     else
@@ -210,7 +198,7 @@ class _KeyRow extends StatelessWidget {
                         value!,
                         style: GoogleFonts.getFont(
                           'Geist Mono',
-                          color: GridTokens.text2,
+                          color: context.gridColors.text2,
                           fontSize: 12.5,
                           height: 1.35,
                           letterSpacing: 0.02,
@@ -223,7 +211,7 @@ class _KeyRow extends StatelessWidget {
               Icon(
                 Icons.copy_rounded,
                 size: 16,
-                color: _isLoading ? GridTokens.text4 : GridTokens.text3,
+                color: _isLoading ? context.gridColors.text4 : context.gridColors.text3,
               ),
             ],
           ),

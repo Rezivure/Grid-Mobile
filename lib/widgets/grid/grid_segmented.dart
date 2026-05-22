@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import 'grid_mono.dart';
 
 class GridSegmentedTab {
@@ -35,9 +35,9 @@ class GridSegmented extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -76,10 +76,10 @@ class _SegItem extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: active ? GridTokens.surface : Colors.transparent,
+            color: active ? context.gridColors.surface : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
             border: active
-                ? Border.all(color: GridTokens.hairlineStrong)
+                ? Border.all(color: context.gridColors.hairlineStrong)
                 : null,
           ),
           child: Row(
@@ -92,14 +92,14 @@ class _SegItem extends StatelessWidget {
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.01,
-                  color: active ? GridTokens.text : GridTokens.text2,
+                  color: active ? context.gridColors.text : context.gridColors.text2,
                 ),
               ),
               if (tab.badgeCount > 0) ...[
                 const SizedBox(width: 6),
                 GridMono(
                   '${tab.badgeCount}',
-                  color: tab.badgeColor ?? GridTokens.text3,
+                  color: tab.badgeColor ?? context.gridColors.text3,
                   size: 10,
                   letterSpacing: 0,
                   uppercase: false,
@@ -133,7 +133,7 @@ class GridSectionHeader extends StatelessWidget {
           Expanded(
             child: GridMono(
               text,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               size: 10.5,
               letterSpacing: 0.12,
             ),

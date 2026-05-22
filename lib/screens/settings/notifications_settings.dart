@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../../widgets/grid/grid_segmented.dart';
 
@@ -53,21 +54,21 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
-        backgroundColor: GridTokens.bg,
+        backgroundColor: context.gridColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: GridTokens.text, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: context.gridColors.text, size: 20),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         title: Text(
           'Notifications',
           style: GoogleFonts.getFont(
             'Geist',
-            color: GridTokens.text,
+            color: context.gridColors.text,
             fontSize: 18,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.015,
@@ -201,17 +202,17 @@ class _InfoCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.notifications_active_outlined,
             size: 18,
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -219,7 +220,7 @@ class _InfoCard extends StatelessWidget {
               text,
               style: GoogleFonts.getFont(
                 'Geist',
-                color: GridTokens.text,
+                color: context.gridColors.text,
                 fontSize: 13.5,
                 height: 1.35,
                 fontWeight: FontWeight.w400,
@@ -242,9 +243,9 @@ class _SettingsGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
@@ -255,9 +256,9 @@ class _SettingsGroup extends StatelessWidget {
 class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.only(left: 16),
-      child: Divider(height: 1, thickness: 1, color: GridTokens.hairline),
+      child: Divider(height: 1, thickness: 1, color: context.gridColors.hairline),
     );
   }
 }
@@ -288,7 +289,7 @@ class _ToggleRow extends StatelessWidget {
                 label,
                 style: GoogleFonts.getFont(
                   'Geist',
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
                   letterSpacing: -0.01,
@@ -302,8 +303,8 @@ class _ToggleRow extends StatelessWidget {
               thumbColor: WidgetStateProperty.all(Colors.white),
               trackColor: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.selected)
-                    ? GridTokens.mint
-                    : GridTokens.surface3,
+                    ? context.gridColors.mint
+                    : context.gridColors.surface3,
               ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               trackOutlineColor:
@@ -343,7 +344,7 @@ class _TimeRow extends StatelessWidget {
                 width: 32,
                 child: GridMono(
                   shortLabel,
-                  color: GridTokens.text3,
+                  color: context.gridColors.text3,
                   size: 12,
                   letterSpacing: 0.04,
                   uppercase: false,
@@ -355,7 +356,7 @@ class _TimeRow extends StatelessWidget {
                   label,
                   style: GoogleFonts.getFont(
                     'Geist',
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.01,
@@ -364,14 +365,14 @@ class _TimeRow extends StatelessWidget {
               ),
               GridMono(
                 time,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 size: 12,
                 letterSpacing: 0.04,
                 uppercase: false,
               ),
               const SizedBox(width: 6),
-              const Icon(Icons.chevron_right_rounded,
-                  size: 18, color: GridTokens.text3),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: context.gridColors.text3),
             ],
           ),
         ),
@@ -399,7 +400,7 @@ class _ValueRow extends StatelessWidget {
                 label,
                 style: GoogleFonts.getFont(
                   'Geist',
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
                   letterSpacing: -0.01,
@@ -410,15 +411,15 @@ class _ValueRow extends StatelessWidget {
               value,
               style: GoogleFonts.getFont(
                 'Geist',
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
                 letterSpacing: -0.01,
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.chevron_right_rounded,
-                size: 18, color: GridTokens.text3),
+            Icon(Icons.chevron_right_rounded,
+                size: 18, color: context.gridColors.text3),
           ],
         ),
       ),

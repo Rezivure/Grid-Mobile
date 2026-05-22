@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import '../../widgets/grid/grid_segmented.dart';
 import 'developer_settings_screen.dart';
 import 'synapse_logs_screen.dart';
@@ -16,15 +17,15 @@ class DeveloperToolsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
-        backgroundColor: GridTokens.bg,
+        backgroundColor: context.gridColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -33,7 +34,7 @@ class DeveloperToolsScreen extends StatelessWidget {
           'Developer tools',
           style: GoogleFonts.getFont(
             'Geist',
-            color: GridTokens.text,
+            color: context.gridColors.text,
             fontSize: 18,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.015,
@@ -49,9 +50,9 @@ class DeveloperToolsScreen extends StatelessWidget {
             const GridSectionHeader(text: 'Diagnostics'),
             Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
@@ -68,10 +69,10 @@ class DeveloperToolsScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const Divider(
+                  Divider(
                     height: 1,
                     thickness: 1,
-                    color: GridTokens.hairline,
+                    color: context.gridColors.hairline,
                     indent: 16,
                     endIndent: 16,
                   ),
@@ -121,24 +122,24 @@ class _DevMenuOption extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: GridTokens.text2),
+              Icon(icon, size: 20, color: context.gridColors.text2),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   title,
                   style: GoogleFonts.getFont(
                     'Geist',
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.01,
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 14,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
             ],
           ),

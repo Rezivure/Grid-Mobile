@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/repositories/user_repository.dart';
-import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 
 import 'user_avatar_bloc.dart';
@@ -143,15 +143,15 @@ class _UserMapMarkerState extends State<UserMapMarker>
   /// Live > 10 min ago → amber. Live > 1 hr → text3. Recent → mint.
   Color get _statusColor {
     final ts = widget.timestamp;
-    if (ts == null) return GridTokens.mint;
+    if (ts == null) return context.gridColors.mint;
     final ago = TimeAgoFormatter.format(ts);
-    if (ago == 'Just now' || ago.contains('s ago')) return GridTokens.mint;
+    if (ago == 'Just now' || ago.contains('s ago')) return context.gridColors.mint;
     if (ago.contains('m ago')) {
       final m = int.tryParse(ago.split(' ').first) ?? 0;
-      return m <= 10 ? GridTokens.mint : GridTokens.amber;
+      return m <= 10 ? context.gridColors.mint : context.gridColors.amber;
     }
-    if (ago.contains('h ago')) return GridTokens.amber;
-    return GridTokens.text3;
+    if (ago.contains('h ago')) return context.gridColors.amber;
+    return context.gridColors.text3;
   }
 
   @override
@@ -231,9 +231,9 @@ class _NamePill extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 132),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: GridTokens.surface.withOpacity(0.95),
+        color: context.gridColors.surface.withOpacity(0.95),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+        border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.28),
@@ -267,7 +267,7 @@ class _NamePill extends StatelessWidget {
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.005,
-                color: GridTokens.text,
+                color: context.gridColors.text,
                 height: 1.1,
               ),
             ),
@@ -347,7 +347,7 @@ class _PinBody extends StatelessWidget {
             height: 54,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               border: Border.all(
                 color: accent,
                 width: selected ? 2.5 : 1.8,
@@ -387,7 +387,7 @@ class _PinBody extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: accent,
                 border: Border.all(
-                  color: GridTokens.surface,
+                  color: context.gridColors.surface,
                   width: 2,
                 ),
                 boxShadow: [

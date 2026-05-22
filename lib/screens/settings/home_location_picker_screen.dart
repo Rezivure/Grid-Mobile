@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../services/location_manager.dart';
 import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../map/grid_map_style.dart';
@@ -129,7 +130,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
     final initialCenter = _resolveInitialCenter();
 
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -151,7 +152,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
           'Set home location',
           style: GoogleFonts.getFont(
             'Geist',
-            color: GridTokens.text,
+            color: context.gridColors.text,
             fontSize: 17,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.01,
@@ -201,10 +202,10 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      GridTokens.bg.withOpacity(0.55),
+                      context.gridColors.bg.withOpacity(0.55),
                       Colors.transparent,
                       Colors.transparent,
-                      GridTokens.bg.withOpacity(0.65),
+                      context.gridColors.bg.withOpacity(0.65),
                     ],
                     stops: const [0.0, 0.15, 0.5, 1.0],
                   ),
@@ -245,9 +246,9 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: GridTokens.mint.withOpacity(0.12),
+                          color: context.gridColors.mint.withOpacity(0.12),
                           border: Border.all(
-                            color: GridTokens.mint.withOpacity(0.65),
+                            color: context.gridColors.mint.withOpacity(0.65),
                             width: 1.5,
                           ),
                         ),
@@ -285,18 +286,18 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: GridTokens.surface.withOpacity(0.92),
+                    color: context.gridColors.surface.withOpacity(0.92),
                     borderRadius:
                         BorderRadius.circular(GridTokens.rMd),
                     border:
-                        Border.all(color: GridTokens.hairlineStrong),
+                        Border.all(color: context.gridColors.hairlineStrong),
                   ),
                   child: Text(
                     'Pan the map until the pin sits over your home.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.getFont(
                       'Geist',
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                       letterSpacing: -0.005,
@@ -319,11 +320,11 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                   decoration: BoxDecoration(
-                    color: GridTokens.surface.withOpacity(0.96),
+                    color: context.gridColors.surface.withOpacity(0.96),
                     borderRadius:
                         BorderRadius.circular(GridTokens.rLg),
                     border:
-                        Border.all(color: GridTokens.hairlineStrong),
+                        Border.all(color: context.gridColors.hairlineStrong),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -331,17 +332,17 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                     children: [
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.radio_button_checked_rounded,
                             size: 16,
-                            color: GridTokens.mint,
+                            color: context.gridColors.mint,
                           ),
                           const SizedBox(width: 8),
                           Text(
                             'Geofence radius',
                             style: GoogleFonts.getFont(
                               'Geist',
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.01,
@@ -352,18 +353,18 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                             '${_radiusMeters.round()} M',
                             size: 11,
                             letterSpacing: 0.08,
-                            color: GridTokens.mint,
+                            color: context.gridColors.mint,
                           ),
                         ],
                       ),
                       SliderTheme(
                         data: SliderThemeData(
                           trackHeight: 3,
-                          activeTrackColor: GridTokens.mint,
-                          inactiveTrackColor: GridTokens.hairlineStrong,
-                          thumbColor: GridTokens.mint,
+                          activeTrackColor: context.gridColors.mint,
+                          inactiveTrackColor: context.gridColors.hairlineStrong,
+                          thumbColor: context.gridColors.mint,
                           overlayColor:
-                              GridTokens.mint.withOpacity(0.16),
+                              context.gridColors.mint.withOpacity(0.16),
                           thumbShape: const RoundSliderThumbShape(
                             enabledThumbRadius: 9,
                           ),
@@ -433,8 +434,8 @@ class _CenterPin extends StatelessWidget {
                     child: Container(
                       width: haloSize,
                       height: haloSize,
-                      decoration: const BoxDecoration(
-                        color: GridTokens.mintSoft,
+                      decoration: BoxDecoration(
+                        color: context.gridColors.mintSoft,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -467,12 +468,12 @@ class _CenterPin extends StatelessWidget {
                 width: dotSize,
                 height: dotSize,
                 decoration: BoxDecoration(
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: GridTokens.mint.withOpacity(0.55),
+                      color: context.gridColors.mint.withOpacity(0.55),
                       blurRadius: 16,
                       spreadRadius: 1,
                     ),

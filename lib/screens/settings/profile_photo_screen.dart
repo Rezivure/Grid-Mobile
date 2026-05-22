@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
@@ -45,9 +46,9 @@ class ProfilePhotoScreen extends StatelessWidget {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -61,8 +62,8 @@ class ProfilePhotoScreen extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -74,13 +75,13 @@ class ProfilePhotoScreen extends StatelessWidget {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius: BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.delete_outline,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -95,7 +96,7 @@ class ProfilePhotoScreen extends StatelessWidget {
                                 'Geist',
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -104,7 +105,7 @@ class ProfilePhotoScreen extends StatelessWidget {
                               style: GoogleFonts.getFont(
                                 'Geist',
                                 fontSize: 13,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -150,7 +151,7 @@ class ProfilePhotoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -162,12 +163,12 @@ class ProfilePhotoScreen extends StatelessWidget {
             'Geist',
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             letterSpacing: -0.01,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: GridTokens.text),
+          icon: Icon(Icons.arrow_back, color: context.gridColors.text),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -176,15 +177,15 @@ class ProfilePhotoScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            _buildInfoCard(),
+            _buildInfoCard(context),
             const SizedBox(height: 24),
             _buildAvatar(),
             const GridSectionHeader(text: 'PROFILE PHOTO'),
             Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
@@ -195,10 +196,10 @@ class ProfilePhotoScreen extends StatelessWidget {
                     subtitle: 'Use your camera',
                     onTap: () => _run(context, onTakePhoto),
                   ),
-                  const Divider(
+                  Divider(
                     height: 1,
                     thickness: 1,
-                    color: GridTokens.hairline,
+                    color: context.gridColors.hairline,
                     indent: 56,
                   ),
                   _ActionRow(
@@ -207,10 +208,10 @@ class ProfilePhotoScreen extends StatelessWidget {
                     subtitle: 'Select an existing photo',
                     onTap: () => _run(context, onChooseFromGallery),
                   ),
-                  const Divider(
+                  Divider(
                     height: 1,
                     thickness: 1,
-                    color: GridTokens.hairline,
+                    color: context.gridColors.hairline,
                     indent: 56,
                   ),
                   _ActionRow(
@@ -229,20 +230,20 @@ class ProfilePhotoScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard() {
+  Widget _buildInfoCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.mintSoft),
+        border: Border.all(color: context.gridColors.mintSoft),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.lock_outline_rounded,
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             size: 18,
           ),
           const SizedBox(width: 12),
@@ -252,7 +253,7 @@ class ProfilePhotoScreen extends StatelessWidget {
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 height: 1.4,
               ),
             ),
@@ -312,9 +313,9 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = danger ? GridTokens.danger : GridTokens.text;
-    final tileBg = danger ? GridTokens.dangerSoft : GridTokens.mintFaint;
-    final iconColor = danger ? GridTokens.danger : GridTokens.mint;
+    final fg = danger ? context.gridColors.danger : context.gridColors.text;
+    final tileBg = danger ? context.gridColors.dangerSoft : context.gridColors.mintFaint;
+    final iconColor = danger ? context.gridColors.danger : context.gridColors.mint;
 
     return Material(
       color: Colors.transparent,
@@ -355,7 +356,7 @@ class _ActionRow extends StatelessWidget {
                       subtitle,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w400,
                       ),
@@ -363,10 +364,10 @@ class _ActionRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.chevron_right,
                 size: 18,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
             ],
           ),

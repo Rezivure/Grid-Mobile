@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
@@ -234,10 +235,10 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             child: Container(
               decoration: BoxDecoration(
                 // One uniform surface for the entire sheet body (handle,
-                // segmented header, subscreen). GridTokens.surface == #15181B
+                // segmented header, subscreen). context.gridColors.surface == #15181B
                 // — matches what the segmented pill renders against so the
                 // top of the sheet doesn't look gray-on-near-black.
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   topRight: Radius.circular(20),
@@ -286,7 +287,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 // body never reveals the underlying scaffold.
                 Expanded(
                   child: ColoredBox(
-                    color: GridTokens.surface,
+                    color: context.gridColors.surface,
                     child: NotificationListener<ScrollNotification>(
                       onNotification: (notification) {
                         if (notification.metrics.pixels <= 0 &&
@@ -353,7 +354,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     GridSegmentedTab(
                       label: 'Invites',
                       badgeCount: inviteCount,
-                      badgeColor: GridTokens.amber,
+                      badgeColor: context.gridColors.amber,
                     ),
                   ],
                   onChanged: (i) {
@@ -1406,11 +1407,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                                 MediaQuery.of(context).size.width * 0.9,
                           ),
                           decoration: BoxDecoration(
-                            color: GridTokens.surface,
+                            color: context.gridColors.surface,
                             borderRadius:
                                 BorderRadius.circular(GridTokens.rXl),
                             border:
-                                Border.all(color: GridTokens.hairline),
+                                Border.all(color: context.gridColors.hairline),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.4),
@@ -1424,8 +1425,8 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(20),
-                                decoration: const BoxDecoration(
-                                  color: GridTokens.dangerSoft,
+                                decoration: BoxDecoration(
+                                  color: context.gridColors.dangerSoft,
                                   borderRadius: BorderRadius.only(
                                     topLeft:
                                         Radius.circular(GridTokens.rXl),
@@ -1439,16 +1440,16 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                                       width: 40,
                                       height: 40,
                                       decoration: BoxDecoration(
-                                        color: GridTokens.danger
+                                        color: context.gridColors.danger
                                             .withOpacity(0.18),
                                         borderRadius:
                                             BorderRadius.circular(
                                                 GridTokens.rMd),
                                       ),
                                       alignment: Alignment.center,
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.exit_to_app,
-                                        color: GridTokens.danger,
+                                        color: context.gridColors.danger,
                                         size: 20,
                                       ),
                                     ),
@@ -1465,7 +1466,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                                               fontSize: 18,
                                               fontWeight: FontWeight.w600,
                                               letterSpacing: -0.015,
-                                              color: GridTokens.text,
+                                              color: context.gridColors.text,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -1475,7 +1476,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                                               'Geist',
                                               fontSize: 13,
                                               fontWeight: FontWeight.w400,
-                                              color: GridTokens.text2,
+                                              color: context.gridColors.text2,
                                             ),
                                           ),
                                         ],
@@ -1493,7 +1494,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                                     'Geist',
                                     fontSize: 14,
                                     fontWeight: FontWeight.w400,
-                                    color: GridTokens.text2,
+                                    color: context.gridColors.text2,
                                     height: 1.45,
                                   ),
                                 ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
 
@@ -83,10 +84,10 @@ class _AddSharingPreferenceModalState
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.dark(
-              primary: GridTokens.mint,
+              primary: context.gridColors.mint,
               onPrimary: const Color(0xFF04201A),
-              surface: GridTokens.surface,
-              onSurface: GridTokens.text,
+              surface: context.gridColors.surface,
+              onSurface: context.gridColors.text,
             ),
           ),
           child: child!,
@@ -127,15 +128,15 @@ class _AddSharingPreferenceModalState
         curve: Curves.easeOut,
         padding: EdgeInsets.only(bottom: bottomInset),
         child: Container(
-          decoration: const BoxDecoration(
-            color: GridTokens.bg,
+          decoration: BoxDecoration(
+            color: context.gridColors.bg,
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(GridTokens.r2Xl),
             ),
             border: Border(
-              top: BorderSide(color: GridTokens.hairline),
-              left: BorderSide(color: GridTokens.hairline),
-              right: BorderSide(color: GridTokens.hairline),
+              top: BorderSide(color: context.gridColors.hairline),
+              left: BorderSide(color: context.gridColors.hairline),
+              right: BorderSide(color: context.gridColors.hairline),
             ),
           ),
           child: SafeArea(
@@ -177,7 +178,7 @@ class _AddSharingPreferenceModalState
       width: 36,
       height: 4,
       decoration: BoxDecoration(
-        color: GridTokens.hairlineStrong,
+        color: context.gridColors.hairlineStrong,
         borderRadius: BorderRadius.circular(2),
       ),
     );
@@ -193,15 +194,15 @@ class _AddSharingPreferenceModalState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
+              color: context.gridColors.mintFaint,
               borderRadius: BorderRadius.circular(GridTokens.rSm),
-              border: Border.all(color: GridTokens.mintSoft),
+              border: Border.all(color: context.gridColors.mintSoft),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               Icons.schedule_rounded,
               size: 18,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
             ),
           ),
           const SizedBox(width: 12),
@@ -216,7 +217,7 @@ class _AddSharingPreferenceModalState
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.015,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.15,
                   ),
                 ),
@@ -226,16 +227,16 @@ class _AddSharingPreferenceModalState
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 12.5,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.close_rounded,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               size: 22,
             ),
             tooltip: 'Close',
@@ -251,10 +252,10 @@ class _AddSharingPreferenceModalState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono(
+        GridMono(
           'LABEL',
           size: 10,
-          color: GridTokens.text3,
+          color: context.gridColors.text3,
           letterSpacing: 0.12,
         ),
         const SizedBox(height: 8),
@@ -262,21 +263,21 @@ class _AddSharingPreferenceModalState
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(
               color: _labelFocus.hasFocus
-                  ? GridTokens.mint
-                  : GridTokens.hairline,
+                  ? context.gridColors.mint
+                  : context.gridColors.hairline,
               width: _labelFocus.hasFocus ? 1.5 : 1,
             ),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.label_outline_rounded,
                 size: 18,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -285,13 +286,13 @@ class _AddSharingPreferenceModalState
                   focusNode: _labelFocus,
                   autocorrect: true,
                   textCapitalization: TextCapitalization.sentences,
-                  cursorColor: GridTokens.mint,
+                  cursorColor: context.gridColors.mint,
                   cursorWidth: 2,
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                   ),
                   decoration: InputDecoration(
                     isDense: true,
@@ -304,7 +305,7 @@ class _AddSharingPreferenceModalState
                       'Geist',
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                   ),
                 ),
@@ -320,10 +321,10 @@ class _AddSharingPreferenceModalState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono(
+        GridMono(
           'QUICK START',
           size: 10,
-          color: GridTokens.text3,
+          color: context.gridColors.text3,
           letterSpacing: 0.12,
         ),
         const SizedBox(height: 10),
@@ -379,10 +380,10 @@ class _AddSharingPreferenceModalState
       children: [
         Row(
           children: [
-            const GridMono(
+            GridMono(
               'DAYS',
               size: 10,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               letterSpacing: 0.12,
             ),
             const Spacer(),
@@ -428,10 +429,10 @@ class _AddSharingPreferenceModalState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono(
+        GridMono(
           'TIME',
           size: 10,
-          color: GridTokens.text3,
+          color: context.gridColors.text3,
           letterSpacing: 0.12,
         ),
         const SizedBox(height: 10),
@@ -469,10 +470,10 @@ class _AddSharingPreferenceModalState
               padding: const EdgeInsets.only(top: 8),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.error_outline_rounded,
                     size: 13,
-                    color: GridTokens.danger,
+                    color: context.gridColors.danger,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -480,7 +481,7 @@ class _AddSharingPreferenceModalState
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 12,
-                      color: GridTokens.danger,
+                      color: context.gridColors.danger,
                     ),
                   ),
                 ],
@@ -555,10 +556,10 @@ class _DayChip extends StatelessWidget {
           height: 40,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? GridTokens.mintFaint : GridTokens.surface,
+            color: active ? context.gridColors.mintFaint : context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rSm),
             border: Border.all(
-              color: active ? GridTokens.mint : GridTokens.hairline,
+              color: active ? context.gridColors.mint : context.gridColors.hairline,
               width: active ? 1.4 : 1,
             ),
           ),
@@ -569,7 +570,7 @@ class _DayChip extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.005,
-              color: active ? GridTokens.mint : GridTokens.text2,
+              color: active ? context.gridColors.mint : context.gridColors.text2,
             ),
           ),
         ),
@@ -600,14 +601,14 @@ class _PresetChip extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: GridTokens.hairlineStrong),
+            border: Border.all(color: context.gridColors.hairlineStrong),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: GridTokens.mint),
+              Icon(icon, size: 13, color: context.gridColors.mint),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -616,7 +617,7 @@ class _PresetChip extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   letterSpacing: -0.005,
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                 ),
               ),
             ],
@@ -650,9 +651,9 @@ class _ToggleRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Row(
             children: [
@@ -667,7 +668,7 @@ class _ToggleRow extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -676,7 +677,7 @@ class _ToggleRow extends StatelessWidget {
                       style: GoogleFonts.getFont(
                         'Geist',
                         fontSize: 12.5,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                         height: 1.35,
                       ),
                     ),
@@ -686,7 +687,7 @@ class _ToggleRow extends StatelessWidget {
               const SizedBox(width: 10),
               Switch.adaptive(
                 value: value,
-                activeColor: GridTokens.mint,
+                activeColor: context.gridColors.mint,
                 onChanged: onChanged,
               ),
             ],
@@ -724,9 +725,9 @@ class _TimeButton extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -734,16 +735,16 @@ class _TimeButton extends StatelessWidget {
               GridMono(
                 label.toUpperCase(),
                 size: 10,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
                 letterSpacing: 0.12,
               ),
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.access_time_rounded,
                     size: 15,
-                    color: GridTokens.mint,
+                    color: context.gridColors.mint,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -753,7 +754,7 @@ class _TimeButton extends StatelessWidget {
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       letterSpacing: -0.01,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
                   ),
                 ],
@@ -780,7 +781,7 @@ class _MiniLink extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        foregroundColor: GridTokens.mint,
+        foregroundColor: context.gridColors.mint,
       ),
       child: Text(
         label,
@@ -788,7 +789,7 @@ class _MiniLink extends StatelessWidget {
           'Geist',
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: GridTokens.mint,
+          color: context.gridColors.mint,
         ),
       ),
     );

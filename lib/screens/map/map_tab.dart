@@ -8,6 +8,7 @@ import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
@@ -20,6 +21,7 @@ import 'grid_map_style.dart';
 import 'maplibre_camera_facade.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
@@ -940,16 +942,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _selectedGroupId = null;
     
     // Show confirmation immediately with shorter duration
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(milliseconds: 1500),
-      ),
+    InAppNotifier.instance.show(
+      title: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(milliseconds: 1800),
     );
     
     // Save to database and sync in background
@@ -960,16 +956,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       // If save fails, remove from BLoC
       context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Failed to save icon'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to save icon',
+        variant: InAppNotificationVariant.error,
+        duration: const Duration(seconds: 2),
       );
     }
   }
@@ -1000,15 +990,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   void _sendPing() {
     _locationManager?.grabLocationAndPing();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Location pinged to all active contacts and groups.'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
+    InAppNotifier.instance.show(
+      title: 'Ping sent',
+      message: 'Location pinged to all active contacts and groups.',
+      variant: InAppNotificationVariant.success,
     );
 
 
@@ -1310,15 +1295,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         return Consumer<SharingStateNotifier>(
           builder: (context, sharingState, _) {
             final paused = sharingState.isPaused;
-            final dotColor = paused ? GridTokens.paused : GridTokens.mint;
-            final textColor = paused ? GridTokens.paused : GridTokens.text;
+            final dotColor = paused ? context.gridColors.paused : context.gridColors.mint;
+            final textColor = paused ? context.gridColors.paused : context.gridColors.text;
             final label = paused ? 'SHARING PAUSED' : 'SHARING WITH $count';
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: GridTokens.surface.withOpacity(0.92),
+                color: context.gridColors.surface.withOpacity(0.92),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: GridTokens.hairlineStrong),
+                border: Border.all(color: context.gridColors.hairlineStrong),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.4),
@@ -1340,7 +1325,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           ? null
                           : [
                               BoxShadow(
-                                color: GridTokens.mint.withOpacity(0.55),
+                                color: context.gridColors.mint.withOpacity(0.55),
                                 blurRadius: 6,
                               ),
                             ],
@@ -1693,14 +1678,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
                     if (_isMovingIcon && _movingIcon != null) {
                       if (_movingIcon!.creatorId != context.read<Client>().userID) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('You can only move icons you created'),
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            duration: const Duration(seconds: 2),
-                          ),
+                        InAppNotifier.instance.show(
+                          title: 'You can only move icons you created',
+                          variant: InAppNotificationVariant.warning,
+                          duration: const Duration(seconds: 2),
                         );
                         setState(() {
                           _isMovingIcon = false;
@@ -1737,14 +1718,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         _selectedIconPosition = null;
                       });
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Icon moved'),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          duration: const Duration(seconds: 2),
-                        ),
+                      InAppNotifier.instance.show(
+                        title: 'Icon moved',
+                        variant: InAppNotificationVariant.success,
+                        duration: const Duration(seconds: 2),
                       );
                     } else {
                       context.read<MapBloc>().add(MapClearSelection());
@@ -1813,7 +1790,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             ) <=
                             _homeRadiusMeters;
                     final pt = _screenPosFor(home);
-                    final accent = inside ? GridTokens.mint : GridTokens.amber;
+                    final accent = inside ? context.gridColors.mint : context.gridColors.amber;
                     final label = inside ? 'AT HOME' : 'HOME';
 
                     // Geofence radius circle in screen pixels — Web Mercator
@@ -1863,16 +1840,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: GridTokens.amberSoft,
+                                    color: context.gridColors.amberSoft,
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: GridTokens.amber,
+                                      color: context.gridColors.amber,
                                       width: 2,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: (inside
-                                                ? GridTokens.mint
+                                                ? context.gridColors.mint
                                                 : Colors.white)
                                             .withOpacity(inside ? 0.55 : 0.85),
                                         blurRadius: inside ? 12 : 6,
@@ -2030,16 +2007,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 onDelete: () async {
                   // Only allow delete if user created it
                   if (_selectedMapIcon!.creatorId != context.read<Client>().userID) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('You can only delete icons you created'),
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
+                    InAppNotifier.instance.show(
+                      title: 'You can only delete icons you created',
+                      variant: InAppNotificationVariant.warning,
+                      duration: const Duration(seconds: 2),
                     );
                     setState(() {
                       _showIconActionWheel = false;
@@ -2062,10 +2033,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 MediaQuery.of(context).size.width * 0.9,
                           ),
                           decoration: BoxDecoration(
-                            color: GridTokens.surface,
+                            color: context.gridColors.surface,
                             borderRadius:
                                 BorderRadius.circular(GridTokens.rXl),
-                            border: Border.all(color: GridTokens.hairline),
+                            border: Border.all(color: context.gridColors.hairline),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.4),
@@ -2079,8 +2050,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(20),
-                                decoration: const BoxDecoration(
-                                  color: GridTokens.dangerSoft,
+                                decoration: BoxDecoration(
+                                  color: context.gridColors.dangerSoft,
                                   borderRadius: BorderRadius.only(
                                     topLeft:
                                         Radius.circular(GridTokens.rXl),
@@ -2094,15 +2065,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                       width: 40,
                                       height: 40,
                                       decoration: BoxDecoration(
-                                        color: GridTokens.danger
+                                        color: context.gridColors.danger
                                             .withOpacity(0.18),
                                         borderRadius: BorderRadius.circular(
                                             GridTokens.rMd),
                                       ),
                                       alignment: Alignment.center,
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.delete_outline,
-                                        color: GridTokens.danger,
+                                        color: context.gridColors.danger,
                                         size: 20,
                                       ),
                                     ),
@@ -2119,7 +2090,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                               fontSize: 18,
                                               fontWeight: FontWeight.w600,
                                               letterSpacing: -0.015,
-                                              color: GridTokens.text,
+                                              color: context.gridColors.text,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -2129,7 +2100,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                               'Geist',
                                               fontSize: 13,
                                               fontWeight: FontWeight.w400,
-                                              color: GridTokens.text2,
+                                              color: context.gridColors.text2,
                                             ),
                                           ),
                                         ],
@@ -2147,7 +2118,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                     'Geist',
                                     fontSize: 14,
                                     fontWeight: FontWeight.w400,
-                                    color: GridTokens.text2,
+                                    color: context.gridColors.text2,
                                     height: 1.45,
                                   ),
                                 ),
@@ -2204,16 +2175,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       _selectedMapIcon = null;
                       _selectedIconPosition = null;
                     });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Icon deleted'),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
+                    InAppNotifier.instance.show(
+                      title: 'Icon deleted',
+                      variant: InAppNotificationVariant.success,
+                      duration: const Duration(seconds: 2),
                     );
                   } else {
                     setState(() {
@@ -2513,9 +2478,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: GridTokens.surface.withOpacity(0.92),
+            color: context.gridColors.surface.withOpacity(0.92),
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+            border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.4),
@@ -2532,19 +2497,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 child: CustomPaint(
                   size: const Size(26, 26),
                   painter: CompassPainter(
-                    northColor: GridTokens.danger,
-                    southColor: GridTokens.text2,
+                    northColor: context.gridColors.danger,
+                    southColor: context.gridColors.text2,
                   ),
                 ),
               ),
-              const Positioned(
+              Positioned(
                 top: 4,
                 child: Text(
                   'N',
                   style: TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                 ),
               ),
@@ -2622,13 +2587,13 @@ class _MapOverlayIconButton extends StatelessWidget {
           height: 40,
           decoration: BoxDecoration(
             color: active
-                ? GridTokens.mintFaint
-                : GridTokens.surface.withOpacity(0.92),
+                ? context.gridColors.mintFaint
+                : context.gridColors.surface.withOpacity(0.92),
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(
               color: active
-                  ? GridTokens.mint
-                  : GridTokens.hairlineStrong,
+                  ? context.gridColors.mint
+                  : context.gridColors.hairlineStrong,
               width: active ? 1.5 : 1,
             ),
             boxShadow: [
@@ -2641,7 +2606,7 @@ class _MapOverlayIconButton extends StatelessWidget {
           ),
           child: Icon(
             icon,
-            color: active ? GridTokens.mint : GridTokens.text,
+            color: active ? context.gridColors.mint : context.gridColors.text,
             size: 20,
           ),
         ),

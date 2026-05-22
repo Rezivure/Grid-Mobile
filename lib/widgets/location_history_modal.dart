@@ -17,6 +17,7 @@ import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:matrix/matrix.dart';
@@ -218,9 +219,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -234,8 +235,8 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -247,14 +248,14 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.delete_outline,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -270,7 +271,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.015,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -280,7 +281,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -297,7 +298,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       'Geist',
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                   ),
@@ -748,8 +749,8 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         : '${widget.userName}’s history';
 
     return Container(
-      decoration: const BoxDecoration(
-        color: GridTokens.bg,
+      decoration: BoxDecoration(
+        color: context.gridColors.bg,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(GridTokens.r2Xl),
           topRight: Radius.circular(GridTokens.r2Xl),
@@ -763,7 +764,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: GridTokens.hairlineStrong,
+              color: context.gridColors.hairlineStrong,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -788,7 +789,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.015,
                         ),
@@ -797,7 +798,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       if (_earliestTime != null && _latestTime != null)
                         GridMono(
                           _formatHeaderSubtitle(),
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                           size: 10.5,
                           letterSpacing: 0.08,
                           uppercase: false,
@@ -805,7 +806,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       else
                         GridMono(
                           'Loading',
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                           size: 10.5,
                           letterSpacing: 0.08,
                           uppercase: false,
@@ -816,7 +817,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                 if (isGroup)
                   _ChromeIconBtn(
                     icon: Icons.delete_outline,
-                    iconColor: GridTokens.danger,
+                    iconColor: context.gridColors.danger,
                     onPressed: _showClearHistoryDialog,
                   )
                 else
@@ -841,9 +842,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     final active = _showAllMembers;
                     return _MemberTile(
                       active: active,
-                      underlineColor: GridTokens.mint,
+                      underlineColor: context.gridColors.mint,
                       label: 'All',
-                      labelColor: active ? GridTokens.mint : GridTokens.text2,
+                      labelColor: active ? context.gridColors.mint : context.gridColors.text2,
                       onTap: () {
                         setState(() {
                           _showAllMembers = true;
@@ -867,7 +868,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     active: active,
                     underlineColor: memberColor,
                     label: memberLabel,
-                    labelColor: active ? GridTokens.text : GridTokens.text2,
+                    labelColor: active ? context.gridColors.text : context.gridColors.text2,
                     onTap: hasHistory
                         ? () {
                             setState(() {
@@ -901,14 +902,14 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                             bottom: 0,
                             child: Container(
                               padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: GridTokens.surface,
+                              decoration: BoxDecoration(
+                                color: context.gridColors.surface,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.location_off,
                                 size: 10,
-                                color: GridTokens.text3,
+                                color: context.gridColors.text3,
                               ),
                             ),
                           ),
@@ -924,9 +925,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
             child: Container(
               margin: const EdgeInsets.fromLTRB(14, 4, 14, 10),
               decoration: BoxDecoration(
-                color: GridTokens.surface2,
+                color: context.gridColors.surface2,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
@@ -936,13 +937,13 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const CircularProgressIndicator(
-                          color: GridTokens.mint,
+                        CircularProgressIndicator(
+                          color: context.gridColors.mint,
                         ),
                         const SizedBox(height: 16),
                         GridMono(
                           _isLoading ? 'Loading history' : 'Preparing map',
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                           size: 11,
                           letterSpacing: 0.08,
                           uppercase: false,
@@ -956,25 +957,25 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_off,
                           size: 56,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'No location history available',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
                     ),
                   )
                 else if (_currentMapStyle == 'base' && _tileProvider == null)
-                  const Center(
+                  Center(
                     child: CircularProgressIndicator(
-                      color: GridTokens.mint,
+                      color: context.gridColors.mint,
                     ),
                   )
                 else if ((_currentMapStyle == 'base' && _tileProvider != null) ||
@@ -1098,10 +1099,10 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
               ((_locationHistory != null && _locationHistory!.points.isNotEmpty) ||
                (_groupHistories != null && _groupHistories!.isNotEmpty)))
             Container(
-              decoration: const BoxDecoration(
-                color: GridTokens.surface,
+              decoration: BoxDecoration(
+                color: context.gridColors.surface,
                 border: Border(
-                  top: BorderSide(color: GridTokens.hairline),
+                  top: BorderSide(color: context.gridColors.hairline),
                 ),
               ),
               child: SafeArea(
@@ -1117,22 +1118,22 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: GridTokens.surface2,
+                              color: context.gridColors.surface2,
                               borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: GridTokens.hairline),
+                              border: Border.all(color: context.gridColors.hairline),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.access_time_rounded,
                                   size: 12,
-                                  color: GridTokens.mint,
+                                  color: context.gridColors.mint,
                                 ),
                                 const SizedBox(width: 6),
                                 GridMono(
                                   '${_formatMonoDuration(_earliestTime, _latestTime)} · ${_countStops()} STOPS',
-                                  color: GridTokens.text2,
+                                  color: context.gridColors.text2,
                                   size: 10.5,
                                   letterSpacing: 0.08,
                                 ),
@@ -1160,10 +1161,10 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
                           trackHeight: 3,
-                          activeTrackColor: GridTokens.mint,
-                          inactiveTrackColor: GridTokens.surface3,
+                          activeTrackColor: context.gridColors.mint,
+                          inactiveTrackColor: context.gridColors.surface3,
                           thumbColor: Colors.white,
-                          overlayColor: GridTokens.mintSoft,
+                          overlayColor: context.gridColors.mintSoft,
                           thumbShape: const RoundSliderThumbShape(
                             enabledThumbRadius: 8,
                             elevation: 0,
@@ -1195,7 +1196,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                             bottom: _earliestTime != null
                                 ? _formatMonoMeridiem(_earliestTime!)
                                 : '',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                           ),
                           _ScrubberTimeLabel(
                             top: _currentTime != null
@@ -1204,7 +1205,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                             bottom: _currentTime != null
                                 ? _formatMonoMeridiem(_currentTime!)
                                 : '',
-                            color: GridTokens.mint,
+                            color: context.gridColors.mint,
                             bold: true,
                           ),
                           _ScrubberTimeLabel(
@@ -1214,7 +1215,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                             bottom: _latestTime != null
                                 ? _formatMonoMeridiem(_latestTime!)
                                 : '',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                           ),
                         ],
                       ),
@@ -1406,14 +1407,14 @@ class _ChromeIconBtn extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Icon(
             icon,
             size: 18,
-            color: iconColor ?? GridTokens.text,
+            color: iconColor ?? context.gridColors.text,
           ),
         ),
       ),
@@ -1458,7 +1459,7 @@ class _MemberTile extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(
                   width: 2,
-                  color: active ? GridTokens.mint : Colors.transparent,
+                  color: active ? context.gridColors.mint : Colors.transparent,
                 ),
               ),
               child: ClipOval(child: child),
@@ -1500,8 +1501,8 @@ class _AllTileContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: GridTokens.surface2,
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -1509,7 +1510,7 @@ class _AllTileContent extends StatelessWidget {
         'ALL',
         style: TextStyle(
           fontFamily: 'GeistMono',
-          color: GridTokens.mint,
+          color: context.gridColors.mint,
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.12,
@@ -1542,15 +1543,15 @@ class _SpeedPill extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: active ? GridTokens.mintSoft : GridTokens.surface2,
+            color: active ? context.gridColors.mintSoft : context.gridColors.surface2,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: active ? GridTokens.mint : GridTokens.hairline,
+              color: active ? context.gridColors.mint : context.gridColors.hairline,
             ),
           ),
           child: GridMono(
             '${speed}x',
-            color: active ? GridTokens.mint : GridTokens.text2,
+            color: active ? context.gridColors.mint : context.gridColors.text2,
             size: 10.5,
             letterSpacing: 0.04,
             uppercase: false,

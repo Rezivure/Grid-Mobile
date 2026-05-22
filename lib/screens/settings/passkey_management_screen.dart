@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:passkeys/types.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
@@ -90,24 +92,11 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   }
 
   void _showStyledSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: GoogleFonts.getFont(
-            'Geist',
-            color: isError ? Colors.white : const Color(0xFF04201A),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            isError ? GridTokens.danger : GridTokens.mint,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-        ),
-        margin: const EdgeInsets.all(16),
-      ),
+    InAppNotifier.instance.show(
+      title: message,
+      variant: isError
+          ? InAppNotificationVariant.error
+          : InAppNotificationVariant.success,
     );
   }
 
@@ -122,9 +111,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -139,7 +128,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                    color: context.gridColors.dangerSoft,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -151,13 +140,13 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius: BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.delete_outline,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -172,7 +161,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                                 'Geist',
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -181,7 +170,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                               style: GoogleFonts.getFont(
                                 'Geist',
                                 fontSize: 13,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -197,16 +186,16 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: GridTokens.surface2,
+                          color: context.gridColors.surface2,
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
-                          border: Border.all(color: GridTokens.hairline),
+                          border: Border.all(color: context.gridColors.hairline),
                         ),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.warning_amber_rounded,
-                              color: GridTokens.amber,
+                              color: context.gridColors.amber,
                               size: 18,
                             ),
                             const SizedBox(width: 10),
@@ -216,7 +205,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                                 style: GoogleFonts.getFont(
                                   'Geist',
                                   fontSize: 13,
-                                  color: GridTokens.text2,
+                                  color: context.gridColors.text2,
                                   height: 1.35,
                                 ),
                               ),
@@ -287,9 +276,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -303,8 +292,8 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.mintFaint,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.mintFaint,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -316,13 +305,13 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.mintSoft,
+                          color: context.gridColors.mintSoft,
                           borderRadius: BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.edit,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           size: 20,
                         ),
                       ),
@@ -337,7 +326,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                                 'Geist',
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -346,7 +335,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                               style: GoogleFonts.getFont(
                                 'Geist',
                                 fontSize: 13,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -365,35 +354,35 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                         style: GoogleFonts.getFont(
                           'Geist',
                           fontSize: 15,
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                         ),
-                        cursorColor: GridTokens.mint,
+                        cursorColor: context.gridColors.mint,
                         decoration: InputDecoration(
                           hintText: 'e.g. YubiKey, iPhone, Work laptop',
                           hintStyle: GoogleFonts.getFont(
                             'Geist',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             fontSize: 15,
                           ),
                           filled: true,
-                          fillColor: GridTokens.surface2,
+                          fillColor: context.gridColors.surface2,
                           border: OutlineInputBorder(
                             borderRadius:
                                 BorderRadius.circular(GridTokens.rMd),
                             borderSide:
-                                const BorderSide(color: GridTokens.hairline),
+                                BorderSide(color: context.gridColors.hairline),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius:
                                 BorderRadius.circular(GridTokens.rMd),
                             borderSide:
-                                const BorderSide(color: GridTokens.hairline),
+                                BorderSide(color: context.gridColors.hairline),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius:
                                 BorderRadius.circular(GridTokens.rMd),
-                            borderSide: const BorderSide(
-                              color: GridTokens.mint,
+                            borderSide: BorderSide(
+                              color: context.gridColors.mint,
                               width: 1.5,
                             ),
                           ),
@@ -461,9 +450,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -473,15 +462,15 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                     label: 'Rename',
                     onTap: () => Navigator.pop(context, 'rename'),
                   ),
-                  const Divider(
+                  Divider(
                     height: 1,
                     thickness: 1,
-                    color: GridTokens.hairline,
+                    color: context.gridColors.hairline,
                   ),
                   _menuRow(
                     icon: Icons.delete_outline,
                     label: 'Delete',
-                    color: GridTokens.danger,
+                    color: context.gridColors.danger,
                     onTap: () => Navigator.pop(context, 'delete'),
                   ),
                 ],
@@ -505,7 +494,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     Color? color,
     required VoidCallback onTap,
   }) {
-    final fg = color ?? GridTokens.text;
+    final fg = color ?? context.gridColors.text;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -535,7 +524,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -547,12 +536,12 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
             'Geist',
             fontSize: 17,
             fontWeight: FontWeight.w600,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             letterSpacing: -0.01,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: GridTokens.text),
+          icon: Icon(Icons.arrow_back, color: context.gridColors.text),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -560,7 +549,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: IconButton(
-                icon: const Icon(Icons.add, color: GridTokens.mint),
+                icon: Icon(Icons.add, color: context.gridColors.mint),
                 onPressed: _addPasskey,
               ),
             ),
@@ -569,9 +558,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
       body: SafeArea(
         top: false,
         child: _isLoading
-            ? const Center(
+            ? Center(
                 child: CircularProgressIndicator(
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                 ),
               )
             : _error != null
@@ -592,14 +581,14 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: GridTokens.dangerSoft,
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
               ),
               alignment: Alignment.center,
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline,
                 size: 28,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
               ),
             ),
             const SizedBox(height: 16),
@@ -608,7 +597,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 15,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
               ),
               textAlign: TextAlign.center,
             ),
@@ -627,8 +616,8 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: _loadPasskeys,
-      color: GridTokens.mint,
-      backgroundColor: GridTokens.surface,
+      color: context.gridColors.mint,
+      backgroundColor: context.gridColors.surface,
       strokeWidth: 2.5,
       displacement: 20,
       child: ListView(
@@ -643,7 +632,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                 ? null
                 : GridMono(
                     '${_passkeys.length} ACTIVE',
-                    color: GridTokens.text3,
+                    color: context.gridColors.text3,
                     size: 10.5,
                     letterSpacing: 0.12,
                   ),
@@ -672,16 +661,16 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.mintSoft),
+        border: Border.all(color: context.gridColors.mintSoft),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.shield_outlined,
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             size: 18,
           ),
           const SizedBox(width: 12),
@@ -691,7 +680,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 height: 1.4,
               ),
             ),
@@ -706,9 +695,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Column(
         children: [
@@ -716,14 +705,14 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
+              color: context.gridColors.mintFaint,
               borderRadius: BorderRadius.circular(GridTokens.rLg),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               Icons.fingerprint,
               size: 28,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
             ),
           ),
           const SizedBox(height: 14),
@@ -733,7 +722,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
               'Geist',
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(height: 4),
@@ -742,7 +731,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 13,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
             ),
             textAlign: TextAlign.center,
           ),
@@ -759,9 +748,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
         (passkey.backedUp ? 'Synced passkey' : 'Security key');
     final typeLabel = passkey.backedUp ? 'SYNCED' : 'HARDWARE';
     final tileBg =
-        passkey.backedUp ? GridTokens.mintFaint : GridTokens.amberSoft;
+        passkey.backedUp ? context.gridColors.mintFaint : context.gridColors.amberSoft;
     final iconColor =
-        passkey.backedUp ? GridTokens.mint : GridTokens.amber;
+        passkey.backedUp ? context.gridColors.mint : context.gridColors.amber;
     final icon = passkey.backedUp
         ? Icons.lock_outline_rounded
         : Icons.usb_rounded;
@@ -773,10 +762,10 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
         : addedText;
 
     final isHighlight = isCurrentDevice;
-    final cardBg = isHighlight ? GridTokens.mintFaint : GridTokens.surface;
+    final cardBg = isHighlight ? context.gridColors.mintFaint : context.gridColors.surface;
     final cardBorder = isHighlight
-        ? Border.all(color: GridTokens.mintSoft)
-        : Border.all(color: GridTokens.hairline);
+        ? Border.all(color: context.gridColors.mintSoft)
+        : Border.all(color: context.gridColors.hairline);
 
     return Dismissible(
       key: Key(passkey.credentialId),
@@ -785,10 +774,10 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: GridTokens.dangerSoft,
+          color: context.gridColors.dangerSoft,
           borderRadius: BorderRadius.circular(GridTokens.rLg),
         ),
-        child: const Icon(Icons.delete_outline, color: GridTokens.danger),
+        child: Icon(Icons.delete_outline, color: context.gridColors.danger),
       ),
       confirmDismiss: (_) async {
         _deletePasskey(passkey);
@@ -838,7 +827,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                                   'Geist',
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: GridTokens.text,
+                                  color: context.gridColors.text,
                                   letterSpacing: -0.01,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -848,17 +837,17 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                             _MonoChip(
                               label: typeLabel,
                               bg: passkey.backedUp
-                                  ? GridTokens.mintSoft
-                                  : GridTokens.amberSoft,
+                                  ? context.gridColors.mintSoft
+                                  : context.gridColors.amberSoft,
                               fg: passkey.backedUp
-                                  ? GridTokens.mint
-                                  : GridTokens.amber,
+                                  ? context.gridColors.mint
+                                  : context.gridColors.amber,
                             ),
                             if (isCurrentDevice)
-                              const _MonoChip(
+                              _MonoChip(
                                 label: 'THIS DEVICE',
-                                bg: GridTokens.surface2,
-                                fg: GridTokens.text2,
+                                bg: context.gridColors.surface2,
+                                fg: context.gridColors.text2,
                               ),
                           ],
                         ),
@@ -866,7 +855,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                         GridMono(
                           metaText,
                           size: 10.5,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                           letterSpacing: 0.08,
                         ),
                       ],
@@ -874,9 +863,9 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
                   ),
                   IconButton(
                     onPressed: () => _showPasskeyMenu(passkey),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.more_horiz,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       size: 20,
                     ),
                     splashRadius: 20,

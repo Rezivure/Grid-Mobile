@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 /// Tap an existing map icon → iOS-style context menu (spec §5.26).
@@ -228,7 +229,7 @@ class _LiftedPreview extends StatelessWidget {
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
             boxShadow: [
               BoxShadow(
@@ -237,7 +238,7 @@ class _LiftedPreview extends StatelessWidget {
                 offset: const Offset(0, 14),
               ),
               BoxShadow(
-                color: GridTokens.mint.withOpacity(0.35),
+                color: context.gridColors.mint.withOpacity(0.35),
                 blurRadius: 18,
                 spreadRadius: 0.5,
               ),
@@ -247,21 +248,21 @@ class _LiftedPreview extends StatelessWidget {
           child: Icon(
             icon,
             size: 28,
-            color: GridTokens.bg,
+            color: context.gridColors.bg,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: GridMono(
             caption,
             size: 9.5,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
             letterSpacing: 0.12,
           ),
         ),
@@ -297,10 +298,10 @@ class _MenuCard extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              color: GridTokens.surface.withOpacity(0.96),
+              color: context.gridColors.surface.withOpacity(0.96),
               borderRadius: BorderRadius.circular(GridTokens.rLg),
               border: Border.all(
-                color: GridTokens.hairlineStrong,
+                color: context.gridColors.hairlineStrong,
                 width: 1,
               ),
               boxShadow: [
@@ -335,10 +336,10 @@ class _MenuCard extends StatelessWidget {
                   label: 'Share with group',
                   onTap: onShare,
                 ),
-                const Divider(
+                Divider(
                   height: 1,
                   thickness: 1,
-                  color: GridTokens.hairline,
+                  color: context.gridColors.hairline,
                 ),
                 _MenuRow(
                   icon: Icons.delete_outline_rounded,
@@ -377,7 +378,7 @@ class _MenuRowState extends State<_MenuRow> {
 
   @override
   Widget build(BuildContext context) {
-    final fg = widget.destructive ? GridTokens.danger : GridTokens.text;
+    final fg = widget.destructive ? context.gridColors.danger : context.gridColors.text;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -385,7 +386,7 @@ class _MenuRowState extends State<_MenuRow> {
         onHighlightChanged: (v) => setState(() => _hover = v),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
-          color: _hover ? GridTokens.surface2 : Colors.transparent,
+          color: _hover ? context.gridColors.surface2 : Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [

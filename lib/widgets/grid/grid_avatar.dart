@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import '../user_avatar_bloc.dart';
 
 /// Status indicator at the bottom-right of an avatar.
@@ -117,12 +117,12 @@ class GridAvatar extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: GridTokens.bg,
+          color: context.gridColors.bg,
           border: Border.all(
             width: 2,
             color: status == GridAvatarStatus.live
-                ? GridTokens.mint
-                : GridTokens.hairlineStrong,
+                ? context.gridColors.mint
+                : context.gridColors.hairlineStrong,
           ),
         ),
         child: inner,
@@ -130,9 +130,9 @@ class GridAvatar extends StatelessWidget {
     } else if (padding > 0) {
       body = Container(
         padding: EdgeInsets.all(padding),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: GridTokens.bg,
+          color: context.gridColors.bg,
         ),
         child: inner,
       );
@@ -141,9 +141,9 @@ class GridAvatar extends StatelessWidget {
     if (status == GridAvatarStatus.none) return body;
 
     final dotColor = switch (status) {
-      GridAvatarStatus.live => GridTokens.mint,
-      GridAvatarStatus.paused => GridTokens.paused,
-      GridAvatarStatus.offline => GridTokens.text3,
+      GridAvatarStatus.live => context.gridColors.mint,
+      GridAvatarStatus.paused => context.gridColors.paused,
+      GridAvatarStatus.offline => context.gridColors.text3,
       _ => Colors.transparent,
     };
     final dotSize = (size * 0.28).clamp(8.0, 16.0);
@@ -161,11 +161,11 @@ class GridAvatar extends StatelessWidget {
             decoration: BoxDecoration(
               color: dotColor,
               shape: BoxShape.circle,
-              border: Border.all(color: GridTokens.bg, width: 2),
+              border: Border.all(color: context.gridColors.bg, width: 2),
               boxShadow: status == GridAvatarStatus.live
                   ? [
                       BoxShadow(
-                        color: GridTokens.mint.withOpacity(0.6),
+                        color: context.gridColors.mint.withOpacity(0.6),
                         blurRadius: 6,
                       ),
                     ]

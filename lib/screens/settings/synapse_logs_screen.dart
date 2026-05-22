@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../services/in_app_notifier.dart';
 import '../../services/log_stream_service.dart';
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 
 /// Terminal-style live tail of in-app + Matrix SDK logs. Reached from
 /// Developer tools → "Synapse Logs". Auto-scrolls to the latest line
@@ -80,12 +81,10 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
     }
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Copied ${entries.length} lines'),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    InAppNotifier.instance.show(
+      title: 'Copied ${entries.length} lines',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -126,15 +125,15 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
   Color _levelColor(LogStreamLevel l) {
     switch (l) {
       case LogStreamLevel.error:
-        return GridTokens.danger;
+        return context.gridColors.danger;
       case LogStreamLevel.warning:
-        return GridTokens.amber;
+        return context.gridColors.amber;
       case LogStreamLevel.info:
-        return GridTokens.mint;
+        return context.gridColors.mint;
       case LogStreamLevel.debug:
-        return GridTokens.text2;
+        return context.gridColors.text2;
       case LogStreamLevel.verbose:
-        return GridTokens.text3;
+        return context.gridColors.text3;
     }
   }
 
@@ -143,15 +142,15 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
     final entries = _visibleEntries();
     final paused = LogStreamService.instance.paused;
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
-        backgroundColor: GridTokens.bg,
+        backgroundColor: context.gridColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -161,7 +160,7 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
           'Synapse Logs',
           style: GoogleFonts.getFont(
             'Geist',
-            color: GridTokens.text,
+            color: context.gridColors.text,
             fontSize: 18,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.015,
@@ -172,16 +171,16 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
             tooltip: paused ? 'Resume' : 'Pause',
             icon: Icon(
               paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-              color: paused ? GridTokens.mint : GridTokens.text2,
+              color: paused ? context.gridColors.mint : context.gridColors.text2,
             ),
             onPressed: () => LogStreamService.instance.setPaused(!paused),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
             ),
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             onSelected: (v) async {
               switch (v) {
                 case 'copy':
@@ -219,7 +218,7 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
           ),
           Expanded(
             child: Container(
-              color: GridTokens.bg,
+              color: context.gridColors.bg,
               child: entries.isEmpty
                   ? _emptyState(paused)
                   : ListView.builder(
@@ -236,13 +235,13 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
                                 'Geist Mono',
                                 fontSize: 11,
                                 height: 1.35,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                               children: [
                                 TextSpan(
                                   text: '${_timeStamp(e.time)} ',
-                                  style: const TextStyle(
-                                    color: GridTokens.text4,
+                                  style: TextStyle(
+                                    color: context.gridColors.text4,
                                   ),
                                 ),
                                 TextSpan(
@@ -254,16 +253,16 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
                                 ),
                                 TextSpan(
                                   text: '${e.source}: ',
-                                  style: const TextStyle(
-                                    color: GridTokens.text3,
+                                  style: TextStyle(
+                                    color: context.gridColors.text3,
                                   ),
                                 ),
                                 TextSpan(
                                   text: e.message,
                                   style: TextStyle(
                                     color: e.level == LogStreamLevel.error
-                                        ? GridTokens.danger
-                                        : GridTokens.text,
+                                        ? context.gridColors.danger
+                                        : context.gridColors.text,
                                   ),
                                 ),
                               ],
@@ -280,7 +279,7 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Material(
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(99),
                   ),
@@ -338,14 +337,14 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
                   ? Icons.pause_circle_outline_rounded
                   : Icons.terminal_rounded,
               size: 36,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
             ),
             const SizedBox(height: 12),
             Text(
               paused ? 'Capture paused' : 'Waiting for logs…',
               style: GoogleFonts.getFont(
                 'Geist',
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -358,7 +357,7 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
               textAlign: TextAlign.center,
               style: GoogleFonts.getFont(
                 'Geist',
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
                 fontSize: 12,
                 height: 1.4,
               ),
@@ -386,17 +385,17 @@ class _LevelFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final levels = [
-      (LogStreamLevel.error, 'ERR', GridTokens.danger),
-      (LogStreamLevel.warning, 'WRN', GridTokens.amber),
-      (LogStreamLevel.info, 'INF', GridTokens.mint),
-      (LogStreamLevel.debug, 'DBG', GridTokens.text2),
-      (LogStreamLevel.verbose, 'VRB', GridTokens.text3),
+      (LogStreamLevel.error, 'ERR', context.gridColors.danger),
+      (LogStreamLevel.warning, 'WRN', context.gridColors.amber),
+      (LogStreamLevel.info, 'INF', context.gridColors.mint),
+      (LogStreamLevel.debug, 'DBG', context.gridColors.text2),
+      (LogStreamLevel.verbose, 'VRB', context.gridColors.text3),
     ];
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: GridTokens.hairline),
+          bottom: BorderSide(color: context.gridColors.hairline),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -446,7 +445,7 @@ class _Chip extends StatelessWidget {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(99),
             border: Border.all(
-              color: active ? color : GridTokens.hairlineStrong,
+              color: active ? color : context.gridColors.hairlineStrong,
             ),
           ),
           child: Text(
@@ -456,7 +455,7 @@ class _Chip extends StatelessWidget {
               fontSize: 10,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.08,
-              color: active ? color : GridTokens.text3,
+              color: active ? color : context.gridColors.text3,
             ),
           ),
         ),

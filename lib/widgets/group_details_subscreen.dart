@@ -22,6 +22,7 @@ import 'package:grid_frontend/widgets/group_markers_modal.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
@@ -178,9 +179,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 child: Container(
                   width: MediaQuery.of(context).size.width * 0.8,
                   height: MediaQuery.of(context).size.width * 0.8,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: GridTokens.surface,
+                    color: context.gridColors.surface,
                   ),
                   child: ClipOval(
                     child: UserAvatarBloc(
@@ -237,7 +238,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       SnackBar(
         content: Text(text),
         backgroundColor:
-            danger ? GridTokens.danger : GridTokens.mint,
+            danger ? context.gridColors.danger : context.gridColors.mint,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(GridTokens.rMd),
@@ -266,9 +267,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -276,8 +277,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               // Member info header
               Container(
                 padding: const EdgeInsets.all(18),
-                decoration: const BoxDecoration(
-                  color: GridTokens.surface2,
+                decoration: BoxDecoration(
+                  color: context.gridColors.surface2,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(GridTokens.rLg),
                     topRight: Radius.circular(GridTokens.rLg),
@@ -314,7 +315,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.015,
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -322,7 +323,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                             showFullMatrixId
                                 ? user.userId
                                 : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             size: 11,
                             uppercase: false,
                             letterSpacing: 0,
@@ -344,11 +345,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                           ? 'Already in contacts'
                           : 'Send friend request',
                       tint: isAlreadyContact
-                          ? GridTokens.text4
-                          : GridTokens.mint,
+                          ? context.gridColors.text4
+                          : context.gridColors.mint,
                       bgTint: isAlreadyContact
-                          ? GridTokens.surface3
-                          : GridTokens.mintFaint,
+                          ? context.gridColors.surface3
+                          : context.gridColors.mintFaint,
                       onTap: isAlreadyContact
                           ? null
                           : () {
@@ -361,11 +362,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       icon: Icons.person_remove_outlined,
                       label: 'Remove from group',
                       tint: canKick
-                          ? GridTokens.danger
-                          : GridTokens.text4,
+                          ? context.gridColors.danger
+                          : context.gridColors.text4,
                       bgTint: canKick
-                          ? GridTokens.dangerSoft
-                          : GridTokens.surface3,
+                          ? context.gridColors.dangerSoft
+                          : context.gridColors.surface3,
                       onTap: canKick
                           ? () {
                               Navigator.pop(context);
@@ -418,10 +419,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     fontSize: 14.5,
                     fontWeight: FontWeight.w500,
                     color: onTap == null
-                        ? GridTokens.text4
-                        : (tint == GridTokens.danger
-                            ? GridTokens.danger
-                            : GridTokens.text),
+                        ? context.gridColors.text4
+                        : (tint == context.gridColors.danger
+                            ? context.gridColors.danger
+                            : context.gridColors.text),
                   ),
                 ),
               ),
@@ -443,9 +444,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -459,8 +460,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.mintFaint,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.mintFaint,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -472,14 +473,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.mintSoft,
+                          color: context.gridColors.mintSoft,
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.person_add,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           size: 20,
                         ),
                       ),
@@ -495,7 +496,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.015,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -505,7 +506,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -525,17 +526,17 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                           'Geist',
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
-                          color: GridTokens.text2,
+                          color: context.gridColors.text2,
                         ),
                       ),
                       const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: GridTokens.surface2,
+                          color: context.gridColors.surface2,
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
-                          border: Border.all(color: GridTokens.hairline),
+                          border: Border.all(color: context.gridColors.hairline),
                         ),
                         child: Row(
                           children: [
@@ -561,7 +562,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                       'Geist',
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
-                                      color: GridTokens.text,
+                                      color: context.gridColors.text,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
@@ -569,7 +570,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                     showFullMatrixId
                                         ? user.userId
                                         : '@${user.userId.split(':')[0].replaceFirst('@', '')}',
-                                    color: GridTokens.text3,
+                                    color: context.gridColors.text3,
                                     size: 11,
                                     uppercase: false,
                                     letterSpacing: 0,
@@ -654,9 +655,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -670,8 +671,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -683,14 +684,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.person_remove_outlined,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -706,7 +707,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.015,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -716,7 +717,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -733,7 +734,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       'Geist',
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                   ),
@@ -805,9 +806,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -821,8 +822,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               children: [
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -834,14 +835,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.exit_to_app,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -857,7 +858,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.015,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -867,7 +868,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -884,7 +885,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       'Geist',
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                   ),
@@ -957,8 +958,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
-        decoration: const BoxDecoration(
-          color: GridTokens.surface,
+        decoration: BoxDecoration(
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.vertical(
               top: Radius.circular(GridTokens.r2Xl)),
         ),
@@ -1053,9 +1054,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           ),
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1063,8 +1064,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               // Group info header
               Container(
                 padding: const EdgeInsets.all(18),
-                decoration: const BoxDecoration(
-                  color: GridTokens.surface2,
+                decoration: BoxDecoration(
+                  color: context.gridColors.surface2,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(GridTokens.rLg),
                     topRight: Radius.circular(GridTokens.rLg),
@@ -1095,13 +1096,13 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.015,
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                             ),
                           ),
                           const SizedBox(height: 2),
                           GridMono(
                             '${_filteredMembers.length} MEMBERS',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             size: 10.5,
                             letterSpacing: 0.08,
                           ),
@@ -1115,8 +1116,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               _menuRow(
                 icon: Icons.person_add_outlined,
                 label: 'Add member',
-                tint: GridTokens.mint,
-                bgTint: GridTokens.mintFaint,
+                tint: context.gridColors.mint,
+                bgTint: context.gridColors.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   _showAddGroupMemberModal();
@@ -1125,8 +1126,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               _menuRow(
                 icon: Icons.history,
                 label: 'View history',
-                tint: GridTokens.mint,
-                bgTint: GridTokens.mintFaint,
+                tint: context.gridColors.mint,
+                bgTint: context.gridColors.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   showModalBottomSheet(
@@ -1147,8 +1148,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               _menuRow(
                 icon: Icons.location_on,
                 label: 'View markers',
-                tint: GridTokens.mint,
-                bgTint: GridTokens.mintFaint,
+                tint: context.gridColors.mint,
+                bgTint: context.gridColors.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   _showGroupMarkersModal();
@@ -1157,8 +1158,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               _menuRow(
                 icon: Icons.schedule_rounded,
                 label: 'Sharing windows',
-                tint: GridTokens.mint,
-                bgTint: GridTokens.mintFaint,
+                tint: context.gridColors.mint,
+                bgTint: context.gridColors.mintFaint,
                 onTap: () {
                   Navigator.pop(context);
                   _openGroupSharingWindowModal();
@@ -1167,8 +1168,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               _menuRow(
                 icon: Icons.exit_to_app_outlined,
                 label: 'Leave group',
-                tint: GridTokens.danger,
-                bgTint: GridTokens.dangerSoft,
+                tint: context.gridColors.danger,
+                bgTint: context.gridColors.dangerSoft,
                 onTap: _isLeaving
                     ? null
                     : () {
@@ -1279,7 +1280,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.02,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                   ),
                 ),
               ),
@@ -1293,13 +1294,13 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: GridTokens.surface2,
+                      color: context.gridColors.surface2,
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.more_horiz,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       size: 18,
                     ),
                   ),
@@ -1327,9 +1328,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         decoration: BoxDecoration(
-          color: GridTokens.amberSoft,
+          color: context.gridColors.amberSoft,
           borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(color: GridTokens.amber.withOpacity(0.22)),
+          border: Border.all(color: context.gridColors.amber.withOpacity(0.22)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -1338,12 +1339,12 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: GridTokens.amber.withOpacity(0.18),
+                color: context.gridColors.amber.withOpacity(0.18),
                 borderRadius: BorderRadius.circular(GridTokens.rSm),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.history,
-                color: GridTokens.amber,
+                color: context.gridColors.amber,
                 size: 18,
               ),
             ),
@@ -1362,7 +1363,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       letterSpacing: -0.01,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1373,7 +1374,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 12.5,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                     ),
                   ),
                 ],
@@ -1492,13 +1493,13 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [GridTokens.mintFaint, GridTokens.surface],
+            colors: [context.gridColors.mintFaint, context.gridColors.surface],
           ),
           borderRadius: BorderRadius.circular(GridTokens.rLg),
-          border: Border.all(color: GridTokens.mintSoft),
+          border: Border.all(color: context.gridColors.mintSoft),
         ),
         child: Column(
           children: [
@@ -1510,17 +1511,17 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    GridTokens.mint.withValues(alpha: 0.22),
-                    GridTokens.mint.withValues(alpha: 0.08),
+                    context.gridColors.mint.withValues(alpha: 0.22),
+                    context.gridColors.mint.withValues(alpha: 0.08),
                   ],
                 ),
                 shape: BoxShape.circle,
-                border: Border.all(color: GridTokens.mintSoft),
+                border: Border.all(color: context.gridColors.mintSoft),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.person_add_alt_1_rounded,
                 size: 28,
-                color: GridTokens.mint,
+                color: context.gridColors.mint,
               ),
             ),
             const SizedBox(height: 16),
@@ -1531,7 +1532,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.015,
-                color: GridTokens.text,
+                color: context.gridColors.text,
               ),
             ),
             const SizedBox(height: 4),
@@ -1541,7 +1542,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 height: 1.4,
               ),
             ),
@@ -1612,10 +1613,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                 controller: _searchController,
                 hintText: 'Search Members',
               ),
-              const Expanded(
+              Expanded(
                 child: Center(
                   child: CircularProgressIndicator(
-                    color: GridTokens.mint,
+                    color: context.gridColors.mint,
                   ),
                 ),
               ),
@@ -1705,10 +1706,10 @@ class _MonoSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         _LiveSegment(count: liveCount),
-        _dot(),
+        _dot(context),
         GridMono(
           '$memberCount MEMBERS',
-          color: GridTokens.text2,
+          color: context.gridColors.text2,
           size: 10.5,
           letterSpacing: 0.08,
         ),
@@ -1717,7 +1718,7 @@ class _MonoSummary extends StatelessWidget {
           Flexible(
             child: GridMono(
               endsIn!,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               size: 10.5,
               letterSpacing: 0.08,
               uppercase: false,
@@ -1730,12 +1731,12 @@ class _MonoSummary extends StatelessWidget {
     );
   }
 
-  Widget _dot() => const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6),
+  Widget _dot(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Text(
           '·',
           style: TextStyle(
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             fontSize: 11,
             height: 1,
           ),
@@ -1755,15 +1756,15 @@ class _LiveSegment extends StatelessWidget {
         Container(
           width: 5,
           height: 5,
-          decoration: const BoxDecoration(
-            color: GridTokens.mint,
+          decoration: BoxDecoration(
+            color: context.gridColors.mint,
             shape: BoxShape.circle,
           ),
         ),
         const SizedBox(width: 4),
         GridMono(
           '$count LIVE',
-          color: GridTokens.mint,
+          color: context.gridColors.mint,
           size: 10.5,
           letterSpacing: 0.1,
         ),

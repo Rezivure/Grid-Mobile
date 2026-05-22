@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import 'grid_mono.dart';
 
 /// Compact status indicator — driving, walking, paused, home, work, custom.
@@ -26,40 +26,41 @@ class GridStatusPill extends StatelessWidget {
   final GridStatusKind kind;
   final IconData? icon;
 
-  ({Color bg, Color fg, IconData icon}) _palette() {
+  ({Color bg, Color fg, IconData icon}) _palette(BuildContext context) {
+    final c = context.gridColors;
     switch (kind) {
       case GridStatusKind.home:
-        return (bg: GridTokens.mintSoft, fg: GridTokens.mint, icon: Icons.home_rounded);
+        return (bg: c.mintSoft, fg: c.mint, icon: Icons.home_rounded);
       case GridStatusKind.driving:
         return (
-          bg: GridTokens.driving.withOpacity(0.16),
-          fg: GridTokens.driving,
+          bg: c.driving.withOpacity(0.16),
+          fg: c.driving,
           icon: Icons.directions_car_rounded
         );
       case GridStatusKind.walking:
         return (
-          bg: GridTokens.walking.withOpacity(0.16),
-          fg: GridTokens.walking,
+          bg: c.walking.withOpacity(0.16),
+          fg: c.walking,
           icon: Icons.directions_walk_rounded
         );
       case GridStatusKind.paused:
         return (
-          bg: GridTokens.paused.withOpacity(0.16),
-          fg: GridTokens.paused,
+          bg: c.paused.withOpacity(0.16),
+          fg: c.paused,
           icon: Icons.pause_circle_outline_rounded
         );
       case GridStatusKind.work:
-        return (bg: GridTokens.amberSoft, fg: GridTokens.amber, icon: Icons.work_outline_rounded);
+        return (bg: c.amberSoft, fg: c.amber, icon: Icons.work_outline_rounded);
       case GridStatusKind.trip:
-        return (bg: GridTokens.amberSoft, fg: GridTokens.amber, icon: Icons.luggage_rounded);
+        return (bg: c.amberSoft, fg: c.amber, icon: Icons.luggage_rounded);
       case GridStatusKind.live:
-        return (bg: GridTokens.mintSoft, fg: GridTokens.mint, icon: Icons.circle);
+        return (bg: c.mintSoft, fg: c.mint, icon: Icons.circle);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final p = _palette();
+    final p = _palette(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -89,7 +90,7 @@ class GridLiveBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: GridTokens.mintSoft,
+        color: context.gridColors.mintSoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -98,13 +99,13 @@ class GridLiveBadge extends StatelessWidget {
           Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
-              color: GridTokens.mint,
+            decoration: BoxDecoration(
+              color: context.gridColors.mint,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 4),
-          GridMono(label, color: GridTokens.mint, size: 9, letterSpacing: 0.12),
+          GridMono(label, color: context.gridColors.mint, size: 9, letterSpacing: 0.12),
         ],
       ),
     );

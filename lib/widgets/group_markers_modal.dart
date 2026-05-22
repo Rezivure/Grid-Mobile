@@ -9,6 +9,7 @@ import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
 
 import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
 import 'grid/grid_mono.dart';
 
 class GroupMarkersModal extends StatefulWidget {
@@ -154,15 +155,15 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
     return Material(
       color: Colors.transparent,
       child: Container(
-        decoration: const BoxDecoration(
-          color: GridTokens.bg,
+        decoration: BoxDecoration(
+          color: context.gridColors.bg,
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(GridTokens.r2Xl),
           ),
           border: Border(
-            top: BorderSide(color: GridTokens.hairline),
-            left: BorderSide(color: GridTokens.hairline),
-            right: BorderSide(color: GridTokens.hairline),
+            top: BorderSide(color: context.gridColors.hairline),
+            left: BorderSide(color: context.gridColors.hairline),
+            right: BorderSide(color: context.gridColors.hairline),
           ),
         ),
         child: SafeArea(
@@ -193,7 +194,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
       width: 36,
       height: 4,
       decoration: BoxDecoration(
-        color: GridTokens.hairlineStrong,
+        color: context.gridColors.hairlineStrong,
         borderRadius: BorderRadius.circular(2),
       ),
     );
@@ -214,15 +215,15 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
+              color: context.gridColors.mintFaint,
               borderRadius: BorderRadius.circular(GridTokens.rSm),
-              border: Border.all(color: GridTokens.mintSoft),
+              border: Border.all(color: context.gridColors.mintSoft),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               Icons.location_on_rounded,
               size: 18,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
             ),
           ),
           const SizedBox(width: 12),
@@ -237,7 +238,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.015,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.15,
                   ),
                 ),
@@ -247,16 +248,16 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 12.5,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.close_rounded,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               size: 22,
             ),
             tooltip: 'Close',
@@ -273,19 +274,19 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(
+          SizedBox(
             width: 28,
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              valueColor: AlwaysStoppedAnimation<Color>(GridTokens.mint),
+              valueColor: AlwaysStoppedAnimation<Color>(context.gridColors.mint),
             ),
           ),
           const SizedBox(height: 14),
-          const GridMono(
+          GridMono(
             'LOADING MARKERS',
             size: 11,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             letterSpacing: 0.12,
           ),
         ],
@@ -303,15 +304,15 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: GridTokens.surface2,
+              color: context.gridColors.surface2,
               shape: BoxShape.circle,
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               Icons.location_off_rounded,
               size: 32,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
             ),
           ),
           const SizedBox(height: 16),
@@ -323,7 +324,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
               fontSize: 16,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.01,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(height: 6),
@@ -333,7 +334,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 13,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               height: 1.35,
             ),
           ),
@@ -347,12 +348,12 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
           child: GridMono(
             'MARKERS',
             size: 10,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             letterSpacing: 0.12,
           ),
         ),
@@ -411,9 +412,9 @@ class _MarkerTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -422,15 +423,15 @@ class _MarkerTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: GridTokens.mintFaint,
+                  color: context.gridColors.mintFaint,
                   borderRadius: BorderRadius.circular(GridTokens.rSm),
-                  border: Border.all(color: GridTokens.mintSoft),
+                  border: Border.all(color: context.gridColors.mintSoft),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
                   iconData,
                   size: 20,
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                 ),
               ),
               const SizedBox(width: 12),
@@ -447,7 +448,7 @@ class _MarkerTile extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     if (hasDescription) ...[
@@ -459,7 +460,7 @@ class _MarkerTile extends StatelessWidget {
                         style: GoogleFonts.getFont(
                           'Geist',
                           fontSize: 12.5,
-                          color: GridTokens.text2,
+                          color: context.gridColors.text2,
                           height: 1.35,
                         ),
                       ),
@@ -468,10 +469,10 @@ class _MarkerTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.navigation_outlined,
                             size: 12,
-                            color: GridTokens.mint,
+                            color: context.gridColors.mint,
                           ),
                           const SizedBox(width: 4),
                           GridMono(
@@ -479,7 +480,7 @@ class _MarkerTile extends StatelessWidget {
                             uppercase: false,
                             size: 11,
                             letterSpacing: 0.04,
-                            color: GridTokens.mint,
+                            color: context.gridColors.mint,
                           ),
                         ],
                       ),
@@ -488,10 +489,10 @@ class _MarkerTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 20,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
             ],
           ),

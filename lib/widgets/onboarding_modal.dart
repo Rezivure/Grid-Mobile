@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
 
@@ -222,9 +223,9 @@ class _OnboardingModalState extends State<OnboardingModal>
             maxWidth: 460,
           ),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.r2Xl),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -274,7 +275,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: GridTokens.text3,
+                foregroundColor: context.gridColors.text3,
               ),
               child: Text(
                 'Not now',
@@ -282,7 +283,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                   'Geist',
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
+                  color: context.gridColors.text3,
                 ),
               ),
             ),
@@ -315,7 +316,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                     fontSize: 26,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.025 * 26,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.1,
                   ),
                 ),
@@ -327,7 +328,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 14,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                     height: 1.45,
                     letterSpacing: -0.005,
                   ),
@@ -360,7 +361,7 @@ class _OnboardingModalState extends State<OnboardingModal>
               fontSize: 24,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.025 * 24,
-              color: GridTokens.text,
+              color: context.gridColors.text,
               height: 1.15,
             ),
           ),
@@ -370,7 +371,7 @@ class _OnboardingModalState extends State<OnboardingModal>
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 14,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               height: 1.4,
               letterSpacing: -0.005,
             ),
@@ -378,8 +379,8 @@ class _OnboardingModalState extends State<OnboardingModal>
           const SizedBox(height: 18),
           _PermissionRow(
             icon: Icons.location_on_rounded,
-            iconColor: GridTokens.danger,
-            iconBg: GridTokens.dangerSoft,
+            iconColor: context.gridColors.danger,
+            iconBg: context.gridColors.dangerSoft,
             title: 'Location',
             subtitle: 'Always',
             state: _location,
@@ -389,8 +390,8 @@ class _OnboardingModalState extends State<OnboardingModal>
           const SizedBox(height: 10),
           _PermissionRow(
             icon: Icons.directions_run_rounded,
-            iconColor: GridTokens.amber,
-            iconBg: GridTokens.amberSoft,
+            iconColor: context.gridColors.amber,
+            iconBg: context.gridColors.amberSoft,
             title: Platform.isIOS ? 'Motion & Fitness' : 'Motion',
             subtitle: 'Saves battery',
             state: _motion,
@@ -525,12 +526,12 @@ class _PermissionRow extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
             border: Border.all(
               color: granted && requiredAction
-                  ? GridTokens.mint.withOpacity(0.5)
-                  : GridTokens.hairline,
+                  ? context.gridColors.mint.withOpacity(0.5)
+                  : context.gridColors.hairline,
               width: granted && requiredAction ? 1.2 : 1,
             ),
           ),
@@ -558,7 +559,7 @@ class _PermissionRow extends StatelessWidget {
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -567,7 +568,7 @@ class _PermissionRow extends StatelessWidget {
                       style: GoogleFonts.getFont(
                         'Geist',
                         fontSize: 12.5,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                         height: 1.3,
                         letterSpacing: -0.005,
                       ),
@@ -594,17 +595,17 @@ class _RowTrailing extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (state) {
       case _PermState.granted:
-        return const Icon(
+        return Icon(
           Icons.check_rounded,
-          color: GridTokens.mint,
+          color: context.gridColors.mint,
           size: 22,
         );
       case _PermState.requesting:
-        return const SizedBox(
+        return SizedBox(
           width: 18,
           height: 18,
           child: CircularProgressIndicator(
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             strokeWidth: 2,
           ),
         );
@@ -615,7 +616,7 @@ class _RowTrailing extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: GridTokens.amber,
+            foregroundColor: context.gridColors.amber,
           ),
           child: const Text(
             'Settings',
@@ -632,7 +633,7 @@ class _RowTrailing extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: GridTokens.mint,
+            foregroundColor: context.gridColors.mint,
           ),
           child: const Text(
             'Allow',
@@ -660,8 +661,8 @@ class _LogoHero extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: RadialGradient(
           colors: [
-            GridTokens.mint.withOpacity(0.18),
-            GridTokens.mint.withOpacity(0.05),
+            context.gridColors.mint.withOpacity(0.18),
+            context.gridColors.mint.withOpacity(0.05),
             Colors.transparent,
           ],
           stops: const [0.0, 0.6, 1.0],
@@ -711,14 +712,14 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: GridTokens.mint),
+          Icon(icon, size: 14, color: context.gridColors.mint),
           const SizedBox(width: 8),
           Text(
             text,
@@ -726,7 +727,7 @@ class _Chip extends StatelessWidget {
               'Geist',
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
               letterSpacing: -0.005,
             ),
           ),
@@ -746,15 +747,15 @@ class _PrivacyPolicyLine extends StatelessWidget {
           style: GoogleFonts.getFont(
             'Geist',
             fontSize: 12,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             height: 1.4,
           ),
           children: [
             const TextSpan(text: 'Skeptical? Read our '),
             TextSpan(
               text: 'Privacy Policy',
-              style: const TextStyle(
-                color: GridTokens.mint,
+              style: TextStyle(
+                color: context.gridColors.mint,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.underline,
               ),
@@ -785,14 +786,14 @@ class _StepCounter extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: GridMono(
         'ONBOARDING · $step OF $total',
         size: 10,
-        color: GridTokens.text2,
+        color: context.gridColors.text2,
         letterSpacing: 0.12,
       ),
     );

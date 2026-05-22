@@ -9,6 +9,7 @@ import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/models/room.dart' as gr;
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
@@ -78,8 +79,8 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
     return BlocBuilder<GroupsBloc, GroupsState>(
       builder: (context, state) {
         if (state is GroupsLoading || state is GroupsInitial) {
-          return const Center(
-            child: CircularProgressIndicator(color: GridTokens.mint),
+          return Center(
+            child: CircularProgressIndicator(color: context.gridColors.mint),
           );
         }
         if (state is GroupsError) {
@@ -106,7 +107,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
                 text: 'MY GROUPS',
                 trailing: GridMono(
                   '${groups.length}',
-                  color: GridTokens.text3,
+                  color: context.gridColors.text3,
                   size: 10.5,
                   letterSpacing: 0.08,
                 ),
@@ -148,12 +149,12 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
             width: 88,
             height: 88,
             decoration: BoxDecoration(
-              color: GridTokens.mintFaint,
+              color: context.gridColors.mintFaint,
               borderRadius: BorderRadius.circular(24),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.group_outlined,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
               size: 40,
             ),
           ),
@@ -165,7 +166,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
               fontSize: 20,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.02,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(height: 6),
@@ -176,7 +177,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
               'Geist',
               fontSize: 13.5,
               fontWeight: FontWeight.w400,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               height: 1.5,
             ),
           ),
@@ -191,9 +192,9 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.error_outline_rounded,
-            color: GridTokens.danger,
+            color: context.gridColors.danger,
             size: 36,
           ),
           const SizedBox(height: 12),
@@ -203,7 +204,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
               'Geist',
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(height: 6),
@@ -213,7 +214,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 12.5,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               height: 1.5,
             ),
           ),
@@ -256,16 +257,16 @@ class _GroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final decoration = BoxDecoration(
       gradient: featured
-          ? const LinearGradient(
+          ? LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [GridTokens.mintFaint, GridTokens.surface],
+              colors: [context.gridColors.mintFaint, context.gridColors.surface],
             )
           : null,
-      color: featured ? null : GridTokens.surface,
+      color: featured ? null : context.gridColors.surface,
       borderRadius: BorderRadius.circular(GridTokens.rLg),
       border: Border.all(
-        color: featured ? GridTokens.mintSoft : GridTokens.hairline,
+        color: featured ? context.gridColors.mintSoft : context.gridColors.hairline,
       ),
     );
 
@@ -302,7 +303,7 @@ class _GroupCard extends StatelessWidget {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: -0.01,
-                                    color: GridTokens.text,
+                                    color: context.gridColors.text,
                                     height: 1.2,
                                   ),
                                 ),
@@ -326,7 +327,7 @@ class _GroupCard extends StatelessWidget {
                               fontSize: 12.5,
                               fontWeight: FontWeight.w400,
                               letterSpacing: -0.01,
-                              color: GridTokens.text2,
+                              color: context.gridColors.text2,
                               height: 1.25,
                             ),
                           ),
@@ -341,22 +342,22 @@ class _GroupCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: GridTokens.surface2,
+                      color: context.gridColors.surface2,
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.history_rounded,
                           size: 14,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: GridMono(
                             timerLabel!,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                             size: 11,
                             letterSpacing: 0.06,
                             uppercase: false,

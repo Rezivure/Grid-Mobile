@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -540,19 +540,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         height: 52,
         decoration: BoxDecoration(
           color: isPrimary
-              ? GridTokens.mint.withOpacity(0.55)
-              : GridTokens.surface2,
+              ? context.gridColors.mint.withOpacity(0.55)
+              : context.gridColors.surface2,
           borderRadius: BorderRadius.circular(14),
           border: isPrimary
               ? null
-              : Border.all(color: GridTokens.hairlineStrong),
+              : Border.all(color: context.gridColors.hairlineStrong),
         ),
         alignment: Alignment.center,
         child: SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
-            color: isPrimary ? Colors.black : GridTokens.mint,
+            color: isPrimary ? Colors.black : context.gridColors.mint,
             strokeWidth: 2,
           ),
         ),

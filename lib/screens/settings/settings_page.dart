@@ -7,6 +7,7 @@ import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/location/location_dispatch.dart';
@@ -48,6 +49,7 @@ import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import '../../widgets/grid/grid_avatar.dart';
 import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
@@ -260,13 +262,15 @@ class _SettingsPageState extends State<SettingsPage> {
     if (value) {
       // enable incognito
       locationManager.toggleBatterySaverMode(value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Battery Saver Mode: Enabled')),
+      InAppNotifier.instance.show(
+        title: 'Battery Saver Mode enabled',
+        variant: InAppNotificationVariant.success,
       );
     } else {
       locationManager.toggleBatterySaverMode(value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Battery Saver Mode: Disabled')),
+      InAppNotifier.instance.show(
+        title: 'Battery Saver Mode disabled',
+        variant: InAppNotificationVariant.info,
       );
     }
   }
@@ -287,13 +291,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (value) {
       locationManager.stopTracking();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Your location is no longer being shared.')),
+      InAppNotifier.instance.show(
+        title: 'Sharing paused',
+        message: 'Your location is no longer being shared.',
+        variant: InAppNotificationVariant.info,
       );
     } else {
       locationManager.startTracking();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Your location is being shared with trusted contacts.')),
+      InAppNotifier.instance.show(
+        title: 'Sharing resumed',
+        message: 'Your location is being shared with trusted contacts.',
+        variant: InAppNotificationVariant.success,
       );
     }
   }
@@ -372,8 +380,9 @@ class _SettingsPageState extends State<SettingsPage> {
     await _syncHomeGeofence();
     if (!mounted) return;
     setState(() => _homeLocationSet = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Home location updated.')),
+    InAppNotifier.instance.show(
+      title: 'Home location updated',
+      variant: InAppNotificationVariant.success,
     );
   }
 
@@ -390,8 +399,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _homeLocationSet = false;
       _autoPauseAtHome = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Home location cleared.')),
+    InAppNotifier.instance.show(
+      title: 'Home location cleared',
+      variant: InAppNotificationVariant.info,
     );
   }
 
@@ -409,9 +419,9 @@ class _SettingsPageState extends State<SettingsPage> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface,
+                color: context.gridColors.surface,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
@@ -424,17 +434,17 @@ class _SettingsPageState extends State<SettingsPage> {
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: GridTokens.mintFaint,
+                          color: context.gridColors.mintFaint,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: GridTokens.mintSoft,
+                            color: context.gridColors.mintSoft,
                             width: 1,
                           ),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.home_outlined,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           size: 26,
                         ),
                       ),
@@ -445,7 +455,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
@@ -458,7 +468,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                         fontSize: 13.5,
                         fontWeight: FontWeight.w400,
                         height: 1.35,
@@ -727,11 +737,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             onPressed: () {
                               // Copy to clipboard functionality would go here
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('$title copied to clipboard'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
+                              InAppNotifier.instance.show(
+                                title: '$title copied to clipboard',
+                                variant: InAppNotificationVariant.success,
                               );
                             },
                             icon: Icon(
@@ -887,8 +895,10 @@ class _SettingsPageState extends State<SettingsPage> {
         // Navigate to welcome screen
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to sign out: $e')),
+        InAppNotifier.instance.show(
+          title: 'Failed to sign out',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
     }
@@ -917,8 +927,10 @@ class _SettingsPageState extends State<SettingsPage> {
     // Grab the phone number from shared prefs
     final phoneNumber = sharedPreferences.getString('phone_number');
     if (phoneNumber == null || phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Phone number not found, is this a beta/test account?')),
+      InAppNotifier.instance.show(
+        title: 'Phone number not found',
+        message: 'Is this a beta/test account?',
+        variant: InAppNotificationVariant.warning,
       );
       return;
     }
@@ -927,8 +939,9 @@ class _SettingsPageState extends State<SettingsPage> {
       // Attempt to request deactivation
       final requestSuccess = await authProvider.requestDeactivateAccount(phoneNumber);
       if (!requestSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to request account deactivation')),
+        InAppNotifier.instance.show(
+          title: 'Failed to request account deactivation',
+          variant: InAppNotificationVariant.error,
         );
         return;
       }
@@ -943,8 +956,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // If user canceled or code is empty, abort
       if (smsCode == null || smsCode.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Confirmation code was not entered')),
+        InAppNotifier.instance.show(
+          title: 'Confirmation code was not entered',
+          variant: InAppNotificationVariant.warning,
         );
         return;
       }
@@ -952,8 +966,10 @@ class _SettingsPageState extends State<SettingsPage> {
       // Try confirming account deactivation
       final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
       if (!confirmSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to confirm account deactivation. Please try again.')),
+        InAppNotifier.instance.show(
+          title: 'Failed to confirm account deactivation',
+          message: 'Please try again.',
+          variant: InAppNotificationVariant.error,
         );
         return;
       }
@@ -985,8 +1001,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     } catch (e) {
       print('Error during deactivation request: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start account deactivation process')),
+      InAppNotifier.instance.show(
+        title: 'Failed to start account deactivation',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1023,9 +1040,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   maxHeight: MediaQuery.of(context).size.height * 0.7,
                 ),
                 decoration: BoxDecoration(
-                  color: GridTokens.surface,
+                  color: context.gridColors.surface,
                   borderRadius: BorderRadius.circular(GridTokens.rXl),
-                  border: Border.all(color: GridTokens.hairline),
+                  border: Border.all(color: context.gridColors.hairline),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.4),
@@ -1040,8 +1057,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     // Header
                     Container(
                       padding: const EdgeInsets.all(20),
-                      decoration: const BoxDecoration(
-                        color: GridTokens.mintFaint,
+                      decoration: BoxDecoration(
+                        color: context.gridColors.mintFaint,
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(GridTokens.rXl),
                           topRight: Radius.circular(GridTokens.rXl),
@@ -1053,14 +1070,14 @@ class _SettingsPageState extends State<SettingsPage> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: GridTokens.mintSoft,
+                              color: context.gridColors.mintSoft,
                               borderRadius:
                                   BorderRadius.circular(GridTokens.rMd),
                             ),
                             alignment: Alignment.center,
-                            child: const Icon(
+                            child: Icon(
                               Icons.edit,
-                              color: GridTokens.mint,
+                              color: context.gridColors.mint,
                               size: 20,
                             ),
                           ),
@@ -1076,7 +1093,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: -0.015,
-                                    color: GridTokens.text,
+                                    color: context.gridColors.text,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -1086,7 +1103,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     'Geist',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w400,
-                                    color: GridTokens.text2,
+                                    color: context.gridColors.text2,
                                   ),
                                 ),
                               ],
@@ -1109,22 +1126,22 @@ class _SettingsPageState extends State<SettingsPage> {
                               style: GoogleFonts.getFont(
                                 'Geist',
                                 fontSize: 15,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
-                              cursorColor: GridTokens.mint,
+                              cursorColor: context.gridColors.mint,
                               maxLength: 14,
                               decoration: InputDecoration(
                                 hintText: 'Enter your display name',
                                 hintStyle: GoogleFonts.getFont(
                                   'Geist',
-                                  color: GridTokens.text3,
+                                  color: context.gridColors.text3,
                                   fontSize: 15,
                                 ),
                                 filled: true,
-                                fillColor: GridTokens.surface2,
-                                prefixIcon: const Icon(
+                                fillColor: context.gridColors.surface2,
+                                prefixIcon: Icon(
                                   Icons.person_outline,
-                                  color: GridTokens.text3,
+                                  color: context.gridColors.text3,
                                   size: 20,
                                 ),
                                 counterText:
@@ -1133,16 +1150,16 @@ class _SettingsPageState extends State<SettingsPage> {
                                   'Geist',
                                   fontSize: 11,
                                   color: hasError
-                                      ? GridTokens.danger
-                                      : GridTokens.text3,
+                                      ? context.gridColors.danger
+                                      : context.gridColors.text3,
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius:
                                       BorderRadius.circular(GridTokens.rMd),
                                   borderSide: BorderSide(
                                     color: hasError
-                                        ? GridTokens.danger
-                                        : GridTokens.hairline,
+                                        ? context.gridColors.danger
+                                        : context.gridColors.hairline,
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
@@ -1150,8 +1167,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                       BorderRadius.circular(GridTokens.rMd),
                                   borderSide: BorderSide(
                                     color: hasError
-                                        ? GridTokens.danger
-                                        : GridTokens.hairline,
+                                        ? context.gridColors.danger
+                                        : context.gridColors.hairline,
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
@@ -1159,8 +1176,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                       BorderRadius.circular(GridTokens.rMd),
                                   borderSide: BorderSide(
                                     color: hasError
-                                        ? GridTokens.danger
-                                        : GridTokens.mint,
+                                        ? context.gridColors.danger
+                                        : context.gridColors.mint,
                                     width: 1.5,
                                   ),
                                 ),
@@ -1200,7 +1217,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 style: GoogleFonts.getFont(
                                   'Geist',
                                   fontSize: 12,
-                                  color: GridTokens.danger,
+                                  color: context.gridColors.danger,
                                 ),
                               ),
                             ],
@@ -1208,17 +1225,17 @@ class _SettingsPageState extends State<SettingsPage> {
                             Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: GridTokens.surface2,
+                                color: context.gridColors.surface2,
                                 borderRadius:
                                     BorderRadius.circular(GridTokens.rMd),
                                 border:
-                                    Border.all(color: GridTokens.hairline),
+                                    Border.all(color: context.gridColors.hairline),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.visibility_outlined,
-                                    color: GridTokens.text2,
+                                    color: context.gridColors.text2,
                                     size: 18,
                                   ),
                                   const SizedBox(width: 10),
@@ -1229,7 +1246,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         'Geist',
                                         fontSize: 13,
                                         fontWeight: FontWeight.w400,
-                                        color: GridTokens.text2,
+                                        color: context.gridColors.text2,
                                         height: 1.35,
                                       ),
                                     ),
@@ -1299,20 +1316,15 @@ class _SettingsPageState extends State<SettingsPage> {
           _displayName = newDisplayName;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Display name updated successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Display name updated',
+          variant: InAppNotificationVariant.success,
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update display name: $e'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.red,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Failed to update display name',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       } finally {
         setState(() {
@@ -1623,12 +1635,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await _uploadAvatarToR2(finalImagePath);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to process image: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to process image',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1764,12 +1774,9 @@ class _SettingsPageState extends State<SettingsPage> {
         await prefs.setString('avatar_uri', cdnUrl);
         await prefs.setBool('avatar_is_matrix', false);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Avatar uploaded successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Avatar updated',
+          variant: InAppNotificationVariant.success,
         );
 
         // Step 4: Clear cache and reload the avatar to display it
@@ -1807,12 +1814,10 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.of(context).pop();
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload avatar: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to upload avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1930,12 +1935,9 @@ class _SettingsPageState extends State<SettingsPage> {
         await prefs.setBool('avatar_is_matrix', true);
         print('[Matrix Avatar] Stored in SharedPreferences');
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Avatar uploaded successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Avatar updated',
+          variant: InAppNotificationVariant.success,
         );
 
         // Step 4: Clear cache and reload the avatar to display it
@@ -1976,12 +1978,10 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.of(context).pop();
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload avatar: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to upload avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -2015,32 +2015,16 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarUpdateCounter += 1;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Profile photo removed',
-            style: GoogleFonts.getFont(
-              'Geist',
-              color: const Color(0xFF04201A),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: GridTokens.mint,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
+      InAppNotifier.instance.show(
+        title: 'Profile photo removed',
+        variant: InAppNotificationVariant.success,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to remove avatar: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to remove avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -2305,13 +2289,17 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } else {
         print("Failed to delete account: ${response.body}");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete account: ${response.body}')),
+        InAppNotifier.instance.show(
+          title: 'Failed to delete account',
+          message: response.body,
+          variant: InAppNotificationVariant.error,
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+      InAppNotifier.instance.show(
+        title: 'Error',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -2376,15 +2364,15 @@ class _SettingsPageState extends State<SettingsPage> {
     final isCustom = isCustomHomeserver();
 
     return Scaffold(
-      backgroundColor: GridTokens.bg,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
-        backgroundColor: GridTokens.bg,
+        backgroundColor: context.gridColors.bg,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -2393,7 +2381,7 @@ class _SettingsPageState extends State<SettingsPage> {
           'Settings',
           style: GoogleFonts.getFont(
             'Geist',
-            color: GridTokens.text,
+            color: context.gridColors.text,
             fontSize: 18,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.015,
@@ -2593,9 +2581,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       height: 10,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: GridTokens.mint.withOpacity(0.18),
+                        color: context.gridColors.mint.withOpacity(0.18),
                         border: Border.all(
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           width: 1.4,
                         ),
                       ),
@@ -2603,7 +2591,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(width: 8),
                     GridMono(
                       _buildFooterText(),
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                       size: 11,
                       letterSpacing: 0.04,
                       uppercase: false,
@@ -2668,12 +2656,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// Hairline separator between rows inside a settings group.
   Widget _buildSettingsDivider() {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.only(left: 56),
       child: Divider(
         height: 1,
         thickness: 1,
-        color: GridTokens.hairline,
+        color: context.gridColors.hairline,
       ),
     );
   }
@@ -2689,9 +2677,9 @@ class _SettingsPageState extends State<SettingsPage> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         children: [
@@ -2751,7 +2739,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.getFont(
                           'Geist',
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.015,
@@ -2760,21 +2748,21 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(width: 6),
                     if (_isEditingDisplayName)
-                      const SizedBox(
+                      SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 1.5,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                         ),
                       )
                     else
                       GestureDetector(
                         onTap: _editDisplayName,
-                        child: const Icon(
+                        child: Icon(
                           Icons.edit_outlined,
                           size: 14,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                         ),
                       ),
                   ],
@@ -2782,7 +2770,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 4),
                 GridMono(
                   handleLine,
-                  color: GridTokens.text2,
+                  color: context.gridColors.text2,
                   size: 12,
                   letterSpacing: 0.02,
                   uppercase: false,
@@ -2806,15 +2794,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: GridTokens.mintFaint,
+                  color: context.gridColors.mintFaint,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: GridTokens.hairline),
+                  border: Border.all(color: context.gridColors.hairline),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(
+                child: Icon(
                   Icons.camera_alt_rounded,
                   size: 22,
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                 ),
               ),
             ),
@@ -2834,9 +2822,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: children),
@@ -2861,7 +2849,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Icon(
               icon,
               size: 20,
-              color: value && enabled ? GridTokens.mint : GridTokens.text2,
+              color: value && enabled ? context.gridColors.mint : context.gridColors.text2,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -2873,7 +2861,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     title,
                     style: GoogleFonts.getFont(
                       'Geist',
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                       letterSpacing: -0.01,
@@ -2885,7 +2873,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       subtitle,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w400,
                         letterSpacing: -0.005,
@@ -2902,8 +2890,8 @@ class _SettingsPageState extends State<SettingsPage> {
               thumbColor: WidgetStateProperty.all(Colors.white),
               trackColor: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.selected)
-                    ? GridTokens.mint
-                    : GridTokens.surface3,
+                    ? context.gridColors.mint
+                    : context.gridColors.surface3,
               ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               trackOutlineColor:
@@ -2938,11 +2926,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: GridTokens.mintFaint,
+                  color: context.gridColors.mintFaint,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 16, color: GridTokens.mint),
+                child: Icon(icon, size: 16, color: context.gridColors.mint),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2954,7 +2942,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       title,
                       style: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                         letterSpacing: -0.01,
@@ -2964,7 +2952,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     mono
                         ? GridMono(
                             displayValue,
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             size: 11,
                             letterSpacing: 0.04,
                             uppercase: false,
@@ -2977,7 +2965,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.getFont(
                               'Geist',
-                              color: GridTokens.text3,
+                              color: context.gridColors.text3,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w400,
                               letterSpacing: -0.005,
@@ -2986,10 +2974,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 14,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
             ],
           ),
@@ -3008,8 +2996,8 @@ class _SettingsPageState extends State<SettingsPage> {
     bool isHighRisk = false,
     bool enabled = true,
   }) {
-    final Color titleColor = isDestructive ? GridTokens.danger : GridTokens.text;
-    final Color iconColor = isDestructive ? GridTokens.danger : GridTokens.text2;
+    final Color titleColor = isDestructive ? context.gridColors.danger : context.gridColors.text;
+    final Color iconColor = isDestructive ? context.gridColors.danger : context.gridColors.text2;
 
     return Opacity(
       opacity: enabled ? 1.0 : 0.55,
@@ -3042,7 +3030,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     trailing,
                     style: GoogleFonts.getFont(
                       'Geist',
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: -0.005,
@@ -3054,8 +3042,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   Icons.arrow_forward_ios_rounded,
                   size: 14,
                   color: isDestructive
-                      ? GridTokens.danger.withOpacity(0.6)
-                      : GridTokens.text3,
+                      ? context.gridColors.danger.withOpacity(0.6)
+                      : context.gridColors.text3,
                 ),
               ],
             ),
@@ -3119,9 +3107,9 @@ class _SettingsPageState extends State<SettingsPage> {
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
         decoration: BoxDecoration(
-          color: GridTokens.surface,
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: GridTokens.hairline),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.4),
@@ -3136,8 +3124,8 @@ class _SettingsPageState extends State<SettingsPage> {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: GridTokens.dangerSoft,
+              decoration: BoxDecoration(
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(GridTokens.rXl),
                   topRight: Radius.circular(GridTokens.rXl),
@@ -3149,13 +3137,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: GridTokens.danger.withOpacity(0.18),
+                      color: context.gridColors.danger.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.warning_amber_rounded,
-                      color: GridTokens.danger,
+                      color: context.gridColors.danger,
                       size: 20,
                     ),
                   ),
@@ -3171,7 +3159,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.015,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -3181,7 +3169,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             'Geist',
                             fontSize: 13,
                             fontWeight: FontWeight.w400,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3204,7 +3192,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         'Geist',
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                         height: 1.45,
                       ),
                     ),
@@ -3212,10 +3200,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: GridTokens.surface2,
+                        color: context.gridColors.surface2,
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
-                        border: Border.all(color: GridTokens.hairline),
+                        border: Border.all(color: context.gridColors.hairline),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3227,7 +3215,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               children: [
                                 Icon(
                                   bullets[i].icon,
-                                  color: GridTokens.danger,
+                                  color: context.gridColors.danger,
                                   size: 18,
                                 ),
                                 const SizedBox(width: 10),
@@ -3238,7 +3226,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                       'Geist',
                                       fontSize: 13,
                                       fontWeight: FontWeight.w400,
-                                      color: GridTokens.text2,
+                                      color: context.gridColors.text2,
                                       height: 1.35,
                                     ),
                                   ),
@@ -3291,9 +3279,9 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: GridTokens.surface,
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: GridTokens.hairline),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.4),
@@ -3308,8 +3296,8 @@ class _SettingsPageState extends State<SettingsPage> {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: GridTokens.dangerSoft,
+              decoration: BoxDecoration(
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(GridTokens.rXl),
                   topRight: Radius.circular(GridTokens.rXl),
@@ -3321,13 +3309,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: GridTokens.danger.withOpacity(0.18),
+                      color: context.gridColors.danger.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.sms_outlined,
-                      color: GridTokens.danger,
+                      color: context.gridColors.danger,
                       size: 20,
                     ),
                   ),
@@ -3343,7 +3331,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.015,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -3353,7 +3341,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             'Geist',
                             fontSize: 13,
                             fontWeight: FontWeight.w400,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3372,16 +3360,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: GridTokens.surface2,
+                      color: context.gridColors.surface2,
                       borderRadius:
                           BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.info_outline,
-                          color: GridTokens.text2,
+                          color: context.gridColors.text2,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
@@ -3392,7 +3380,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               'Geist',
                               fontSize: 13,
                               fontWeight: FontWeight.w400,
-                              color: GridTokens.text2,
+                              color: context.gridColors.text2,
                               height: 1.35,
                             ),
                           ),
@@ -3411,37 +3399,37 @@ class _SettingsPageState extends State<SettingsPage> {
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 4,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
-                    cursorColor: GridTokens.mint,
+                    cursorColor: context.gridColors.mint,
                     decoration: InputDecoration(
                       hintText: 'Enter code',
                       hintStyle: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         fontSize: 15,
                         fontWeight: FontWeight.w400,
                         letterSpacing: 0,
                       ),
                       filled: true,
-                      fillColor: GridTokens.surface2,
+                      fillColor: context.gridColors.surface2,
                       border: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
                         borderSide:
-                            const BorderSide(color: GridTokens.hairline),
+                            BorderSide(color: context.gridColors.hairline),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
                         borderSide:
-                            const BorderSide(color: GridTokens.hairline),
+                            BorderSide(color: context.gridColors.hairline),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
-                        borderSide: const BorderSide(
-                          color: GridTokens.mint,
+                        borderSide: BorderSide(
+                          color: context.gridColors.mint,
                           width: 1.5,
                         ),
                       ),
@@ -3493,9 +3481,9 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: GridTokens.surface,
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: GridTokens.hairline),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.4),
@@ -3510,8 +3498,8 @@ class _SettingsPageState extends State<SettingsPage> {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: GridTokens.dangerSoft,
+              decoration: BoxDecoration(
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(GridTokens.rXl),
                   topRight: Radius.circular(GridTokens.rXl),
@@ -3523,13 +3511,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: GridTokens.danger.withOpacity(0.18),
+                      color: context.gridColors.danger.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.lock_outline,
-                      color: GridTokens.danger,
+                      color: context.gridColors.danger,
                       size: 20,
                     ),
                   ),
@@ -3545,7 +3533,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.015,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -3555,7 +3543,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             'Geist',
                             fontSize: 13,
                             fontWeight: FontWeight.w400,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3574,16 +3562,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: GridTokens.surface2,
+                      color: context.gridColors.surface2,
                       borderRadius:
                           BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.warning_amber_rounded,
-                          color: GridTokens.amber,
+                          color: context.gridColors.amber,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
@@ -3594,7 +3582,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               'Geist',
                               fontSize: 13,
                               fontWeight: FontWeight.w400,
-                              color: GridTokens.text2,
+                              color: context.gridColors.text2,
                               height: 1.35,
                             ),
                           ),
@@ -3610,40 +3598,40 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 15,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
-                    cursorColor: GridTokens.mint,
+                    cursorColor: context.gridColors.mint,
                     decoration: InputDecoration(
                       hintText: 'Enter your password',
                       hintStyle: GoogleFonts.getFont(
                         'Geist',
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         fontSize: 15,
                       ),
                       filled: true,
-                      fillColor: GridTokens.surface2,
-                      prefixIcon: const Icon(
+                      fillColor: context.gridColors.surface2,
+                      prefixIcon: Icon(
                         Icons.lock_outline,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         size: 20,
                       ),
                       border: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
                         borderSide:
-                            const BorderSide(color: GridTokens.hairline),
+                            BorderSide(color: context.gridColors.hairline),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
                         borderSide:
-                            const BorderSide(color: GridTokens.hairline),
+                            BorderSide(color: context.gridColors.hairline),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(GridTokens.rMd),
-                        borderSide: const BorderSide(
-                          color: GridTokens.mint,
+                        borderSide: BorderSide(
+                          color: context.gridColors.mint,
                           width: 1.5,
                         ),
                       ),
@@ -3702,9 +3690,9 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: GridTokens.surface,
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: GridTokens.hairline),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.4),
@@ -3719,8 +3707,8 @@ class _SettingsPageState extends State<SettingsPage> {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: GridTokens.mintFaint,
+              decoration: BoxDecoration(
+                color: context.gridColors.mintFaint,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(GridTokens.rXl),
                   topRight: Radius.circular(GridTokens.rXl),
@@ -3732,14 +3720,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: GridTokens.mintSoft,
+                      color: context.gridColors.mintSoft,
                       borderRadius:
                           BorderRadius.circular(GridTokens.rMd),
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.logout,
-                      color: GridTokens.mint,
+                      color: context.gridColors.mint,
                       size: 20,
                     ),
                   ),
@@ -3755,7 +3743,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.015,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -3765,7 +3753,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             'Geist',
                             fontSize: 13,
                             fontWeight: FontWeight.w400,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3787,7 +3775,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       'Geist',
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                   ),
@@ -3795,10 +3783,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: GridTokens.surface2,
+                      color: context.gridColors.surface2,
                       borderRadius:
                           BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: GridTokens.hairline),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3810,7 +3798,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             children: [
                               Icon(
                                 bullets[i].icon,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                                 size: 18,
                               ),
                               const SizedBox(width: 10),
@@ -3821,7 +3809,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     'Geist',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w400,
-                                    color: GridTokens.text2,
+                                    color: context.gridColors.text2,
                                     height: 1.35,
                                   ),
                                 ),
@@ -3920,10 +3908,10 @@ class _SharingModeRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.tune_rounded,
                 size: 18,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
               ),
               const SizedBox(width: 10),
               Text(
@@ -3933,7 +3921,7 @@ class _SharingModeRow extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.01,
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                 ),
               ),
             ],
@@ -3942,9 +3930,9 @@ class _SharingModeRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: GridTokens.surface2,
+              color: context.gridColors.surface2,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -3967,7 +3955,7 @@ class _SharingModeRow extends StatelessWidget {
               'Geist',
               fontSize: 13.5,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
               letterSpacing: -0.005,
             ),
           ),
@@ -3977,24 +3965,24 @@ class _SharingModeRow extends StatelessWidget {
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 12.5,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
               height: 1.4,
             ),
           ),
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.battery_5_bar_rounded,
                 size: 13,
-                color: GridTokens.mint,
+                color: context.gridColors.mint,
               ),
               const SizedBox(width: 6),
               GridMono(
                 info.battery,
                 size: 10.5,
                 letterSpacing: 0.08,
-                color: GridTokens.mint,
+                color: context.gridColors.mint,
               ),
             ],
           ),
@@ -4026,10 +4014,10 @@ class _SharingModeChip extends StatelessWidget {
           height: 36,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: active ? GridTokens.mintFaint : Colors.transparent,
+            color: active ? context.gridColors.mintFaint : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
             border: active
-                ? Border.all(color: GridTokens.mintSoft, width: 1)
+                ? Border.all(color: context.gridColors.mintSoft, width: 1)
                 : null,
           ),
           child: Row(
@@ -4038,7 +4026,7 @@ class _SharingModeChip extends StatelessWidget {
               Icon(
                 info.icon,
                 size: 14,
-                color: active ? GridTokens.mint : GridTokens.text3,
+                color: active ? context.gridColors.mint : context.gridColors.text3,
               ),
               const SizedBox(width: 6),
               Text(
@@ -4048,7 +4036,7 @@ class _SharingModeChip extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.005,
-                  color: active ? GridTokens.mint : GridTokens.text2,
+                  color: active ? context.gridColors.mint : context.gridColors.text2,
                 ),
               ),
             ],

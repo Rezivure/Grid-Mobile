@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 
 /// Quick helper for Geist Mono text — used for timestamps, coordinates,
 /// status pills, "LIVE", build numbers, etc. The design system treats mono
@@ -42,7 +42,7 @@ class GridMono extends StatelessWidget {
         fontSize: size,
         fontWeight: weight,
         letterSpacing: letterSpacing,
-        color: color ?? GridTokens.text2,
+        color: color ?? context.gridColors.text2,
         height: 1.15,
       ),
     );

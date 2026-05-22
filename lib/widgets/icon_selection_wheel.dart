@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 /// Long-press-on-map → pick an icon type. Replaced the radial wheel with a
@@ -95,10 +96,10 @@ class _IconSelectionWheelState extends State<IconSelectionWheel>
                   filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: GridTokens.surface.withOpacity(0.95),
+                      color: context.gridColors.surface.withOpacity(0.95),
                       borderRadius: BorderRadius.circular(GridTokens.rXl),
                       border: Border.all(
-                        color: GridTokens.hairlineStrong,
+                        color: context.gridColors.hairlineStrong,
                         width: 1,
                       ),
                       boxShadow: [
@@ -119,7 +120,7 @@ class _IconSelectionWheelState extends State<IconSelectionWheel>
                           GridMono(
                             'DROP A PIN HERE',
                             size: 10.5,
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             letterSpacing: 0.12,
                           ),
                         ],
@@ -207,10 +208,10 @@ class _IconTileState extends State<_IconTile> {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: GridTokens.mintFaint,
+            color: context.gridColors.mintFaint,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(
-              color: GridTokens.hairlineStrong,
+              color: context.gridColors.hairlineStrong,
               width: 1,
             ),
           ),
@@ -218,7 +219,7 @@ class _IconTileState extends State<_IconTile> {
           child: Icon(
             widget.slot.icon,
             size: 24,
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
           ),
         ),
       ),

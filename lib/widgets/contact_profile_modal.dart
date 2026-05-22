@@ -14,6 +14,7 @@ import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
@@ -161,9 +162,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.8,
                     height: MediaQuery.of(context).size.width * 0.8,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: GridTokens.surface,
+                      color: context.gridColors.surface,
                     ),
                     child: ClipOval(
                       child: UserAvatarBloc(
@@ -258,7 +259,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           // sitting on `bg`. Buttons inside use `surface2` for
           // hierarchy.
           Positioned.fill(
-            child: ColoredBox(color: GridTokens.surface),
+            child: ColoredBox(color: context.gridColors.surface),
           ),
 
           // Scrollable content.
@@ -282,7 +283,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: GridTokens.text4,
+                        color: context.gridColors.text4,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -403,8 +404,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    GridTokens.bg.withAlpha(0),
-                    GridTokens.bg,
+                    context.gridColors.bg.withAlpha(0),
+                    context.gridColors.bg,
                   ],
                 ),
               ),
@@ -431,9 +432,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+            border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -444,14 +445,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   'Geist',
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                 ),
               ),
               const SizedBox(width: 6),
               GridMono(
                 widget.contact.lastSeen.isEmpty ? 'now' : widget.contact.lastSeen,
                 size: 9,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
                 letterSpacing: 0.06,
               ),
             ],
@@ -478,7 +479,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 child: CustomPaint(
                   size: const Size(14, 10),
                   painter: _PinTailPainter(
-                    color: live ? GridTokens.mint : GridTokens.hairlineStrong,
+                    color: live ? context.gridColors.mint : context.gridColors.hairlineStrong,
                   ),
                 ),
               ),
@@ -505,9 +506,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             tag: 'contact_avatar_${widget.contact.userId}',
             child: Container(
               padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: GridTokens.bg,
+                color: context.gridColors.bg,
               ),
               child: ClipOval(
                 child: SizedBox(
@@ -541,7 +542,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                           fontSize: 22,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.02,
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -567,7 +568,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         handle.startsWith('@') ? handle : '@$handle',
                         uppercase: false,
                         size: 12,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         letterSpacing: 0.02,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -658,9 +659,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.mintSoft, width: 1),
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
       ),
       child: Row(
         children: [
@@ -668,14 +669,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: GridTokens.mintSoft,
+              color: context.gridColors.mintSoft,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: const Icon(
+            child: Icon(
               Icons.shield_outlined,
               size: 18,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
             ),
           ),
           const SizedBox(width: 12),
@@ -692,7 +693,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.01,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -703,7 +704,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 12.5,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                     height: 1.35,
                     letterSpacing: -0.005,
                   ),
@@ -714,7 +715,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           const SizedBox(width: 10),
           Switch.adaptive(
             value: _alwaysShare,
-            activeColor: GridTokens.mint,
+            activeColor: context.gridColors.mint,
             onChanged: (value) async {
               setState(() => _alwaysShare = value);
               await _saveToDatabase();
@@ -800,13 +801,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             children: [
-              Icon(Icons.groups_2_outlined, size: 18, color: GridTokens.text3),
+              Icon(Icons.groups_2_outlined, size: 18, color: context.gridColors.text3),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -815,7 +816,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     'Geist',
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                 ),
               ),
@@ -834,7 +835,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return Row(
       children: [
         Expanded(
-          child: GridMono(text, size: 10, color: GridTokens.text3, letterSpacing: 0.12),
+          child: GridMono(text, size: 10, color: context.gridColors.text3, letterSpacing: 0.12),
         ),
         if (trailing != null) trailing,
       ],
@@ -851,13 +852,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: GridTokens.surface,
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(color: GridTokens.hairline, width: 1),
+          border: Border.all(color: context.gridColors.hairline, width: 1),
         ),
         child: Column(
           children: [
-            Icon(Icons.schedule_outlined, size: 28, color: GridTokens.text3),
+            Icon(Icons.schedule_outlined, size: 28, color: context.gridColors.text3),
             const SizedBox(height: 8),
             Text(
               'No sharing windows set',
@@ -865,7 +866,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 'Geist',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
               ),
             ),
             const SizedBox(height: 12),
@@ -877,13 +878,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                   decoration: BoxDecoration(
-                    color: GridTokens.mintSoft,
+                    color: context.gridColors.mintSoft,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.add, size: 14, color: GridTokens.mint),
+                      Icon(Icons.add, size: 14, color: context.gridColors.mint),
                       const SizedBox(width: 6),
                       Text(
                         'Add window',
@@ -891,7 +892,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                           'Geist',
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                         ),
                       ),
                     ],
@@ -923,7 +924,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   'Geist',
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: GridTokens.mint,
+                  color: context.gridColors.mint,
                 ),
               ),
             ),
@@ -958,9 +959,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                       decoration: BoxDecoration(
-                        color: window.isActive ? GridTokens.mintSoft : GridTokens.surface2,
+                        color: window.isActive ? context.gridColors.mintSoft : context.gridColors.surface2,
                         border: Border.all(
-                          color: window.isActive ? GridTokens.mint : GridTokens.hairline,
+                          color: window.isActive ? context.gridColors.mint : context.gridColors.hairline,
                           width: 1,
                         ),
                         borderRadius: BorderRadius.circular(10),
@@ -971,7 +972,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                           'Geist',
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: window.isActive ? GridTokens.mint : GridTokens.text2,
+                          color: window.isActive ? context.gridColors.mint : context.gridColors.text2,
                         ),
                       ),
                     ),
@@ -989,9 +990,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         },
                         child: Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: GridTokens.danger,
+                            color: context.gridColors.danger,
                           ),
                           child: const Icon(Icons.close, size: 12, color: Colors.white),
                         ),
@@ -1005,14 +1006,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                 decoration: BoxDecoration(
-                  color: GridTokens.surface2,
-                  border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+                  color: context.gridColors.surface2,
+                  border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add, size: 14, color: GridTokens.mint),
+                    Icon(Icons.add, size: 14, color: context.gridColors.mint),
                     const SizedBox(width: 6),
                     Text(
                       'Add window',
@@ -1020,7 +1021,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         'Geist',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: GridTokens.mint,
+                        color: context.gridColors.mint,
                       ),
                     ),
                   ],
@@ -1060,9 +1061,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           insetPadding: const EdgeInsets.symmetric(horizontal: 32),
           child: Container(
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
             ),
             padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
             child: Column(
@@ -1075,13 +1076,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: GridTokens.dangerSoft,
+                        color: context.gridColors.dangerSoft,
                         borderRadius: BorderRadius.circular(GridTokens.rSm),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(
+                      child: Icon(
                         Icons.warning_amber_rounded,
-                        color: GridTokens.danger,
+                        color: context.gridColors.danger,
                         size: 18,
                       ),
                     ),
@@ -1094,7 +1095,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.015,
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                         ),
                       ),
                     ),
@@ -1107,7 +1108,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 13,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                     height: 1.4,
                   ),
                 ),
@@ -1158,9 +1159,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   Widget _buildSecurityCard() {
     return Container(
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
       child: Column(
         children: [
@@ -1181,11 +1182,11 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: GridTokens.mintFaint,
+                        color: context.gridColors.mintFaint,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
-                      child: const Icon(Icons.shield_outlined, size: 18, color: GridTokens.mint),
+                      child: Icon(Icons.shield_outlined, size: 18, color: context.gridColors.mint),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1198,7 +1199,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                               'Geist',
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -1208,7 +1209,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                               'Geist',
                               fontSize: 12,
                               fontWeight: FontWeight.w400,
-                              color: GridTokens.text3,
+                              color: context.gridColors.text3,
                             ),
                           ),
                         ],
@@ -1216,7 +1217,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     ),
                     Icon(
                       _isDeviceKeysExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                       size: 20,
                     ),
                   ],
@@ -1225,14 +1226,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             ),
           ),
           if (_isDeviceKeysExpanded) ...[
-            const Divider(height: 1, color: GridTokens.hairline),
+            Divider(height: 1, color: context.gridColors.hairline),
             Padding(
               padding: const EdgeInsets.all(14),
               child: _isLoading
-                  ? const Center(
+                  ? Center(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: CircularProgressIndicator(color: GridTokens.mint),
+                        child: CircularProgressIndicator(color: context.gridColors.mint),
                       ),
                     )
                   : _buildDeviceKeysList(),
@@ -1250,12 +1251,12 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: GridTokens.surface2,
+          color: context.gridColors.surface2,
           borderRadius: BorderRadius.circular(GridTokens.rMd),
         ),
         child: Column(
           children: [
-            const Icon(Icons.shield_outlined, size: 36, color: GridTokens.text3),
+            Icon(Icons.shield_outlined, size: 36, color: context.gridColors.text3),
             const SizedBox(height: 10),
             Text(
               'No security keys yet',
@@ -1263,7 +1264,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 'Geist',
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
               ),
             ),
             const SizedBox(height: 4),
@@ -1274,7 +1275,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 'Geist',
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
             ),
           ],
@@ -1288,13 +1289,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: GridTokens.mintFaint,
+            color: context.gridColors.mintFaint,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.mintSoft, width: 1),
+            border: Border.all(color: context.gridColors.mintSoft, width: 1),
           ),
           child: Row(
             children: [
-              const Icon(Icons.info_outline, color: GridTokens.mint, size: 16),
+              Icon(Icons.info_outline, color: context.gridColors.mint, size: 16),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1303,7 +1304,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     'Geist',
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
-                    color: GridTokens.mint,
+                    color: context.gridColors.mint,
                     height: 1.35,
                   ),
                 ),
@@ -1319,9 +1320,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              color: GridTokens.surface2,
+              color: context.gridColors.surface2,
               borderRadius: BorderRadius.circular(GridTokens.rMd),
-              border: Border.all(color: GridTokens.hairline, width: 1),
+              border: Border.all(color: context.gridColors.hairline, width: 1),
             ),
             child: Theme(
               data: Theme.of(context).copyWith(
@@ -1332,8 +1333,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               child: ExpansionTile(
                 tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                 childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                iconColor: GridTokens.text3,
-                collapsedIconColor: GridTokens.text3,
+                iconColor: context.gridColors.text3,
+                collapsedIconColor: context.gridColors.text3,
                 shape: const RoundedRectangleBorder(side: BorderSide.none),
                 collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
                 title: Row(
@@ -1341,10 +1342,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: GridTokens.mintFaint,
+                        color: context.gridColors.mintFaint,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Icon(Icons.devices_rounded, color: GridTokens.mint, size: 16),
+                      child: Icon(Icons.devices_rounded, color: context.gridColors.mint, size: 16),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1357,7 +1358,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                               'Geist',
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -1365,7 +1366,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                             deviceId,
                             uppercase: false,
                             size: 10,
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             letterSpacing: 0.04,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1392,9 +1393,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: GridTokens.bg,
+        color: context.gridColors.bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1404,10 +1405,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: GridTokens.mintSoft,
+                  color: context.gridColors.mintSoft,
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: GridMono(keyType, color: GridTokens.mint, size: 9, letterSpacing: 0.1),
+                child: GridMono(keyType, color: context.gridColors.mint, size: 9, letterSpacing: 0.1),
               ),
               const Spacer(),
               InkWell(
@@ -1416,7 +1417,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('$keyType key copied'),
-                      backgroundColor: GridTokens.surface,
+                      backgroundColor: context.gridColors.surface,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -1426,9 +1427,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   );
                 },
                 borderRadius: BorderRadius.circular(6),
-                child: const Padding(
+                child: Padding(
                   padding: EdgeInsets.all(4),
-                  child: Icon(Icons.copy_rounded, size: 14, color: GridTokens.mint),
+                  child: Icon(Icons.copy_rounded, size: 14, color: context.gridColors.mint),
                 ),
               ),
             ],
@@ -1438,7 +1439,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             keyValue,
             uppercase: false,
             size: 10,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
             letterSpacing: 0.02,
           ),
         ],
@@ -1463,9 +1464,9 @@ class _MotionStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = motion == null;
-    final color = muted ? GridTokens.text3 : GridTokens.mint;
-    final bg = muted ? GridTokens.surface2 : GridTokens.mintFaint;
-    final border = muted ? GridTokens.hairline : GridTokens.mintSoft;
+    final color = muted ? context.gridColors.text3 : context.gridColors.mint;
+    final bg = muted ? context.gridColors.surface2 : context.gridColors.mintFaint;
+    final border = muted ? context.gridColors.hairline : context.gridColors.mintSoft;
     final IconData icon;
     if (motion == 'DRIVING') {
       icon = Icons.directions_car_filled_rounded;
@@ -1517,23 +1518,23 @@ class _BatteryStatusPill extends StatelessWidget {
     final IconData icon;
     final String label;
     if (level == null) {
-      color = GridTokens.text3;
+      color = context.gridColors.text3;
       icon = Icons.battery_unknown_rounded;
       label = '?';
     } else if (charging) {
-      color = GridTokens.mint;
+      color = context.gridColors.mint;
       icon = Icons.bolt_rounded;
       label = '${(level! * 100).round()}%';
     } else if (level! < 0.20) {
-      color = GridTokens.danger;
+      color = context.gridColors.danger;
       icon = Icons.battery_alert_rounded;
       label = '${(level! * 100).round()}%';
     } else if (level! < 0.40) {
-      color = GridTokens.amber;
+      color = context.gridColors.amber;
       icon = Icons.battery_3_bar_rounded;
       label = '${(level! * 100).round()}%';
     } else {
-      color = GridTokens.text2;
+      color = context.gridColors.text2;
       icon = Icons.battery_5_bar_rounded;
       label = '${(level! * 100).round()}%';
     }
@@ -1572,11 +1573,11 @@ class _MonoPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
-      child: GridMono(label, size: 10, color: GridTokens.text2, letterSpacing: 0.08),
+      child: GridMono(label, size: 10, color: context.gridColors.text2, letterSpacing: 0.08),
     );
   }
 }
@@ -1600,7 +1601,7 @@ class _CopyButton extends StatelessWidget {
           child: Icon(
             copied ? Icons.check_rounded : Icons.copy_rounded,
             size: 14,
-            color: copied ? GridTokens.mint : GridTokens.text3,
+            color: copied ? context.gridColors.mint : context.gridColors.text3,
           ),
         ),
       ),
@@ -1633,10 +1634,10 @@ class _ShareToggle extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
         decoration: BoxDecoration(
-          color: value ? GridTokens.mintSoft : GridTokens.surface2,
+          color: value ? context.gridColors.mintSoft : context.gridColors.surface2,
           borderRadius: BorderRadius.circular(GridTokens.rMd),
           border: Border.all(
-            color: value ? GridTokens.mint : GridTokens.hairline,
+            color: value ? context.gridColors.mint : context.gridColors.hairline,
             width: 1,
           ),
         ),
@@ -1646,11 +1647,11 @@ class _ShareToggle extends StatelessWidget {
               Container(
                 width: 6,
                 height: 6,
-                decoration: const BoxDecoration(
-                  color: GridTokens.mint,
+                decoration: BoxDecoration(
+                  color: context.gridColors.mint,
                   shape: BoxShape.circle,
                   boxShadow: [
-                    BoxShadow(color: GridTokens.mint, blurRadius: 6, spreadRadius: 0),
+                    BoxShadow(color: context.gridColors.mint, blurRadius: 6, spreadRadius: 0),
                   ],
                 ),
               ),
@@ -1670,7 +1671,7 @@ class _ShareToggle extends StatelessWidget {
                             'Geist',
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: value ? GridTokens.mint : GridTokens.text2,
+                            color: value ? context.gridColors.mint : context.gridColors.text2,
                           ),
                         ),
                         TextSpan(
@@ -1679,7 +1680,7 @@ class _ShareToggle extends StatelessWidget {
                             'Geist',
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: value ? GridTokens.mint : GridTokens.text3,
+                            color: value ? context.gridColors.mint : context.gridColors.text3,
                           ),
                         ),
                       ],
@@ -1696,7 +1697,7 @@ class _ShareToggle extends StatelessWidget {
                       'Geist',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: value ? GridTokens.mint : GridTokens.text2,
+                      color: value ? context.gridColors.mint : context.gridColors.text2,
                     ),
                   ),
                 ],
@@ -1720,7 +1721,7 @@ class _MiniSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final track = value ? GridTokens.mint : GridTokens.surface3;
+    final track = value ? context.gridColors.mint : context.gridColors.surface3;
     return GestureDetector(
       onTap: onChanged == null ? null : () => onChanged!(!value),
       child: AnimatedContainer(
@@ -1772,9 +1773,9 @@ class _FloatingCloseButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             shape: BoxShape.circle,
-            border: Border.all(color: GridTokens.hairlineStrong, width: 1),
+            border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.35),
@@ -1784,10 +1785,10 @@ class _FloatingCloseButton extends StatelessWidget {
             ],
           ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: Icon(
             Icons.close_rounded,
             size: 20,
-            color: GridTokens.text,
+            color: context.gridColors.text,
           ),
         ),
       ),
@@ -1817,9 +1818,9 @@ class _ActionTile extends StatelessWidget {
         child: Ink(
           height: 64,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1827,7 +1828,7 @@ class _ActionTile extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: disabled ? GridTokens.text4 : GridTokens.text,
+                color: disabled ? context.gridColors.text4 : context.gridColors.text,
               ),
               const SizedBox(height: 4),
               Text(
@@ -1836,7 +1837,7 @@ class _ActionTile extends StatelessWidget {
                   'Geist',
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: disabled ? GridTokens.text4 : GridTokens.text2,
+                  color: disabled ? context.gridColors.text4 : context.gridColors.text2,
                 ),
               ),
             ],

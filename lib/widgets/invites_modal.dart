@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/widgets/friend_request_modal.dart';
 import 'package:grid_frontend/widgets/group_invitation_modal.dart';
@@ -66,35 +67,35 @@ class _InvitesSubscreenState extends State<InvitesSubscreen> {
                         width: 72,
                         height: 72,
                         decoration: BoxDecoration(
-                          color: GridTokens.mintFaint,
+                          color: context.gridColors.mintFaint,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.mail_outline_rounded,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           size: 32,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         'Inbox is quiet.',
                         style: TextStyle(
                           fontFamily: GridTokens.fontUi,
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.015,
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         'New friend requests and group invites land here first.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: GridTokens.fontUi,
                           fontSize: 13,
                           height: 1.45,
-                          color: GridTokens.text2,
+                          color: context.gridColors.text2,
                         ),
                       ),
                     ],
@@ -402,8 +403,8 @@ class _InvitesModalState extends State<InvitesModal> {
         return Material(
       color: Colors.transparent,
       child: Container(
-        decoration: const BoxDecoration(
-          color: GridTokens.bg,
+        decoration: BoxDecoration(
+          color: context.gridColors.bg,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(GridTokens.r2Xl),
             topRight: Radius.circular(GridTokens.r2Xl),
@@ -417,7 +418,7 @@ class _InvitesModalState extends State<InvitesModal> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: GridTokens.hairlineStrong,
+                color: context.gridColors.hairlineStrong,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -435,14 +436,14 @@ class _InvitesModalState extends State<InvitesModal> {
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                       letterSpacing: -0.01,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
                   ),
                   if (invites.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     GridMono(
                       '${invites.length} pending',
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                       size: 11,
                       letterSpacing: 0.08,
                     ),
@@ -464,12 +465,12 @@ class _InvitesModalState extends State<InvitesModal> {
                               width: 88,
                               height: 88,
                               decoration: BoxDecoration(
-                                color: GridTokens.mintFaint,
+                                color: context.gridColors.mintFaint,
                                 borderRadius: BorderRadius.circular(24),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.mail_outline_rounded,
-                                color: GridTokens.mint,
+                                color: context.gridColors.mint,
                                 size: 40,
                               ),
                             ),
@@ -480,7 +481,7 @@ class _InvitesModalState extends State<InvitesModal> {
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.02,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -489,7 +490,7 @@ class _InvitesModalState extends State<InvitesModal> {
                               style: TextStyle(
                                 fontSize: 14,
                                 height: 1.5,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -712,12 +713,12 @@ class _PersonInviteCard extends StatelessWidget {
                       displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: GridTokens.fontUi,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -726,7 +727,7 @@ class _PersonInviteCard extends StatelessWidget {
                       uppercase: false,
                       size: 11,
                       letterSpacing: 0.04,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                   ],
                 ),
@@ -740,7 +741,7 @@ class _PersonInviteCard extends StatelessWidget {
               fontFamily: GridTokens.fontUi,
               fontSize: 13,
               height: 1.4,
-              color: GridTokens.text2,
+              color: context.gridColors.text2,
             ),
           ),
           const SizedBox(height: 14),
@@ -823,12 +824,12 @@ class _GroupInviteCard extends StatelessWidget {
                       groupName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: GridTokens.fontUi,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -836,10 +837,10 @@ class _GroupInviteCard extends StatelessWidget {
                       '$inviterDisplay invited you',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: GridTokens.fontUi,
                         fontSize: 13,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                       ),
                     ),
                   ],
@@ -850,10 +851,10 @@ class _GroupInviteCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.schedule_rounded,
                 size: 13,
-                color: GridTokens.amber,
+                color: context.gridColors.amber,
               ),
               const SizedBox(width: 6),
               GridMono(
@@ -861,7 +862,7 @@ class _GroupInviteCard extends StatelessWidget {
                 uppercase: false,
                 size: 11,
                 letterSpacing: 0.04,
-                color: GridTokens.amber,
+                color: context.gridColors.amber,
               ),
             ],
           ),
@@ -921,16 +922,16 @@ class _InviteShell extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: featured
-            ? const LinearGradient(
+            ? LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [GridTokens.mintFaint, GridTokens.surface],
+                colors: [context.gridColors.mintFaint, context.gridColors.surface],
               )
             : null,
-        color: featured ? null : GridTokens.surface,
+        color: featured ? null : context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
         border: Border.all(
-          color: featured ? GridTokens.mintSoft : GridTokens.hairline,
+          color: featured ? context.gridColors.mintSoft : context.gridColors.hairline,
           width: 1,
         ),
       ),
@@ -986,12 +987,12 @@ class _ExpiredInviteCard extends StatelessWidget {
                       groupName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: GridTokens.fontUi,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -999,10 +1000,10 @@ class _ExpiredInviteCard extends StatelessWidget {
                       '$inviterDisplay invited you',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: GridTokens.fontUi,
                         fontSize: 13,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                       ),
                     ),
                   ],
@@ -1015,18 +1016,18 @@ class _ExpiredInviteCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.schedule_rounded,
                 size: 13,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
               ),
               const SizedBox(width: 6),
-              const GridMono(
+              GridMono(
                 'expired',
                 uppercase: false,
                 size: 11,
                 letterSpacing: 0.04,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
               ),
             ],
           ),
@@ -1054,15 +1055,15 @@ class _DismissXButton extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rSm),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: Icon(
             Icons.close_rounded,
             size: 16,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
           ),
         ),
       ),

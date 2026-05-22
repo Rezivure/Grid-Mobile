@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'styles/tokens.dart';
+import 'styles/grid_colors.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,6 +62,7 @@ import 'package:grid_frontend/repositories/invitations_repository.dart';
 
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
+import 'package:grid_frontend/widgets/in_app_notification_overlay.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
@@ -378,6 +380,12 @@ void main() async {
           theme: _buildTheme(GridTokens.lightScheme()),
           darkTheme: _buildTheme(GridTokens.darkScheme()),
           themeMode: ThemeMode.system,
+          builder: (context, child) => Stack(
+            children: [
+              if (child != null) child,
+              const InAppNotificationOverlay(),
+            ],
+          ),
           home: VersionWrapper(
             client: client,
             child: AppInitializer(client: client),
@@ -421,12 +429,17 @@ ThemeData _buildTheme(ColorScheme scheme) {
       ? ThemeData.dark(useMaterial3: true)
       : ThemeData.light(useMaterial3: true);
 
+  final gridColors = scheme.brightness == Brightness.dark
+      ? GridColors.dark()
+      : GridColors.light();
+
   final textTheme = GoogleFonts.getTextTheme('Geist', base.textTheme).apply(
     bodyColor: scheme.onSurface,
     displayColor: scheme.onSurface,
   );
 
   return base.copyWith(
+    extensions: <ThemeExtension<dynamic>>[gridColors],
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
@@ -499,8 +512,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: scheme.surfaceVariant,
-      hintStyle: GoogleFonts.getFont('Geist',color: GridTokens.text3, fontSize: 15),
-      labelStyle: GoogleFonts.getFont('Geist',color: GridTokens.text2, fontSize: 13),
+      hintStyle: GoogleFonts.getFont('Geist',color: gridColors.text3, fontSize: 15),
+      labelStyle: GoogleFonts.getFont('Geist',color: gridColors.text2, fontSize: 13),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
         borderSide: BorderSide(color: scheme.outlineVariant),

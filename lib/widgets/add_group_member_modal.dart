@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../repositories/user_repository.dart';
 import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
 import 'grid/grid_avatar.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
@@ -109,7 +110,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Unable to share invite: ${e.toString()}'),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(GridTokens.rMd),
@@ -229,11 +230,11 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Invite sent to @${utils.localpart(username)}'),
-            backgroundColor: GridTokens.surface2,
+            backgroundColor: context.gridColors.surface2,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(GridTokens.rMd),
-              side: const BorderSide(color: GridTokens.hairlineStrong),
+              side: BorderSide(color: context.gridColors.hairlineStrong),
             ),
           ),
         );
@@ -308,14 +309,14 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Container(
-        decoration: const BoxDecoration(
-          color: GridTokens.surface,
+        decoration: BoxDecoration(
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(GridTokens.r2Xl),
             topRight: Radius.circular(GridTokens.r2Xl),
           ),
           border: Border(
-            top: BorderSide(color: GridTokens.hairlineStrong, width: 1),
+            top: BorderSide(color: context.gridColors.hairlineStrong, width: 1),
           ),
         ),
         child: Column(
@@ -327,7 +328,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: GridTokens.hairlineStrong,
+                color: context.gridColors.hairlineStrong,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -349,8 +350,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     else ...[
                       _buildPreview(),
                       const SizedBox(height: 20),
-                      const GridMono('Username',
-                          color: GridTokens.text3,
+                      GridMono('Username',
+                          color: context.gridColors.text3,
                           size: 10,
                           letterSpacing: 0.12),
                       const SizedBox(height: 10),
@@ -381,8 +382,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono('Add member',
-            color: GridTokens.text3, size: 10, letterSpacing: 0.14),
+        GridMono('Add member',
+            color: context.gridColors.text3, size: 10, letterSpacing: 0.14),
         const SizedBox(height: 6),
         Text(
           widget.groupName == null
@@ -395,7 +396,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
             fontSize: 26,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.025 * 26,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             height: 1.15,
           ),
         ),
@@ -406,7 +407,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
             'Geist',
             fontSize: 13,
             fontWeight: FontWeight.w400,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
             height: 1.4,
           ),
         ),
@@ -421,9 +422,9 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
       child: Row(
         children: [
@@ -445,7 +446,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     'Geist Mono',
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.1,
                   ),
                 ),
@@ -453,7 +454,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                   const SizedBox(height: 4),
                   GridMono(
                     'Pending invite',
-                    color: GridTokens.text3,
+                    color: context.gridColors.text3,
                     size: 10,
                     letterSpacing: 0.12,
                   ),
@@ -473,17 +474,17 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
         border: Border.all(
-          color: _contactError != null ? GridTokens.danger : GridTokens.mint,
+          color: _contactError != null ? context.gridColors.danger : context.gridColors.mint,
           width: 1.5,
         ),
         boxShadow: _contactError != null
             ? null
             : [
                 BoxShadow(
-                  color: GridTokens.mint.withOpacity(0.18),
+                  color: context.gridColors.mint.withOpacity(0.18),
                   blurRadius: 14,
                   spreadRadius: 1,
                 ),
@@ -497,7 +498,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               'Geist',
               fontSize: 18,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               height: 1.0,
             ),
           ),
@@ -508,13 +509,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               autocorrect: false,
               enableSuggestions: false,
               textCapitalization: TextCapitalization.none,
-              cursorColor: GridTokens.mint,
+              cursorColor: context.gridColors.mint,
               cursorWidth: 2,
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.text,
+                color: context.gridColors.text,
               ),
               decoration: InputDecoration(
                 isDense: true,
@@ -531,7 +532,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                   'Geist',
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
+                  color: context.gridColors.text3,
                 ),
               ),
               onSubmitted: (_) {
@@ -549,13 +550,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       'Geist',
       fontSize: 12,
       fontWeight: FontWeight.w400,
-      color: GridTokens.text3,
+      color: context.gridColors.text3,
     );
     final mono = GoogleFonts.getFont(
       'Geist Mono',
       fontSize: 12,
       fontWeight: FontWeight.w500,
-      color: GridTokens.text3,
+      color: context.gridColors.text3,
     );
     if (isCustomHomeserver()) {
       return Text(
@@ -575,14 +576,14 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: GridTokens.dangerSoft,
+        color: context.gridColors.dangerSoft,
         borderRadius: BorderRadius.circular(GridTokens.rSm),
-        border: Border.all(color: GridTokens.danger.withOpacity(0.4)),
+        border: Border.all(color: context.gridColors.danger.withOpacity(0.4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: GridTokens.danger, size: 18),
+          Icon(Icons.error_outline_rounded,
+              color: context.gridColors.danger, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -591,7 +592,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                 'Geist',
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
                 height: 1.3,
               ),
             ),
@@ -617,9 +618,9 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,13 +641,13 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: GridTokens.surface,
+                      color: context.gridColors.surface,
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
                       border: Border.all(
-                          color: GridTokens.hairlineStrong, width: 1),
+                          color: context.gridColors.hairlineStrong, width: 1),
                     ),
-                    child: const Icon(Icons.arrow_back_rounded,
-                        size: 18, color: GridTokens.text),
+                    child: Icon(Icons.arrow_back_rounded,
+                        size: 18, color: context.gridColors.text),
                   ),
                 ),
               ),
@@ -657,7 +658,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                   'Geist',
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                   letterSpacing: -0.01,
                 ),
               ),
@@ -667,16 +668,16 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           Container(
             height: 300,
             decoration: BoxDecoration(
-              color: GridTokens.bg,
+              color: context.gridColors.bg,
               borderRadius: BorderRadius.circular(GridTokens.rMd),
-              border: Border.all(color: GridTokens.hairlineStrong),
+              border: Border.all(color: context.gridColors.hairlineStrong),
             ),
             clipBehavior: Clip.antiAlias,
             child: QRView(
               key: qrKey,
               onQRViewCreated: _onQRViewCreated,
               overlay: QrScannerOverlayShape(
-                borderColor: GridTokens.mint,
+                borderColor: context.gridColors.mint,
                 borderRadius: 12,
                 borderLength: 30,
                 borderWidth: 4,
@@ -688,8 +689,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline_rounded,
-                  size: 14, color: GridTokens.text3),
+              Icon(Icons.info_outline_rounded,
+                  size: 14, color: context.gridColors.text3),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -698,7 +699,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     'Geist',
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
-                    color: GridTokens.text3,
+                    color: context.gridColors.text3,
                     height: 1.3,
                   ),
                 ),
@@ -720,10 +721,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
         24,
         MediaQuery.of(context).padding.bottom + 16,
       ),
-      decoration: const BoxDecoration(
-        color: GridTokens.surface,
+      decoration: BoxDecoration(
+        color: context.gridColors.surface,
         border: Border(
-          top: BorderSide(color: GridTokens.hairline, width: 1),
+          top: BorderSide(color: context.gridColors.hairline, width: 1),
         ),
       ),
       child: Row(
@@ -756,7 +757,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       height: 52,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: GridTokens.mint.withOpacity(0.5),
+        color: context.gridColors.mint.withOpacity(0.5),
         borderRadius: BorderRadius.circular(14),
       ),
       alignment: Alignment.center,
@@ -795,14 +796,14 @@ class _SecondaryAction extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: GridTokens.mint),
+              Icon(icon, size: 16, color: context.gridColors.mint),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -813,7 +814,7 @@ class _SecondaryAction extends StatelessWidget {
                     'Geist',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     letterSpacing: -0.005,
                   ),
                 ),

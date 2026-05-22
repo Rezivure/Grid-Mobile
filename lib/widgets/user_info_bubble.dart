@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
@@ -73,7 +74,7 @@ class UserInfoBubble extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Coordinates copied to clipboard'),
-        backgroundColor: GridTokens.mint,
+        backgroundColor: context.gridColors.mint,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -92,9 +93,9 @@ class UserInfoBubble extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 340),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.r2Xl),
-              border: Border.all(color: GridTokens.hairlineStrong),
+              border: Border.all(color: context.gridColors.hairlineStrong),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.5),
@@ -111,13 +112,13 @@ class UserInfoBubble extends StatelessWidget {
                   Container(
                     width: 64,
                     height: 64,
-                    decoration: const BoxDecoration(
-                      color: GridTokens.dangerSoft,
+                    decoration: BoxDecoration(
+                      color: context.gridColors.dangerSoft,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.warning_amber_rounded,
-                      color: GridTokens.danger,
+                      color: context.gridColors.danger,
                       size: 32,
                     ),
                   ),
@@ -129,7 +130,7 @@ class UserInfoBubble extends StatelessWidget {
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
                       letterSpacing: -0.02,
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -138,7 +139,7 @@ class UserInfoBubble extends StatelessWidget {
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 14,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.5,
                     ),
                     textAlign: TextAlign.center,
@@ -150,9 +151,9 @@ class UserInfoBubble extends StatelessWidget {
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pop(false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: GridTokens.text,
-                            side: const BorderSide(
-                                color: GridTokens.hairlineStrong),
+                            foregroundColor: context.gridColors.text,
+                            side: BorderSide(
+                                color: context.gridColors.hairlineStrong),
                             padding:
                                 const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -167,7 +168,7 @@ class UserInfoBubble extends StatelessWidget {
                         child: ElevatedButton(
                           onPressed: () => Navigator.of(context).pop(true),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: GridTokens.mint,
+                            backgroundColor: context.gridColors.mint,
                             foregroundColor: const Color(0xFF04201A),
                             padding:
                                 const EdgeInsets.symmetric(vertical: 16),
@@ -209,9 +210,9 @@ class UserInfoBubble extends StatelessWidget {
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 260),
                 decoration: BoxDecoration(
-                  color: GridTokens.surface,
+                  color: context.gridColors.surface,
                   borderRadius: BorderRadius.circular(GridTokens.rXl),
-                  border: Border.all(color: GridTokens.hairlineStrong),
+                  border: Border.all(color: context.gridColors.hairlineStrong),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.5),
@@ -231,21 +232,21 @@ class UserInfoBubble extends StatelessWidget {
                           'Geist',
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: GridTokens.text,
+                          color: context.gridColors.text,
                         ),
                       ),
                       const SizedBox(height: 20),
                       _MapChoiceTile(
                         label: 'Apple Maps',
                         icon: Icons.map_outlined,
-                        iconColor: GridTokens.driving,
+                        iconColor: context.gridColors.driving,
                         onTap: () => Navigator.of(context).pop('apple'),
                       ),
                       const SizedBox(height: 10),
                       _MapChoiceTile(
                         label: 'Google Maps',
                         icon: Icons.map_outlined,
-                        iconColor: GridTokens.walking,
+                        iconColor: context.gridColors.walking,
                         onTap: () => Navigator.of(context).pop('google'),
                       ),
                       const SizedBox(height: 12),
@@ -259,7 +260,7 @@ class UserInfoBubble extends StatelessWidget {
                           'Cancel',
                           style: GoogleFonts.getFont(
                             'Geist',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             fontSize: 14,
                           ),
                         ),
@@ -336,7 +337,7 @@ class UserInfoBubble extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Could not open maps application'),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -417,10 +418,10 @@ class UserInfoBubble extends StatelessWidget {
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: GridTokens.surface.withOpacity(0.95),
+                    color: context.gridColors.surface.withOpacity(0.95),
                     borderRadius: BorderRadius.circular(GridTokens.rLg),
                     border: Border.all(
-                      color: GridTokens.hairlineStrong,
+                      color: context.gridColors.hairlineStrong,
                       width: 1,
                     ),
                     boxShadow: [
@@ -485,7 +486,10 @@ class UserInfoBubble extends StatelessWidget {
             // ── Tail triangle pointing down at the pin ───────────
             CustomPaint(
               size: const Size(18, 9),
-              painter: _BubbleTailPainter(),
+              painter: _BubbleTailPainter(
+                fillColor: context.gridColors.surface.withOpacity(0.95),
+                strokeColor: context.gridColors.hairlineStrong,
+              ),
             ),
           ],
         ),
@@ -542,12 +546,12 @@ class _IdentityRow extends StatelessWidget {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: GridTokens.mint,
+                    color: context.gridColors.mint,
                     shape: BoxShape.circle,
-                    border: Border.all(color: GridTokens.surface, width: 2),
+                    border: Border.all(color: context.gridColors.surface, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: GridTokens.mint.withOpacity(0.6),
+                        color: context.gridColors.mint.withOpacity(0.6),
                         blurRadius: 6,
                       ),
                     ],
@@ -576,7 +580,7 @@ class _IdentityRow extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                   ),
@@ -603,7 +607,7 @@ class _IdentityRow extends StatelessWidget {
                     coordinatesLabel,
                     size: 10.5,
                     uppercase: false,
-                    color: GridTokens.text3,
+                    color: context.gridColors.text3,
                     letterSpacing: 0.04,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -637,15 +641,15 @@ class _CloseButton extends StatelessWidget {
           width: 30,
           height: 30,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             shape: BoxShape.circle,
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: Icon(
             Icons.close_rounded,
             size: 16,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
           ),
         ),
       ),
@@ -711,9 +715,9 @@ class _StatusCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = motion == null;
-    final color = muted ? GridTokens.text3 : GridTokens.mint;
-    final bg = muted ? GridTokens.surface2 : GridTokens.mintFaint;
-    final border = muted ? GridTokens.hairline : GridTokens.mintSoft;
+    final color = muted ? context.gridColors.text3 : context.gridColors.mint;
+    final bg = muted ? context.gridColors.surface2 : context.gridColors.mintFaint;
+    final border = muted ? context.gridColors.hairline : context.gridColors.mintSoft;
 
     final IconData icon;
     if (motion == 'DRIVING') {
@@ -787,23 +791,23 @@ class _BatteryGlyph extends StatelessWidget {
     final String label;
 
     if (level == null) {
-      color = GridTokens.text3;
+      color = context.gridColors.text3;
       icon = Icons.battery_unknown_rounded;
       label = '?';
     } else if (charging) {
-      color = GridTokens.mint;
+      color = context.gridColors.mint;
       icon = Icons.bolt_rounded;
       label = '${(level! * 100).round()}%';
     } else if (level! < 0.20) {
-      color = GridTokens.danger;
+      color = context.gridColors.danger;
       icon = Icons.battery_alert_rounded;
       label = '${(level! * 100).round()}%';
     } else if (level! < 0.40) {
-      color = GridTokens.amber;
+      color = context.gridColors.amber;
       icon = Icons.battery_3_bar_rounded;
       label = '${(level! * 100).round()}%';
     } else {
-      color = GridTokens.text2;
+      color = context.gridColors.text2;
       icon = Icons.battery_5_bar_rounded;
       label = '${(level! * 100).round()}%';
     }
@@ -845,9 +849,9 @@ class _MonoCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline, width: 1),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -858,7 +862,7 @@ class _MonoCell extends StatelessWidget {
               primary,
               size: 10,
               uppercase: false,
-              color: GridTokens.text,
+              color: context.gridColors.text,
               letterSpacing: 0.04,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -870,7 +874,7 @@ class _MonoCell extends StatelessWidget {
               secondary,
               size: 10,
               uppercase: false,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               letterSpacing: 0.04,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -896,7 +900,7 @@ class _MiniBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final fg = enabled ? GridTokens.text : GridTokens.text3;
+    final fg = enabled ? context.gridColors.text : context.gridColors.text3;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -905,9 +909,9 @@ class _MiniBtn extends StatelessWidget {
         child: Ink(
           height: 38,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -953,9 +957,9 @@ class _MapChoiceTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: GridTokens.surface2,
+          color: context.gridColors.surface2,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: GridTokens.hairline),
+          border: Border.all(color: context.gridColors.hairline),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -968,7 +972,7 @@ class _MapChoiceTile extends StatelessWidget {
                 'Geist',
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.text,
+                color: context.gridColors.text,
               ),
             ),
           ],
@@ -979,13 +983,17 @@ class _MapChoiceTile extends StatelessWidget {
 }
 
 class _BubbleTailPainter extends CustomPainter {
+  _BubbleTailPainter({required this.fillColor, required this.strokeColor});
+  final Color fillColor;
+  final Color strokeColor;
+
   @override
   void paint(Canvas canvas, Size size) {
     final fill = Paint()
-      ..color = GridTokens.surface.withOpacity(0.95)
+      ..color = fillColor
       ..style = PaintingStyle.fill;
     final stroke = Paint()
-      ..color = GridTokens.hairlineStrong
+      ..color = strokeColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -1006,5 +1014,6 @@ class _BubbleTailPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _BubbleTailPainter oldDelegate) =>
+      oldDelegate.fillColor != fillColor || oldDelegate.strokeColor != strokeColor;
 }

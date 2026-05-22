@@ -13,6 +13,7 @@ import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
@@ -87,12 +88,12 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
             child: Container(
               decoration: BoxDecoration(
-                color: GridTokens.surface.withOpacity(0.96),
+                color: context.gridColors.surface.withOpacity(0.96),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(GridTokens.r2Xl),
                 ),
-                border: const Border(
-                  top: BorderSide(color: GridTokens.hairlineStrong, width: 1),
+                border: Border(
+                  top: BorderSide(color: context.gridColors.hairlineStrong, width: 1),
                 ),
               ),
               child: Column(
@@ -104,7 +105,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: GridTokens.text4,
+                      color: context.gridColors.text4,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -168,13 +169,13 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: GridTokens.surface,
+                    color: context.gridColors.surface,
                     shape: BoxShape.circle,
-                    border: Border.all(color: GridTokens.surface, width: 3),
+                    border: Border.all(color: context.gridColors.surface, width: 3),
                   ),
                   child: Container(
-                    decoration: const BoxDecoration(
-                      color: GridTokens.mint,
+                    decoration: BoxDecoration(
+                      color: context.gridColors.mint,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -197,7 +198,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             fontSize: 24,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.02,
-            color: GridTokens.text,
+            color: context.gridColors.text,
           ),
         ),
         const SizedBox(height: 4),
@@ -206,7 +207,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           uppercase: false,
           size: 12,
           letterSpacing: 0.04,
-          color: GridTokens.text3,
+          color: context.gridColors.text3,
           textAlign: TextAlign.center,
         ),
       ],
@@ -219,9 +220,9 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.mintSoft, width: 1),
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
       ),
       child: Text(
         'Wants to share location with you.',
@@ -231,7 +232,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           fontSize: 14,
           fontWeight: FontWeight.w500,
           letterSpacing: -0.01,
-          color: GridTokens.text,
+          color: context.gridColors.text,
         ),
       ),
     );
@@ -250,9 +251,9 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             children: [
@@ -261,10 +262,10 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: on ? GridTokens.mint : GridTokens.surface3,
+                  color: on ? context.gridColors.mint : context.gridColors.surface3,
                   borderRadius: BorderRadius.circular(GridTokens.rSm),
                   border: Border.all(
-                    color: on ? GridTokens.mint : GridTokens.hairlineStrong,
+                    color: on ? context.gridColors.mint : context.gridColors.hairlineStrong,
                     width: 1,
                   ),
                 ),
@@ -288,7 +289,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -300,7 +301,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                         'Geist',
                         fontSize: 12.5,
                         fontWeight: FontWeight.w400,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                       ),
                     ),
                   ],
@@ -318,18 +319,18 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Column(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 28,
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              valueColor: AlwaysStoppedAnimation<Color>(GridTokens.mint),
+              valueColor: AlwaysStoppedAnimation<Color>(context.gridColors.mint),
             ),
           ),
           const SizedBox(height: 14),
           GridMono(
             'PROCESSING REQUEST',
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             size: 11,
             letterSpacing: 0.12,
           ),
@@ -402,7 +403,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text("Friend request accepted."),
-            backgroundColor: GridTokens.mint,
+            backgroundColor: context.gridColors.mint,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -434,7 +435,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                 Expanded(child: Text(errorMessage)),
               ],
             ),
-            backgroundColor: GridTokens.amber,
+            backgroundColor: context.gridColors.amber,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -475,7 +476,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text("Friend request declined."),
-            backgroundColor: GridTokens.mint,
+            backgroundColor: context.gridColors.mint,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -489,7 +490,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Error declining the request: $e"),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),

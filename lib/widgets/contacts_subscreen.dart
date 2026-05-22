@@ -12,6 +12,7 @@ import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
@@ -270,10 +271,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   Widget build(BuildContext context) {
     // Single uniform surface for the whole subscreen — the Scaffold,
     // the outer container, and every list background all resolve to
-    // GridTokens.surface so the sheet doesn't bleed to a darker tone
+    // context.gridColors.surface so the sheet doesn't bleed to a darker tone
     // as the user scrolls past the bottom of the contact rows.
     return Material(
-      color: GridTokens.surface,
+      color: context.gridColors.surface,
       child: BlocListener<AvatarBloc, AvatarState>(
         listenWhen: (previous, current) =>
             previous.updateCounter != current.updateCounter,
@@ -287,7 +288,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Error: ${state.message}'),
-                  backgroundColor: GridTokens.danger,
+                  backgroundColor: context.gridColors.danger,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -362,7 +363,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 'No contacts',
                 style: GoogleFonts.getFont(
                   'Geist',
-                  color: GridTokens.text2,
+                  color: context.gridColors.text2,
                   fontSize: 14,
                 ),
               ),
@@ -422,7 +423,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     }
 
     return Container(
-      color: GridTokens.surface,
+      color: context.gridColors.surface,
       child: ListView.builder(
         controller: widget.scrollController,
         itemCount: items.length,
@@ -439,7 +440,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                     item.trailingCount != null && item.trailingCount! > 0
                         ? GridMono(
                             '${item.trailingCount}',
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             size: 10.5,
                             letterSpacing: 0.12,
                           )
@@ -497,8 +498,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         child: Container(
                           width: 10,
                           height: 10,
-                          decoration: const BoxDecoration(
-                            color: GridTokens.mint,
+                          decoration: BoxDecoration(
+                            color: context.gridColors.mint,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -520,8 +521,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                             height: 8,
                             decoration: BoxDecoration(
                               color: index <= _dotsAnimation.value
-                                  ? GridTokens.mint
-                                  : GridTokens.mint.withOpacity(0.3),
+                                  ? context.gridColors.mint
+                                  : context.gridColors.mint.withOpacity(0.3),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -537,7 +538,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   Widget _buildLoadingState() {
     return Container(
-      color: GridTokens.surface,
+      color: context.gridColors.surface,
       child: ListView.builder(
         controller: widget.scrollController,
         padding: const EdgeInsets.only(top: 8),
@@ -552,9 +553,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   Widget _buildSkeletonContactRow() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: GridTokens.hairline, width: 1),
+          bottom: BorderSide(color: context.gridColors.hairline, width: 1),
         ),
       ),
       child: Row(
@@ -562,8 +563,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: GridTokens.surface2,
+            decoration: BoxDecoration(
+              color: context.gridColors.surface2,
               shape: BoxShape.circle,
             ),
           ),
@@ -576,7 +577,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                   height: 12,
                   width: 140,
                   decoration: BoxDecoration(
-                    color: GridTokens.surface2,
+                    color: context.gridColors.surface2,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -585,7 +586,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                   height: 10,
                   width: 100,
                   decoration: BoxDecoration(
-                    color: GridTokens.surface2.withOpacity(0.7),
+                    color: context.gridColors.surface2.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -597,7 +598,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
             width: 32,
             height: 10,
             decoration: BoxDecoration(
-              color: GridTokens.surface2.withOpacity(0.7),
+              color: context.gridColors.surface2.withOpacity(0.7),
               borderRadius: BorderRadius.circular(6),
             ),
           ),
@@ -608,7 +609,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   Widget _buildErrorState(String message) {
     return Container(
-      color: GridTokens.surface,
+      color: context.gridColors.surface,
       padding: const EdgeInsets.all(24),
       child: Center(
         child: Column(
@@ -618,12 +619,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: GridTokens.dangerSoft,
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.circular(GridTokens.rLg),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline_rounded,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
                 size: 28,
               ),
             ),
@@ -634,7 +635,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 'Geist',
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: GridTokens.text,
+                color: context.gridColors.text,
                 letterSpacing: -0.01,
               ),
             ),
@@ -645,7 +646,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,
-                color: GridTokens.text2,
+                color: context.gridColors.text2,
                 height: 1.4,
               ),
             ),
@@ -663,7 +664,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     final qrData = myUserId ?? handle;
 
     return Container(
-      color: GridTokens.surface,
+      color: context.gridColors.surface,
       child: ListView(
         controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
@@ -714,7 +715,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 12.5,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
                 height: 1.45,
                 letterSpacing: -0.005,
               ),
@@ -749,9 +750,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Unable to share invite'),
-          backgroundColor: GridTokens.danger,
+          backgroundColor: context.gridColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -793,9 +794,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
               maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             decoration: BoxDecoration(
-              color: GridTokens.surface,
+              color: context.gridColors.surface,
               borderRadius: BorderRadius.circular(GridTokens.rXl),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.4),
@@ -810,8 +811,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 // Header
                 Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: GridTokens.dangerSoft,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
                     borderRadius: BorderRadius.only(
                       topLeft: Radius.circular(GridTokens.rXl),
                       topRight: Radius.circular(GridTokens.rXl),
@@ -823,14 +824,14 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: GridTokens.danger.withOpacity(0.18),
+                          color: context.gridColors.danger.withOpacity(0.18),
                           borderRadius:
                               BorderRadius.circular(GridTokens.rMd),
                         ),
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.warning_amber_rounded,
-                          color: GridTokens.danger,
+                          color: context.gridColors.danger,
                           size: 20,
                         ),
                       ),
@@ -846,7 +847,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: -0.015,
-                                color: GridTokens.text,
+                                color: context.gridColors.text,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -856,7 +857,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ],
@@ -875,7 +876,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                       'Geist',
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                   ),
@@ -910,7 +911,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                               SnackBar(
                                 content: Text(
                                     'Removing $contactName from contacts...'),
-                                backgroundColor: GridTokens.surface2,
+                                backgroundColor: context.gridColors.surface2,
                                 behavior: SnackBarBehavior.floating,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
@@ -1033,13 +1034,13 @@ class _MenuRow extends StatelessWidget {
                     'Geist',
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: labelColor ?? GridTokens.text,
+                    color: labelColor ?? context.gridColors.text,
                     letterSpacing: -0.01,
                   ),
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded,
-                  color: GridTokens.text3, size: 18),
+              Icon(Icons.chevron_right_rounded,
+                  color: context.gridColors.text3, size: 18),
             ],
           ),
         ),
@@ -1068,13 +1069,13 @@ class _HandleHeroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [GridTokens.mintFaint, GridTokens.surface],
+          colors: [context.gridColors.mintFaint, context.gridColors.surface],
         ),
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: GridTokens.mintSoft),
+        border: Border.all(color: context.gridColors.mintSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1117,8 +1118,8 @@ class _HandleHeroCard extends StatelessWidget {
                     Container(
                       width: 14,
                       height: 14,
-                      decoration: const BoxDecoration(
-                        color: GridTokens.mint,
+                      decoration: BoxDecoration(
+                        color: context.gridColors.mint,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1139,7 +1140,7 @@ class _HandleHeroCard extends StatelessWidget {
                       'YOUR HANDLE',
                       size: 10,
                       letterSpacing: 0.12,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -1151,7 +1152,7 @@ class _HandleHeroCard extends StatelessWidget {
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1161,7 +1162,7 @@ class _HandleHeroCard extends StatelessWidget {
                       style: GoogleFonts.getFont(
                         'Geist',
                         fontSize: 12,
-                        color: GridTokens.text2,
+                        color: context.gridColors.text2,
                         height: 1.35,
                         letterSpacing: -0.005,
                       ),
@@ -1196,17 +1197,17 @@ class _CopyChip extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairlineStrong),
+            border: Border.all(color: context.gridColors.hairlineStrong),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.copy_rounded,
                 size: 14,
-                color: GridTokens.mint,
+                color: context.gridColors.mint,
               ),
               const SizedBox(width: 8),
               Text(
@@ -1218,7 +1219,7 @@ class _CopyChip extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.005,
-                  color: GridTokens.text,
+                  color: context.gridColors.text,
                 ),
               ),
             ],

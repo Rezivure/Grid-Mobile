@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 
-import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
 import 'package:grid_frontend/widgets/turnstile_widget.dart';
@@ -255,19 +256,19 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         height: 52,
         decoration: BoxDecoration(
           color: isPrimary
-              ? GridTokens.mint.withOpacity(0.55)
-              : GridTokens.surface2,
+              ? context.gridColors.mint.withOpacity(0.55)
+              : context.gridColors.surface2,
           borderRadius: BorderRadius.circular(14),
           border: isPrimary
               ? null
-              : Border.all(color: GridTokens.hairlineStrong),
+              : Border.all(color: context.gridColors.hairlineStrong),
         ),
         alignment: Alignment.center,
         child: SizedBox(
           width: 22,
           height: 22,
           child: CircularProgressIndicator(
-            color: isPrimary ? Colors.black : GridTokens.mint,
+            color: isPrimary ? Colors.black : context.gridColors.mint,
             strokeWidth: 2,
           ),
         ),
@@ -295,7 +296,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         // Step counter — mono uppercase
         GridMono(
           'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} / ${_isLoginFlow ? 3 : 1}',
-          color: GridTokens.mint,
+          color: context.gridColors.mint,
           size: 10.5,
           letterSpacing: 0.12,
         ),
@@ -307,7 +308,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
             fontSize: 28,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.025,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             height: 1.1,
           ),
           textAlign: TextAlign.center,
@@ -319,7 +320,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
             'Geist',
             fontSize: 15,
             fontWeight: FontWeight.w400,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
             height: 1.45,
           ),
           textAlign: TextAlign.center,
@@ -588,11 +589,10 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
               setState(() => _turnstileToken = token);
             },
             onError: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Verification failed. Please try again.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              InAppNotifier.instance.show(
+                title: 'Verification failed',
+                message: 'Please try again.',
+                variant: InAppNotificationVariant.error,
               );
             },
           ),
@@ -843,16 +843,10 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
                   username: username,
                 );
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Verification code resent'),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
+              InAppNotifier.instance.show(
+                title: 'Verification code resent',
+                variant: InAppNotificationVariant.success,
+                duration: const Duration(seconds: 2),
               );
             } catch (e) {
               _showErrorDialog('Failed to resend SMS code');
@@ -987,22 +981,18 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         if (jwt != null) {
           await _passkeyService.registerPasskey(jwt);
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Passkey set up successfully!'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-              ),
+            InAppNotifier.instance.show(
+              title: 'Passkey set up',
+              variant: InAppNotificationVariant.success,
             );
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Could not set up passkey. You can add one later in Settings.'),
-              behavior: SnackBarBehavior.floating,
-            ),
+          InAppNotifier.instance.show(
+            title: 'Could not set up passkey',
+            message: 'You can add one later in Settings.',
+            variant: InAppNotificationVariant.warning,
           );
         }
       }

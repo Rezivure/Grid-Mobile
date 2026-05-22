@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
@@ -214,7 +215,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
       children: [
         _BackButton(onPressed: () => Navigator.pop(context)),
         const Spacer(),
-        const GridMono('2 / 4', color: GridTokens.text3, size: 11, letterSpacing: 0.12),
+        GridMono('2 / 4', color: context.gridColors.text3, size: 11, letterSpacing: 0.12),
       ],
     );
   }
@@ -232,7 +233,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
             fontSize: 30,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.025 * 30,
-            color: GridTokens.text,
+            color: context.gridColors.text,
             height: 1.1,
           ),
         ),
@@ -244,7 +245,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
             fontSize: 14,
             fontWeight: FontWeight.w400,
             letterSpacing: -0.01,
-            color: GridTokens.text2,
+            color: context.gridColors.text2,
             height: 1.4,
           ),
         ),
@@ -259,12 +260,12 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: GridTokens.surface2,
+        color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.mint, width: 1.5),
+        border: Border.all(color: context.gridColors.mint, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: GridTokens.mint.withOpacity(0.18),
+            color: context.gridColors.mint.withOpacity(0.18),
             blurRadius: 14,
             spreadRadius: 1,
           ),
@@ -278,7 +279,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
               'Geist',
               fontSize: 18,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
               height: 1.0,
             ),
           ),
@@ -290,13 +291,13 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
               autocorrect: false,
               enableSuggestions: false,
               textCapitalization: TextCapitalization.none,
-              cursorColor: GridTokens.mint,
+              cursorColor: context.gridColors.mint,
               cursorWidth: 2,
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.text,
+                color: context.gridColors.text,
                 height: 1.0,
               ),
               decoration: InputDecoration(
@@ -308,7 +309,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                   'Geist',
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
-                  color: GridTokens.text3,
+                  color: context.gridColors.text3,
                 ),
               ),
               onSubmitted: (_) {
@@ -329,15 +330,15 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     switch (_handleState) {
       case _HandleState.available:
         return _Badge(
-          color: GridTokens.mint,
-          bg: GridTokens.mintSoft,
+          color: context.gridColors.mint,
+          bg: context.gridColors.mintSoft,
           icon: Icons.check_rounded,
           label: 'available',
         );
       case _HandleState.taken:
         return _Badge(
-          color: GridTokens.danger,
-          bg: GridTokens.dangerSoft,
+          color: context.gridColors.danger,
+          bg: context.gridColors.dangerSoft,
           icon: Icons.close_rounded,
           label: 'taken',
         );
@@ -355,14 +356,14 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
       'Geist',
       fontSize: 12,
       fontWeight: FontWeight.w400,
-      color: GridTokens.text3,
+      color: context.gridColors.text3,
       letterSpacing: 0,
     );
     final mono = GoogleFonts.getFont(
       'Geist Mono',
       fontSize: 12,
       fontWeight: FontWeight.w500,
-      color: GridTokens.text3,
+      color: context.gridColors.text3,
     );
     return RichText(
       text: TextSpan(
@@ -389,8 +390,8 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const GridMono('Or try one of these',
-            color: GridTokens.text3, size: 10, letterSpacing: 0.12),
+        GridMono('Or try one of these',
+            color: context.gridColors.text3, size: 10, letterSpacing: 0.12),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -414,17 +415,17 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
           padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(
+              Icon(
                 Icons.lock_outline_rounded,
                 size: 18,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -433,13 +434,13 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                   obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
-                  cursorColor: GridTokens.mint,
+                  cursorColor: context.gridColors.mint,
                   cursorWidth: 2,
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 18,
                     fontWeight: FontWeight.w500,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.0,
                   ),
                   decoration: InputDecoration(
@@ -451,7 +452,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                       'Geist',
                       fontSize: 18,
                       fontWeight: FontWeight.w500,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                   ),
                   onChanged: (_) => setState(() {}),
@@ -467,7 +468,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
             'Geist',
             fontSize: 12,
             fontWeight: FontWeight.w400,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
           ),
         ),
       ],
@@ -480,13 +481,13 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: GridTokens.dangerSoft,
+        color: context.gridColors.dangerSoft,
         borderRadius: BorderRadius.circular(GridTokens.rSm),
-        border: Border.all(color: GridTokens.danger.withOpacity(0.4)),
+        border: Border.all(color: context.gridColors.danger.withOpacity(0.4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: GridTokens.danger, size: 18),
+          Icon(Icons.error_outline_rounded, color: context.gridColors.danger, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -495,7 +496,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                 'Geist',
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.danger,
+                color: context.gridColors.danger,
               ),
             ),
           ),
@@ -516,9 +517,9 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     final label = _handle.isEmpty ? 'Sign up' : 'Sign up as @$_handle';
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-      decoration: const BoxDecoration(
-        color: GridTokens.surface,
-        border: Border(top: BorderSide(color: GridTokens.hairline, width: 1)),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface,
+        border: Border(top: BorderSide(color: context.gridColors.hairline, width: 1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -549,7 +550,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                     'Geist',
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                   children: [
                     TextSpan(
@@ -558,7 +559,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
                         'Geist',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: GridTokens.mint,
+                        color: context.gridColors.mint,
                       ),
                     ),
                   ],
@@ -576,7 +577,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
       height: 52,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: GridTokens.mint.withOpacity(0.5),
+        color: context.gridColors.mint.withOpacity(0.5),
         borderRadius: BorderRadius.circular(14),
       ),
       alignment: Alignment.center,
@@ -733,12 +734,12 @@ class _BackButton extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
-          child: const Icon(Icons.arrow_back_rounded,
-              size: 18, color: GridTokens.text),
+          child: Icon(Icons.arrow_back_rounded,
+              size: 18, color: context.gridColors.text),
         ),
       ),
     );
@@ -803,9 +804,9 @@ class _SuggestionPill extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Text(
             '@$text',
@@ -813,7 +814,7 @@ class _SuggestionPill extends StatelessWidget {
               'Geist Mono',
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
               height: 1.0,
             ),
           ),

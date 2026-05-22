@@ -13,6 +13,7 @@ import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
@@ -112,11 +113,11 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       minChildSize: 0.5,
       maxChildSize: 0.9,
       builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: GridTokens.surface,
+        decoration: BoxDecoration(
+          color: context.gridColors.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(GridTokens.r2Xl)),
           border: Border(
-            top: BorderSide(color: GridTokens.hairlineStrong, width: 1),
+            top: BorderSide(color: context.gridColors.hairlineStrong, width: 1),
           ),
         ),
         child: Column(
@@ -128,7 +129,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: GridTokens.text4,
+                color: context.gridColors.text4,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -177,7 +178,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                         'Geist',
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                         letterSpacing: -0.01,
                         height: 1.15,
                       ),
@@ -192,7 +193,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                         size: 12,
                         uppercase: false,
                         letterSpacing: 0.02,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                       ),
                     ),
 
@@ -247,12 +248,12 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: GridTokens.mintFaint,
+        color: context.gridColors.mintFaint,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
       ),
       child: Row(
         children: [
-          const Icon(Icons.group_rounded, size: 18, color: GridTokens.mint),
+          Icon(Icons.group_rounded, size: 18, color: context.gridColors.mint),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -261,7 +262,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
                 'Geist',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: GridTokens.text,
+                color: context.gridColors.text,
                 height: 1.35,
               ),
             ),
@@ -276,12 +277,12 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 28,
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              color: GridTokens.mint,
+              color: context.gridColors.mint,
             ),
           ),
           const SizedBox(height: 14),
@@ -289,7 +290,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
             'PROCESSING INVITATION',
             size: 11,
             letterSpacing: 0.12,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
           ),
         ],
       ),
@@ -536,12 +537,12 @@ class _CloseButton extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           alignment: Alignment.center,
-          child: const Icon(Icons.close_rounded, size: 18, color: GridTokens.text2),
+          child: Icon(Icons.close_rounded, size: 18, color: context.gridColors.text2),
         ),
       ),
     );
@@ -567,9 +568,9 @@ class _ShareToggleRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: GridTokens.surface2,
+            color: context.gridColors.surface2,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline, width: 1),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             children: [
@@ -578,10 +579,10 @@ class _ShareToggleRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: value ? GridTokens.mint : GridTokens.surface3,
+                  color: value ? context.gridColors.mint : context.gridColors.surface3,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: value ? GridTokens.mint : GridTokens.hairlineStrong,
+                    color: value ? context.gridColors.mint : context.gridColors.hairlineStrong,
                     width: 1,
                   ),
                 ),
@@ -601,7 +602,7 @@ class _ShareToggleRow extends StatelessWidget {
                         'Geist',
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                         height: 1.2,
                       ),
                     ),
@@ -614,7 +615,7 @@ class _ShareToggleRow extends StatelessWidget {
                         'Geist',
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                         height: 1.3,
                       ),
                     ),

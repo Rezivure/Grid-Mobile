@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
 import 'grid_avatar.dart';
 import 'grid_mono.dart';
 import 'grid_status_pill.dart';
@@ -45,16 +45,16 @@ class GridContactRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: highlighted ? GridTokens.mintFaint : Colors.transparent,
+      color: highlighted ? context.gridColors.mintFaint : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           decoration: BoxDecoration(
             border: showDivider
-                ? const Border(
+                ? Border(
                     bottom:
-                        BorderSide(color: GridTokens.hairline, width: 1),
+                        BorderSide(color: context.gridColors.hairline, width: 1),
                   )
                 : null,
           ),
@@ -86,7 +86,7 @@ class GridContactRow extends StatelessWidget {
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.01,
-                              color: GridTokens.text,
+                              color: context.gridColors.text,
                             ),
                           ),
                         ),
@@ -109,7 +109,7 @@ class GridContactRow extends StatelessWidget {
                                 'Geist',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: GridTokens.text2,
+                                color: context.gridColors.text2,
                               ),
                             ),
                           ),
@@ -119,7 +119,7 @@ class GridContactRow extends StatelessWidget {
                             child: Text(
                               '·',
                               style: TextStyle(
-                                color: GridTokens.text3,
+                                color: context.gridColors.text3,
                                 fontSize: 13,
                               ),
                             ),
@@ -127,7 +127,7 @@ class GridContactRow extends StatelessWidget {
                         if (timeText != null)
                           GridMono(
                             timeText!,
-                            color: GridTokens.text3,
+                            color: context.gridColors.text3,
                             size: 11,
                             letterSpacing: 0.02,
                             uppercase: false,
@@ -145,7 +145,7 @@ class GridContactRow extends StatelessWidget {
                   if (distanceText != null)
                     GridMono(
                       distanceText!,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       size: 11,
                       letterSpacing: 0.02,
                       uppercase: false,

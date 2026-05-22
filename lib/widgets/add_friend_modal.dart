@@ -19,6 +19,7 @@ import '../blocs/groups/groups_event.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../services/sync_manager.dart';
 import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
 
@@ -300,7 +301,7 @@ class _AddFriendModalState extends State<AddFriendModal>
               SnackBar(
                 content: Text(
                     'Friend request sent to ${utils.localpart(normalizedUserId)}.'),
-                backgroundColor: GridTokens.mint,
+                backgroundColor: context.gridColors.mint,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -545,7 +546,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                 fontSize: 15,
               ),
             ),
-            backgroundColor: GridTokens.mint,
+            backgroundColor: context.gridColors.mint,
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.only(
               bottom: 20,
@@ -580,7 +581,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                 Expanded(child: Text(errorMsg)),
               ],
             ),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -691,7 +692,7 @@ class _AddFriendModalState extends State<AddFriendModal>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Unable to get your username'),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -716,7 +717,7 @@ class _AddFriendModalState extends State<AddFriendModal>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Unable to share invite'),
-            backgroundColor: GridTokens.danger,
+            backgroundColor: context.gridColors.danger,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -741,8 +742,8 @@ class _AddFriendModalState extends State<AddFriendModal>
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
         child: Container(
-          decoration: const BoxDecoration(
-            color: GridTokens.bg,
+          decoration: BoxDecoration(
+            color: context.gridColors.bg,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(GridTokens.r2Xl),
               topRight: Radius.circular(GridTokens.r2Xl),
@@ -834,13 +835,13 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [GridTokens.surface2, GridTokens.surface],
+          colors: [context.gridColors.surface2, context.gridColors.surface],
         ),
         borderRadius: BorderRadius.circular(GridTokens.rXl),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Column(
         children: [
@@ -892,8 +893,8 @@ class _AddFriendModalState extends State<AddFriendModal>
                     child: Container(
                       width: (tile - 28) * 0.10,
                       height: (tile - 28) * 0.10,
-                      decoration: const BoxDecoration(
-                        color: GridTokens.mint,
+                      decoration: BoxDecoration(
+                        color: context.gridColors.mint,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -911,7 +912,7 @@ class _AddFriendModalState extends State<AddFriendModal>
           GridMono(
             'YOUR HANDLE',
             size: 10,
-            color: GridTokens.text3,
+            color: context.gridColors.text3,
             letterSpacing: 0.12,
           ),
           const SizedBox(height: 6),
@@ -922,7 +923,7 @@ class _AddFriendModalState extends State<AddFriendModal>
               fontSize: 18,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.01,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
         ],
@@ -934,13 +935,13 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(child: Container(height: 1, color: GridTokens.hairline)),
+        Expanded(child: Container(height: 1, color: context.gridColors.hairline)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: GridMono('OR',
-              size: 10, color: GridTokens.text3, letterSpacing: 0.16),
+              size: 10, color: context.gridColors.text3, letterSpacing: 0.16),
         ),
-        Expanded(child: Container(height: 1, color: GridTokens.hairline)),
+        Expanded(child: Container(height: 1, color: context.gridColors.hairline)),
       ],
     );
   }
@@ -959,9 +960,9 @@ class _AddFriendModalState extends State<AddFriendModal>
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: GridTokens.surface,
+            color: context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rLg),
-            border: Border.all(color: GridTokens.hairline),
+            border: Border.all(color: context.gridColors.hairline),
           ),
           child: Row(
             children: [
@@ -970,11 +971,11 @@ class _AddFriendModalState extends State<AddFriendModal>
                 height: 36,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: GridTokens.surface2,
+                  color: context.gridColors.surface2,
                   borderRadius: BorderRadius.circular(GridTokens.rMd),
-                  border: Border.all(color: GridTokens.hairline),
+                  border: Border.all(color: context.gridColors.hairline),
                 ),
-                child: Icon(icon, color: GridTokens.text, size: 18),
+                child: Icon(icon, color: context.gridColors.text, size: 18),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -989,7 +990,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         letterSpacing: -0.01,
-                        color: GridTokens.text,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -999,15 +1000,15 @@ class _AddFriendModalState extends State<AddFriendModal>
                         'Geist',
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
-                        color: GridTokens.text3,
+                        color: context.gridColors.text3,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded,
-                  color: GridTokens.text3, size: 22),
+              Icon(Icons.chevron_right_rounded,
+                  color: context.gridColors.text3, size: 22),
             ],
           ),
         ),
@@ -1019,15 +1020,15 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.verified_user_outlined,
-              color: GridTokens.mint, size: 16),
+          Icon(Icons.verified_user_outlined,
+              color: context.gridColors.mint, size: 16),
           const SizedBox(width: 10),
           Expanded(
             child: RichText(
@@ -1036,14 +1037,14 @@ class _AddFriendModalState extends State<AddFriendModal>
                   'Geist',
                   fontSize: 12.5,
                   height: 1.45,
-                  color: GridTokens.text2,
+                  color: context.gridColors.text2,
                 ),
-                children: const [
+                children: [
                   TextSpan(text: 'Nothing is shared until '),
                   TextSpan(
                     text: 'both of you',
                     style: TextStyle(
-                      color: GridTokens.text,
+                      color: context.gridColors.text,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1067,7 +1068,7 @@ class _AddFriendModalState extends State<AddFriendModal>
     Color? foreground,
     bool transparent = false,
   }) {
-    final fg = foreground ?? GridTokens.text;
+    final fg = foreground ?? context.gridColors.text;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         12,
@@ -1109,9 +1110,10 @@ class _AddFriendModalState extends State<AddFriendModal>
   Widget _topBarButton({
     required IconData icon,
     required VoidCallback onTap,
-    Color fg = GridTokens.text,
+    Color? fg,
     bool transparent = false,
   }) {
+    fg ??= context.gridColors.text;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1123,12 +1125,12 @@ class _AddFriendModalState extends State<AddFriendModal>
           decoration: BoxDecoration(
             color: transparent
                 ? Colors.black.withValues(alpha: 0.32)
-                : GridTokens.surface,
+                : context.gridColors.surface,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(
               color: transparent
                   ? Colors.white.withValues(alpha: 0.16)
-                  : GridTokens.hairline,
+                  : context.gridColors.hairline,
             ),
           ),
           child: Icon(icon, color: fg, size: 20),
@@ -1190,15 +1192,15 @@ class _AddFriendModalState extends State<AddFriendModal>
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                GridTokens.mint.withValues(alpha: 0.0),
-                                GridTokens.mint,
-                                GridTokens.mint.withValues(alpha: 0.0),
+                                context.gridColors.mint.withValues(alpha: 0.0),
+                                context.gridColors.mint,
+                                context.gridColors.mint.withValues(alpha: 0.0),
                               ],
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color:
-                                    GridTokens.mint.withValues(alpha: 0.55),
+                                    context.gridColors.mint.withValues(alpha: 0.55),
                                 blurRadius: 10,
                               ),
                             ],
@@ -1284,7 +1286,7 @@ class _AddFriendModalState extends State<AddFriendModal>
           width: horizontal ? length : thickness,
           height: horizontal ? thickness : length,
           decoration: BoxDecoration(
-            color: GridTokens.mint,
+            color: context.gridColors.mint,
             borderRadius: BorderRadius.circular(radius),
           ),
         ),
@@ -1316,8 +1318,8 @@ class _AddFriendModalState extends State<AddFriendModal>
     final hasError = _contactError != null;
     final isFocused = _handleFocus.hasFocus;
     final borderColor = hasError
-        ? GridTokens.danger
-        : (isFocused ? GridTokens.mint : GridTokens.hairlineStrong);
+        ? context.gridColors.danger
+        : (isFocused ? context.gridColors.mint : context.gridColors.hairlineStrong);
     final showGlow = !hasError && isFocused;
     final helperText = isCustomHomeserver()
         ? 'Full Matrix ID · user:homeserver.io'
@@ -1351,7 +1353,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.02,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1361,7 +1363,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                     'Geist',
                     fontSize: 14,
                     height: 1.4,
-                    color: GridTokens.text2,
+                    color: context.gridColors.text2,
                   ),
                 ),
                 const SizedBox(height: 22),
@@ -1372,13 +1374,13 @@ class _AddFriendModalState extends State<AddFriendModal>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
-                    color: GridTokens.surface2,
+                    color: context.gridColors.surface2,
                     borderRadius: BorderRadius.circular(GridTokens.rMd),
                     border: Border.all(color: borderColor, width: 1.5),
                     boxShadow: showGlow
                         ? [
                             BoxShadow(
-                              color: GridTokens.mint.withValues(alpha: 0.18),
+                              color: context.gridColors.mint.withValues(alpha: 0.18),
                               blurRadius: 14,
                               spreadRadius: 1,
                             ),
@@ -1394,7 +1396,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                           'Geist',
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                           height: 1.0,
                         ),
                       ),
@@ -1409,13 +1411,13 @@ class _AddFriendModalState extends State<AddFriendModal>
                           textCapitalization: TextCapitalization.none,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _addContact(),
-                          cursorColor: GridTokens.mint,
+                          cursorColor: context.gridColors.mint,
                           cursorWidth: 2,
                           style: GoogleFonts.getFont(
                             'Geist',
                             fontSize: 18,
                             fontWeight: FontWeight.w500,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                             height: 1.0,
                           ),
                           decoration: InputDecoration(
@@ -1428,7 +1430,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                               'Geist',
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
-                              color: GridTokens.text3,
+                              color: context.gridColors.text3,
                             ),
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
@@ -1447,7 +1449,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 12,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                   ),
                 ),
@@ -1457,17 +1459,17 @@ class _AddFriendModalState extends State<AddFriendModal>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: GridTokens.dangerSoft,
+                      color: context.gridColors.dangerSoft,
                       borderRadius: BorderRadius.circular(GridTokens.rMd),
                       border: Border.all(
-                        color: GridTokens.danger.withValues(alpha: 0.45),
+                        color: context.gridColors.danger.withValues(alpha: 0.45),
                       ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline_rounded,
-                            color: GridTokens.danger, size: 16),
+                        Icon(Icons.error_outline_rounded,
+                            color: context.gridColors.danger, size: 16),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1477,7 +1479,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                               height: 1.35,
-                              color: GridTokens.danger,
+                              color: context.gridColors.danger,
                             ),
                           ),
                         ),
@@ -1495,13 +1497,13 @@ class _AddFriendModalState extends State<AddFriendModal>
                 ),
                 if (_isProcessing) ...[
                   const SizedBox(height: 14),
-                  const Center(
+                  Center(
                     child: SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: GridTokens.mint,
+                        color: context.gridColors.mint,
                       ),
                     ),
                   ),
@@ -1613,7 +1615,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                 height: 6,
                 decoration: BoxDecoration(
                   color:
-                      isActive ? GridTokens.mint : GridTokens.hairlineStrong,
+                      isActive ? context.gridColors.mint : context.gridColors.hairlineStrong,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -1624,7 +1626,7 @@ class _AddFriendModalState extends State<AddFriendModal>
         GridMono(
           'STEP ${_currentGroupStep + 1} OF 4 · ${labels[_currentGroupStep]}',
           size: 10,
-          color: GridTokens.text3,
+          color: context.gridColors.text3,
           letterSpacing: 0.18,
         ),
       ],
@@ -1663,12 +1665,12 @@ class _AddFriendModalState extends State<AddFriendModal>
             onSubmitted: (_) {
               if (_canProceedFromStep(0)) _nextGroupStep();
             },
-            cursorColor: GridTokens.mint,
+            cursorColor: context.gridColors.mint,
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 16,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
             decoration: _groupInputDecoration(
               hintText: 'e.g. Climbing crew',
@@ -1682,13 +1684,13 @@ class _AddFriendModalState extends State<AddFriendModal>
               GridMono(
                 'MAX 14 CHARS',
                 size: 10,
-                color: GridTokens.text3,
+                color: context.gridColors.text3,
                 letterSpacing: 0.14,
               ),
               GridMono(
                 '$count / 14',
                 size: 10,
-                color: count >= 14 ? GridTokens.mint : GridTokens.text3,
+                color: count >= 14 ? context.gridColors.mint : context.gridColors.text3,
                 letterSpacing: 0.14,
               ),
             ],
@@ -1721,14 +1723,14 @@ class _AddFriendModalState extends State<AddFriendModal>
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: GridTokens.mintFaint,
+                color: context.gridColors.mintFaint,
                 borderRadius: BorderRadius.circular(GridTokens.rMd),
-                border: Border.all(color: GridTokens.mintSoft),
+                border: Border.all(color: context.gridColors.mintSoft),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.schedule_rounded,
-                      color: GridTokens.mint, size: 18),
+                  Icon(Icons.schedule_rounded,
+                      color: context.gridColors.mint, size: 18),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1740,7 +1742,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                             'Geist',
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: GridTokens.text,
+                            color: context.gridColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1749,7 +1751,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                           style: GoogleFonts.getFont(
                             'Geist',
                             fontSize: 12,
-                            color: GridTokens.text2,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -1763,7 +1765,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                         'Geist',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: GridTokens.mint,
+                        color: context.gridColors.mint,
                       ),
                     ),
                   ),
@@ -1801,10 +1803,10 @@ class _AddFriendModalState extends State<AddFriendModal>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? GridTokens.mintFaint : GridTokens.surface,
+          color: isSelected ? context.gridColors.mintFaint : context.gridColors.surface,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: isSelected ? GridTokens.mint : GridTokens.hairline,
+            color: isSelected ? context.gridColors.mint : context.gridColors.hairline,
             width: 1,
           ),
         ),
@@ -1814,7 +1816,7 @@ class _AddFriendModalState extends State<AddFriendModal>
             'Geist',
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: isSelected ? GridTokens.mint : GridTokens.text,
+            color: isSelected ? context.gridColors.mint : context.gridColors.text,
           ),
         ),
       ),
@@ -1836,12 +1838,12 @@ class _AddFriendModalState extends State<AddFriendModal>
             enableSuggestions: false,
             textCapitalization: TextCapitalization.none,
             onSubmitted: (_) => _addMember(),
-            cursorColor: GridTokens.mint,
+            cursorColor: context.gridColors.mint,
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
             decoration: _groupInputDecoration(
               hintText: isCustomHomeserver()
@@ -1853,10 +1855,10 @@ class _AddFriendModalState extends State<AddFriendModal>
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: _addMember,
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.all(4),
                     child: Icon(Icons.add_circle_rounded,
-                        color: GridTokens.mint, size: 24),
+                        color: context.gridColors.mint, size: 24),
                   ),
                 ),
               ),
@@ -1868,17 +1870,17 @@ class _AddFriendModalState extends State<AddFriendModal>
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: GridTokens.dangerSoft,
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.circular(GridTokens.rMd),
                 border: Border.all(
-                  color: GridTokens.danger.withValues(alpha: 0.45),
+                  color: context.gridColors.danger.withValues(alpha: 0.45),
                 ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: GridTokens.danger, size: 16),
+                  Icon(Icons.error_outline_rounded,
+                      color: context.gridColors.danger, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1888,7 +1890,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         height: 1.35,
-                        color: GridTokens.danger,
+                        color: context.gridColors.danger,
                       ),
                     ),
                   ),
@@ -1902,15 +1904,15 @@ class _AddFriendModalState extends State<AddFriendModal>
               padding: const EdgeInsets.symmetric(vertical: 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: GridTokens.bg,
+                color: context.gridColors.bg,
                 borderRadius: BorderRadius.circular(GridTokens.rMd),
-                border: Border.all(color: GridTokens.hairline),
+                border: Border.all(color: context.gridColors.hairline),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.people_outline_rounded,
-                      color: GridTokens.text3, size: 28),
+                  Icon(Icons.people_outline_rounded,
+                      color: context.gridColors.text3, size: 28),
                   const SizedBox(height: 8),
                   Text(
                     'No members added yet',
@@ -1918,7 +1920,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                       'Geist',
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1927,7 +1929,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                     style: GoogleFonts.getFont(
                       'Geist',
                       fontSize: 12,
-                      color: GridTokens.text3,
+                      color: context.gridColors.text3,
                     ),
                   ),
                 ],
@@ -1946,8 +1948,8 @@ class _AddFriendModalState extends State<AddFriendModal>
             '${_members.length} / 5 MEMBERS',
             size: 10,
             color: _members.length >= 5
-                ? GridTokens.mint
-                : GridTokens.text3,
+                ? context.gridColors.mint
+                : context.gridColors.text3,
             letterSpacing: 0.16,
           ),
         ],
@@ -1959,9 +1961,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1972,7 +1974,7 @@ class _AddFriendModalState extends State<AddFriendModal>
               'Geist',
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(width: 6),
@@ -1983,11 +1985,11 @@ class _AddFriendModalState extends State<AddFriendModal>
               height: 22,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: GridTokens.dangerSoft,
+                color: context.gridColors.dangerSoft,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.close_rounded,
-                  color: GridTokens.danger, size: 14),
+              child: Icon(Icons.close_rounded,
+                  color: context.gridColors.danger, size: 14),
             ),
           ),
         ],
@@ -2036,9 +2038,9 @@ class _AddFriendModalState extends State<AddFriendModal>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: GridTokens.mintFaint,
+                        color: context.gridColors.mintFaint,
                         borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: GridTokens.mintSoft),
+                        border: Border.all(color: context.gridColors.mintSoft),
                       ),
                       child: Text(
                         '@$username',
@@ -2046,7 +2048,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                           'Geist',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                         ),
                       ),
                     ),
@@ -2067,9 +2069,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Row(
         children: [
@@ -2078,11 +2080,11 @@ class _AddFriendModalState extends State<AddFriendModal>
             height: 36,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: GridTokens.surface2,
+              color: context.gridColors.surface2,
               borderRadius: BorderRadius.circular(GridTokens.rMd),
-              border: Border.all(color: GridTokens.hairline),
+              border: Border.all(color: context.gridColors.hairline),
             ),
-            child: Icon(icon, color: GridTokens.mint, size: 18),
+            child: Icon(icon, color: context.gridColors.mint, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -2091,7 +2093,7 @@ class _AddFriendModalState extends State<AddFriendModal>
               children: [
                 GridMono(label,
                     size: 10,
-                    color: GridTokens.text3,
+                    color: context.gridColors.text3,
                     letterSpacing: 0.14),
                 const SizedBox(height: 4),
                 Text(
@@ -2100,7 +2102,7 @@ class _AddFriendModalState extends State<AddFriendModal>
                     'Geist',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                   ),
                 ),
               ],
@@ -2119,9 +2121,9 @@ class _AddFriendModalState extends State<AddFriendModal>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: GridTokens.surface,
+        color: context.gridColors.surface,
         borderRadius: BorderRadius.circular(GridTokens.rXl),
-        border: Border.all(color: GridTokens.hairline),
+        border: Border.all(color: context.gridColors.hairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2133,7 +2135,7 @@ class _AddFriendModalState extends State<AddFriendModal>
               fontSize: 18,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.01,
-              color: GridTokens.text,
+              color: context.gridColors.text,
             ),
           ),
           const SizedBox(height: 4),
@@ -2142,7 +2144,7 @@ class _AddFriendModalState extends State<AddFriendModal>
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 13,
-              color: GridTokens.text3,
+              color: context.gridColors.text3,
             ),
           ),
           const SizedBox(height: 18),
@@ -2161,30 +2163,30 @@ class _AddFriendModalState extends State<AddFriendModal>
   }) {
     final base = OutlineInputBorder(
       borderRadius: BorderRadius.circular(GridTokens.rMd),
-      borderSide: const BorderSide(color: GridTokens.hairline),
+      borderSide: BorderSide(color: context.gridColors.hairline),
     );
     return InputDecoration(
       hintText: hintText,
       hintStyle: GoogleFonts.getFont(
         'Geist',
         fontSize: 15,
-        color: GridTokens.text4,
+        color: context.gridColors.text4,
       ),
       prefixText: prefixText,
       prefixStyle: GoogleFonts.getFont(
         'Geist',
         fontSize: 15,
         fontWeight: FontWeight.w500,
-        color: GridTokens.text3,
+        color: context.gridColors.text3,
       ),
       errorText: errorText,
       errorStyle: GoogleFonts.getFont(
         'Geist',
         fontSize: 12,
-        color: GridTokens.danger,
+        color: context.gridColors.danger,
       ),
       filled: true,
-      fillColor: GridTokens.bg,
+      fillColor: context.gridColors.bg,
       counterText: counterText,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -2192,15 +2194,15 @@ class _AddFriendModalState extends State<AddFriendModal>
       enabledBorder: base,
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        borderSide: const BorderSide(color: GridTokens.mint, width: 1.5),
+        borderSide: BorderSide(color: context.gridColors.mint, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        borderSide: const BorderSide(color: GridTokens.danger),
+        borderSide: BorderSide(color: context.gridColors.danger),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        borderSide: const BorderSide(color: GridTokens.danger, width: 1.5),
+        borderSide: BorderSide(color: context.gridColors.danger, width: 1.5),
       ),
       suffixIcon: suffix,
     );
@@ -2227,17 +2229,17 @@ class _LoadingButton extends StatelessWidget {
           child: Ink(
             height: 52,
             decoration: BoxDecoration(
-              color: GridTokens.surface2,
+              color: context.gridColors.surface2,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: GridTokens.mint, width: 1.5),
+              border: Border.all(color: context.gridColors.mint, width: 1.5),
             ),
-            child: const Center(
+            child: Center(
               child: SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(GridTokens.mint),
+                  valueColor: AlwaysStoppedAnimation<Color>(context.gridColors.mint),
                 ),
               ),
             ),

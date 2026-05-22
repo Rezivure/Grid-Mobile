@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'dart:math';
 
-import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
@@ -215,8 +215,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         center: Alignment.center,
                         radius: 0.85,
                         colors: [
-                          GridTokens.mint.withOpacity(0.16),
-                          GridTokens.mint.withOpacity(0.06),
+                          context.gridColors.mint.withOpacity(0.16),
+                          context.gridColors.mint.withOpacity(0.06),
                           Colors.transparent,
                         ],
                         stops: const [0.0, 0.55, 1.0],
@@ -239,7 +239,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: GridTokens.mintFaint,
+                    color: context.gridColors.mintFaint,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Row(
@@ -249,20 +249,20 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         width: 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: GridTokens.mint,
+                          color: context.gridColors.mint,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: GridTokens.mint.withOpacity(0.6),
+                              color: context.gridColors.mint.withOpacity(0.6),
                               blurRadius: 6,
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const GridMono(
+                      GridMono(
                         'E2E ENCRYPTED · OPEN SOURCE',
-                        color: GridTokens.mint,
+                        color: context.gridColors.mint,
                         size: 10,
                         letterSpacing: 0.08,
                       ),
@@ -280,7 +280,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                     fontSize: 36,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.03,
-                    color: GridTokens.text,
+                    color: context.gridColors.text,
                     height: 1.05,
                   ),
                   textAlign: TextAlign.center,
@@ -297,7 +297,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                       'Geist',
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
-                      color: GridTokens.text2,
+                      color: context.gridColors.text2,
                       height: 1.45,
                     ),
                     textAlign: TextAlign.center,
@@ -345,13 +345,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         style: GoogleFonts.getFont(
                           'Geist',
                           fontSize: 11.5,
-                          color: GridTokens.text3,
+                          color: context.gridColors.text3,
                         ),
                         children: [
                           TextSpan(
                             text: 'Terms & Privacy',
                             style: TextStyle(
-                              color: GridTokens.text2,
+                              color: context.gridColors.text2,
                               decoration: TextDecoration.underline,
                             ),
                             recognizer: TapGestureRecognizer()
@@ -371,18 +371,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                             horizontal: 8, vertical: 4),
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: GridTokens.mint,
+                        foregroundColor: context.gridColors.mint,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.link_rounded, size: 14, color: GridTokens.mint),
+                        children: [
+                          Icon(Icons.link_rounded, size: 14, color: context.gridColors.mint),
                           SizedBox(width: 4),
                           Text(
                             'Use a custom server',
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: GridTokens.mint,
+                              color: context.gridColors.mint,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -452,7 +452,7 @@ class _AvatarConstellation extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: GridTokens.mint.withOpacity(0.18),
+                  color: context.gridColors.mint.withOpacity(0.18),
                   width: 1,
                 ),
               ),
@@ -466,7 +466,7 @@ class _AvatarConstellation extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: GridTokens.mint.withOpacity(0.22),
+                  color: context.gridColors.mint.withOpacity(0.22),
                   width: 1,
                 ),
               ),
@@ -478,10 +478,10 @@ class _AvatarConstellation extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: GridTokens.mintFaint,
+                color: context.gridColors.mintFaint,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: GridTokens.mint.withOpacity(0.3),
+                  color: context.gridColors.mint.withOpacity(0.3),
                   width: 1,
                 ),
               ),
@@ -489,8 +489,8 @@ class _AvatarConstellation extends StatelessWidget {
               child: Container(
                 width: 16,
                 height: 16,
-                decoration: const BoxDecoration(
-                  color: GridTokens.mint,
+                decoration: BoxDecoration(
+                  color: context.gridColors.mint,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -537,7 +537,7 @@ class _ConstellationAvatar extends StatelessWidget {
             offset: const Offset(0, 3),
           ),
         ],
-        border: Border.all(color: GridTokens.bg, width: 2),
+        border: Border.all(color: context.gridColors.bg, width: 2),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -560,7 +560,7 @@ class _ConstellationLines extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final connector = Paint()
-      ..color = GridTokens.mint.withOpacity(0.18)
+      ..color = const Color(0xFF00DBA4).withOpacity(0.18)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     for (var i = 0; i < positions.length; i++) {
@@ -568,7 +568,7 @@ class _ConstellationLines extends CustomPainter {
       canvas.drawLine(positions[i], positions[j], connector);
     }
     final cross = Paint()
-      ..color = GridTokens.mint.withOpacity(0.10)
+      ..color = const Color(0xFF00DBA4).withOpacity(0.10)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     for (var i = 0; i < positions.length; i += 2) {
