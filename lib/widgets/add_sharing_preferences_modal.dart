@@ -54,6 +54,7 @@ class _AddSharingPreferenceModalState
   void initState() {
     super.initState();
     _labelController.addListener(() => setState(() {}));
+    _labelFocus.addListener(() => setState(() {}));
   }
 
   @override
@@ -259,12 +260,14 @@ class _AddSharingPreferenceModalState
           letterSpacing: 0.12,
         ),
         const SizedBox(height: 8),
-        Container(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: context.gridColors.surface2,
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            color: context.gridColors.surface,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _labelFocus.hasFocus
                   ? context.gridColors.mint
@@ -720,14 +723,14 @@ class _TimeButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: context.gridColors.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairline),
+            color: context.gridColors.surface2,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
