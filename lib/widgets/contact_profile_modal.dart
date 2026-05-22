@@ -232,6 +232,34 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return days;
   }
 
+  // Mirrors `_buildMemberRow` / `_isRecentlyActive` in
+  // group_details_subscreen.dart so the header badge tracks the contact's
+  // own live/paused/offline state — not the local user's outgoing toggle.
+  GridAvatarStatus _contactStatus(BuildContext context) {
+    final loc = context
+        .watch<UserLocationProvider>()
+        .getUserLocation(widget.contact.userId);
+    if (loc == null) return GridAvatarStatus.offline;
+    final ago = TimeAgoFormatter.format(loc.timestamp);
+    if (_isRecentlyActive(ago)) return GridAvatarStatus.live;
+    if (ago.contains('m ago') || ago.contains('h ago')) {
+      return GridAvatarStatus.paused;
+    }
+    return GridAvatarStatus.offline;
+  }
+
+  bool _isRecentlyActive(String timeAgo) {
+    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) return true;
+    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
+      final m = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
+      if (m != null) {
+        final minutes = int.tryParse(m.group(1)!) ?? 0;
+        return minutes <= 10;
+      }
+    }
+    return false;
+  }
+
   // ────────────────────────────────────────────────────────────────────
   // build
   // ────────────────────────────────────────────────────────────────────
@@ -425,7 +453,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   }
 
   Widget _focusedPin() {
-    final live = _alwaysShare;
+    final status = _contactStatus(context);
+    final live = status == GridAvatarStatus.live;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -473,7 +502,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 userId: widget.contact.userId,
                 size: 48,
                 ring: true,
-                status: live ? GridAvatarStatus.live : GridAvatarStatus.paused,
+                status: status,
               ),
               Positioned(
                 bottom: 6,
@@ -496,7 +525,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildIdentityRow(String userLocalpart, String handle, bool showFullMatrixId) {
-    final live = _alwaysShare;
+    final status = _contactStatus(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -549,11 +578,20 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (live) ...[
+                    if (status == GridAvatarStatus.live) ...[
                       const SizedBox(width: 8),
                       const Padding(
                         padding: EdgeInsets.only(top: 4),
                         child: GridLiveBadge(),
+                      ),
+                    ] else if (status == GridAvatarStatus.paused) ...[
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: GridStatusPill(
+                          label: 'PAUSED',
+                          kind: GridStatusKind.paused,
+                        ),
                       ),
                     ],
                     // Reserve enough trailing space for the floating
@@ -604,7 +642,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildStatusRow() {
-    final live = _alwaysShare;
     // Run lastSeen through TimeAgoFormatter so the pill reads
     // "UPDATED 3 MIN AGO" instead of dumping a raw ISO timestamp.
     final timeAgo = widget.contact.lastSeen.isEmpty
@@ -613,23 +650,19 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     final updatedLabel = 'UPDATED ${timeAgo.toUpperCase()}';
 
     // gridv 2: pull live device-status (motion / speed / battery) from
-    // the cache. Subscribe so the row rebuilds as fresh fixes land
-    // while the sheet is open. Always renders the placeholder pills so
-    // the shape of the row is consistent even before the sender is on
-    // a gridv-2 build.
+    // the cache for the contact (not the local user). Subscribe so the
+    // row rebuilds as fresh fixes land while the sheet is open.
     final status =
         context.watch<UserDeviceStatusCache>().statusFor(widget.contact.userId);
     final motionLabel = _formatMotion(status?.speed);
     final speedLabel = _formatSpeed(status?.speed);
 
+    // SHARING/PAUSED pill removed — it was bound to the local user's
+    // outgoing toggle, duplicating the mutual-sharing card below.
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        GridStatusPill(
-          label: live ? 'SHARING' : 'PAUSED',
-          kind: live ? GridStatusKind.live : GridStatusKind.paused,
-        ),
         _MotionStatusPill(motion: motionLabel, speed: speedLabel),
         _BatteryStatusPill(
           level: status?.batteryLevel,
