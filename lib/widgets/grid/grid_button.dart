@@ -110,6 +110,7 @@ class GridNavIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final btn = Material(
       color: Colors.transparent,
       child: InkWell(
@@ -121,12 +122,14 @@ class GridNavIconButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.gridColors.surface.withOpacity(0.92),
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
+            border: isDark
+                ? Border.all(color: context.gridColors.hairline, width: 1)
+                : null,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.4),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+                color: Colors.black.withOpacity(isDark ? 0.28 : 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
