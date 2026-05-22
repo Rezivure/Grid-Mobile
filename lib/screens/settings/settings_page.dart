@@ -2812,7 +2812,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 alignment: Alignment.center,
                 child: const Icon(
-                  Icons.qr_code_2_rounded,
+                  Icons.camera_alt_rounded,
                   size: 22,
                   color: GridTokens.mint,
                 ),
