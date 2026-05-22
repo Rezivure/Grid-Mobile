@@ -6,12 +6,12 @@ import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
 import 'grid/grid_mono.dart';
 
-/// Bottom sheet for adding a single sharing window. Restyled to the Grid
-/// 2.0 dark token system (was tracking system light/dark via the
-/// ColorScheme, which looked alien against the rest of the now-dark app).
+/// Bottom sheet for adding a single sharing window. Simplified to a single
+/// decision flow: days → time → optional name.
 class AddSharingPreferenceModal extends StatefulWidget {
   /// onSave fires after Add is tapped. `startTime` / `endTime` are null
-  /// when `isAllDay` is true.
+  /// when `isAllDay` is true. `label` may be empty — the list view will
+  /// auto-summarise from days + time.
   final void Function(
     String label,
     List<bool> selectedDays,
@@ -37,13 +37,13 @@ class _AddSharingPreferenceModalState
   final List<bool> _selectedDays = List.generate(7, (_) => false);
 
   static const List<String> _weekdays = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
+    'M',
+    'T',
+    'W',
+    'T',
+    'F',
+    'S',
+    'S',
   ];
 
   bool _isAllDay = false;
@@ -53,7 +53,6 @@ class _AddSharingPreferenceModalState
   @override
   void initState() {
     super.initState();
-    _labelController.addListener(() => setState(() {}));
     _labelFocus.addListener(() => setState(() {}));
   }
 
@@ -67,7 +66,6 @@ class _AddSharingPreferenceModalState
   bool get _hasDays => _selectedDays.contains(true);
 
   bool get _isValid {
-    if (_labelController.text.trim().isEmpty) return false;
     if (!_hasDays) return false;
     if (_isAllDay) return true;
     final s = _startTime.hour * 60 + _startTime.minute;
@@ -76,8 +74,6 @@ class _AddSharingPreferenceModalState
   }
 
   Future<void> _pickTime(bool isStart) async {
-    // Theme the system picker so it doesn't pop a Material-3 light dialog
-    // in the middle of a dark sheet.
     final picked = await showTimePicker(
       context: context,
       initialTime: isStart ? _startTime : _endTime,
@@ -106,10 +102,8 @@ class _AddSharingPreferenceModalState
     }
   }
 
-  void _quickPreset(String label, List<int> days, TimeOfDay s, TimeOfDay e,
-      bool allDay) {
+  void _quickPreset(List<int> days, TimeOfDay s, TimeOfDay e, bool allDay) {
     setState(() {
-      _labelController.text = label;
       for (var i = 0; i < 7; i++) {
         _selectedDays[i] = days.contains(i);
       }
@@ -149,17 +143,17 @@ class _AddSharingPreferenceModalState
                 _buildHeader(),
                 Flexible(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildLabelField(),
-                        const SizedBox(height: 18),
                         _buildPresetsRow(),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
                         _buildDaysSection(),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
                         _buildTimeSection(),
+                        const SizedBox(height: 20),
+                        _buildLabelField(),
                       ],
                     ),
                   ),
@@ -187,51 +181,21 @@ class _AddSharingPreferenceModalState
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: context.gridColors.mintFaint,
-              borderRadius: BorderRadius.circular(GridTokens.rSm),
-              border: Border.all(color: context.gridColors.mintSoft),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.schedule_rounded,
-              size: 18,
-              color: context.gridColors.mint,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'New sharing window',
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.015,
-                    color: context.gridColors.text,
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Pick when your location is shared.',
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 12.5,
-                    color: context.gridColors.text2,
-                  ),
-                ),
-              ],
+            child: Text(
+              'New sharing window',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.015,
+                color: context.gridColors.text,
+                height: 1.15,
+              ),
             ),
           ),
           IconButton(
@@ -248,132 +212,42 @@ class _AddSharingPreferenceModalState
     );
   }
 
-  Widget _buildLabelField() {
-    final hasContent = _labelController.text.trim().isNotEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GridMono(
-          'LABEL',
-          size: 10,
-          color: context.gridColors.text3,
-          letterSpacing: 0.12,
-        ),
-        const SizedBox(height: 8),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: context.gridColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _labelFocus.hasFocus
-                  ? context.gridColors.mint
-                  : context.gridColors.hairline,
-              width: _labelFocus.hasFocus ? 1.5 : 1,
+  Widget _buildPresetsRow() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _PresetChip(
+            label: 'Workdays 9–5',
+            onTap: () => _quickPreset(
+              const [0, 1, 2, 3, 4],
+              const TimeOfDay(hour: 9, minute: 0),
+              const TimeOfDay(hour: 17, minute: 0),
+              false,
             ),
           ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.label_outline_rounded,
-                size: 18,
-                color: context.gridColors.text3,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _labelController,
-                  focusNode: _labelFocus,
-                  autocorrect: true,
-                  textCapitalization: TextCapitalization.sentences,
-                  cursorColor: context.gridColors.mint,
-                  cursorWidth: 2,
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: context.gridColors.text,
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                    filled: false,
-                    fillColor: Colors.transparent,
-                    hintText: hasContent ? null : 'Work hours, Trip, Gym…',
-                    hintStyle: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: context.gridColors.text3,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(width: 6),
+          _PresetChip(
+            label: 'Weekends',
+            onTap: () => _quickPreset(
+              const [5, 6],
+              const TimeOfDay(hour: 0, minute: 0),
+              const TimeOfDay(hour: 23, minute: 59),
+              true,
+            ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPresetsRow() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GridMono(
-          'QUICK START',
-          size: 10,
-          color: context.gridColors.text3,
-          letterSpacing: 0.12,
-        ),
-        const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _PresetChip(
-                icon: Icons.work_outline_rounded,
-                label: 'Workdays 9–5',
-                onTap: () => _quickPreset(
-                  'Work hours',
-                  const [0, 1, 2, 3, 4],
-                  const TimeOfDay(hour: 9, minute: 0),
-                  const TimeOfDay(hour: 17, minute: 0),
-                  false,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _PresetChip(
-                icon: Icons.weekend_outlined,
-                label: 'Weekends',
-                onTap: () => _quickPreset(
-                  'Weekends',
-                  const [5, 6],
-                  const TimeOfDay(hour: 0, minute: 0),
-                  const TimeOfDay(hour: 23, minute: 59),
-                  true,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _PresetChip(
-                icon: Icons.bedtime_outlined,
-                label: 'Evenings',
-                onTap: () => _quickPreset(
-                  'Evenings',
-                  const [0, 1, 2, 3, 4, 5, 6],
-                  const TimeOfDay(hour: 18, minute: 0),
-                  const TimeOfDay(hour: 23, minute: 0),
-                  false,
-                ),
-              ),
-            ],
+          const SizedBox(width: 6),
+          _PresetChip(
+            label: 'Evenings',
+            onTap: () => _quickPreset(
+              const [0, 1, 2, 3, 4, 5, 6],
+              const TimeOfDay(hour: 18, minute: 0),
+              const TimeOfDay(hour: 23, minute: 0),
+              false,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -394,14 +268,9 @@ class _AddSharingPreferenceModalState
               label: _hasDays ? 'Clear' : 'Every day',
               onTap: () {
                 setState(() {
-                  if (_hasDays) {
-                    for (var i = 0; i < 7; i++) {
-                      _selectedDays[i] = false;
-                    }
-                  } else {
-                    for (var i = 0; i < 7; i++) {
-                      _selectedDays[i] = true;
-                    }
+                  final fill = !_hasDays;
+                  for (var i = 0; i < 7; i++) {
+                    _selectedDays[i] = fill;
                   }
                 });
               },
@@ -432,65 +301,107 @@ class _AddSharingPreferenceModalState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            GridMono(
+              'TIME',
+              size: 10,
+              color: context.gridColors.text3,
+              letterSpacing: 0.12,
+            ),
+            const Spacer(),
+            _AllDayChip(
+              active: _isAllDay,
+              onTap: () => setState(() => _isAllDay = !_isAllDay),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (!_isAllDay)
+          _TimeRangeRow(
+            start: _startTime,
+            end: _endTime,
+            onTapStart: () => _pickTime(true),
+            onTapEnd: () => _pickTime(false),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: context.gridColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.gridColors.hairline),
+            ),
+            child: Text(
+              'Shares for the entire day',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: context.gridColors.text2,
+              ),
+            ),
+          ),
+        if (!_isAllDay && _hasDays && !_isValid)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'End time must be after start.',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12,
+                color: context.gridColors.danger,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLabelField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         GridMono(
-          'TIME',
+          'NAME (OPTIONAL)',
           size: 10,
           color: context.gridColors.text3,
           letterSpacing: 0.12,
         ),
-        const SizedBox(height: 10),
-        // All-day toggle row.
-        _ToggleRow(
-          title: 'All day',
-          subtitle: 'Share for the entire day on the selected days',
-          value: _isAllDay,
-          onChanged: (v) => setState(() => _isAllDay = v),
-        ),
-        if (!_isAllDay) ...[
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _TimeButton(
-                  label: 'Starts',
-                  time: _startTime,
-                  onTap: () => _pickTime(true),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _TimeButton(
-                  label: 'Ends',
-                  time: _endTime,
-                  onTap: () => _pickTime(false),
-                ),
-              ),
-            ],
+        const SizedBox(height: 4),
+        TextField(
+          controller: _labelController,
+          focusNode: _labelFocus,
+          autocorrect: true,
+          textCapitalization: TextCapitalization.sentences,
+          cursorColor: context.gridColors.mint,
+          cursorWidth: 2,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: context.gridColors.text,
           ),
-          if (!_isValid && _labelController.text.trim().isNotEmpty &&
-              _hasDays)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 13,
-                    color: context.gridColors.danger,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'End time must be after start.',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 12,
-                      color: context.gridColors.danger,
-                    ),
-                  ),
-                ],
-              ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            hintText: 'e.g. Work hours',
+            hintStyle: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+              color: context.gridColors.text3,
             ),
-        ],
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: context.gridColors.hairline),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide:
+                  BorderSide(color: context.gridColors.mint, width: 1.5),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -512,7 +423,6 @@ class _AddSharingPreferenceModalState
             flex: 2,
             child: GridButton(
               label: 'Add window',
-              icon: Icons.add_rounded,
               onPressed: _isValid
                   ? () {
                       widget.onSave(
@@ -584,12 +494,10 @@ class _DayChip extends StatelessWidget {
 
 class _PresetChip extends StatelessWidget {
   const _PresetChip({
-    required this.icon,
     required this.label,
     required this.onTap,
   });
 
-  final IconData icon;
   final String label;
   final VoidCallback onTap;
 
@@ -602,28 +510,21 @@ class _PresetChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: Container(
           padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: context.gridColors.surface,
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: context.gridColors.hairlineStrong),
+            border: Border.all(color: context.gridColors.hairline),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 13, color: context.gridColors.mint),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.005,
-                  color: context.gridColors.text,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.005,
+              color: context.gridColors.text2,
+            ),
           ),
         ),
       ),
@@ -631,69 +532,37 @@ class _PresetChip extends StatelessWidget {
   }
 }
 
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
+class _AllDayChip extends StatelessWidget {
+  const _AllDayChip({required this.active, required this.onTap});
 
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final bool active;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: context.gridColors.surface,
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairline),
+            color: active ? context.gridColors.mintFaint : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: active ? context.gridColors.mint : context.gridColors.hairline,
+              width: active ? 1.4 : 1,
+            ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.getFont(
-                        'Geist',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.01,
-                        color: context.gridColors.text,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.getFont(
-                        'Geist',
-                        fontSize: 12.5,
-                        color: context.gridColors.text2,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Switch.adaptive(
-                value: value,
-                activeColor: context.gridColors.mint,
-                onChanged: onChanged,
-              ),
-            ],
+          child: Text(
+            'All day',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: active ? context.gridColors.mint : context.gridColors.text2,
+            ),
           ),
         ),
       ),
@@ -701,68 +570,81 @@ class _ToggleRow extends StatelessWidget {
   }
 }
 
-class _TimeButton extends StatelessWidget {
-  const _TimeButton({
-    required this.label,
-    required this.time,
-    required this.onTap,
+class _TimeRangeRow extends StatelessWidget {
+  const _TimeRangeRow({
+    required this.start,
+    required this.end,
+    required this.onTapStart,
+    required this.onTapEnd,
   });
 
+  final TimeOfDay start;
+  final TimeOfDay end;
+  final VoidCallback onTapStart;
+  final VoidCallback onTapEnd;
+
+  String _fmt(TimeOfDay t) {
+    final mm = t.minute.toString().padLeft(2, '0');
+    final isPm = t.hour >= 12;
+    final h12 = t.hour == 0 ? 12 : (t.hour > 12 ? t.hour - 12 : t.hour);
+    return '$h12:$mm ${isPm ? 'PM' : 'AM'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.gridColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.gridColors.hairline),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _TimePart(label: _fmt(start), onTap: onTapStart),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              Icons.arrow_forward_rounded,
+              size: 16,
+              color: context.gridColors.text3,
+            ),
+          ),
+          Expanded(
+            child: _TimePart(label: _fmt(end), onTap: onTapEnd),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimePart extends StatelessWidget {
+  const _TimePart({required this.label, required this.onTap});
+
   final String label;
-  final TimeOfDay time;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final mm = time.minute.toString().padLeft(2, '0');
-    final isPm = time.hour >= 12;
-    final h12 =
-        time.hour == 0 ? 12 : (time.hour > 12 ? time.hour - 12 : time.hour);
-    final clock = '$h12:$mm ${isPm ? 'PM' : 'AM'}';
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: context.gridColors.surface2,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.gridColors.hairline, width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GridMono(
-                label.toUpperCase(),
-                size: 10,
-                color: context.gridColors.text3,
-                letterSpacing: 0.12,
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time_rounded,
-                    size: 15,
-                    color: context.gridColors.mint,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    clock,
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.01,
-                      color: context.gridColors.text,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.01,
+              color: context.gridColors.text,
+            ),
           ),
         ),
       ),

@@ -84,9 +84,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   /// List of sharing windows loaded from the DB
   List<SharingWindow> _sharingWindows = [];
 
-  /// Whether we're currently editing sharing preferences (for showing X buttons)
-  bool _isEditingPreferences = false;
-
   /// Whether the device keys section is expanded
   bool _isDeviceKeysExpanded = false;
 
@@ -878,29 +875,21 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
   Widget _buildSharingWindows() {
     if (_sharingWindows.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: context.gridColors.surface,
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(color: context.gridColors.hairline, width: 1),
-        ),
-        child: Column(
-          children: [
-            Icon(Icons.schedule_outlined, size: 28, color: context.gridColors.text3),
-            const SizedBox(height: 8),
-            Text(
-              'No sharing windows set',
-              style: GoogleFonts.getFont(
-                'Geist',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: context.gridColors.text2,
-              ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'No sharing windows yet. Tap + to add one.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              color: context.gridColors.text2,
             ),
-            const SizedBox(height: 12),
-            Material(
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: _openAddSharingPreferenceModal,
@@ -930,114 +919,46 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _isEditingPreferences = !_isEditingPreferences;
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _isEditingPreferences ? 'Done' : 'Edit',
-                style: GoogleFonts.getFont(
-                  'Geist',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: context.gridColors.mint,
-                ),
-              ),
-            ),
+        Container(
+          decoration: BoxDecoration(
+            color: context.gridColors.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: context.gridColors.hairline),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < _sharingWindows.length; i++) ...[
+                _buildSharingWindowRow(_sharingWindows[i], i),
+                if (i < _sharingWindows.length - 1)
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: context.gridColors.hairline,
+                  ),
+              ],
+            ],
           ),
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ..._sharingWindows.map((window) {
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  GestureDetector(
-                    onTap: () async {
-                      if (!_isEditingPreferences) {
-                        final index = _sharingWindows.indexOf(window);
-                        final updatedWindow = SharingWindow(
-                          label: window.label,
-                          days: window.days,
-                          isAllDay: window.isAllDay,
-                          startTime: window.startTime,
-                          endTime: window.endTime,
-                          isActive: !window.isActive,
-                        );
-                        setState(() {
-                          _sharingWindows[index] = updatedWindow;
-                        });
-                        await _saveToDatabase();
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: window.isActive ? context.gridColors.mintSoft : context.gridColors.surface2,
-                        border: Border.all(
-                          color: window.isActive ? context.gridColors.mint : context.gridColors.hairline,
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        window.label,
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: window.isActive ? context.gridColors.mint : context.gridColors.text2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_isEditingPreferences)
-                    Positioned(
-                      top: -6,
-                      right: -6,
-                      child: GestureDetector(
-                        onTap: () async {
-                          setState(() {
-                            _sharingWindows.remove(window);
-                          });
-                          await _saveToDatabase();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: context.gridColors.danger,
-                          ),
-                          child: const Icon(Icons.close, size: 12, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            }),
-            GestureDetector(
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
               onTap: _openAddSharingPreferenceModal,
+              borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: context.gridColors.surface2,
-                  border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
+                  color: context.gridColors.mintSoft,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -1058,10 +979,109 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ],
     );
+  }
+
+  Widget _buildSharingWindowRow(SharingWindow window, int index) {
+    final summary = _summariseWindow(window);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  window.label.isNotEmpty ? window.label : summary,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: window.isActive
+                        ? context.gridColors.text
+                        : context.gridColors.text3,
+                  ),
+                ),
+                if (window.label.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    summary,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 12,
+                      color: context.gridColors.text3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: window.isActive,
+            activeColor: context.gridColors.mint,
+            onChanged: (v) async {
+              final updated = SharingWindow(
+                label: window.label,
+                days: window.days,
+                isAllDay: window.isAllDay,
+                startTime: window.startTime,
+                endTime: window.endTime,
+                isActive: v,
+              );
+              setState(() => _sharingWindows[index] = updated);
+              await _saveToDatabase();
+            },
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: context.gridColors.text3,
+            ),
+            tooltip: 'Delete window',
+            visualDensity: VisualDensity.compact,
+            onPressed: () async {
+              setState(() => _sharingWindows.removeAt(index));
+              await _saveToDatabase();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _summariseWindow(SharingWindow window) {
+    const dayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final sorted = [...window.days]..sort();
+    String daysPart;
+    if (sorted.length == 7) {
+      daysPart = 'Every day';
+    } else if (sorted.length == 5 &&
+        sorted.every((d) => d >= 0 && d <= 4)) {
+      daysPart = 'Workdays';
+    } else if (sorted.length == 2 && sorted[0] == 5 && sorted[1] == 6) {
+      daysPart = 'Weekends';
+    } else {
+      daysPart = sorted.map((d) => dayShort[d]).join(', ');
+    }
+    final timePart = window.isAllDay
+        ? 'All day'
+        : '${_fmtClock(window.startTime)} – ${_fmtClock(window.endTime)}';
+    return '$daysPart  ·  $timePart';
+  }
+
+  String _fmtClock(String? hhmm) {
+    if (hhmm == null || hhmm.length < 4) return '';
+    final parts = hhmm.split(':');
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = parts.length > 1 ? parts[1] : '00';
+    final isPm = h >= 12;
+    final h12 = h == 0 ? 12 : (h > 12 ? h - 12 : h);
+    return '$h12:$m ${isPm ? 'PM' : 'AM'}';
   }
 
   // ────────────────────────────────────────────────────────────────────
