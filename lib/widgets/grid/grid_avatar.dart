@@ -113,17 +113,28 @@ class GridAvatar extends StatelessWidget {
     Widget body = inner;
 
     if (ring) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      // Light mode: softer off-white fill + drop shadow instead of white halo.
       body = Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: context.gridColors.bg,
+          color: isDark ? context.gridColors.bg : context.gridColors.surface2,
           border: Border.all(
             width: 2,
             color: status == GridAvatarStatus.live
                 ? context.gridColors.mint
                 : context.gridColors.hairlineStrong,
           ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.10),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: inner,
       );

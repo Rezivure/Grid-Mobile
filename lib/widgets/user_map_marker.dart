@@ -331,6 +331,9 @@ class _PinBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Light mode: softer off-white ring + stronger shadow instead of white halo.
+    final innerRing = isDark ? context.gridColors.surface : context.gridColors.bg;
     return SizedBox(
       width: 60,
       height: 64,
@@ -338,24 +341,20 @@ class _PinBody extends StatelessWidget {
         alignment: Alignment.topCenter,
         clipBehavior: Clip.none,
         children: [
-          // Avatar bubble — thin mint/amber ring, dark inner well,
-          // soft drop shadow that gives it lift without the dated
-          // white 3D look. Selected state thickens the ring and
-          // adds a colored glow.
           Container(
             width: 54,
             height: 54,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: context.gridColors.surface,
+              color: innerRing,
               border: Border.all(
                 color: accent,
                 width: selected ? 2.5 : 1.8,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.30),
-                  blurRadius: 12,
+                  color: Colors.black.withOpacity(isDark ? 0.30 : 0.18),
+                  blurRadius: isDark ? 12 : 14,
                   offset: const Offset(0, 4),
                 ),
                 if (selected)
@@ -375,9 +374,6 @@ class _PinBody extends StatelessWidget {
               ),
             ),
           ),
-          // Anchor dot — sits at the bottom of the cell where the
-          // contact's actual lat/lng is. Reads as a clean "I am
-          // here" point rather than a chunky teardrop.
           Positioned(
             bottom: 0,
             child: Container(
@@ -387,12 +383,12 @@ class _PinBody extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: accent,
                 border: Border.all(
-                  color: context.gridColors.surface,
+                  color: innerRing,
                   width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.20),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),

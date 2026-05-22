@@ -72,7 +72,7 @@ class GridStatusPill extends StatelessWidget {
         children: [
           Icon(icon ?? p.icon, size: 11, color: p.fg),
           const SizedBox(width: 5),
-          GridMono(label, color: p.fg, size: 10, letterSpacing: 0.08),
+          GridMono(label.toUpperCase(), color: p.fg, size: 10, letterSpacing: 0.08),
         ],
       ),
     );
@@ -105,7 +105,7 @@ class GridLiveBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          GridMono(label, color: context.gridColors.mint, size: 9, letterSpacing: 0.12),
+          GridMono(label.toUpperCase(), color: context.gridColors.mint, size: 9, letterSpacing: 0.12),
         ],
       ),
     );
