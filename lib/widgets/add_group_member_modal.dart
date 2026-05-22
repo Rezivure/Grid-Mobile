@@ -449,13 +449,15 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                     height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 4),
-                GridMono(
-                  hasHandle ? 'Pending invite' : 'Type a handle to preview',
-                  color: GridTokens.text3,
-                  size: 10,
-                  letterSpacing: 0.12,
-                ),
+                if (hasHandle) ...[
+                  const SizedBox(height: 4),
+                  GridMono(
+                    'Pending invite',
+                    color: GridTokens.text3,
+                    size: 10,
+                    letterSpacing: 0.12,
+                  ),
+                ],
               ],
             ),
           ),
@@ -518,6 +520,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
                 border: InputBorder.none,
+                filled: false,
+                fillColor: Colors.transparent,
                 hintText: hasContent
                     ? null
                     : (isCustomHomeserver()

@@ -297,6 +297,8 @@ class _AddSharingPreferenceModalState
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     hintText: hasContent ? null : 'Work hours, Trip, Gym…',
                     hintStyle: GoogleFonts.getFont(
                       'Geist',
