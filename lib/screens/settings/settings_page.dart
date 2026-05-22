@@ -2479,26 +2479,7 @@ class _SettingsPageState extends State<SettingsPage> {
               theme: theme,
               colorScheme: colorScheme,
               children: [
-                _buildInfoRow(
-                  icon: Icons.shield_outlined,
-                  title: 'Encryption keys',
-                  value: deviceID == null || identityKey == null
-                      ? 'Loading…'
-                      : 'Device $_shortDeviceId',
-                  onTap: _openEncryptionKeys,
-                  colorScheme: colorScheme,
-                ),
-                _buildSettingsDivider(),
-                _buildInfoRow(
-                  icon: Icons.fingerprint_rounded,
-                  title: 'Device ID',
-                  value: deviceID ?? 'Loading…',
-                  onTap: _openEncryptionKeys,
-                  colorScheme: colorScheme,
-                  mono: true,
-                ),
                 if (!isCustom) ...[
-                  _buildSettingsDivider(),
                   _buildMenuOption(
                     icon: Icons.key_outlined,
                     title: 'Passkeys',
@@ -2513,7 +2494,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                     colorScheme: colorScheme,
                   ),
+                  _buildSettingsDivider(),
                 ],
+                _buildInfoRow(
+                  icon: Icons.fingerprint_rounded,
+                  title: 'Device ID',
+                  value: deviceID ?? 'Loading…',
+                  onTap: _openEncryptionKeys,
+                  colorScheme: colorScheme,
+                  mono: true,
+                ),
               ],
             ),
 
@@ -2691,13 +2681,6 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
-  }
-
-  /// Short 4-char prefix of the device ID used in the encryption-keys row.
-  String get _shortDeviceId {
-    final id = deviceID ?? '';
-    if (id.length <= 4) return id;
-    return id.substring(0, 4);
   }
 
   /// Footer line, e.g. "Grid v3.2 · build 612".
