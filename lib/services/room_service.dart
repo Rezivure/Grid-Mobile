@@ -143,14 +143,23 @@ class RoomService {
         initialState: [
           StateEvent(
             type: 'm.room.encryption',
-            content: {"algorithm": "m.megolm.v1.aes-sha2"},
+            content: {
+              'algorithm': 'm.megolm.v1.aes-sha2',
+              // ~1 year / ~1B msgs: effectively never rotate
+              'rotation_period_ms': 31536000000,
+              'rotation_period_msgs': 1000000000,
+            },
           ),
         ],
       );
-      
-      // Room created with invite - now we need to handle it immediately
-      // Note: invite is already sent via createRoom parameters
-      
+
+      // Pre-warm the outbound Megolm session so the first send doesn't race device-key claim
+      try {
+        await client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      } catch (e) {
+        Logs().w('[MegolmPrewarm] Failed for $roomId: $e');
+      }
+
       return true; // success
     }
     return false; // failed
@@ -604,7 +613,12 @@ class RoomService {
         initialState: [
           StateEvent(
             type: EventTypes.Encryption,
-            content: {'algorithm': 'm.megolm.v1.aes-sha2'},
+            content: {
+              'algorithm': 'm.megolm.v1.aes-sha2',
+              // ~1 year / ~1B msgs: effectively never rotate
+              'rotation_period_ms': 31536000000,
+              'rotation_period_msgs': 1000000000,
+            },
           ),
           StateEvent(
             type: EventTypes.RoomPowerLevels,
@@ -628,6 +642,12 @@ class RoomService {
       final room = client.getRoomById(roomId);
       if (room != null) {
         await room.addTag('Grid Group');
+      }
+
+      try {
+        await client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      } catch (e) {
+        Logs().w('[MegolmPrewarm] Failed for $roomId: $e');
       }
     } catch (e) {
       throw Exception('Failed to create group: $e');

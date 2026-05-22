@@ -113,6 +113,15 @@ void main() async {
   );
   await client.init();
 
+  // Auto-forward room keys to peers who request them; prevents "stuck offline" after key gaps
+  client.onRoomKeyRequest.stream.listen((request) async {
+    try {
+      await request.forwardKey();
+    } catch (e) {
+      Logs().w('[KeyForward] Failed to forward room key: $e');
+    }
+  });
+
   // Initialize debug logging service
   await DebugLogService.instance.init();
 
