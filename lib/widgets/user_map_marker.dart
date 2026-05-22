@@ -8,14 +8,11 @@ import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 
 import 'user_avatar_bloc.dart';
 
-/// Map pin for a contact. Three parts top-to-bottom: small dark name
-/// pill, avatar bubble with status ring + pulse, and a triangle tail
-/// pointing at the underlying coordinate. Tap target is the whole
-/// 110×110 cell.
-class UserMapMarker extends StatefulWidget {
+/// Map pin for a contact. Static — no pulse, no halo. Name pill shows
+/// only when selected; the pin tail anchor dot sits at the lat/lng.
+class UserMapMarker extends StatelessWidget {
   final String userId;
   final bool isSelected;
-  final bool showPulse;
   final String? timestamp;
 
   /// When provided, used directly. Otherwise the marker fires a
@@ -26,67 +23,47 @@ class UserMapMarker extends StatefulWidget {
     Key? key,
     required this.userId,
     this.isSelected = false,
-    this.showPulse = true,
     this.timestamp,
     this.displayName,
   }) : super(key: key);
 
   @override
-  _UserMapMarkerState createState() => _UserMapMarkerState();
+  Widget build(BuildContext context) {
+    return _UserMapMarkerInner(
+      key: ValueKey('marker_$userId'),
+      userId: userId,
+      isSelected: isSelected,
+      timestamp: timestamp,
+      displayName: displayName,
+    );
+  }
 }
 
-class _UserMapMarkerState extends State<UserMapMarker>
-    with TickerProviderStateMixin {
-  late final AnimationController _pulseController;
-  late final AnimationController _selectionController;
-  late final AnimationController _bounceController;
-  late final Animation<double> _pulseAnimation;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _bounceAnimation;
+class _UserMapMarkerInner extends StatefulWidget {
+  const _UserMapMarkerInner({
+    Key? key,
+    required this.userId,
+    required this.isSelected,
+    required this.timestamp,
+    required this.displayName,
+  }) : super(key: key);
 
+  final String userId;
+  final bool isSelected;
+  final String? timestamp;
+  final String? displayName;
+
+  @override
+  State<_UserMapMarkerInner> createState() => _UserMapMarkerInnerState();
+}
+
+class _UserMapMarkerInnerState extends State<_UserMapMarkerInner> {
   String? _displayName;
 
   @override
   void initState() {
     super.initState();
-
     _displayName = widget.displayName;
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-    _selectionController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    _pulseAnimation = CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.12,
-    ).animate(CurvedAnimation(
-      parent: _selectionController,
-      curve: Curves.elasticOut,
-    ));
-    _bounceAnimation = Tween<double>(
-      begin: 0.0,
-      end: -6.0,
-    ).animate(CurvedAnimation(
-      parent: _bounceController,
-      curve: Curves.easeOutBack,
-    ));
-
-    if (widget.showPulse) _pulseController.repeat();
-    if (widget.isSelected) _selectionController.forward();
-
     if (_displayName == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadDisplayName());
     }
@@ -108,49 +85,30 @@ class _UserMapMarkerState extends State<UserMapMarker>
   }
 
   @override
-  void didUpdateWidget(UserMapMarker oldWidget) {
+  void didUpdateWidget(_UserMapMarkerInner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isSelected != oldWidget.isSelected) {
-      if (widget.isSelected) {
-        _selectionController.forward();
-        _bounceController.forward(from: 0);
-      } else {
-        _selectionController.reverse();
-        _bounceController.reverse();
-      }
-    }
-    if (widget.showPulse != oldWidget.showPulse) {
-      if (widget.showPulse) {
-        _pulseController.repeat();
-      } else {
-        _pulseController.stop();
-      }
-    }
     if (widget.displayName != null &&
         widget.displayName != oldWidget.displayName) {
       setState(() => _displayName = widget.displayName);
     }
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _selectionController.dispose();
-    _bounceController.dispose();
-    super.dispose();
-  }
-
-  /// Live > 10 min ago → amber. Live > 1 hr → text3. Recent → mint.
-  Color get _statusColor {
+  /// Mirrors People list / profile modal: recent (<=10m) is live (mint),
+  /// everything else is offline (text3). No amber for contacts.
+  Color _statusColor(BuildContext context) {
     final ts = widget.timestamp;
-    if (ts == null) return context.gridColors.mint;
+    if (ts == null) return context.gridColors.text3;
     final ago = TimeAgoFormatter.format(ts);
-    if (ago == 'Just now' || ago.contains('s ago')) return context.gridColors.mint;
-    if (ago.contains('m ago')) {
-      final m = int.tryParse(ago.split(' ').first) ?? 0;
-      return m <= 10 ? context.gridColors.mint : context.gridColors.amber;
+    if (ago == 'Just now' || ago.contains('s ago')) {
+      return context.gridColors.mint;
     }
-    if (ago.contains('h ago')) return context.gridColors.amber;
+    if (ago.contains('m ago') && !ago.contains('h')) {
+      final m = RegExp(r'(\d+)m ago').firstMatch(ago);
+      if (m != null) {
+        final minutes = int.tryParse(m.group(1)!) ?? 0;
+        if (minutes <= 10) return context.gridColors.mint;
+      }
+    }
     return context.gridColors.text3;
   }
 
@@ -158,64 +116,30 @@ class _UserMapMarkerState extends State<UserMapMarker>
   Widget build(BuildContext context) {
     final localpart = widget.userId.split(':')[0].replaceFirst('@', '');
     final label = _displayName?.isNotEmpty == true ? _displayName! : localpart;
-    final accent = _statusColor;
+    final accent = _statusColor(context);
 
-    return AnimatedBuilder(
-      animation: Listenable.merge(
-        [_pulseAnimation, _scaleAnimation, _bounceAnimation],
-      ),
-      builder: (context, _) {
-        return Transform.translate(
-          // Bounce on selection only — the parent Positioned already
-          // anchors the bottom of the cell (the pin tail tip) to the
-          // contact's lat/lng.
-          offset: Offset(0, _bounceAnimation.value),
-          child: Transform.scale(
-            scale: _scaleAnimation.value,
-            child: SizedBox(
-              width: 140,
-              height: 110,
-              child: Stack(
-                alignment: Alignment.bottomCenter,
-                clipBehavior: Clip.none,
-                children: [
-                  // Pulse rings behind the avatar — bottom of the
-                  // stack so the avatar paints over the fading
-                  // halos.
-                  if (widget.showPulse)
-                    Positioned(
-                      bottom: 14,
-                      child: _PulseHalos(
-                        animation: _pulseAnimation,
-                        color: accent,
-                      ),
-                    ),
-
-                  // Name pill above the avatar — only when this
-                  // marker is the currently-selected contact (i.e.
-                  // the profile sheet is up). Otherwise the map
-                  // stays uncluttered.
-                  if (widget.isSelected)
-                    Positioned(
-                      top: 0,
-                      child: _NamePill(label: label, accent: accent),
-                    ),
-
-                  // Avatar bubble + tail anchored at the bottom.
-                  Positioned(
-                    bottom: 0,
-                    child: _PinBody(
-                      userId: widget.userId,
-                      accent: accent,
-                      selected: widget.isSelected,
-                    ),
-                  ),
-                ],
-              ),
+    return SizedBox(
+      width: 140,
+      height: 110,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none,
+        children: [
+          if (widget.isSelected)
+            Positioned(
+              top: 0,
+              child: _NamePill(label: label, accent: accent),
+            ),
+          Positioned(
+            bottom: 0,
+            child: _PinBody(
+              userId: widget.userId,
+              accent: accent,
+              selected: widget.isSelected,
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -251,9 +175,6 @@ class _NamePill extends StatelessWidget {
             decoration: BoxDecoration(
               color: accent,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: accent.withOpacity(0.6), blurRadius: 4),
-              ],
             ),
           ),
           const SizedBox(width: 6),
@@ -278,46 +199,9 @@ class _NamePill extends StatelessWidget {
   }
 }
 
-class _PulseHalos extends StatelessWidget {
-  const _PulseHalos({required this.animation, required this.color});
-  final Animation<double> animation;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = animation.value;
-    return SizedBox(
-      width: 80,
-      height: 80,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 48 + (32 * t),
-            height: 48 + (32 * t),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withOpacity(0.18 * (1 - t)),
-            ),
-          ),
-          Container(
-            width: 48 + (16 * t),
-            height: 48 + (16 * t),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withOpacity(0.26 * (1 - t)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Pin body: circular avatar in a thin Grid-styled ring, with a
-/// small accent dot below where the avatar bottom meets the lat/lng
-/// anchor. Drops the chunky teardrop tail in favor of a minimal
-/// anchor dot for a cleaner, Life360-ish silhouette.
+/// Pin body: avatar in a thin Grid-styled ring, small accent dot below
+/// where the avatar bottom meets the lat/lng anchor. Subtle drop shadow
+/// gives depth; no glow or halo.
 class _PinBody extends StatelessWidget {
   const _PinBody({
     required this.userId,
@@ -332,7 +216,6 @@ class _PinBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Light mode: softer off-white ring + stronger shadow instead of white halo.
     final innerRing = isDark ? context.gridColors.surface : context.gridColors.bg;
     return SizedBox(
       width: 60,
@@ -357,12 +240,6 @@ class _PinBody extends StatelessWidget {
                   blurRadius: isDark ? 12 : 14,
                   offset: const Offset(0, 4),
                 ),
-                if (selected)
-                  BoxShadow(
-                    color: accent.withOpacity(0.45),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                  ),
               ],
             ),
             padding: const EdgeInsets.all(2),
