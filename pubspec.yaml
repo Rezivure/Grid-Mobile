@@ -96,6 +96,7 @@ flutter:
     - assets/lottie/lottie-phone-verify.json
     - assets/extras/satellite.png
     - assets/extras/basemaps.png
+    - assets/geocoder/cities500.bin.gz
     - .env
 
   fonts:

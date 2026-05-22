@@ -7,6 +7,7 @@ import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/local_geocoder.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
@@ -70,6 +71,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   SyncState? _previousSyncState;
   bool _hasShownInitialLoading = false;
 
+  final Map<String, String?> _placeCache = {};
+  final Set<String> _placeInflight = {};
 
   @override
   void initState() {
@@ -242,22 +245,49 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     }
   }
 
-  String _placeLineFor(ContactDisplay c) {
-    // We don't yet have a geocoded place; show the membership state or a
-    // gentle fallback. Keeps the row visually balanced with the design.
+  String _placeKey(double lat, double lng) {
+    final a = (lat * 1000).round();
+    final b = (lng * 1000).round();
+    return '$a,$b';
+  }
+
+  void _ensurePlaceFor(double lat, double lng) {
+    final key = _placeKey(lat, lng);
+    if (_placeCache.containsKey(key) || _placeInflight.contains(key)) return;
+    _placeInflight.add(key);
+    LocalGeocoder.instance.lookup(lat, lng).then((name) {
+      if (!mounted) return;
+      setState(() {
+        _placeCache[key] = name;
+        _placeInflight.remove(key);
+      });
+    }).catchError((_) {
+      if (!mounted) return;
+      _placeCache[key] = null;
+      _placeInflight.remove(key);
+    });
+  }
+
+  String? _cachedPlace(double lat, double lng) {
+    return _placeCache[_placeKey(lat, lng)];
+  }
+
+  String _placeLineFor(ContactDisplay c, {String? place}) {
     if (c.membershipStatus == 'invite') return 'Invite pending';
     final time = c.lastSeen;
+    final bucket = _bucketFor(c);
+    if (place != null && place.isNotEmpty) return place;
+    if (bucket == _ContactBucket.sharingNow) return 'Sharing location';
     if (time == 'Offline' || time.isEmpty || time == '-') {
-      return 'Last seen unknown';
+      return "Hasn't shared yet";
     }
-    return 'Sharing location';
+    return 'Location unavailable';
   }
 
   String? _timeTextFor(ContactDisplay c) {
     final time = c.lastSeen;
     if (time.isEmpty) return null;
     if (time == 'Just now') return 'now';
-    // Already short ("2m ago", "3h ago"); strip " ago" for compactness.
     if (time.endsWith(' ago')) return time.substring(0, time.length - 4);
     return time;
   }
@@ -452,14 +482,24 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         ? contact.userId
         : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
 
-    // Tap = focus the map on them + open the profile sheet. No more
-    // long-press menu — destructive actions (Remove contact) live
-    // inside the sheet itself.
+    String? place;
+    if (!isInvite) {
+      final loc = Provider.of<UserLocationProvider>(context, listen: false)
+          .getUserLocation(contact.userId);
+      if (loc != null) {
+        place = _cachedPlace(loc.latitude, loc.longitude);
+        if (place == null &&
+            !_placeCache.containsKey(_placeKey(loc.latitude, loc.longitude))) {
+          _ensurePlaceFor(loc.latitude, loc.longitude);
+        }
+      }
+    }
+
     return GridContactRow(
       name: contact.displayName,
       handle: handle,
       userId: contact.userId,
-      placeLine: _placeLineFor(contact),
+      placeLine: _placeLineFor(contact, place: place),
       timeText: _timeTextFor(contact),
       live: _isLive(contact),
       avatarStatus: _avatarStatusFor(contact),
