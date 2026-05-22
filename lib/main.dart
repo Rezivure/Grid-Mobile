@@ -42,6 +42,7 @@ import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/services/log_stream_service.dart';
+import 'package:grid_frontend/services/theme_controller.dart';
 
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
@@ -75,6 +76,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await ThemeController.instance.load();
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
 
@@ -375,33 +378,36 @@ void main() async {
             },
           ),
         ],
-        child: MaterialApp(
-          title: 'Grid App',
-          theme: _buildTheme(GridTokens.lightScheme()),
-          darkTheme: _buildTheme(GridTokens.darkScheme()),
-          themeMode: ThemeMode.system,
-          builder: (context, child) => Stack(
-            children: [
-              if (child != null) child,
-              const InAppNotificationOverlay(),
-            ],
-          ),
-          home: VersionWrapper(
-            client: client,
-            child: AppInitializer(client: client),
-          ),
-          routes: {
-            '/welcome': (context) => WelcomeScreen(),
-            '/server_select': (context) => ServerSelectScreen(),
-            '/login': (context) => LoginScreen(),
-            '/signup': (context) => SignUpScreen(),
-            '/main': (context) => const MapTab(),
-            '/migration': (context) => Scaffold(
-              body: Center(
-                child: MigrationModal(),
-              ),
+        child: AnimatedBuilder(
+          animation: ThemeController.instance,
+          builder: (context, _) => MaterialApp(
+            title: 'Grid App',
+            theme: _buildTheme(GridTokens.lightScheme()),
+            darkTheme: _buildTheme(GridTokens.darkScheme()),
+            themeMode: ThemeController.instance.mode,
+            builder: (context, child) => Stack(
+              children: [
+                if (child != null) child,
+                const InAppNotificationOverlay(),
+              ],
             ),
-          },
+            home: VersionWrapper(
+              client: client,
+              child: AppInitializer(client: client),
+            ),
+            routes: {
+              '/welcome': (context) => WelcomeScreen(),
+              '/server_select': (context) => ServerSelectScreen(),
+              '/login': (context) => LoginScreen(),
+              '/signup': (context) => SignUpScreen(),
+              '/main': (context) => const MapTab(),
+              '/migration': (context) => Scaffold(
+                body: Center(
+                  child: MigrationModal(),
+                ),
+              ),
+            },
+          ),
         ),
       ),
     ),

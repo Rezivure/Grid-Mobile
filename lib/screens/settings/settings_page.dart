@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/theme_controller.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -2397,6 +2398,44 @@ class _SettingsPageState extends State<SettingsPage> {
             // Profile header card
             _buildProfileSection(theme, colorScheme),
 
+            // ── Appearance ──────────────────────────────────
+            const GridSectionHeader(text: 'Appearance'),
+            AnimatedBuilder(
+              animation: ThemeController.instance,
+              builder: (context, _) => _buildSectionCard(
+                theme: theme,
+                colorScheme: colorScheme,
+                children: [
+                  _ThemeModeRow(
+                    icon: Icons.brightness_auto_outlined,
+                    title: 'System',
+                    selected:
+                        ThemeController.instance.mode == ThemeMode.system,
+                    onTap: () => ThemeController.instance
+                        .setMode(ThemeMode.system),
+                  ),
+                  _buildSettingsDivider(),
+                  _ThemeModeRow(
+                    icon: Icons.light_mode_outlined,
+                    title: 'Light',
+                    selected:
+                        ThemeController.instance.mode == ThemeMode.light,
+                    onTap: () => ThemeController.instance
+                        .setMode(ThemeMode.light),
+                  ),
+                  _buildSettingsDivider(),
+                  _ThemeModeRow(
+                    icon: Icons.dark_mode_outlined,
+                    title: 'Dark',
+                    selected:
+                        ThemeController.instance.mode == ThemeMode.dark,
+                    onTap: () => ThemeController.instance
+                        .setMode(ThemeMode.dark),
+                  ),
+                ],
+              ),
+            ),
+
             // ── Sharing ─────────────────────────────────────
             const GridSectionHeader(text: 'Sharing'),
             _buildSectionCard(
@@ -4063,4 +4102,62 @@ class _ModeInfo {
   final String tagline;
   final String friendsSee;
   final String battery;
+}
+
+/// Row used by the Appearance section: shows an icon + label and a mint check
+/// when selected, with a mint-faint background tint highlighting the active
+/// option. Mirrors the menu/info row paddings used elsewhere in this file.
+class _ThemeModeRow extends StatelessWidget {
+  const _ThemeModeRow({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color iconColor =
+        selected ? context.gridColors.mint : context.gridColors.text2;
+    final Color titleColor = context.gridColors.text;
+
+    return Material(
+      color: selected ? context.gridColors.mintFaint : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: iconColor),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    color: titleColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.01,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: context.gridColors.mint,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
