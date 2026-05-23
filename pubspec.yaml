@@ -73,16 +73,15 @@ flutter_launcher_icons:
   adaptive_icon_padding: false
 
 flutter_native_splash:
-  color: "#0E1115"
-  color_dark: "#0E1115"
-  image: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
-  image_dark: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
-  branding: "assets/brand/02-wordmark/grid-wordmark-white-1800.png"
-  branding_dark: "assets/brand/02-wordmark/grid-wordmark-white-1800.png"
-  branding_mode: bottom
+  color: "#F8F8F7"
+  color_dark: "#0B0D0F"
+  image: "assets/brand/01-logos/grid-symbol-color-512.png"
+  image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
   android_12:
-    image: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
-    color: "#0E1115"
+    image: "assets/brand/01-logos/grid-symbol-color-512.png"
+    image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
+    color: "#F8F8F7"
+    color_dark: "#0B0D0F"
   ios: true
   android: true
   fullscreen: true
