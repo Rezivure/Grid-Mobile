@@ -10,6 +10,8 @@ import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
@@ -89,10 +91,53 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   /// Whether the device keys section is expanded
   bool _isDeviceKeysExpanded = false;
 
+  // Relationship snapshot, computed once on modal open.
+  bool _hasDirect = false;
+  List<_SharedGroupRef> _sharedGroups = const [];
+  bool _sendingFriendRequest = false;
+
   @override
   void initState() {
     super.initState();
     _loadDeviceKeys();
+    _computeRelationship();
+  }
+
+  void _computeRelationship() {
+    final myId = widget.roomService.getMyUserId();
+    final targetId = widget.contact.userId;
+    bool direct = false;
+    try {
+      for (final r in widget.roomService.client.rooms) {
+        final name = r.name;
+        if (name == 'Grid:Direct:$myId:$targetId' ||
+            name == 'Grid:Direct:$targetId:$myId') {
+          direct = true;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    List<_SharedGroupRef> shared = const [];
+    try {
+      final state = context.read<GroupsBloc>().state;
+      if (state is GroupsLoaded) {
+        shared = state.groups
+            .where((g) => g.members.contains(targetId))
+            .map((g) => _SharedGroupRef(g.roomId, g.name))
+            .toList();
+      }
+    } catch (_) {}
+
+    _hasDirect = direct;
+    _sharedGroups = shared;
+  }
+
+  _RelationshipState get _relationship {
+    if (_hasDirect && _sharedGroups.isNotEmpty) return _RelationshipState.both;
+    if (_hasDirect) return _RelationshipState.directOnly;
+    if (_sharedGroups.isNotEmpty) return _RelationshipState.groupOnly;
+    return _RelationshipState.directOnly;
   }
 
   Future<void> _loadDeviceKeys() async {
@@ -430,15 +475,17 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         const SizedBox(height: 14),
                         _buildStatusRow(),
                         const SizedBox(height: 18),
-                        _buildMutualSharingCard(firstName),
+                        ..._buildRelationshipBlock(firstName),
                         const SizedBox(height: 14),
                         _buildActionGrid(),
                         const SizedBox(height: 22),
                         _buildSharedGroups(),
-                        const SizedBox(height: 22),
-                        _buildSectionLabel('SHARING WINDOWS'),
-                        const SizedBox(height: 10),
-                        _buildSharingWindows(),
+                        if (_relationship != _RelationshipState.groupOnly) ...[
+                          const SizedBox(height: 22),
+                          _buildSectionLabel('SHARING WINDOWS'),
+                          const SizedBox(height: 10),
+                          _buildSharingWindows(),
+                        ],
                         const SizedBox(height: 22),
                         _buildSectionLabel('SECURITY'),
                         const SizedBox(height: 10),
@@ -877,6 +924,138 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     );
   }
 
+  // Branches the slot that normally holds the "Sharing with X" card by
+  // relationship state.
+  List<Widget> _buildRelationshipBlock(String firstName) {
+    if (_relationship == _RelationshipState.groupOnly) {
+      return [
+        _buildFriendRequestButton(firstName),
+        const SizedBox(height: 8),
+        _buildGroupOnlyCaption(),
+      ];
+    }
+    final showWarning =
+        _relationship == _RelationshipState.both && !_activeSharing;
+    return [
+      _buildMutualSharingCard(firstName),
+      if (showWarning) ...[
+        const SizedBox(height: 8),
+        _buildGroupVisibilityWarning(),
+      ],
+    ];
+  }
+
+  Widget _buildFriendRequestButton(String firstName) {
+    return GridButton(
+      label: _sendingFriendRequest
+          ? 'Sending…'
+          : 'Send friend request',
+      icon: Icons.person_add_alt_1_rounded,
+      onPressed: _sendingFriendRequest ? null : _sendFriendRequest,
+    );
+  }
+
+  Widget _buildGroupOnlyCaption() {
+    final text = _sharedGroups.length == 1
+        ? 'You share with them through ${_sharedGroups.first.name}'
+        : 'You share with them through ${_sharedGroups.length} groups';
+    return Text(
+      text,
+      style: GoogleFonts.getFont(
+        'Geist',
+        fontSize: 12.5,
+        color: context.gridColors.text3,
+        height: 1.35,
+        letterSpacing: -0.005,
+      ),
+    );
+  }
+
+  Widget _buildGroupVisibilityWarning() {
+    final label = _sharedGroups.length == 1
+        ? 'Direct sharing off — still visible via ${_sharedGroups.first.name}'
+        : 'Direct sharing off — still visible via ${_sharedGroups.length} shared groups';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.gridColors.amber.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: context.gridColors.amber.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline_rounded,
+              size: 14, color: context.gridColors.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12,
+                color: context.gridColors.text2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendFriendRequest() async {
+    final firstName = widget.contact.displayName.split(' ').first;
+    setState(() => _sendingFriendRequest = true);
+    InAppNotifier.instance.show(
+      title: 'Friend request sent',
+      message: 'They will see it shortly.',
+      variant: InAppNotificationVariant.success,
+    );
+    try {
+      final ok = await widget.roomService
+          .createRoomAndInviteContact(widget.contact.userId);
+      if (!mounted) return;
+      if (!ok) {
+        InAppNotifier.instance.show(
+          title: 'Could not send request',
+          message: 'Already friends or request pending with $firstName.',
+          variant: InAppNotificationVariant.warning,
+        );
+        setState(() => _sendingFriendRequest = false);
+        return;
+      }
+      // Wire up the new direct room into ContactsBloc, matching add_friend_modal.
+      final myUserId = widget.roomService.getMyUserId();
+      if (myUserId != null) {
+        try {
+          final rooms = widget.roomService.client.rooms;
+          final directRoom = rooms.where((room) {
+            final name = room.name;
+            return name == 'Grid:Direct:$myUserId:${widget.contact.userId}' ||
+                name == 'Grid:Direct:${widget.contact.userId}:$myUserId';
+          }).firstOrNull;
+          if (directRoom != null && mounted) {
+            await context
+                .read<ContactsBloc>()
+                .handleNewContactInvited(directRoom.id, widget.contact.userId);
+          }
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      setState(() {
+        _hasDirect = true;
+        _sendingFriendRequest = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingFriendRequest = false);
+      InAppNotifier.instance.show(
+        title: 'Friend request failed',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
+      );
+    }
+  }
+
   // ────────────────────────────────────────────────────────────────────
   // 4-button action grid
   // ────────────────────────────────────────────────────────────────────
@@ -939,10 +1118,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildSharedGroups() {
-    // We don't pull shared-groups from the room service in this widget
-    // (it isn't passed in and adding a fetch would expand logic surface).
-    // Render the section label always; chip row stays empty for now.
-    // TODO: needs backend — surface shared-room list for this contact.
+    final groups = _sharedGroups;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -956,23 +1132,59 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             borderRadius: BorderRadius.circular(GridTokens.rMd),
             border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.groups_2_outlined, size: 18, color: context.gridColors.text3),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'No shared groups yet',
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: context.gridColors.text2,
-                  ),
+          child: groups.isEmpty
+              ? Row(
+                  children: [
+                    Icon(Icons.groups_2_outlined,
+                        size: 18, color: context.gridColors.text3),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No shared groups yet',
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: context.gridColors.text2,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final g in groups)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: context.gridColors.surface2,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                              color: context.gridColors.hairline, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.groups_2_outlined,
+                                size: 12, color: context.gridColors.text3),
+                            const SizedBox(width: 6),
+                            Text(
+                              g.name,
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: context.gridColors.text2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -1676,6 +1888,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 // ─────────────────────────────────────────────────────────────────────
 // helpers
 // ─────────────────────────────────────────────────────────────────────
+
+enum _RelationshipState { directOnly, groupOnly, both }
+
+class _SharedGroupRef {
+  final String roomId;
+  final String name;
+  const _SharedGroupRef(this.roomId, this.name);
+}
 
 /// Mint pill showing DRIVING / WALKING / STILL + mph next to it.
 /// Falls back to a muted STILL pill when speed is unknown / sub-walking
