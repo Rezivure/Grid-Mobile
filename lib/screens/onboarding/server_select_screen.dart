@@ -413,17 +413,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.fingerprint,
               size: 48,
@@ -485,17 +475,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 96,
             height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.14),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.6, 1.0],
-              ),
-            ),
             alignment: Alignment.center,
             child: Icon(
               Icons.alternate_email_rounded,
@@ -633,17 +612,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.phone_android,
               size: 48,
@@ -747,17 +716,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.verified_user,
               size: 48,

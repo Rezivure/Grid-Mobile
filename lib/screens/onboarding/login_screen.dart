@@ -203,21 +203,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildModernLogo() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            colorScheme.primary.withOpacity(0.1),
-            colorScheme.primary.withOpacity(0.05),
-            Colors.transparent,
-          ],
-          stops: const [0.3, 0.7, 1.0],
-        ),
-      ),
       child: Image.asset(
         'assets/brand/01-logos/grid-symbol-color-1024.png',
         height: 100,
