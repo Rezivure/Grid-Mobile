@@ -979,8 +979,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     if (_relationship == _RelationshipState.groupOnly) {
       return [
         _buildFriendRequestButton(firstName),
-        const SizedBox(height: 8),
-        _buildGroupOnlyCaption(),
       ];
     }
     final showWarning =
@@ -1182,13 +1180,31 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: _ActionTile(
-            icon: Icons.schedule_rounded,
-            label: 'Sharing',
-            onTap: _openAddSharingPreferenceModal,
-          ),
+          child: _buildSharingActionTile(),
         ),
       ],
+    );
+  }
+
+  Widget _buildSharingActionTile() {
+    final managedInGroup = _relationship == _RelationshipState.groupOnly ||
+        _directPending;
+    if (managedInGroup) {
+      final subtext = _sharedGroups.length <= 1
+          ? 'Managed in group'
+          : 'Managed in groups';
+      return _ActionTile(
+        icon: Icons.schedule_rounded,
+        label: 'Sharing',
+        subtext: subtext,
+        mutedAmber: true,
+        onTap: null,
+      );
+    }
+    return _ActionTile(
+      icon: Icons.schedule_rounded,
+      label: 'Sharing',
+      onTap: _openAddSharingPreferenceModal,
     );
   }
 
@@ -2205,15 +2221,28 @@ class _ActionTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.subtext,
+    this.mutedAmber = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final String? subtext;
+  final bool mutedAmber;
 
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
+    final colors = context.gridColors;
+    final bgColor = mutedAmber ? colors.amberSoft : colors.surface2;
+    final borderColor = mutedAmber ? colors.amber.withOpacity(0.45) : colors.hairline;
+    final iconColor = mutedAmber
+        ? colors.amber
+        : (disabled ? colors.text4 : colors.text);
+    final labelColor = mutedAmber
+        ? colors.text2
+        : (disabled ? colors.text4 : colors.text2);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2222,18 +2251,14 @@ class _ActionTile extends StatelessWidget {
         child: Ink(
           height: 64,
           decoration: BoxDecoration(
-            color: context.gridColors.surface2,
+            color: bgColor,
             borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: Border.all(color: context.gridColors.hairline, width: 1),
+            border: Border.all(color: borderColor, width: 1),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 18,
-                color: disabled ? context.gridColors.text4 : context.gridColors.text,
-              ),
+              Icon(icon, size: 18, color: iconColor),
               const SizedBox(height: 4),
               Text(
                 label,
@@ -2241,9 +2266,22 @@ class _ActionTile extends StatelessWidget {
                   'Geist',
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: disabled ? context.gridColors.text4 : context.gridColors.text2,
+                  color: labelColor,
                 ),
               ),
+              if (subtext != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtext!,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w500,
+                    color: mutedAmber ? colors.amber : colors.text3,
+                    letterSpacing: -0.005,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
