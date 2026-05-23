@@ -670,7 +670,7 @@ class _LogoHero extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Image.asset(
-        'assets/logos/png-file-2.png',
+        'assets/brand/01-logos/grid-symbol-color-1024.png',
         width: 76,
         height: 76,
         fit: BoxFit.contain,

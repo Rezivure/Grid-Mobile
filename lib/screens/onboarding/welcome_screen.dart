@@ -125,7 +125,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
         ),
       ),
       child: Image.asset(
-        'assets/logos/png-file-2.png',
+        'assets/brand/01-logos/grid-symbol-color-1024.png',
         height: 120,
         width: 120,
         fit: BoxFit.contain,
@@ -224,7 +224,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                     ),
                     alignment: Alignment.center,
                     child: Image.asset(
-                      'assets/logos/png-file-2.png',
+                      'assets/brand/01-logos/grid-symbol-color-1024.png',
                       width: 132,
                       height: 132,
                       fit: BoxFit.contain,

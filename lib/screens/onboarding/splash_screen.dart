@@ -207,7 +207,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
             ],
           ),
           child: Image.asset(
-            'assets/logos/png-file-2.png',
+            'assets/brand/01-logos/grid-symbol-color-1024.png',
             fit: BoxFit.contain,
           ),
         ),

@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         ),
       ),
       child: Image.asset(
-        'assets/logos/png-file-2.png',
+        'assets/brand/01-logos/grid-symbol-color-1024.png',
         height: 100,
         width: 100,
         fit: BoxFit.contain,
