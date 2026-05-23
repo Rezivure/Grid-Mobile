@@ -134,8 +134,8 @@ void main() async {
   // Initialize debug logging service
   await DebugLogService.instance.init();
 
-  // Attempt to restore session
-  // TODO: this code chunk may do nothing actually
+  // On warm start, re-register push notifications for the restored session.
+  // (client.init() restored creds from the Matrix DB; we just need pushers refreshed.)
   final prefs = await SharedPreferences.getInstance();
   String? token = prefs.getString('token');
 
@@ -143,7 +143,6 @@ void main() async {
     try {
       client.accessToken = token;
 
-      // Register push notifications on session restore
       if (client.isLogged()) {
         final pushService = PushNotificationService(client: client);
         await pushService.register();

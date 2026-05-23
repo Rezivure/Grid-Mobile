@@ -48,7 +48,7 @@ class AppleSubscriptionService {
     _subscription = purchaseUpdated.listen(
       _onPurchaseUpdate,
       onDone: () => _subscription.cancel(),
-      onError: (error) => {},
+      onError: (error) => Logs().w('[IAP] stream error: $error'),
     );
     
     await loadProducts();
@@ -226,9 +226,9 @@ class AppleSubscriptionService {
   
   Future<void> openManageSubscriptions() async {
     if (Platform.isIOS) {
-      const url = 'https://apps.apple.com/account/subscriptions';
-      if (await canLaunch(url)) {
-        await launch(url);
+      final uri = Uri.parse('https://apps.apple.com/account/subscriptions');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
       }
     }
   }

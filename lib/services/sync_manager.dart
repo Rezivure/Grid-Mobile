@@ -205,8 +205,16 @@ class SyncManager with ChangeNotifier {
     // Wire up decryption error callback
     messageProcessor.setDecryptionErrorCallback(_addDecryptionError);
 
-    // Ensure InvitationsBloc is ready before processing sync
-    await Future.delayed(const Duration(milliseconds: 200));
+    // Wait for InvitationsBloc to finish its initial LoadInvitations dispatch
+    // so the first sync's invite reconciliation sees the persisted list, not Initial.
+    if (invitationsBloc.state is InvitationsInitial ||
+        invitationsBloc.state is InvitationsLoading) {
+      await invitationsBloc.stream
+          .firstWhere(
+            (s) => s is InvitationsLoaded || s is InvitationsError,
+          )
+          .timeout(const Duration(seconds: 2), onTimeout: () => invitationsBloc.state);
+    }
 
     try {
       await _loadSinceToken();

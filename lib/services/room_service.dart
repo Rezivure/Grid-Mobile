@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:math';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -1164,11 +1163,11 @@ class RoomService {
   // Helper: Calculate distance between two coordinates using Haversine formula
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371000; // Earth radius in meters
-    final dLat = (lat2 - lat1) * (3.14159265359 / 180);
-    final dLon = (lon2 - lon1) * (3.14159265359 / 180);
+    final dLat = (lat2 - lat1) * (pi / 180);
+    final dLon = (lon2 - lon1) * (pi / 180);
 
-    final lat1Rad = lat1 * (3.14159265359 / 180);
-    final lat2Rad = lat2 * (3.14159265359 / 180);
+    final lat1Rad = lat1 * (pi / 180);
+    final lat2Rad = lat2 * (pi / 180);
 
     final a = sin(dLat / 2) * sin(dLat / 2) +
         cos(lat1Rad) * cos(lat2Rad) *

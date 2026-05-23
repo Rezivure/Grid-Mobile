@@ -465,7 +465,9 @@ class MessageProcessor {
         encryptedData = file.data;
       } else {
         // Download from R2
-        final response = await http.get(Uri.parse(avatarUrl));
+        final response = await http
+            .get(Uri.parse(avatarUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) {
           print('[Group Avatar Processing] Failed to download avatar from R2: ${response.statusCode}');
           return;
@@ -511,7 +513,9 @@ class MessageProcessor {
         encryptedData = file.data;
       } else {
         // Download from R2
-        final response = await http.get(Uri.parse(avatarUrl));
+        final response = await http
+            .get(Uri.parse(avatarUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) {
           print('[Avatar Processing] Failed to download avatar from R2: ${response.statusCode}');
           return;
