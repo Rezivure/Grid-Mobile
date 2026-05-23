@@ -134,6 +134,25 @@ String formatHandleWithServer(String userId) {
   return '$localpart · $server';
 }
 
+/// Pulls the user-facing group name out of a `Grid:Group:<ts>:<name>:<creatorId>`
+/// room name. On the default homeserver returns just the name; otherwise
+/// appends the creator's server so users can tell groups apart across servers.
+String formatGroupName(String roomName) {
+  if (!roomName.startsWith('Grid:Group:')) return roomName;
+  const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';
+  final defaultHomeserver = dotenv.env['HOMESERVER'] ?? FALLBACK_DEFAULT_HOMESERVER;
+  final parts = roomName.split(':');
+  if (parts.length < 5) return roomName;
+  final name = parts[3];
+  final creatorServer = parts.sublist(5).join(':');
+  if (creatorServer.isEmpty ||
+      creatorServer == defaultHomeserver ||
+      creatorServer == FALLBACK_DEFAULT_HOMESERVER) {
+    return name;
+  }
+  return '$name · $creatorServer';
+}
+
 bool isCustomHomeserver(String currentHomeserver) {
   // Default homeserver fallback in case dotenv fails
   const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';

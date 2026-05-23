@@ -124,7 +124,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       if (state is GroupsLoaded) {
         shared = state.groups
             .where((g) => g.members.contains(targetId))
-            .map((g) => _SharedGroupRef(g.roomId, g.name))
+            .map((g) => _SharedGroupRef(g.roomId, utils.formatGroupName(g.name)))
             .toList();
       }
     } catch (_) {}
