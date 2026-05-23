@@ -2739,9 +2739,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       name: _displayName ?? _username ?? 'Grid',
                       size: 56,
                       ring: true,
-                      status: _incognitoMode
-                          ? GridAvatarStatus.paused
-                          : GridAvatarStatus.live,
+                      selfStatus: _incognitoMode
+                          ? SelfSharingStatus.paused
+                          : SelfSharingStatus.sharing,
                     ),
                     // Live user-uploaded avatar, clipped into the inner disc.
                     Positioned.fill(
