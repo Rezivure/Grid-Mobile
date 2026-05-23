@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
@@ -379,12 +381,14 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
 
       // Handle location sharing based on checkbox
       if (_startSharingOnJoin) {
-        // Send immediate location update
+        // Fire-and-forget so the modal closes immediately.
         final locationManager = context.read<LocationManager>();
-        await locationManager.grabLocationAndPing();
-
-        // Send location specifically to this room
-        await widget.roomService.updateSingleRoom(widget.roomId);
+        unawaited(locationManager
+            .grabLocationAndPing()
+            .catchError((e) => Logs().w('location ping failed: $e')));
+        unawaited(widget.roomService
+            .updateSingleRoom(widget.roomId)
+            .catchError((e) => Logs().w('updateSingleRoom failed: $e')));
       } else {
         // Disable location sharing for this contact
         final sharingPrefs = context.read<SharingPreferencesRepository>();

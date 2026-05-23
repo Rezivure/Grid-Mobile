@@ -1289,7 +1289,7 @@ class SyncManager with ChangeNotifier {
     final currentParticipants = customRoom.members;
     final existingParticipants = await roomRepository.getRoomParticipants(room.id);
 
-    for (var participantId in currentParticipants) {
+    await Future.wait(currentParticipants.map((participantId) async {
       try {
         // Fetch participant details using client.getUserProfile
         final profileInfo = await client.getUserProfile(participantId);
@@ -1316,7 +1316,7 @@ class SyncManager with ChangeNotifier {
             isDirect,
             membershipStatus: !isDirect ? membershipStatus : null
         );
-        
+
         // Also insert into RoomParticipants table for proper tracking
         await roomRepository.insertRoomParticipant(room.id, participantId);
 
@@ -1354,7 +1354,7 @@ class SyncManager with ChangeNotifier {
       } catch (e) {
         print('Error fetching profile for user $participantId: $e');
       }
-    }
+    }));
 
     // Remove participants who are no longer in the room
     for (var participant in existingParticipants) {
@@ -1389,23 +1389,14 @@ class SyncManager with ChangeNotifier {
         if (room != null) {
           await processJoinedRoom(room);
           
-          // Enhanced avatar exchange after accepting invite
-          try {
-            final avatarService = AvatarAnnouncementService(client);
-            
-            // 1. Announce our avatar to the room
-            await avatarService.announceProfPicToRoom(roomId);
-            
-            // 2. Request avatars from all room members
-            print('[Avatar Exchange] Requesting avatars from room members after accepting invite');
-            await avatarService.requestAvatars(roomId);
-            
-            // 4. For groups, existing members should send avatar state
-            // This is handled by the member join event in _processMemberStateEvent
-            
-          } catch (e) {
-            print('Error during avatar exchange after accepting invite: $e');
-          }
+          // Fire-and-forget avatar exchange so it doesn't block the accept critical path.
+          final avatarService = AvatarAnnouncementService(client);
+          unawaited(avatarService
+              .announceProfPicToRoom(roomId)
+              .catchError((e) => Logs().w('avatar announce failed: $e')));
+          unawaited(avatarService
+              .requestAvatars(roomId)
+              .catchError((e) => Logs().w('avatar request failed: $e')));
           
           groupsBloc.add(RefreshGroups());
         }

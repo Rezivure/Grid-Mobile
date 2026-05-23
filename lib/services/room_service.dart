@@ -153,11 +153,10 @@ class RoomService {
         ],
       );
 
-      // Pre-warm the outbound Megolm session so the first send doesn't race device-key claim
-      try {
-        await client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
-      } catch (e) {
-        Logs().w('[MegolmPrewarm] Failed for $roomId: $e');
+      // Pre-warm Megolm session off the send critical path; first event creates it anyway.
+      final prewarm = client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      if (prewarm != null) {
+        unawaited(prewarm.catchError((e) => Logs().w('[MegolmPrewarm] Failed for $roomId: $e')));
       }
 
       return true; // success
@@ -333,9 +332,9 @@ class RoomService {
       await client.joinRoom(roomId);
       print("Successfully joined room: $roomId");
 
-      // Wait a bit for sync to catch up
-      await Future.delayed(const Duration(seconds: 1));
-      
+      // Brief wait so sync populates participants before the validity check below.
+      await Future.delayed(const Duration(milliseconds: 200));
+
       // Check if the room exists
       final room = client.getRoomById(roomId);
       if (room == null) {
@@ -644,10 +643,9 @@ class RoomService {
         await room.addTag('Grid Group');
       }
 
-      try {
-        await client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
-      } catch (e) {
-        Logs().w('[MegolmPrewarm] Failed for $roomId: $e');
+      final prewarm = client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      if (prewarm != null) {
+        unawaited(prewarm.catchError((e) => Logs().w('[MegolmPrewarm] Failed for $roomId: $e')));
       }
     } catch (e) {
       throw Exception('Failed to create group: $e');
