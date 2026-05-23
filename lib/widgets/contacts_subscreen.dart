@@ -785,9 +785,11 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   Widget _buildEmptyState() {
     final myUserId = widget.roomService.getMyUserId();
+    final isCustom =
+        utils.isCustomHomeserver(widget.roomService.getMyHomeserver());
     final handle = myUserId == null
         ? '@…'
-        : '@${utils.localpart(myUserId)}';
+        : (isCustom ? myUserId : '@${utils.localpart(myUserId)}');
     final qrData = myUserId ?? handle;
 
     return Container(
