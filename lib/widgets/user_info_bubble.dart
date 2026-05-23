@@ -733,7 +733,7 @@ class _StatusCell extends StatelessWidget {
           const SizedBox(width: 6),
           Flexible(
             child: GridMono(
-              motion ?? 'IDLE',
+              motion ?? 'STILL',
               size: 10.5,
               letterSpacing: 0.1,
               color: color,

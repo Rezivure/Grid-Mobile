@@ -1486,9 +1486,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 // helpers
 // ─────────────────────────────────────────────────────────────────────
 
-/// Mint pill showing DRIVING / WALKING / IDLE + mph next to it.
-/// Falls back to a muted IDLE pill when speed is unknown so the slot
-/// is always visible.
+/// Mint pill showing DRIVING / WALKING / STILL + mph next to it.
+/// Falls back to a muted STILL pill when speed is unknown / sub-walking
+/// so the slot is always visible. Distinct from freshness "idle".
 class _MotionStatusPill extends StatelessWidget {
   const _MotionStatusPill({required this.motion, this.speed});
 
@@ -1521,7 +1521,7 @@ class _MotionStatusPill extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 5),
-          GridMono(motion ?? 'IDLE',
+          GridMono(motion ?? 'STILL',
               size: 10, color: color, letterSpacing: 0.08),
           if (speed != null) ...[
             const SizedBox(width: 5),
