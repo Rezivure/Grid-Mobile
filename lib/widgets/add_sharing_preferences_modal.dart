@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/sharing_window.dart';
 import '../styles/tokens.dart';
 import '../styles/grid_colors.dart';
 import 'grid/grid_button.dart';
@@ -21,9 +22,13 @@ class AddSharingPreferenceModal extends StatefulWidget {
     TimeOfDay? endTime,
   ) onSave;
 
+  /// Optional existing window to pre-fill the form for edit mode.
+  final SharingWindow? initial;
+
   const AddSharingPreferenceModal({
     Key? key,
     required this.onSave,
+    this.initial,
   }) : super(key: key);
 
   @override
@@ -55,6 +60,28 @@ class _AddSharingPreferenceModalState
   void initState() {
     super.initState();
     _labelFocus.addListener(() => setState(() {}));
+    final init = widget.initial;
+    if (init != null) {
+      _labelController.text = init.label;
+      for (final d in init.days) {
+        if (d >= 0 && d < 7) _selectedDays[d] = true;
+      }
+      _isAllDay = init.isAllDay;
+      final s = _parseHm(init.startTime);
+      final e = _parseHm(init.endTime);
+      if (s != null) _startTime = s;
+      if (e != null) _endTime = e;
+    }
+  }
+
+  TimeOfDay? _parseHm(String? hhmm) {
+    if (hhmm == null || hhmm.isEmpty) return null;
+    final parts = hhmm.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return TimeOfDay(hour: h, minute: m);
   }
 
   @override
@@ -125,7 +152,11 @@ class _AddSharingPreferenceModalState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const GridSheetHeader(title: 'New sharing window'),
+            GridSheetHeader(
+              title: widget.initial == null
+                  ? 'New sharing window'
+                  : 'Edit sharing window',
+            ),
             SizedBox(
               height: MediaQuery.of(context).size.height * 0.6,
               child: SingleChildScrollView(
@@ -361,7 +392,7 @@ class _AddSharingPreferenceModalState
           Expanded(
             flex: 2,
             child: GridButton(
-              label: 'Add window',
+              label: widget.initial == null ? 'Add window' : 'Save changes',
               onPressed: _isValid
                   ? () {
                       widget.onSave(

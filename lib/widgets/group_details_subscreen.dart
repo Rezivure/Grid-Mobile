@@ -39,9 +39,7 @@ import '../blocs/groups/groups_state.dart';
 import '../services/user_service.dart';
 import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
-import 'add_sharing_preferences_modal.dart';
-import '../models/sharing_preferences.dart';
-import '../models/sharing_window.dart';
+import 'group_sharing_windows_modal.dart';
 import 'location_history_modal.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
@@ -421,53 +419,20 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
-  Future<void> _openGroupSharingWindowModal() async {
-    // Load existing prefs so the new window is appended to whatever the
-    // group already has rather than overwriting them. Mirrors what
-    // `GroupProfileModal` used to do before that screen was removed.
-    final existing = await widget.sharingPreferencesRepository
-        .getSharingPreferences(widget.room.roomId, 'group');
-    final windows = existing?.shareWindows?.toList() ?? <SharingWindow>[];
-    final activeSharing = existing?.activeSharing ?? true;
-
-    if (!mounted) return;
+  void _openGroupSharingWindowModal() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalContext) {
-        return Container(
+        return ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.85,
           ),
-          child: AddSharingPreferenceModal(
-            onSave: (label, selectedDays, isAllDay, startTime, endTime) async {
-              final newWindow = SharingWindow(
-                label: label,
-                days: [
-                  for (var i = 0; i < selectedDays.length; i++)
-                    if (selectedDays[i]) i,
-                ],
-                isAllDay: isAllDay,
-                startTime: (isAllDay || startTime == null)
-                    ? null
-                    : '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
-                endTime: (isAllDay || endTime == null)
-                    ? null
-                    : '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
-                isActive: true,
-              );
-              windows.add(newWindow);
-              await widget.sharingPreferencesRepository
-                  .setSharingPreferences(
-                SharingPreferences(
-                  targetId: widget.room.roomId,
-                  targetType: 'group',
-                  activeSharing: activeSharing,
-                  shareWindows: windows,
-                ),
-              );
-            },
+          child: GroupSharingWindowsModal(
+            roomId: widget.room.roomId,
+            groupName: _groupName,
+            sharingPreferencesRepository: widget.sharingPreferencesRepository,
           ),
         );
       },
