@@ -809,9 +809,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       handle: handle,
       userId: user.userId,
       placeLine: _placeLine(timeAgoText, isInvited),
-      timeText: isInvited
-          ? null
-          : (timeAgoText == 'Offline' ? null : timeAgoText),
+      timeText: isInvited ? null : timeAgoText,
       distanceText: null,
       statusKind: statusKind,
       statusLabel: statusLabel,
@@ -824,9 +822,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   }
 
   String? _placeLine(String timeAgoText, bool isInvited) {
-    if (isInvited) return 'pending invite';
-    if (timeAgoText == 'Offline') return 'offline';
-    return null;
+    if (isInvited) return 'Invite pending';
+    if (timeAgoText == 'Offline') return "Hasn't shared yet";
+    return 'Sharing location';
   }
 
   bool _isRecentlyActive(DateTime? lastUpdateAt) =>
