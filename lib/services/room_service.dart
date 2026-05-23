@@ -402,9 +402,10 @@ class RoomService {
 
   Future<void> cleanRooms() async {
     try {
-      // SAFETY: Ensure client is fully synced before cleaning
-      if (!client.isLogged() || client.syncPending == null) {
-        print("[CleanRooms] Client not fully synced yet, skipping cleanup");
+      // SAFETY: skip until first sync has persisted a prevBatch token —
+      // running against an incomplete sync silently deletes contacts.
+      if (!client.isLogged() || client.prevBatch == null) {
+        Logs().w('[cleanRooms] Skipping — first sync incomplete (prevBatch null)');
         return;
       }
       
