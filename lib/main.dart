@@ -272,6 +272,7 @@ void main() async {
             rs.locationDispatch = locationDispatch;
             return rs;
           },
+          dispose: (_, rs) => rs.dispose(),
         ),
       ],
       child: MultiBlocProvider(

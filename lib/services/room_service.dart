@@ -54,6 +54,10 @@ class RoomService {
   /// constructor refactor — bootstrap sets this once at app boot.
   LocationDispatch? locationDispatch;
 
+  StreamSubscription<LocationUpdate>? _locationStreamSub;
+  bool _disposed = false;
+  bool get isDisposed => _disposed;
+
   RoomService(
       this.client,
       this.userService,
@@ -67,7 +71,8 @@ class RoomService {
       {this.roomLocationHistoryRepository}
       ) {
     // Subscribe to location updates
-    locationManager.locationStream.listen((location) {
+    _locationStreamSub = locationManager.locationStream.listen((location) {
+      if (_disposed) return;
       // Always keep `_currentLocation` warm — it's read by callers like
       // `pingNow()` regardless of whether we choose to post this fix.
       _currentLocation = location;
@@ -79,6 +84,18 @@ class RoomService {
         _handleLocationUpdate(location);
       }
     });
+  }
+
+  void dispose() {
+    _disposed = true;
+    _locationStreamSub?.cancel();
+    _locationStreamSub = null;
+    _locationUpdateTimer?.cancel();
+    _locationUpdateTimer = null;
+    _pendingLocation = null;
+    _recentlySentMessages.clear();
+    _lastSentLocationByRoom.clear();
+    _offlineQueue.clear();
   }
   
   void _handleLocationUpdate(LocationUpdate location) {
@@ -98,6 +115,7 @@ class RoomService {
 
     // Minimal debounce (100ms) to batch rapid GPS updates while staying responsive
     _locationUpdateTimer = Timer(const Duration(milliseconds: 100), () {
+      if (_disposed) return;
       if (_pendingLocation != null) {
         updateRooms(_pendingLocation!);
         _pendingLocation = null;

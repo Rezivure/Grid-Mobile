@@ -78,6 +78,10 @@ class SyncManager with ChangeNotifier {
   final MapIconSyncService? mapIconSyncService;
   final LocationManager? locationManager;
   bool _isActive = true;
+  bool _disposed = false;
+  bool _isShuttingDown = false;
+  bool get isDisposed => _disposed;
+  bool get _stopped => _disposed || _isShuttingDown;
 
   bool _isSyncing = false;
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
@@ -176,6 +180,7 @@ class SyncManager with ChangeNotifier {
 
   Future<void> initialize() async {
     if (_isInitialized || _syncState != SyncState.uninitialized) return;
+    _isShuttingDown = false;
 
     // Defer state change to avoid build phase conflicts
     await Future.microtask(() => _setSyncState(SyncState.loadingToken));
@@ -314,8 +319,9 @@ class SyncManager with ChangeNotifier {
     print('[SyncManager] Processing ${_postSyncOperations.length} queued operations');
     final operations = List<Function>.from(_postSyncOperations);
     _postSyncOperations.clear();
-    
+
     for (final operation in operations) {
+      if (_disposed) return;
       try {
         await operation();
       } catch (e) {
@@ -426,6 +432,7 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> clearAllState() async {
+    _isShuttingDown = true;
     invitationsBloc.add(ClearInvitations());
     _roomMessages.clear();
     _pendingMessages.clear();
@@ -593,11 +600,13 @@ class SyncManager with ChangeNotifier {
 
       // Force additional updates after a delay
       Future.delayed(const Duration(milliseconds: 500), () {
+        if (_stopped) return;
         groupsBloc.add(RefreshGroups());
         groupsBloc.add(LoadGroups());
       });
 
       Future.delayed(const Duration(seconds: 1), () {
+        if (_stopped) return;
         groupsBloc.add(RefreshGroups());
         groupsBloc.add(LoadGroups());
         mapBloc.add(MapLoadUserLocations());
@@ -719,6 +728,7 @@ class SyncManager with ChangeNotifier {
                 if (mapIconSyncService != null) {
                   // Small delay to ensure the new member's session is ready
                   Future.delayed(const Duration(seconds: 1), () async {
+                    if (_stopped) return;
                     print('[MapIconSync] Timeline: Sending icon state to new member ${event.stateKey}');
                     await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
                   });
@@ -1014,6 +1024,7 @@ class SyncManager with ChangeNotifier {
                 if (mapIconSyncService != null) {
                   // Small delay to ensure the new member is fully joined
                   Future.delayed(const Duration(seconds: 1), () async {
+                    if (_stopped) return;
                     print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
                     await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
                   });
@@ -1169,6 +1180,7 @@ class SyncManager with ChangeNotifier {
 
           // Additional delayed updates to ensure sync
           Future.delayed(const Duration(milliseconds: 500), () {
+            if (_stopped) return;
             groupsBloc.add(LoadGroups());
             groupsBloc.add(LoadGroupMembers(roomId));
           });
@@ -1796,4 +1808,24 @@ class SyncManager with ChangeNotifier {
   }
 
   bool get authenticationFailed => _authenticationFailed;
+
+  @override
+  void dispose() {
+    // Cancel our streams first; ChangeNotifier finalizes its state in super.dispose().
+    _disposed = true;
+    _isActive = false;
+    _isSyncing = false;
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
+    if (client.syncPending) {
+      try {
+        client.abortSync();
+      } catch (_) {}
+    }
+    _postSyncOperations.clear();
+    _roomMessages.clear();
+    _pendingMessages.clear();
+    _decryptionErrors.clear();
+    super.dispose();
+  }
 }
