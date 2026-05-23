@@ -3,7 +3,12 @@ name: Grid Release
 on:
   schedule:
     - cron: '0 7 * * 0'  # Every Sunday 2am EST (7am UTC)
-  workflow_dispatch:  # Or trigger manually anytime
+  workflow_dispatch:
+    inputs:
+      skip_github_release:
+        description: 'Skip cutting a public GitHub Release (TestFlight + Play only)'
+        type: boolean
+        default: false
 
 concurrency:
   group: release
@@ -141,6 +146,7 @@ jobs:
           fastlane android beta
 
       - name: Create GitHub Release
+        if: ${{ inputs.skip_github_release != true }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           STORE_NOTES=$(bash scripts/build-release-notes.sh)
