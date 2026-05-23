@@ -470,7 +470,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     return Column(
       children: [
         _buildStepHeader(
-          title: 'Choose Your Username',
+          title: 'Choose Your Handle',
           subtitle: 'This is how others can find and add you on Grid',
           illustration: Container(
             width: 96,
@@ -505,8 +505,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           child: TextField(
             controller: _usernameController,
             decoration: InputDecoration(
-              labelText: 'Username',
-              hintText: 'Enter your unique username',
+              labelText: 'Handle',
+              hintText: 'Enter your unique handle',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,

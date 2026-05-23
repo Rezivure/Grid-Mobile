@@ -701,11 +701,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     const SizedBox(height: 16),
                   ],
                   
-                  // Username
+                  // Handle
                   _buildModernTextField(
                     controller: _usernameController,
-                    label: 'Username',
-                    hint: 'Enter your username',
+                    label: 'Handle',
+                    hint: 'Enter your handle',
                     icon: Icons.person_outline,
                   ),
                   

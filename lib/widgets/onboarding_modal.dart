@@ -309,7 +309,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                 _LogoHero(),
                 const SizedBox(height: 22),
                 Text(
-                  'Welcome to Grid.',
+                  'Welcome to grid.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.getFont(
                     'Geist',
@@ -648,26 +648,16 @@ class _RowTrailing extends StatelessWidget {
 class _LogoHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 116,
       height: 116,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            context.gridColors.mint.withOpacity(0.18),
-            context.gridColors.mint.withOpacity(0.05),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.6, 1.0],
+      child: Center(
+        child: Image.asset(
+          'assets/brand/01-logos/grid-symbol-color-1024.png',
+          width: 76,
+          height: 76,
+          fit: BoxFit.contain,
         ),
-      ),
-      alignment: Alignment.center,
-      child: Image.asset(
-        'assets/brand/01-logos/grid-symbol-color-1024.png',
-        width: 76,
-        height: 76,
-        fit: BoxFit.contain,
       ),
     );
   }
