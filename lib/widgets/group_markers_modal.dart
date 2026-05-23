@@ -166,7 +166,8 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
             title: 'Group markers',
             subtitle: subtitle,
           ),
-          Flexible(
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
             child: _isLoading
                 ? _buildLoadingState()
                 : _markers.isEmpty
@@ -180,8 +181,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
   }
 
   Widget _buildLoadingState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 56),
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -206,11 +206,12 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
   }
 
   Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           Container(
             width: 72,
             height: 72,
@@ -250,6 +251,7 @@ class _GroupMarkersModalState extends State<GroupMarkersModal> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

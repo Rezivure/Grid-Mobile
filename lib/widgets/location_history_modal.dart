@@ -758,7 +758,10 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                   )
                 : null,
           ),
-          
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: Column(
+              children: [
           // Member strip — group mode. First tile = ALL.
           if (!_isLoading && !_isMapLoading && _groupHistories != null && _groupHistories!.isNotEmpty)
             SizedBox(
@@ -1154,6 +1157,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                 ),
               ),
             ),
+              ],
+            ),
+          ),
         ],
       ),
     );
