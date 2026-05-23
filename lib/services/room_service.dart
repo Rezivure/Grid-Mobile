@@ -42,6 +42,8 @@ class RoomService {
   // Offline queue for failed location sends
   final List<Map<String, dynamic>> _offlineQueue = [];
   static const int _maxOfflineQueueSize = 50;
+  // Drop queued locations older than this — stale GPS is misinformation, not delay.
+  static const Duration _maxQueueAge = Duration(minutes: 5);
 
   LocationUpdate? _currentLocation;
   DateTime? _lastUpdateTime;
@@ -1146,6 +1148,19 @@ class RoomService {
 
   // Process offline queue - retry failed location sends
   Future<void> _processOfflineQueue() async {
+    if (_offlineQueue.isEmpty) return;
+
+    final now = DateTime.now();
+    final beforeCount = _offlineQueue.length;
+    _offlineQueue.removeWhere((entry) {
+      final ts = entry['timestamp'];
+      if (ts is! DateTime) return true;
+      return now.difference(ts) > _maxQueueAge;
+    });
+    final dropped = beforeCount - _offlineQueue.length;
+    if (dropped > 0) {
+      print("🗑  Dropped $dropped stale offline locations (>${_maxQueueAge.inMinutes}m old)");
+    }
     if (_offlineQueue.isEmpty) return;
 
     print("📤 Processing ${_offlineQueue.length} offline locations...");
