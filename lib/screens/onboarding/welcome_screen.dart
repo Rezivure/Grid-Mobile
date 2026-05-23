@@ -201,34 +201,31 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
           child: Column(
             children: [
               const Spacer(flex: 2),
-              // Grid logo hero.
+              // Grid logo hero — mark + wordmark, theme-aware.
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
                   scale: _scaleAnimation,
-                  child: Container(
-                    width: 200,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        center: Alignment.center,
-                        radius: 0.85,
-                        colors: [
-                          context.gridColors.mint.withOpacity(0.16),
-                          context.gridColors.mint.withOpacity(0.06),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.55, 1.0],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        theme.brightness == Brightness.dark
+                            ? 'assets/brand/01-logos/grid-symbol-color-dark-1024.png'
+                            : 'assets/brand/01-logos/grid-symbol-color-1024.png',
+                        width: 132,
+                        height: 132,
+                        fit: BoxFit.contain,
                       ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Image.asset(
-                      'assets/brand/01-logos/grid-symbol-color-1024.png',
-                      width: 132,
-                      height: 132,
-                      fit: BoxFit.contain,
-                    ),
+                      const SizedBox(height: 20),
+                      Image.asset(
+                        theme.brightness == Brightness.dark
+                            ? 'assets/brand/02-wordmark/grid-wordmark-white-1800.png'
+                            : 'assets/brand/02-wordmark/grid-wordmark-ink-1800.png',
+                        height: 38,
+                        fit: BoxFit.contain,
+                      ),
+                    ],
                   ),
                 ),
               ),
