@@ -185,7 +185,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return null;
   }
 
-  void _openAddSharingPreferenceModal() {
+  void _openAddSharingPreferenceModal({SharingWindow? existing, int? index}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -193,11 +193,12 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       builder: (modalContext) {
         return Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
           ),
           child: AddSharingPreferenceModal(
+            initial: existing,
             onSave: (label, selectedDays, isAllDay, startTime, endTime) async {
-              final newWindow = SharingWindow(
+              final next = SharingWindow(
                 label: label,
                 days: _daysToIntList(selectedDays),
                 isAllDay: isAllDay,
@@ -207,18 +208,116 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 endTime: (isAllDay || endTime == null)
                     ? null
                     : '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
-                isActive: true,
+                isActive: existing?.isActive ?? true,
               );
 
+              final isEdit = index != null;
+              final prevList = List<SharingWindow>.from(_sharingWindows);
               setState(() {
-                _sharingWindows.add(newWindow);
+                if (isEdit) {
+                  _sharingWindows[index] = next;
+                } else {
+                  _sharingWindows.add(next);
+                }
               });
-              await _saveToDatabase();
+              try {
+                await _saveToDatabase();
+                if (!mounted) return;
+                InAppNotifier.instance.show(
+                  title: isEdit
+                      ? 'Sharing window updated'
+                      : 'Sharing window added',
+                  message: isEdit
+                      ? 'Changes saved.'
+                      : 'Friend will see your location during this window.',
+                  variant: InAppNotificationVariant.success,
+                );
+              } catch (e) {
+                if (!mounted) return;
+                setState(() => _sharingWindows = prevList);
+                InAppNotifier.instance.show(
+                  title: 'Could not save window',
+                  message: '$e',
+                  variant: InAppNotificationVariant.error,
+                );
+              }
             },
           ),
         );
       },
     );
+  }
+
+  Future<void> _toggleWindowActive(int index, bool v) async {
+    final prev = _sharingWindows[index];
+    final updated = SharingWindow(
+      label: prev.label,
+      days: prev.days,
+      isAllDay: prev.isAllDay,
+      startTime: prev.startTime,
+      endTime: prev.endTime,
+      isActive: v,
+    );
+    setState(() => _sharingWindows[index] = updated);
+    try {
+      await _saveToDatabase();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sharingWindows[index] = prev);
+      InAppNotifier.instance.show(
+        title: 'Could not update window',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
+      );
+    }
+  }
+
+  Future<void> _deleteWindow(int index) async {
+    final removed = _sharingWindows[index];
+    setState(() => _sharingWindows.removeAt(index));
+    try {
+      await _saveToDatabase();
+      if (!mounted) return;
+      InAppNotifier.instance.show(
+        title: 'Sharing window removed',
+        message: 'You can add a new window any time.',
+        variant: InAppNotificationVariant.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sharingWindows.insert(index, removed));
+      InAppNotifier.instance.show(
+        title: 'Could not delete window',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
+      );
+    }
+  }
+
+  Future<void> _toggleMutualSharing(bool v, String firstName) async {
+    final prev = _alwaysShare;
+    setState(() => _alwaysShare = v);
+    try {
+      await _saveToDatabase();
+      if (!mounted) return;
+      InAppNotifier.instance.show(
+        title: v
+            ? 'Sharing resumed for $firstName'
+            : 'Sharing paused for $firstName',
+        message: v
+            ? "They'll see updates during your active windows."
+            : 'Resume any time from this sheet.',
+        variant: InAppNotificationVariant.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _alwaysShare = prev);
+      InAppNotifier.instance.show(
+        title: 'Could not update sharing',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
+      );
+    }
   }
 
   List<int> _daysToIntList(List<bool> selectedDays) {
@@ -331,12 +430,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         _buildActionGrid(),
                         const SizedBox(height: 22),
                         _buildSharedGroups(),
-                        if (!_alwaysShare) ...[
-                          const SizedBox(height: 22),
-                          _buildSectionLabel('SHARING WINDOWS'),
-                          const SizedBox(height: 10),
-                          _buildSharingWindows(),
-                        ],
+                        const SizedBox(height: 22),
+                        _buildSectionLabel('SHARING WINDOWS'),
+                        const SizedBox(height: 10),
+                        _buildSharingWindows(),
                         const SizedBox(height: 22),
                         _buildSectionLabel('SECURITY'),
                         const SizedBox(height: 10),
@@ -735,10 +832,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           Switch.adaptive(
             value: _alwaysShare,
             activeColor: context.gridColors.mint,
-            onChanged: (value) async {
-              setState(() => _alwaysShare = value);
-              await _saveToDatabase();
-            },
+            onChanged: (value) => _toggleMutualSharing(value, firstName),
           ),
         ],
       ),
@@ -866,12 +960,19 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildSharingWindows() {
+    // When _alwaysShare is true the backend ignores windows entirely
+    // (see UserService.isInSharingWindow). Show the rows so the user
+    // can still curate them, but visually flag the override.
+    final scheduleSuperseded = _alwaysShare;
+
     if (_sharingWindows.isEmpty) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (scheduleSuperseded) _buildScheduleSupersededNote(),
+          if (scheduleSuperseded) const SizedBox(height: 10),
           Text(
-            'No sharing windows yet. Tap + to add one.',
+            'No sharing windows yet. Add one to share on a schedule.',
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 13,
@@ -881,36 +982,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerLeft,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: _openAddSharingPreferenceModal,
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: context.gridColors.mintSoft,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, size: 14, color: context.gridColors.mint),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Add window',
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.gridColors.mint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            child: _buildAddWindowChip(),
           ),
         ],
       );
@@ -919,6 +991,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (scheduleSuperseded) _buildScheduleSupersededNote(),
+        if (scheduleSuperseded) const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
             color: context.gridColors.surface,
@@ -942,106 +1016,145 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         const SizedBox(height: 10),
         Align(
           alignment: Alignment.centerLeft,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _openAddSharingPreferenceModal,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: context.gridColors.mintSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add, size: 14, color: context.gridColors.mint),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Add window',
-                      style: GoogleFonts.getFont(
-                        'Geist',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: context.gridColors.mint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          child: _buildAddWindowChip(),
         ),
       ],
     );
   }
 
-  Widget _buildSharingWindowRow(SharingWindow window, int index) {
-    final summary = _summariseWindow(window);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+  Widget _buildScheduleSupersededNote() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: context.gridColors.hairline),
+      ),
       child: Row(
         children: [
+          Icon(Icons.all_inclusive_rounded,
+              size: 14, color: context.gridColors.text3),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  window.label.isNotEmpty ? window.label : summary,
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: window.isActive
-                        ? context.gridColors.text
-                        : context.gridColors.text3,
-                  ),
-                ),
-                if (window.label.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    summary,
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 12,
-                      color: context.gridColors.text3,
-                    ),
-                  ),
-                ],
-              ],
+            child: Text(
+              'Active 24/7 — schedule disabled',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12,
+                color: context.gridColors.text2,
+              ),
             ),
-          ),
-          Switch.adaptive(
-            value: window.isActive,
-            activeColor: context.gridColors.mint,
-            onChanged: (v) async {
-              final updated = SharingWindow(
-                label: window.label,
-                days: window.days,
-                isAllDay: window.isAllDay,
-                startTime: window.startTime,
-                endTime: window.endTime,
-                isActive: v,
-              );
-              setState(() => _sharingWindows[index] = updated);
-              await _saveToDatabase();
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: 18,
-              color: context.gridColors.text3,
-            ),
-            tooltip: 'Delete window',
-            visualDensity: VisualDensity.compact,
-            onPressed: () async {
-              setState(() => _sharingWindows.removeAt(index));
-              await _saveToDatabase();
-            },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAddWindowChip() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openAddSharingPreferenceModal(),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: context.gridColors.mintSoft,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 14, color: context.gridColors.mint),
+              const SizedBox(width: 6),
+              Text(
+                'Add window',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.gridColors.mint,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSharingWindowRow(SharingWindow window, int index) {
+    final summary = _summariseWindow(window);
+    // Dim when always-share supersedes the schedule, or when the
+    // window itself is paused. Per-row switch still works in both
+    // states; trash always works.
+    final dim = _alwaysShare || !window.isActive;
+    final rowSwitchEnabled = !_alwaysShare;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openAddSharingPreferenceModal(
+          existing: window,
+          index: index,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      window.label.isNotEmpty ? window.label : summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: dim
+                            ? context.gridColors.text3
+                            : context.gridColors.text,
+                      ),
+                    ),
+                    if (window.label.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 12,
+                          color: context.gridColors.text3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: window.isActive,
+                activeColor: context.gridColors.mint,
+                onChanged: rowSwitchEnabled
+                    ? (v) => _toggleWindowActive(index, v)
+                    : null,
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: context.gridColors.text3,
+                ),
+                tooltip: 'Delete window',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _deleteWindow(index),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1050,7 +1163,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     const dayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final sorted = [...window.days]..sort();
     String daysPart;
-    if (sorted.length == 7) {
+    if (sorted.isEmpty) {
+      daysPart = 'No days';
+    } else if (sorted.length == 7) {
       daysPart = 'Every day';
     } else if (sorted.length == 5 &&
         sorted.every((d) => d >= 0 && d <= 4)) {
