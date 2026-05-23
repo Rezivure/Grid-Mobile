@@ -1595,7 +1595,12 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       message: 'Removing from contacts…',
       variant: InAppNotificationVariant.info,
     );
-    if (mounted) Navigator.of(context).pop();
+    if (!mounted) return;
+    if (widget.onClose != null) {
+      widget.onClose!();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   Widget _buildSecurityCard() {
