@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -93,26 +95,42 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
   // Relationship snapshot, computed once on modal open.
   bool _hasDirect = false;
+  bool _directPending = false;
   List<_SharedGroupRef> _sharedGroups = const [];
   bool _sendingFriendRequest = false;
+  StreamSubscription<ContactsState>? _contactsSub;
 
   @override
   void initState() {
     super.initState();
     _loadDeviceKeys();
     _computeRelationship();
+    _subscribeToContacts();
+  }
+
+  @override
+  void dispose() {
+    _contactsSub?.cancel();
+    super.dispose();
   }
 
   void _computeRelationship() {
     final myId = widget.roomService.getMyUserId();
     final targetId = widget.contact.userId;
     bool direct = false;
+    bool pending = false;
     try {
       for (final r in widget.roomService.client.rooms) {
         final name = r.name;
         if (name == 'Grid:Direct:$myId:$targetId' ||
             name == 'Grid:Direct:$targetId:$myId') {
           direct = true;
+          // Sync state lookup — cheap, no network round-trip.
+          try {
+            final memberEvent = r.getState('m.room.member', targetId);
+            final m = memberEvent?.content['membership'] as String?;
+            pending = (m == 'invite');
+          } catch (_) {}
           break;
         }
       }
@@ -130,7 +148,28 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     } catch (_) {}
 
     _hasDirect = direct;
+    _directPending = pending;
     _sharedGroups = shared;
+  }
+
+  void _subscribeToContacts() {
+    try {
+      final bloc = context.read<ContactsBloc>();
+      _maybeFlipPendingFromContacts(bloc.state);
+      _contactsSub = bloc.stream.listen(_maybeFlipPendingFromContacts);
+    } catch (_) {}
+  }
+
+  void _maybeFlipPendingFromContacts(ContactsState state) {
+    if (!_directPending) return;
+    if (state is! ContactsLoaded) return;
+    final targetId = widget.contact.userId;
+    for (final c in state.contacts) {
+      if (c.userId == targetId && c.membershipStatus == 'join') {
+        if (mounted) setState(() => _directPending = false);
+        return;
+      }
+    }
   }
 
   _RelationshipState get _relationship {
@@ -480,7 +519,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         _buildActionGrid(),
                         const SizedBox(height: 22),
                         _buildSharedGroups(),
-                        if (_relationship != _RelationshipState.groupOnly) ...[
+                        if (_relationship != _RelationshipState.groupOnly &&
+                            !_directPending) ...[
                           const SizedBox(height: 22),
                           _buildSectionLabel('SHARING WINDOWS'),
                           const SizedBox(height: 10),
@@ -927,6 +967,15 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // Branches the slot that normally holds the "Sharing with X" card by
   // relationship state.
   List<Widget> _buildRelationshipBlock(String firstName) {
+    if (_directPending) {
+      return [
+        _buildPendingRequestRow(firstName),
+        if (_sharedGroups.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _buildGroupOnlyCaption(),
+        ],
+      ];
+    }
     if (_relationship == _RelationshipState.groupOnly) {
       return [
         _buildFriendRequestButton(firstName),
@@ -951,7 +1000,54 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           ? 'Sending…'
           : 'Send friend request',
       icon: Icons.person_add_alt_1_rounded,
+      style: GridButtonStyle.secondary,
       onPressed: _sendingFriendRequest ? null : _sendFriendRequest,
+    );
+  }
+
+  // Informational inline pill shown after a friend request is sent but
+  // before the target accepts. Mirrors the "scheduled" mintFaint chrome
+  // from _buildMutualSharingCard so it reads as a status, not a button.
+  Widget _buildPendingRequestRow(String firstName) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: context.gridColors.mintFaint,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: context.gridColors.mintSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.schedule_send_rounded,
+              size: 16,
+              color: context.gridColors.mint,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Friend request sent — waiting for $firstName to accept',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: context.gridColors.text2,
+                height: 1.35,
+                letterSpacing: -0.005,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1043,6 +1139,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       if (!mounted) return;
       setState(() {
         _hasDirect = true;
+        _directPending = true;
         _sendingFriendRequest = false;
       });
     } catch (e) {
