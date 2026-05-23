@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
@@ -8,10 +10,14 @@ class UserLocationProvider with ChangeNotifier {
   final LocationRepository locationRepository;
   final UserRepository userRepository;
 
+  StreamSubscription<UserLocation>? _locationUpdatesSub;
+  bool _disposed = false;
+
   UserLocationProvider(this.locationRepository, this.userRepository) {
     _initializeLocations();
     _listenForDatabaseUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed) return;
       notifyListeners();
     });
 
@@ -42,12 +48,14 @@ class UserLocationProvider with ChangeNotifier {
   }
 
   void _listenForDatabaseUpdates() {
-    locationRepository.locationUpdates.listen((location) async {
+    _locationUpdatesSub = locationRepository.locationUpdates.listen((location) async {
+      if (_disposed) return;
       try {
         // Check if user exists in any rooms before updating location
         final userRooms = await userRepository.getUserRooms(location.userId);
         final directRoom = await userRepository.getDirectRoomForContact(location.userId);
 
+        if (_disposed) return;
         if (userRooms.isNotEmpty || directRoom != null) {
           _userLocations[location.userId] = location;
           notifyListeners();
@@ -60,6 +68,15 @@ class UserLocationProvider with ChangeNotifier {
         print("Error in location update listener: $e");
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // Cancel our own resources first; ChangeNotifier finalizes its state in super.dispose().
+    _locationUpdatesSub?.cancel();
+    _locationUpdatesSub = null;
+    _disposed = true;
+    super.dispose();
   }
 
   List<UserLocation> getAllUserLocations() => _userLocations.values.toList();

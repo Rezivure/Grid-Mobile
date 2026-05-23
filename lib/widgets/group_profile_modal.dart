@@ -5,6 +5,7 @@ import 'package:grid_frontend/models/room.dart';
 import 'package:grid_frontend/models/grid_user.dart';
 import 'package:grid_frontend/models/sharing_window.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/widgets/add_sharing_preferences_modal.dart';
@@ -544,8 +545,10 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       print('[Group Avatar Upload] Error: $e');
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload group avatar: $e')),
+        InAppNotifier.instance.show(
+          title: 'Failed to upload group avatar',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
       setState(() {

@@ -10,4 +10,11 @@
 
     <!-- Background Location Attribution (Android 15+) -->
     <string name="attribution_background_location">This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.</string>
+
+    <!-- Digital Asset Links for Credential Manager / passkeys -->
+    <string name="asset_statements" translatable="false">
+        [{
+          \"include\": \"https://mygrid.app/.well-known/assetlinks.json\"
+        }]
+    </string>
 </resources>

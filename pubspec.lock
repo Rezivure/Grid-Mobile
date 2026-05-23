@@ -45,10 +45,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: cb6a278ef2dbb298455e1a713bda08524a175630ec643a242c399c932a0a1f7d
+      sha256: a96e8b390886ee8abb49b7bd3ac8df6f451c621619f52a26e815fdcf568959ff
       url: "https://pub.dev"
     source: hosted
-    version: "3.6.1"
+    version: "4.0.9"
   args:
     dependency: transitive
     description:
@@ -823,6 +823,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1"
+  google_fonts:
+    dependency: "direct main"
+    description:
+      name: google_fonts
+      sha256: "4e9391085e524954a51e3625b7c9c7e9851dc3f376603208bb45c24b9a66255d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "8.1.0"
   graphs:
     dependency: transitive
     description:
@@ -883,10 +891,10 @@ packages:
     dependency: transitive
     description:
       name: image
-      sha256: f31d52537dc417fdcde36088fdf11d191026fd5e4fae742491ebd40e5a8bea7d
+      sha256: f9881ff4998044947ec38d098bc7c8316ae1186fa786eddffdb867b9bc94dfce
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.0"
+    version: "4.8.0"
   image_cropper:
     dependency: "direct main"
     description:
@@ -1115,10 +1123,34 @@ packages:
     dependency: "direct main"
     description:
       name: lottie
-      sha256: "377d87b8dcef640c04717e93afb86a510f0e1117a399ab94dc4b3f39c85eaa87"
+      sha256: "8b6359a7422167014aa73ce763fa133fb832065dcc0ac4d1dec1f603a5cef7d0"
       url: "https://pub.dev"
     source: hosted
-    version: "3.3.0"
+    version: "3.3.3"
+  maplibre_gl:
+    dependency: "direct main"
+    description:
+      name: maplibre_gl
+      sha256: c97f32353b7c4d15e77c167cc444424556c0be7746dc73fd3deac5f32f858ed4
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.26.0"
+  maplibre_gl_platform_interface:
+    dependency: transitive
+    description:
+      name: maplibre_gl_platform_interface
+      sha256: "60ee6ab5671de09dcf7fcb512aedb940024ed03dfcca04a4487dfdd76c906391"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.26.0"
+  maplibre_gl_web:
+    dependency: transitive
+    description:
+      name: maplibre_gl_web
+      sha256: "63988f302809a46667a40d8ae97882c13a2e0aa1f86808ba47a5e6f311471b59"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.26.0"
   markdown:
     dependency: transitive
     description:
@@ -1435,10 +1467,10 @@ packages:
     dependency: transitive
     description:
       name: pmtiles
-      sha256: "7e3135c64ec3647e1dd8929fd3c371c8e1c6809b24f1d910d3198a7f41e2068c"
+      sha256: "9acb9e330e029c2c4eb6faafd53fc1f439dd9c61a0e080778026b2d2d5975944"
       url: "https://pub.dev"
     source: hosted
-    version: "1.3.0"
+    version: "1.2.0"
   pointycastle:
     dependency: transitive
     description:
@@ -1463,6 +1495,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
+  posix:
+    dependency: transitive
+    description:
+      name: posix
+      sha256: "185ef7606574f789b40f289c233efa52e96dead518aed988e040a10737febb07"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.5.0"
   proj4dart:
     dependency: transitive
     description:

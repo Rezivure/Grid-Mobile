@@ -1,22 +1,31 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:vector_map_tiles/vector_map_tiles.dart';
-import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
-import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:google_fonts/google_fonts.dart';
+
+import 'grid_map_style.dart';
+import 'maplibre_camera_facade.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
@@ -31,11 +40,16 @@ import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
+import 'package:grid_frontend/widgets/contact_profile_modal.dart';
+import 'package:grid_frontend/models/contact_display.dart';
+import 'package:grid_frontend/services/map_camera_signals.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
-import 'package:grid_frontend/screens/settings/settings_page.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/widgets/onboarding_modal.dart';
 import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
@@ -78,7 +92,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   static DateTime? _lastInitTime;
   bool _servicesInitialized = false;
   AppLifecycleState? _currentLifecycleState;
-  late MapController _mapController;
+  final MaplibreCameraFacade _mapController = MaplibreCameraFacade();
   LocationManager? _locationManager;
   RoomService? _roomService;
   UserService? _userService;
@@ -108,8 +122,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // Track if user has completed onboarding (to avoid auto-requesting location permission)
   bool _hasCompletedOnboarding = false;
 
-  VectorTileProvider? _tileProvider;
-  late vector_renderer.Theme _mapTheme;
+  ml.MapLibreMapController? _mlController;
+  String? _styleJson;
+  bool _isDarkStyle = false;
+  final GlobalKey _mapKeyForSize = GlobalKey();
+
+  // Authoritative screen positions for every marker, sourced from maplibre's
+  // own projection. Keyed by "lat,lng". Values are screen-pixel offsets
+  // relative to the map widget's top-left. Refreshed every camera tick.
+  final Map<String, Offset> _markerScreenPositions = {};
+  int _projectionSeq = 0;
 
   // Bubble variables
   LatLng? _bubblePosition;
@@ -164,13 +186,31 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   // SharedPreferences keys
   static const String _mapStyleKey = 'selected_map_style';
 
+  // Saved "home" location from Settings → auto-pause feature. Null if unset.
+  LatLng? _homeLocation;
+  double _homeRadiusMeters = 25;
+
   @override
   void initState() {
     super.initState();
     print('[MapTab] Initializing - hasInitialized: $_hasInitialized');
     WidgetsBinding.instance.addObserver(this);
-    _mapController = MapController();
-    
+    _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+
+    // External callers (e.g. the contact profile sheet's close
+    // handler) can ask the camera to smart-zoom back out by ticking
+    // this notifier. We only need the pulse — the int value itself
+    // doesn't matter.
+    MapCameraSignals.resetRequested.addListener(_onResetSignal);
+
+    // Inline contact profile sheet — rendered as part of the map's
+    // own Stack rather than as a modal route so the map remains
+    // interactive while it's up.
+    ContactSheetController.instance.addListener(_onSheetChanged);
+
+    // Load saved home location (set in Settings).
+    _reloadHomeLocation();
+
     // Check if app was properly initialized
     _checkAndInitialize().then((_) {
       // Only access _locationManager after initialization is complete
@@ -474,21 +514,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         lifecycleState == AppLifecycleState.inactive;
 
     if (wasLaunchedFromBackground) {
-      print('[MapTab] App launched from background/terminated state - forcing tile provider reinitialization');
-      // Clear tile provider first to ensure complete reinitialization
-      _tileProvider = null;
+      print('[MapTab] App launched from background/terminated state');
     }
 
     await _loadMapProvider();
 
-    // Only force rebuild if actually launched from background AND tile provider exists
-    if (wasLaunchedFromBackground && _tileProvider != null) {
-      // Single setState to trigger UI update after everything is loaded
-      if (mounted) {
-        setState(() {
-          print('[MapTab] UI refreshed after background launch');
-        });
-      }
+    if (wasLaunchedFromBackground && mounted) {
+      setState(() {
+        print('[MapTab] UI refreshed after background launch');
+      });
     }
   }
   
@@ -628,8 +662,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // Start location tracking (only called after permission disclosure/onboarding)
   Future<void> _startLocationTracking() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isIncognitoMode = prefs.getBool('incognito_mode') ?? false;
+    final isIncognitoMode =
+        context.read<SharingStateNotifier>().userIncognito;
 
     if (!isIncognitoMode) {
       _locationManager?.startTracking();
@@ -760,11 +794,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager?.removeListener(_onSyncStateChanged);
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
+    MapCameraSignals.resetRequested.removeListener(_onResetSignal);
+    ContactSheetController.instance.removeListener(_onSheetChanged);
     WidgetsBinding.instance.removeObserver(this);
     _locationManager?.removeListener(_onLocationUpdate);
     _syncManager?.removeListener(_checkAuthenticationStatus);
     _syncManager?.removeListener(_onSyncStateChanged);
     _subscreenProvider?.removeListener(_onSubscreenChanged);
+    _mlController?.removeListener(_onMaplibreCameraChanged);
     _mapController.dispose();
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
@@ -816,17 +853,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Normal resume handling for short pauses
     _syncManager?.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
-    // Refresh satellite token when app resumes if using satellite maps
-    if (state == AppLifecycleState.resumed && _currentMapStyle == 'satellite') {
-      _refreshSatelliteTokenIfNeeded();
-    }
-    
     // Only reinitialize if app was paused for a significant time
     if (state == AppLifecycleState.resumed && _pausedTime != null) {
       final pauseDuration = DateTime.now().difference(_pausedTime!);
 
-      // Only rebuild if paused for more than 5 seconds (to handle background location wakes)
-      if (pauseDuration.inSeconds > 5 && _tileProvider != null) {
+      if (pauseDuration.inSeconds > 5) {
         print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - rebuilding map');
 
         // Single rebuild after short delay
@@ -870,44 +901,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     await backwardsService.runBackfillIfNeeded();
   }
 
-  Future<void> _refreshSatelliteTokenIfNeeded() async {
-    try {
-      // Check if still has subscription
-      final hasSubscription = await _subscriptionService.hasActiveSubscription();
-      if (!hasSubscription) {
-        // Subscription expired, revert to base maps
-        setState(() {
-          _currentMapStyle = 'base';
-          _satelliteMapToken = null;
-        });
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_mapStyleKey, 'base');
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Subscription expired. Reverting to base maps.'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      
-      // Get a fresh token (will use cached if still valid)
-      final token = await _subscriptionService.getMapToken();
-      if (token != null && token != _satelliteMapToken) {
-        setState(() {
-          _satelliteMapToken = token;
-        });
-      }
-    } catch (e) {
-    }
-  }
+  // Satellite mode was deprecated when map style switched to system brightness.
+  // Kept as a no-op stub so any remaining callers compile.
+  Future<void> _refreshSatelliteTokenIfNeeded() async {}
 
   void _handleIconSelection(IconType iconType) async {
     if (_longPressLocation == null || _selectedGroupId == null) return;
@@ -946,16 +942,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _selectedGroupId = null;
     
     // Show confirmation immediately with shorter duration
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(milliseconds: 1500),
-      ),
+    InAppNotifier.instance.show(
+      title: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed',
+      message: 'Group members will see it on the map.',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(milliseconds: 1800),
     );
     
     // Save to database and sync in background
@@ -966,16 +957,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       // If save fails, remove from BLoC
       context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Failed to save icon'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: const Duration(seconds: 2),
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to save icon',
+        message: 'Check your connection and try again.',
+        variant: InAppNotificationVariant.error,
+        duration: const Duration(seconds: 2),
       );
     }
   }
@@ -1006,15 +992,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   void _sendPing() {
     _locationManager?.grabLocationAndPing();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Location pinged to all active contacts and groups.'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
+    InAppNotifier.instance.show(
+      title: 'Ping sent',
+      message: 'Location pinged to all active contacts and groups.',
+      variant: InAppNotificationVariant.success,
     );
 
 
@@ -1039,65 +1020,28 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   Future<void> _loadMapProvider() async {
     try {
-      // Ensure dotenv is loaded before proceeding
+      // Ensure dotenv is loaded before proceeding.
       if (dotenv.env.isEmpty) {
         try {
           await dotenv.load(fileName: ".env");
-        } catch (e) {
-        }
+        } catch (e) {}
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
-
-      // Clear existing tile provider to force complete reinitialization
-      _tileProvider = null;
-
-      _mapTheme = ProtomapsThemes.light();
-      _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
-
-      context.read<MapBloc>().add(MapInitialize());
-      setState(() {});
+      // Style JSON is reactively built per-build based on system brightness;
+      // nothing to pre-fetch here.
+      if (mounted) {
+        context.read<MapBloc>().add(MapInitialize());
+        setState(() {});
+      }
     } catch (e) {
       _showMapErrorDialog();
     }
   }
-  
+
   Future<void> _loadMapStylePreference() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedStyle = prefs.getString(_mapStyleKey) ?? 'base';
-
-      // Check if user has an active subscription before loading satellite maps
-      if (savedStyle == 'satellite') {
-        final hasSubscription = await _subscriptionService.hasActiveSubscription();
-        if (hasSubscription) {
-          // Try to get a map token (will use cached if valid)
-          final token = await _subscriptionService.getMapToken();
-          if (token != null) {
-            // Set satellite style without setState since we're in init
-            _currentMapStyle = 'satellite';
-            _satelliteMapToken = token;
-          } else {
-            // Failed to get token, revert to base maps
-            _currentMapStyle = 'base';
-            await prefs.setString(_mapStyleKey, 'base');
-          }
-        } else {
-          // No subscription, revert to base maps
-          _currentMapStyle = 'base';
-          await prefs.setString(_mapStyleKey, 'base');
-        }
-      } else {
-        _currentMapStyle = savedStyle;
-      }
-    } catch (e) {
-      // Default to base maps on error
-      _currentMapStyle = 'base';
-    }
-
-    // If still null somehow, default to base
-    _currentMapStyle ??= 'base';
+    // Map style is now driven by system brightness; user choice no longer
+    // persisted. Kept as a stub so existing call sites still resolve.
+    _currentMapStyle = 'base';
   }
 
   void _showMapErrorDialog() {
@@ -1302,11 +1246,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       zoomLevel = 2.0; // Intercontinental
     }
 
-    // Cap zoom at country level for faster loading (3.5 for full USA view)
-    if (zoomLevel > 3.5) {
-      zoomLevel = 3.5;
-    }
-
     // Estimate viewport size at this zoom level (degrees of lat/lng visible on screen)
     // These are rough approximations for a typical phone screen
     double viewportRadius;
@@ -1345,25 +1284,271 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
+  /// "SHARING WITH N" pill rendered top-center over the map.
+  ///
+  /// When the user has paused sharing (incognito on), the mint glow dot
+  /// is swapped for a purple dot with no glow and the label reads
+  /// "SHARING PAUSED" instead of the contact count.
+  Widget _buildSharingPill() {
+    return BlocBuilder<MapBloc, MapState>(
+      buildWhen: (p, c) => p.userLocations.length != c.userLocations.length,
+      builder: (context, state) {
+        final count = state.userLocations.length;
+        return Consumer<SharingStateNotifier>(
+          builder: (context, sharingState, _) {
+            final paused = sharingState.isPaused;
+            final dotColor = paused ? context.gridColors.paused : context.gridColors.mint;
+            final textColor = paused ? context.gridColors.paused : context.gridColors.text;
+            final label = paused ? 'SHARING PAUSED' : 'SHARING WITH $count';
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: context.gridColors.surface.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: context.gridColors.hairlineStrong),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                      boxShadow: paused
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: context.gridColors.mint.withOpacity(0.55),
+                                blurRadius: 6,
+                              ),
+                            ],
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  GridMono(
+                    label,
+                    color: textColor,
+                    size: 10.5,
+                    letterSpacing: 0.1,
+                    weight: FontWeight.w600,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  int _invitesBadgeCount(BuildContext context) {
+    try {
+      final state = context.read<InvitationsBloc>().state;
+      if (state is InvitationsLoaded) return state.invitations.length;
+    } catch (_) {}
+    return 0;
+  }
+
+  void _onMaplibreCameraChanged() {
+    if (!mounted) return;
+    _mapController.syncFromController();
+    // Re-position the marker overlay widgets to stay glued to the map
+    // during pan/zoom gestures (not just on idle).
+    setState(() {});
+    _refreshMarkerScreenPositions();
+  }
+
+  String _latLngKey(LatLng p) => '${p.latitude},${p.longitude}';
+
+  /// Ask maplibre for the authoritative screen position of every marker we
+  /// render. Uses the controller's batch API (one round-trip across the
+  /// platform channel for all markers). Stale results from concurrent calls
+  /// are ignored via [_projectionSeq].
+  Future<void> _refreshMarkerScreenPositions() async {
+    final controller = _mlController;
+    if (controller == null || !mounted) return;
+
+    final userLocations = context.read<MapBloc>().state.userLocations;
+    final mapIcons = context.read<MapIconsBloc>().state.filteredIcons;
+    if (userLocations.isEmpty && mapIcons.isEmpty) return;
+
+    // Collect all distinct LatLngs and remember the matching keys in order.
+    final List<ml.LatLng> mlPoints = [];
+    final List<String> keys = [];
+    for (final u in userLocations) {
+      mlPoints.add(ml.LatLng(u.position.latitude, u.position.longitude));
+      keys.add(_latLngKey(u.position));
+    }
+    for (final i in mapIcons) {
+      mlPoints.add(ml.LatLng(i.position.latitude, i.position.longitude));
+      keys.add(_latLngKey(i.position));
+    }
+
+    final seq = ++_projectionSeq;
+    try {
+      final screenPoints = await controller.toScreenLocationBatch(mlPoints);
+      // Ignore stale responses — camera may have moved past us.
+      if (!mounted || seq != _projectionSeq) return;
+      for (var idx = 0; idx < keys.length && idx < screenPoints.length; idx++) {
+        final p = screenPoints[idx];
+        _markerScreenPositions[keys[idx]] =
+            Offset(p.x.toDouble(), p.y.toDouble());
+      }
+      setState(() {});
+    } catch (_) {
+      // toScreenLocation can race with map teardown — swallow.
+    }
+  }
+
+  Offset _screenPosFor(LatLng p) =>
+      _markerScreenPositions[_latLngKey(p)] ??
+      _mapController.camera.latLngToScreenPoint(p);
+
+  /// Reload the "home" location + geofence radius from SharedPreferences
+  /// (keys: `home_location` = "lat,lng", `home_radius` = double meters).
+  /// Called on init and after returning from Settings.
+  Future<void> _reloadHomeLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('home_location');
+      final radius = prefs.getDouble('home_radius') ?? 25;
+      if (raw == null || raw.isEmpty) {
+        if (_homeLocation != null && mounted) {
+          setState(() {
+            _homeLocation = null;
+            _homeRadiusMeters = radius;
+          });
+        }
+        return;
+      }
+      final parts = raw.split(',');
+      if (parts.length != 2) return;
+      final lat = double.tryParse(parts[0].trim());
+      final lng = double.tryParse(parts[1].trim());
+      if (lat == null || lng == null) return;
+      final parsed = LatLng(lat, lng);
+      if (!mounted) return;
+      final locChanged = _homeLocation == null ||
+          _homeLocation!.latitude != parsed.latitude ||
+          _homeLocation!.longitude != parsed.longitude;
+      if (locChanged || _homeRadiusMeters != radius) {
+        setState(() {
+          _homeLocation = parsed;
+          _homeRadiusMeters = radius;
+        });
+      }
+    } catch (_) {
+      // Swallow — pref-read failure shouldn't break the map.
+    }
+  }
+
+  void _onResetSignal() {
+    if (!mounted) return;
+    context.read<MapBloc>().add(MapClearSelection());
+    _resetToInitialZoom();
+  }
+
+  Widget _buildInlineContactSheet() {
+    final contact = ContactSheetController.instance.contact!;
+    final sharingRepo = sharingPreferencesRepository;
+    if (sharingRepo == null) return const SizedBox.shrink();
+    final roomService = context.read<RoomService>();
+
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (n) {
+        if (n.extent < 0.20 && ContactSheetController.instance.contact != null) {
+          ContactSheetController.instance.close();
+          MapCameraSignals.requestReset();
+        }
+        return false;
+      },
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.0,
+        maxChildSize: 0.95,
+        snap: true,
+        snapSizes: const [0.32, 0.5, 0.95],
+        builder: (_, scrollController) {
+          return ContactProfileModal(
+            contact: contact,
+            roomService: roomService,
+            sharingPreferencesRepo: sharingRepo,
+            fromMapTap: true,
+            scrollController: scrollController,
+            onClose: () {
+              ContactSheetController.instance.close();
+              MapCameraSignals.requestReset();
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  void _onSheetChanged() {
+    if (!mounted) return;
+    // No camera changes here — opening sets the contact, closing
+    // hands off to MapCameraSignals from the sheet's own close
+    // handler. We just rebuild to mount/unmount the sheet widget.
+    setState(() {});
+  }
+
   void _onMarkerTap(String userId, LatLng position) async {
-    // Update map state with selected user
-    context.read<MapBloc>().add(MapMoveToUser(userId));
-    
-    // Fetch user display name
-    String displayName = userId.split(':')[0].replaceFirst('@', ''); // Default fallback
+    context.read<MapBloc>().add(
+          MapCenterOnLocation(
+            position,
+            zoom: 15,
+            selectedUserId: userId,
+          ),
+        );
+
+    String displayName = userId.split(':')[0].replaceFirst('@', '');
+    String? avatarUrl;
+    String lastSeen = '';
     try {
       final user = await userRepository?.getUserById(userId);
-      if (user != null && user.displayName != null && user.displayName!.isNotEmpty) {
-        displayName = user.displayName!;
+      if (user != null) {
+        if (user.displayName != null && user.displayName!.isNotEmpty) {
+          displayName = user.displayName!;
+        }
+        avatarUrl = user.profileStatus;
+        lastSeen = user.lastSeen;
       }
-    } catch (e) {
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    DateTime? lastUpdateAt;
+    final markerLoc = context
+        .read<MapBloc>()
+        .state
+        .userLocations
+        .cast<UserLocation?>()
+        .firstWhere((u) => u?.userId == userId, orElse: () => null);
+    if (markerLoc != null) {
+      try {
+        lastUpdateAt = DateTime.parse(markerLoc.timestamp).toLocal();
+      } catch (_) {}
     }
-    
-    setState(() {
-      _selectedUserId = userId;
-      _bubblePosition = position;
-      _selectedUserName = displayName;
-    });
+
+    ContactSheetController.instance.open(
+      ContactDisplay(
+        userId: userId,
+        displayName: displayName,
+        avatarUrl: avatarUrl,
+        lastSeen: lastSeen,
+        lastUpdateAt: lastUpdateAt,
+      ),
+    );
   }
 
   @override
@@ -1373,7 +1558,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final colorScheme = theme.colorScheme;
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // Don't pre-calculate - let onMapReady handle it
+    // Keep map style in sync with system brightness.
+    if (isDarkMode != _isDarkStyle) {
+      _isDarkStyle = isDarkMode;
+      _styleJson = buildGridMapStyle(dark: _isDarkStyle);
+      // Hot-swap the style on an already-running map.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mlController?.setStyle(_styleJson!);
+      });
+    }
 
     return BlocListener<MapBloc, MapState>(
       listenWhen: (previous, current) =>
@@ -1429,336 +1622,304 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               children: [
                 SizedBox(
                     height: MediaQuery.of(context).size.height * 3/4,
-                child: GestureDetector(
-                  onLongPressStart: (details) {
-                    print('[DEBUG] GestureDetector long press at: ${details.globalPosition}');
-                    
-                    // Convert screen position to lat/lng
-                    final renderBox = context.findRenderObject() as RenderBox?;
-                    if (renderBox != null && _mapController.camera.center != null) {
-                      final localPosition = renderBox.globalToLocal(details.globalPosition);
-                      
-                      // Check if we're in groups subscreen and have a selected group
-                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
-                      
-                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
-                      
-                      // Check if the subscreen starts with "group:" which means a group is selected
-                      if (selectedSubscreen.startsWith('group:')) {
-                        // Extract the group ID (remove "group:" prefix)
-                        final groupId = selectedSubscreen.substring(6);
-                        print('[DEBUG] Showing icon wheel for group: $groupId');
-                        
-                        // Show icon selection wheel
-                        setState(() {
-                          _showIconWheel = true;
-                          _iconWheelPosition = details.globalPosition;
-                          // For now, use map center as location (we'll improve this later)
-                          _longPressLocation = _mapController.camera.center;
-                          _selectedGroupId = groupId;
+                child: LayoutBuilder(builder: (context, constraints) {
+                  _mapController.setMapSize(Size(constraints.maxWidth, constraints.maxHeight));
+                  return Stack(children: [
+                  ml.MapLibreMap(
+                  key: _mapKey,
+                  styleString: _styleJson ?? buildGridMapStyle(dark: isDarkMode),
+                  initialCameraPosition: ml.CameraPosition(
+                    target: ml.LatLng(
+                      (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).latitude,
+                      (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).longitude,
+                    ),
+                    zoom: _zoom,
+                  ),
+                  myLocationEnabled: _hasCompletedOnboarding,
+                  myLocationTrackingMode: _followUser
+                      ? ml.MyLocationTrackingMode.tracking
+                      : ml.MyLocationTrackingMode.none,
+                  trackCameraPosition: true,
+                  minMaxZoomPreference: const ml.MinMaxZoomPreference(1.0, 17),
+                  rotateGesturesEnabled: true,
+                  tiltGesturesEnabled: false,
+                  attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+                  onMapCreated: (controller) {
+                    _mlController = controller;
+                    _mapController.attach(controller);
+                    controller.addListener(_onMaplibreCameraChanged);
+                  },
+                  onStyleLoadedCallback: () {
+                    print('[SMART ZOOM] Style loaded — map ready');
+                    if (mounted) setState(() => _isMapReady = true);
+                    _mapController.syncFromController();
+
+                    if (!_initialZoomCalculated) {
+                      if (_locationManager?.currentLatLng == null) {
+                        _locationManager?.grabLocationAndPing().then((_) {
+                          if (_locationManager?.currentLatLng != null && mounted) {
+                            _zoom = 3.5;
+                            _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+
+                            final userLocations = context.read<MapBloc>().state.userLocations;
+                            if (userLocations.isNotEmpty) {
+                              final result = _calculateOptimalZoomAndCenter(
+                                _locationManager!.currentLatLng!,
+                                userLocations,
+                              );
+                              _zoom = result.zoom;
+                              _mapController.moveAndRotate(result.center, _zoom, 0);
+                            }
+                            setState(() => _initialZoomCalculated = true);
+                          }
                         });
                       } else {
-                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
+                        _zoom = 3.5;
+                        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+
+                        final userLocations = context.read<MapBloc>().state.userLocations;
+                        if (userLocations.isNotEmpty) {
+                          final result = _calculateOptimalZoomAndCenter(
+                            _locationManager!.currentLatLng!,
+                            userLocations,
+                          );
+                          _zoom = result.zoom;
+                          _mapController.moveAndRotate(result.center, _zoom, 0);
+                        }
+                        setState(() => _initialZoomCalculated = true);
                       }
                     }
                   },
-                  child: FlutterMap(
-                  key: _mapKey,
-                  mapController: _mapController,
-                  options: MapOptions(
-                    onTap: (tapPosition, latLng) async {
-                      // Check if we're in move mode
-                      if (_isMovingIcon && _movingIcon != null) {
-                        // Only allow moving if user created it
-                        if (_movingIcon!.creatorId != context.read<Client>().userID) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('You can only move icons you created'),
-                              backgroundColor: Theme.of(context).colorScheme.error,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                          setState(() {
-                            _isMovingIcon = false;
-                            _movingIcon = null;
-                            _selectedMapIcon = null;
-                            _selectedIconPosition = null;
-                          });
-                          return;
-                        }
-                        
-                        // Update the icon position
-                        final updatedIcon = MapIcon(
-                          id: _movingIcon!.id,
-                          roomId: _movingIcon!.roomId,
-                          creatorId: _movingIcon!.creatorId,
-                          latitude: latLng.latitude,
-                          longitude: latLng.longitude,
-                          iconType: _movingIcon!.iconType,
-                          iconData: _movingIcon!.iconData,
-                          name: _movingIcon!.name,
-                          description: _movingIcon!.description,
-                          createdAt: _movingIcon!.createdAt,
-                          expiresAt: _movingIcon!.expiresAt,
-                          metadata: _movingIcon!.metadata,
+                  onMapClick: (point, latLng) async {
+                    final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
+                    if (_isMovingIcon && _movingIcon != null) {
+                      if (_movingIcon!.creatorId != context.read<Client>().userID) {
+                        InAppNotifier.instance.show(
+                          title: 'You can only move icons you created',
+                          message: 'Ask the creator to move it instead.',
+                          variant: InAppNotificationVariant.warning,
+                          duration: const Duration(seconds: 2),
                         );
-                        
-                        await _mapIconRepository?.updateMapIcon(updatedIcon);
-                        
-                        // Send update to other users
-                        await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
-                        
-                        // Notify the BLoC about the update
-                        context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
-                        
                         setState(() {
-                          // Exit move mode
                           _isMovingIcon = false;
                           _movingIcon = null;
                           _selectedMapIcon = null;
                           _selectedIconPosition = null;
                         });
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Icon moved'),
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      } else {
-                        // Clear selection when tapping on map
-                        context.read<MapBloc>().add(MapClearSelection());
-                        // Also clear bubbles if shown
-                        setState(() {
-                          _bubblePosition = null;
-                          _selectedUserId = null;
-                          _selectedUserName = null;
-                          _selectedMapIcon = null;
-                          _selectedIconPosition = null;
-                          _showIconActionWheel = false;
-                          _iconActionWheelPosition = null;
-                        });
-                      }
-                    },
-                    onLongPress: (tapPosition, latLng) {
-                      print('[DEBUG] Long press detected at: $latLng');
-                      
-                      // Check if we're in groups subscreen and have a selected group
-                      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
-                      
-                      print('[DEBUG] Selected subscreen: $selectedSubscreen');
-                      
-                      // Check if the subscreen starts with "group:" which means a group is selected
-                      if (selectedSubscreen.startsWith('group:')) {
-                        // Extract the group ID (remove "group:" prefix)
-                        final groupId = selectedSubscreen.substring(6);
-                        print('[DEBUG] Showing icon wheel for group: $groupId');
-                        
-                        // Show icon selection wheel
-                        setState(() {
-                          _showIconWheel = true;
-                          _iconWheelPosition = Offset(tapPosition.global.dx, tapPosition.global.dy);
-                          _longPressLocation = latLng;
-                          _selectedGroupId = groupId;
-                        });
-                      } else {
-                        print('[DEBUG] Not in group view - subscreen: $selectedSubscreen');
-                      }
-                    },
-                    onPositionChanged: (position, hasGesture) {
-                      if (hasGesture && _followUser) {
-                        setState(() {
-                          _followUser = false;
-                        });
+                        return;
                       }
 
-                      // Track map rotation changes
-                      if (position.rotation != _currentMapRotation) {
-                        setState(() {
-                          _currentMapRotation = position.rotation ?? 0.0;
-                        });
-                      }
+                      final updatedIcon = MapIcon(
+                        id: _movingIcon!.id,
+                        roomId: _movingIcon!.roomId,
+                        creatorId: _movingIcon!.creatorId,
+                        latitude: dartLatLng.latitude,
+                        longitude: dartLatLng.longitude,
+                        iconType: _movingIcon!.iconType,
+                        iconData: _movingIcon!.iconData,
+                        name: _movingIcon!.name,
+                        description: _movingIcon!.description,
+                        createdAt: _movingIcon!.createdAt,
+                        expiresAt: _movingIcon!.expiresAt,
+                        metadata: _movingIcon!.metadata,
+                      );
 
-                      // Check if we've moved away from reset view (on ANY movement, not just gestures)
-                      if (_resetCenter != null && _resetZoom != null) {
-                        final distance = const Distance().as(
-                          LengthUnit.Meter,
-                          _resetCenter!,
-                          position.center!,
-                        );
+                      await _mapIconRepository?.updateMapIcon(updatedIcon);
+                      await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
+                      context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
 
-                        // Consider moved if more than 100m away or zoom changed by more than 0.5
-                        final zoomDiff = (position.zoom - _resetZoom!).abs();
-                        final hasMoved = distance > 100 || zoomDiff > 0.5;
-
-                        if (_isAtResetView && hasMoved) {
-                          setState(() {
-                            _isAtResetView = false;
-                          });
-                        }
-                      }
-                    },
-                    initialCenter: _locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194), // SF instead of London
-                    initialZoom: _zoom,
-                    initialRotation: 0.0,
-                    minZoom: 3.5, // Prevent zooming out too far (country level minimum)
-                    maxZoom: 17, // Prevent zooming in too close where tiles don't exist
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.all,
-                      enableMultiFingerGestureRace: true,
-                    ),
-                    // Add camera constraints to prevent panning beyond world bounds
-                    cameraConstraint: CameraConstraint.contain(
-                      bounds: LatLngBounds(
-                        const LatLng(-85, -180), // Southwest corner of the world
-                        const LatLng(85, 180),   // Northeast corner of the world
-                      ),
-                    ),
-                    onMapReady: () {
-                      print('[SMART ZOOM] Map is ready!');
-                      setState(() => _isMapReady = true);
-                      
-                      // Force tile loading by slightly moving the map
-                      Future.delayed(const Duration(milliseconds: 100), () {
-                        if (mounted && _mapController.camera.center != null) {
-                          // Tiny movement to trigger tile loading
-                          final currentCenter = _mapController.camera.center;
-                          _mapController.move(
-                            LatLng(
-                              currentCenter.latitude + 0.00001,
-                              currentCenter.longitude + 0.00001,
-                            ),
-                            _mapController.camera.zoom,
-                          );
-                          // Move back immediately
-                          _mapController.move(currentCenter, _mapController.camera.zoom);
-                        }
+                      setState(() {
+                        _isMovingIcon = false;
+                        _movingIcon = null;
+                        _selectedMapIcon = null;
+                        _selectedIconPosition = null;
                       });
-                      
-                      // Calculate optimal zoom when map is ready
-                      if (!_initialZoomCalculated) {
-                        // Try to get current position if we don't have it yet
-                        if (_locationManager?.currentLatLng == null) {
-                          print('[SMART ZOOM] No location yet, requesting current position...');
-                          _locationManager?.grabLocationAndPing().then((_) {
-                            print('[SMART ZOOM] Got location: ${_locationManager?.currentLatLng}');
-                            if (_locationManager?.currentLatLng != null && mounted) {
-                              // Immediately center on user's location first
-                              _zoom = 3.5; // Full country view for faster tile loading
-                              _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-                              
-                              // Then check if we have user locations from sync
-                              final mapBloc = context.read<MapBloc>();
-                              final userLocations = mapBloc.state.userLocations;
-                              if (userLocations.isNotEmpty) {
-                                // Recalculate with user locations
-                                final result = _calculateOptimalZoomAndCenter(
-                                  _locationManager!.currentLatLng!, 
-                                  userLocations
-                                );
-                                _zoom = result.zoom;
-                                print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
-                                _mapController.moveAndRotate(result.center, _zoom, 0);
-                              }
-                              setState(() {
-                                _initialZoomCalculated = true;
-                              });
-                            }
-                          });
-                        } else {
-                          // We already have location - immediately center on user
-                          print('[SMART ZOOM] Have location: ${_locationManager?.currentLatLng}');
-                          _zoom = 3.5; // Full country view for faster tile loading
-                          _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
-                          
-                          // Then check if we have user locations from sync
-                          final mapBloc = context.read<MapBloc>();
-                          final userLocations = mapBloc.state.userLocations;
-                          if (userLocations.isNotEmpty) {
-                            // Recalculate with user locations
-                            final result = _calculateOptimalZoomAndCenter(
-                              _locationManager!.currentLatLng!, 
-                              userLocations
-                            );
-                            _zoom = result.zoom;
-                            print('[SMART ZOOM] Adjusting to include contacts with zoom: $_zoom');
-                            _mapController.moveAndRotate(result.center, _zoom, 0);
-                          }
-                          setState(() {
-                            _initialZoomCalculated = true;
-                          });
-                        }
+
+                      InAppNotifier.instance.show(
+                        title: 'Icon moved',
+                        message: 'Group members will see the new location.',
+                        variant: InAppNotificationVariant.success,
+                        duration: const Duration(seconds: 2),
+                      );
+                    } else {
+                      context.read<MapBloc>().add(MapClearSelection());
+                      setState(() {
+                        _bubblePosition = null;
+                        _selectedUserId = null;
+                        _selectedUserName = null;
+                        _selectedMapIcon = null;
+                        _selectedIconPosition = null;
+                        _showIconActionWheel = false;
+                        _iconActionWheelPosition = null;
+                      });
+                    }
+                  },
+                  onMapLongClick: (point, latLng) {
+                    final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
+                    final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+                    if (selectedSubscreen.startsWith('group:')) {
+                      final groupId = selectedSubscreen.substring(6);
+                      setState(() {
+                        _showIconWheel = true;
+                        _iconWheelPosition = Offset(point.x.toDouble(), point.y.toDouble());
+                        _longPressLocation = dartLatLng;
+                        _selectedGroupId = groupId;
+                      });
+                    }
+                  },
+                  onCameraIdle: () {
+                    _mapController.syncFromController();
+                    final cam = _mapController.camera;
+                    if (cam.center == null) return;
+                    if (cam.bearing != _currentMapRotation) {
+                      setState(() => _currentMapRotation = cam.bearing);
+                    }
+                    if (_resetCenter != null && _resetZoom != null) {
+                      final distance = const Distance().as(
+                        LengthUnit.Meter,
+                        _resetCenter!,
+                        cam.center!,
+                      );
+                      final zoomDiff = (cam.zoom - _resetZoom!).abs();
+                      if (_isAtResetView && (distance > 100 || zoomDiff > 0.5)) {
+                        setState(() => _isAtResetView = false);
                       }
-                    },
-                  ),
-              children: [
-                // Show a subtle gray placeholder while tiles are loading or style not yet determined
-                // This gives instant visual feedback like Google Maps
-                if (_currentMapStyle == null || _tileProvider == null || (_currentMapStyle == 'satellite' && _satelliteMapToken == null))
-                  Container(
-                    color: isDarkMode
-                      ? const Color(0xFF2C2C2C)  // Slightly lighter dark gray for visibility
-                      : const Color(0xFFE8E8E8), // Light gray for light mode
-                  ),
-                // Regular map tiles
-                if (_currentMapStyle == 'base' && _tileProvider != null)
-                  VectorTileLayer(
-                    theme: _mapTheme,
-                    tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                    fileCacheTtl: const Duration(days: 14),
-                    memoryTileDataCacheMaxSize: 80,
-                    memoryTileCacheMaxSize: 100,
-                    concurrency: 5,
-                  )
-                else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
-                  TileLayer(
-                    urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
-                    tileProvider: NetworkTileProvider(
-                      headers: {
-                        'Authorization': 'Bearer $_satelliteMapToken',
-                      },
-                    ),
-                    maxZoom: 20,
-                    maxNativeZoom: 20,
-                    tileSize: 256,
-                    errorTileCallback: (tile, error, stack) {
-                      // Handle 401/403 errors indicating token issues
-                      if (error.toString().contains('401') || error.toString().contains('403')) {
-                        print('Satellite tile auth error: $error');
-                        // Refresh token on next frame to avoid setState during build
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _refreshSatelliteTokenIfNeeded();
-                        });
-                      }
-                    },
-                  ),
-                // Only show CurrentLocationLayer AFTER onboarding (it auto-requests permissions)
-                if (_hasCompletedOnboarding)
-                  CurrentLocationLayer(
-                    alignPositionOnUpdate: _followUser ? AlignOnUpdate.always : AlignOnUpdate.never,
-                    style: const LocationMarkerStyle(),
-                  ),
+                    }
+                    // force refresh of marker overlay positions
+                    if (mounted) setState(() {});
+                  },
+                  onCameraTrackingDismissed: () {
+                    if (_followUser) setState(() => _followUser = false);
+                  },
+                ),
+                // Home-location pin overlay (under user-location markers).
+                Builder(
+                  builder: (context) {
+                    if (!_isMapReady || _homeLocation == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final home = _homeLocation!;
+                    final current = _locationManager?.currentLatLng;
+                    final inside = current != null &&
+                        const Distance().as(
+                              LengthUnit.Meter,
+                              home,
+                              current,
+                            ) <=
+                            _homeRadiusMeters;
+                    final pt = _screenPosFor(home);
+                    final accent = inside ? context.gridColors.mint : context.gridColors.amber;
+                    final label = inside ? 'AT HOME' : 'HOME';
+
+                    // Geofence radius circle in screen pixels — Web Mercator
+                    // resolution at 512-pixel world tiles (matches maplibre's
+                    // internal convention used elsewhere in this file).
+                    final zoom = _mapController.camera.zoom;
+                    final lat = home.latitude * math.pi / 180.0;
+                    final metersPerPixel =
+                        78271.516 * math.cos(lat) / math.pow(2, zoom);
+                    final radiusPx = metersPerPixel <= 0
+                        ? 0.0
+                        : _homeRadiusMeters / metersPerPixel;
+                    final diameter = radiusPx * 2;
+
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: Stack(
+                        children: [
+                          // Geofence radius (under the pin).
+                          if (diameter > 4)
+                            Positioned(
+                              left: pt.dx - radiusPx,
+                              top: pt.dy - radiusPx,
+                              width: diameter,
+                              height: diameter,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: accent.withOpacity(0.12),
+                                  border: Border.all(
+                                    color: accent.withOpacity(0.55),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Pin + label.
+                          Positioned(
+                            left: pt.dx - 30,
+                            top: pt.dy - 18,
+                            width: 60,
+                            height: 60,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: context.gridColors.amberSoft,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: context.gridColors.amber,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (inside
+                                                ? context.gridColors.mint
+                                                : Colors.white)
+                                            .withOpacity(inside ? 0.55 : 0.85),
+                                        blurRadius: inside ? 12 : 6,
+                                        spreadRadius: inside ? 1 : 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.home_rounded,
+                                    size: 20,
+                                    color: accent,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                GridMono(
+                                  label,
+                                  color: accent,
+                                  size: 9,
+                                  letterSpacing: 0.4,
+                                  weight: FontWeight.w700,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                // User-location markers (Stack overlay).
                 BlocBuilder<MapBloc, MapState>(
-                  buildWhen: (previous, current) => 
+                  buildWhen: (previous, current) =>
                       previous.userLocations != current.userLocations ||
                       previous.selectedUserId != current.selectedUserId,
                   builder: (context, state) {
-                    return MarkerLayer(
-                      markers: state.userLocations.map((userLocation) =>
-                          Marker(
-                            width: 100.0,
-                            height: 100.0,
-                            point: userLocation.position,
+                    if (!_isMapReady) return const SizedBox.shrink();
+                    return IgnorePointer(
+                      ignoring: false,
+                      child: Stack(
+                        children: state.userLocations.map((userLocation) {
+                          final pt = _screenPosFor(userLocation.position);
+                          // Marker box is 140 wide × 110 tall; the
+                          // pin tip sits at the bottom-center of the
+                          // box, which we want anchored at the lat/lng
+                          // screen point.
+                          return Positioned(
+                            left: pt.dx - 70,
+                            top: pt.dy - 110,
+                            width: 140,
+                            height: 110,
                             child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
                               onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
                               child: UserMapMarker(
                                 userId: userLocation.userId,
@@ -1766,90 +1927,82 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 timestamp: userLocation.timestamp,
                               ),
                             ),
-                          )
-                      ).toList(),
+                          );
+                        }).toList(),
+                      ),
                     );
                   },
                 ),
-                // Map icons layer
+                // Map-icons overlay.
                 BlocBuilder<MapIconsBloc, MapIconsState>(
                   builder: (context, mapIconsState) {
-                    return MarkerLayer(
-                      markers: mapIconsState.filteredIcons.map((icon) =>
-                        Marker(
-                          width: 50.0,
-                          height: 50.0,
-                          point: icon.position,
-                          child: GestureDetector(
-                            onTap: () {
-                              // Show icon action wheel
-                              setState(() {
-                                _selectedMapIcon = icon;
-                                _selectedIconPosition = icon.position;
-                                _showIconActionWheel = true;
-                                // Calculate screen position for the wheel
-                                final renderBox = context.findRenderObject() as RenderBox;
-                                final screenPoint = _mapController.camera.latLngToScreenPoint(icon.position);
-                                _iconActionWheelPosition = Offset(screenPoint.x, screenPoint.y);
-                                // Clear user selection when selecting an icon
-                                _bubblePosition = null;
-                                _selectedUserId = null;
-                                _selectedUserName = null;
-                              });
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
+                    if (!_isMapReady) return const SizedBox.shrink();
+                    return IgnorePointer(
+                      ignoring: false,
+                      child: Stack(
+                        children: mapIconsState.filteredIcons.map((icon) {
+                          final pt = _screenPosFor(icon.position);
+                          return Positioned(
+                            left: pt.dx - 25,
+                            top: pt.dy - 25,
+                            width: 50,
+                            height: 50,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: () {
+                                setState(() {
+                                  _selectedMapIcon = icon;
+                                  _selectedIconPosition = icon.position;
+                                  _showIconActionWheel = true;
+                                  _iconActionWheelPosition = Offset(pt.dx, pt.dy);
+                                  _bubblePosition = null;
+                                  _selectedUserId = null;
+                                  _selectedUserName = null;
+                                });
+                              },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surface,
+                                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                                padding: const EdgeInsets.all(8),
-                                child: Icon(
-                                  _getIconDataForType(icon.iconData),
-                                  size: 24,
-                                  color: Theme.of(context).colorScheme.primary,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.surface,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    _getIconDataForType(icon.iconData),
+                                    size: 24,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        )
-                      ).toList(),
+                          );
+                        }).toList(),
+                      ),
                     );
                   },
                 ),
-              ],
-            ),
-            )),  // Close GestureDetector and SizedBox
+              ]);
+            })),  // close Stack, LayoutBuilder builder, LayoutBuilder, SizedBox
 
-            if (_bubblePosition != null && _selectedUserId != null)
-              UserInfoBubble(
-                userId: _selectedUserId!,
-                userName: _selectedUserName!,
-                position: _bubblePosition!,
-                onClose: () {
-                  setState(() {
-                    _bubblePosition = null;
-                    _selectedUserId = null;
-                    _selectedUserName = null;
-                  });
-                },
-              ),
-            
+            // user_info_bubble is retired — marker tap opens the
+            // ContactProfileModal directly via `_onMarkerTap`.
+
+
             // Icon action wheel
             if (_showIconActionWheel && _iconActionWheelPosition != null && _selectedMapIcon != null)
               IconActionWheel(
@@ -1872,16 +2025,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 onDelete: () async {
                   // Only allow delete if user created it
                   if (_selectedMapIcon!.creatorId != context.read<Client>().userID) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('You can only delete icons you created'),
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
+                    InAppNotifier.instance.show(
+                      title: 'You can only delete icons you created',
+                      message: 'Ask the creator to remove it instead.',
+                      variant: InAppNotificationVariant.warning,
+                      duration: const Duration(seconds: 2),
                     );
                     setState(() {
                       _showIconActionWheel = false;
@@ -1896,95 +2044,130 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   final shouldDelete = await showDialog<bool>(
                     context: context,
                     builder: (BuildContext context) {
-                      final colorScheme = Theme.of(context).colorScheme;
-                      
                       return Dialog(
                         backgroundColor: Colors.transparent,
                         child: Container(
-                          constraints: const BoxConstraints(maxWidth: 300),
+                          constraints: BoxConstraints(
+                            maxWidth:
+                                MediaQuery.of(context).size.width * 0.9,
+                          ),
                           decoration: BoxDecoration(
-                            color: colorScheme.surface,
-                            borderRadius: BorderRadius.circular(24),
+                            color: context.gridColors.surface,
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rXl),
+                            border: Border.all(color: context.gridColors.hairline),
                             boxShadow: [
                               BoxShadow(
-                                color: colorScheme.shadow.withOpacity(0.1),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
+                                color: Colors.black.withOpacity(0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
                             ],
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.error.withOpacity(0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.delete_outline,
-                                    color: colorScheme.error,
-                                    size: 32,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: context.gridColors.dangerSoft,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft:
+                                        Radius.circular(GridTokens.rXl),
+                                    topRight:
+                                        Radius.circular(GridTokens.rXl),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Delete Icon?',
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'This icon will be permanently removed from the map.',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(0.8),
-                                    height: 1.5,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 24),
-                                Row(
+                                child: Row(
                                   children: [
-                                    Expanded(
-                                      child: OutlinedButton(
-                                        onPressed: () => Navigator.of(context).pop(false),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: colorScheme.onSurface,
-                                          side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Cancel'),
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: context.gridColors.danger
+                                            .withOpacity(0.18),
+                                        borderRadius: BorderRadius.circular(
+                                            GridTokens.rMd),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        Icons.delete_outline,
+                                        color: context.gridColors.danger,
+                                        size: 20,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 14),
                                     Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () => Navigator.of(context).pop(true),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: colorScheme.error,
-                                          foregroundColor: colorScheme.onError,
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Delete icon',
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: -0.015,
+                                              color: context.gridColors.text,
+                                            ),
                                           ),
-                                          elevation: 0,
-                                        ),
-                                        child: const Text('Delete'),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "This can't be undone.",
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w400,
+                                              color: context.gridColors.text2,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 0),
+                                child: Text(
+                                  'This icon will be permanently removed from the map.',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.gridColors.text2,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 20),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Cancel',
+                                        style: GridButtonStyle.secondary,
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Delete',
+                                        style: GridButtonStyle.danger,
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -2011,16 +2194,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       _selectedMapIcon = null;
                       _selectedIconPosition = null;
                     });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Icon deleted'),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
+                    InAppNotifier.instance.show(
+                      title: 'Icon deleted',
+                      message: 'It is no longer visible to the group.',
+                      variant: InAppNotificationVariant.success,
+                      duration: const Duration(seconds: 2),
                     );
                   } else {
                     setState(() {
@@ -2182,26 +2360,24 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
               ),
 
-            Positioned(
-              top: 100,
-              left: 16,
-              child: FloatingActionButton(
-                heroTag: "settingsBtn",
-                backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => SettingsPage()),
-                  );
-                },
-                child: Icon(
-                    Icons.menu,
-                    color: isDarkMode ? colorScheme.primary : Colors.black
+            // Top-center "SHARING WITH N" pill. Hidden while a map-icon
+            // detail bubble is open so it doesn't obscure the bubble.
+            if (!(_selectedMapIcon != null &&
+                _selectedIconPosition != null &&
+                !_showIconActionWheel))
+              Positioned(
+                top: 60,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Center(child: _buildSharingPill()),
                 ),
-                mini: true,
               ),
-            ),
 
+            // Right column overlay stack — compass, globe reset, center-on-me.
+            // Chrome matches the bottom sheet's `GridNavIconButton` (40×40,
+            // surface 0.92, hairline border, soft shadow, rMd radius) so the
+            // map's floating chrome reads as one design system with the drawer.
             Positioned(
               right: 16,
               top: 100,
@@ -2210,130 +2386,52 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 children: [
                   _buildCompassButton(isDarkMode, colorScheme),
                   const SizedBox(height: 10),
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      FloatingActionButton(
-                        heroTag: "pingBtn",
-                        backgroundColor: _isPingOnCooldown
-                            ? Colors.grey
-                            : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                        onPressed: _isPingOnCooldown ? null : _sendPing,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            if (_isPingOnCooldown)
-                              SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  value: _pingCooldownSeconds / 5,
-                                  strokeWidth: 2,
-                                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                                  backgroundColor: isDarkMode ? colorScheme.surfaceVariant : Colors.grey.withOpacity(0.3),
-                                ),
-                              )
-                            else
-                              Icon(
-                                Icons.sensors,
-                                color: isDarkMode ? colorScheme.primary : Colors.black,
-                                size: 24,
-                              ),
-                            if (_isPingOnCooldown)
-                              Text(
-                                '$_pingCooldownSeconds',
-                                style: TextStyle(
-                                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                              ),
-                          ],
-                        ),
-                        mini: true,
-                      ),
-                    ],
+                  _MapOverlayIconButton(
+                    icon: Icons.public_rounded,
+                    active: _isAtResetView,
+                    onPressed: _resetToInitialZoom,
+                    tooltip: 'Reset view',
                   ),
-                  if (!utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? '')) ...[
-                    const SizedBox(height: 10),
-                    FloatingActionButton(
-                      heroTag: "mapSelectorBtn",
-                      backgroundColor: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-                      onPressed: () {
-                        setState(() {
-                          _showMapSelector = !_showMapSelector;
-                        });
-                      },
-                      child: Icon(
-                        Icons.layers,
-                        color: isDarkMode ? colorScheme.primary : Colors.black,
-                        size: 24,
-                      ),
-                      mini: true,
-                    ),
-                  ],
                   const SizedBox(height: 10),
-                  // Center on user button
-                  FloatingActionButton(
-                    heroTag: 'center_on_user_fab',
-                    backgroundColor: _followUser
-                      ? colorScheme.primary
-                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
+                  _MapOverlayIconButton(
+                    icon: Icons.my_location_rounded,
+                    active: _followUser,
+                    tooltip: 'Center on me',
                     onPressed: () {
-                      // Center on user with same zoom level as other users
-                      _mapController.move(_locationManager?.currentLatLng ?? _mapController.camera.center, 16.0);
+                      final target = _locationManager?.currentLatLng ??
+                          _mapController.camera.center;
+                      if (target != null) {
+                        _mapController.move(target, 16.0);
+                      }
                       setState(() {
                         _followUser = true;
-                        _isAtResetView = false;  // Unhighlight globe when centering on user
+                        _isAtResetView = false;
                       });
                     },
-                    child: Icon(
-                      Icons.my_location,
-                      color: _followUser
-                        ? Colors.white
-                        : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
-                    tooltip: 'Center on me',
-                    elevation: _followUser ? 6 : 2,
-                    mini: true,
-                  ),
-                  const SizedBox(height: 10),
-                  // Globe reset button
-                  FloatingActionButton(
-                    heroTag: 'reset_view_fab',
-                    backgroundColor: _isAtResetView
-                      ? colorScheme.primary
-                      : (isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8)),
-                    onPressed: _resetToInitialZoom,
-                    child: Icon(
-                      Icons.public,
-                      color: _isAtResetView
-                        ? Colors.white
-                        : (isDarkMode ? colorScheme.primary : Colors.black),
-                    ),
-                    tooltip: 'Reset view',
-                    elevation: _isAtResetView ? 6 : 2,
-                    mini: true,
                   ),
                 ],
               ),
             ),
 
-            // Map Selector Overlay (only for default homeserver)
-            if (_showMapSelector && !utils.isCustomHomeserver(_roomService?.getMyHomeserver() ?? ''))
-              Positioned(
-                top: 300,
-                right: 16,
-                child: _buildMapSelector(isDarkMode, colorScheme),
-              ),
-              
+            // Map Selector Overlay — removed (theme follows system brightness now).
+
+
             Align(
               alignment: Alignment.bottomCenter,
               child: MapScrollWindow(
                 isEditingMapIcon: _isEditingIconDescription,
               ),
             ),
-            
+
+            // Inline contact profile sheet. Lives inside the Stack
+            // (not pushed as a modal route) so the map underneath
+            // remains tappable / pannable while the sheet is up. The
+            // sheet is rendered with IgnorePointer:false so it gets
+            // its own gestures; the area above the sheet falls
+            // through to the map.
+            if (ContactSheetController.instance.contact != null)
+              _buildInlineContactSheet(),
+
             // Icon selection wheel overlay
             if (_showIconWheel && _iconWheelPosition != null)
               IconSelectionWheel(
@@ -2381,71 +2479,66 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
   
   Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
-    return GestureDetector(
-      onTap: () {
-        // Orient north when tapped
-        _mapController.moveAndRotate(
-          _mapController.camera.center,
-          _mapController.camera.zoom,
-          0, // Set rotation to 0 (north)
-        );
-        setState(() {
-          _currentMapRotation = 0.0;
-        });
-      },
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: isDarkMode ? colorScheme.surface : Colors.white.withOpacity(0.8),
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Compass circle background
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDarkMode ? colorScheme.outline.withOpacity(0.3) : Colors.grey.withOpacity(0.3),
-                  width: 1,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        onTap: () {
+          final center = _mapController.camera.center;
+          if (center != null) {
+            _mapController.moveAndRotate(
+              center,
+              _mapController.camera.zoom,
+              0,
+            );
+          }
+          setState(() {
+            _currentMapRotation = 0.0;
+          });
+        },
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: context.gridColors.surface.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: isDarkMode
+                ? Border.all(color: context.gridColors.hairline, width: 1)
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDarkMode ? 0.28 : 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.rotate(
+                angle: _currentMapRotation * (math.pi / 180),
+                child: CustomPaint(
+                  size: const Size(26, 26),
+                  painter: CompassPainter(
+                    northColor: context.gridColors.danger,
+                    southColor: context.gridColors.text2,
+                  ),
                 ),
               ),
-            ),
-            // Rotating compass needle
-            Transform.rotate(
-              angle: _currentMapRotation * (3.141592653589793 / 180), // Convert degrees to radians
-              child: CustomPaint(
-                size: Size(28, 28),
-                painter: CompassPainter(
-                  northColor: Colors.red,
-                  southColor: isDarkMode ? colorScheme.onSurface.withOpacity(0.6) : Colors.black.withOpacity(0.6),
+              Positioned(
+                top: 4,
+                child: Text(
+                  'N',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: context.gridColors.text2,
+                  ),
                 ),
               ),
-            ),
-            // North indicator (N)
-            Positioned(
-              top: 4,
-              child: Text(
-                'N',
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? colorScheme.primary : Colors.black,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2486,309 +2579,67 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       ),
     );
   }
-  
-  Widget _buildMapSelector(bool isDarkMode, ColorScheme colorScheme) {
-    return Container(
-      width: 220,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? colorScheme.surface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header with title and close button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Map Layers',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showMapSelector = false;
-                  });
-                },
-                child: Container(
-                  padding: EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: colorScheme.onSurface.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    size: 18,
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
+
+}
+
+/// Floating map-overlay icon button styled to match the bottom sheet's
+/// `GridNavIconButton`. Used for the globe/center buttons in the right
+/// FAB column — the compass keeps its own builder because it carries the
+/// rotating compass rose inside the same chrome.
+class _MapOverlayIconButton extends StatelessWidget {
+  const _MapOverlayIconButton({
+    required this.icon,
+    required this.active,
+    required this.onPressed,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final bool active;
+  final VoidCallback onPressed;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final btn = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: active
+                ? context.gridColors.mintFaint
+                : context.gridColors.surface.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: active
+                ? Border.all(color: context.gridColors.mint, width: 1.5)
+                : (isDark
+                    ? Border.all(color: context.gridColors.hairline, width: 1)
+                    : null),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.28 : 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-          SizedBox(height: 12),
-
-          // Loading overlay if switching maps
-          if (_isLoadingMapStyle)
-            Container(
-              height: 120,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-                      strokeWidth: 2,
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Loading map...',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else ...[
-            // Base Map Option
-            _buildMapOption(
-              title: 'Standard Map',
-              imagePath: 'assets/extras/basemaps.png',
-              isSelected: _currentMapStyle == 'base',
-              onTap: _isLoadingMapStyle ? null : () {
-                _selectMapStyle('base');
-              },
-              colorScheme: colorScheme,
-              isDarkMode: isDarkMode,
-            ),
-            // Satellite Map hidden while the sat-tile provider is offline.
-            // Re-enable by removing the `if (false)` guard once available.
-            if (false) ...[
-              SizedBox(height: 8),
-              _buildMapOption(
-                title: 'Satellite Map',
-                imagePath: 'assets/extras/satellite.png',
-                isSelected: _currentMapStyle == 'satellite',
-                showStar: true,
-                onTap: _isLoadingMapStyle ? null : () async {
-                  final hasSubscription = await _subscriptionService.hasActiveSubscription();
-                  if (!hasSubscription) {
-                    // Navigate to subscription page
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                    );
-                  } else {
-                    _selectMapStyle('satellite');
-                  }
-                },
-                colorScheme: colorScheme,
-                isDarkMode: isDarkMode,
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildMapOption({
-    required String title,
-    required String imagePath,
-    required bool isSelected,
-    required VoidCallback? onTap,
-    required ColorScheme colorScheme,
-    required bool isDarkMode,
-    bool showStar = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 180, // Fixed width for consistent alignment
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? colorScheme.primary.withOpacity(0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected 
-                ? colorScheme.primary 
-                : colorScheme.outline.withOpacity(0.2),
-            width: isSelected ? 2 : 1,
+          child: Icon(
+            icon,
+            color: active ? context.gridColors.mint : context.gridColors.text,
+            size: 20,
           ),
-        ),
-        child: Row(
-          children: [
-            // Map preview image
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.outline.withOpacity(0.2),
-                  width: 1,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: Image.asset(
-                  imagePath,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected 
-                      ? colorScheme.primary 
-                      : (isDarkMode ? Colors.white : Colors.black),
-                ),
-              ),
-            ),
-            if (showStar)
-              Icon(
-                Icons.star,
-                color: Colors.amber,
-                size: 16,
-              ),
-          ],
         ),
       ),
     );
-  }
-  
-  Future<void> _selectMapStyle(String style) async {
-    // Don't allow switching if already loading
-    if (_isLoadingMapStyle) return;
-
-    // Don't switch if already on the selected style
-    if (_currentMapStyle == style) return;
-
-    setState(() {
-      _isLoadingMapStyle = true;
-    });
-
-    try {
-      if (style == 'satellite') {
-        // Check subscription and get token
-        final hasSubscription = await _subscriptionService.hasActiveSubscription();
-        if (!hasSubscription) {
-          setState(() {
-            _isLoadingMapStyle = false;
-          });
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-          );
-          return;
-        }
-
-        // Try to get a map token (will use cached if valid)
-        final token = await _subscriptionService.getMapToken();
-        if (token == null) {
-          setState(() {
-            _isLoadingMapStyle = false;
-          });
-          // Failed to get token, navigate to subscription page
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-        );
-        return;
-      }
-      
-      // Switch to satellite tile provider with token
-      print('Got satellite map token: ${token.substring(0, 20)}...'); // Debug log
-      print('Full token length: ${token.length}'); // Debug log
-      setState(() {
-        _satelliteMapToken = token;
-        _currentMapStyle = style;
-        _showMapSelector = false;
-        _isLoadingMapStyle = false;
-      });
-      
-      // Save the preference
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_mapStyleKey, style);
-      
-      // Force a rebuild to ensure new token is used
-      if (mounted) {
-        setState(() {});
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Switched to satellite maps'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    } else {
-      // Switch to base maps
-      setState(() {
-        _currentMapStyle = style;
-        _showMapSelector = false;
-        _satelliteMapToken = null; // Clear token when switching back
-        _isLoadingMapStyle = false;
-      });
-      
-      // Save the preference
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_mapStyleKey, style);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Switched to base maps'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip!, child: btn);
     }
-    } catch (e) {
-      // Handle any errors and reset loading state
-      print('Error switching map style: $e');
-      setState(() {
-        _isLoadingMapStyle = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to switch map layer'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
+    return btn;
   }
 }
 

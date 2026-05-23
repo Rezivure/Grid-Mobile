@@ -181,7 +181,8 @@ class ContactsBloc extends Bloc<ContactsEvent, ContactsState> {
       print("ContactsBloc: Handling new contact invite for $userId in room $roomId");
 
       // Get user profile and insert/update user
-      final profileInfo = await roomService.client.getUserProfile(userId);
+      final profileInfo = await roomService.client
+          .getUserProfile(userId, timeout: const Duration(seconds: 8));
       final newUser = GridUser(
         userId: userId,
         displayName: profileInfo.displayname,

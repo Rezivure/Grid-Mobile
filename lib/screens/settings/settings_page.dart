@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/theme_controller.dart';
+import 'package:grid_frontend/services/location/home_geofence_service.dart';
+import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
@@ -38,9 +42,21 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
-import 'package:grid_frontend/screens/settings/developer_settings_screen.dart';
+import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
+import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
+import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
+import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
+import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
+import 'package:grid_frontend/screens/settings/sharing_mode_screen.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../styles/tokens.dart';
+import '../../styles/grid_colors.dart';
+import '../../widgets/grid/grid_avatar.dart';
+import '../../widgets/grid/grid_button.dart';
+import '../../widgets/grid/grid_mono.dart';
+import '../../widgets/grid/grid_segmented.dart';
 
 
 
@@ -59,8 +75,12 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedProxy = 'None';
   TextEditingController _customProxyController = TextEditingController();
   String _appVersion = '';
+  String _buildNumber = '';
   bool _incognitoMode = false;
   bool _batterySaver = false;
+  SharingMode _sharingMode = SharingMode.balanced;
+  bool _autoPauseAtHome = false;
+  bool _homeLocationSet = false;
   String? _userID;
   String? _username;
   String? _localpart;
@@ -72,6 +92,32 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _hasLoadedAvatar = false; // Track if we've attempted to load avatar
   int _avatarUpdateCounter = 0; // Force UserAvatar widget rebuild
 
+  // Hidden dev-tools easter egg: 5 taps on the footer within a 3s rolling
+  // window opens the Developer Tools screen.
+  int _devTapCount = 0;
+  DateTime? _lastDevTapAt;
+
+  void _onFooterTapped() {
+    final now = DateTime.now();
+    if (_lastDevTapAt != null &&
+        now.difference(_lastDevTapAt!) <= const Duration(seconds: 3)) {
+      _devTapCount += 1;
+    } else {
+      _devTapCount = 1;
+    }
+    _lastDevTapAt = now;
+    if (_devTapCount >= 5) {
+      _devTapCount = 0;
+      _lastDevTapAt = null;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DeveloperToolsScreen(),
+        ),
+      );
+    }
+  }
+
 
   @override
   void initState() {
@@ -80,6 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadIncognitoState();
     _loadBatterySaverState();
+    _loadAutoPauseAtHomeState();
     _loadCachedAvatar();
     _loadAppVersion();
   }
@@ -88,6 +135,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final packageInfo = await PackageInfo.fromPlatform();
     setState(() {
       _appVersion = 'v${packageInfo.version}';
+      _buildNumber = packageInfo.buildNumber;
     });
   }
 
@@ -118,9 +166,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadIncognitoState() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sharingState = context.read<SharingStateNotifier>();
+    if (!mounted) return;
     setState(() {
-      _incognitoMode = prefs.getBool('incognito_mode') ?? false;
+      _incognitoMode = sharingState.userIncognito;
     });
   }
 
@@ -128,6 +177,18 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _batterySaver = prefs.getBool('battery_saver') ?? false;
+      _sharingMode =
+          SharingModePref.fromPrefValue(prefs.getString('sharing_mode'));
+    });
+  }
+
+  Future<void> _loadAutoPauseAtHomeState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('home_location');
+    setState(() {
+      _autoPauseAtHome =
+          prefs.getBool('auto_pause_at_home_enabled') ?? false;
+      _homeLocationSet = saved != null && saved.trim().isNotEmpty;
     });
   }
 
@@ -170,6 +231,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// Drives the user-facing 'Sharing mode' slider. Persists the choice,
+  /// swaps the underlying `libre_location` preset at runtime via
+  /// LocationDispatch, and keeps the legacy `battery_saver` pref in sync
+  /// for any consumer that still reads it.
+  Future<void> _setSharingMode(SharingMode mode) async {
+    if (_sharingMode == mode) return;
+    setState(() => _sharingMode = mode);
+    try {
+      await context.read<LocationDispatch>().setMode(mode);
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    final wantBatterySaver = mode == SharingMode.light;
+    if (_batterySaver != wantBatterySaver) {
+      await prefs.setBool('battery_saver', wantBatterySaver);
+      if (mounted) setState(() => _batterySaver = wantBatterySaver);
+      try {
+        Provider.of<LocationManager>(context, listen: false)
+            .toggleBatterySaverMode(wantBatterySaver);
+      } catch (_) {}
+    }
+  }
+
   Future<void> _toggleBatterySaver(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final prefs = await SharedPreferences.getInstance();
@@ -183,38 +266,260 @@ class _SettingsPageState extends State<SettingsPage> {
     if (value) {
       // enable incognito
       locationManager.toggleBatterySaverMode(value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Battery Saver Mode: Enabled')),
+      InAppNotifier.instance.show(
+        title: 'Battery Saver Mode enabled',
+        message: 'Location updates less frequently to save power.',
+        variant: InAppNotificationVariant.success,
       );
     } else {
       locationManager.toggleBatterySaverMode(value);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Battery Saver Mode: Disabled')),
+      InAppNotifier.instance.show(
+        title: 'Battery Saver Mode disabled',
+        message: 'Location now updates at full frequency.',
+        variant: InAppNotificationVariant.info,
       );
     }
   }
 
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
-    final prefs = await SharedPreferences.getInstance();
+    final sharingState = context.read<SharingStateNotifier>();
 
     setState(() {
       _incognitoMode = value;
     });
 
-    await prefs.setBool('incognito_mode', value);
+    await sharingState.setUserIncognito(value);
 
     if (value) {
       locationManager.stopTracking();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Your location is no longer being shared.')),
+      InAppNotifier.instance.show(
+        title: 'Sharing paused',
+        message: 'Your location is no longer being shared.',
+        variant: InAppNotificationVariant.info,
       );
     } else {
       locationManager.startTracking();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Your location is being shared with trusted contacts.')),
+      InAppNotifier.instance.show(
+        title: 'Sharing resumed',
+        message: 'Your location is being shared with trusted contacts.',
+        variant: InAppNotificationVariant.success,
       );
     }
+  }
+
+  // ── Auto-pause at home ─────────────────────────────────
+  //
+  // Toggle + home-location prefs are owned here; the actual platform
+  // geofence is registered by HomeGeofenceService, which we resync any
+  // time any of these prefs change so add/remove happens immediately.
+  Future<void> _syncHomeGeofence() async {
+    try {
+      await context.read<HomeGeofenceService>().syncFromPrefs();
+    } catch (_) {
+      // Provider may not be mounted in some test/preview surfaces — fine.
+    }
+  }
+
+  Future<void> _onAutoPauseAtHomeToggled(bool requested) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!requested) {
+      // Turning off: keep the saved home location, just clear the enabled flag.
+      await prefs.setBool('auto_pause_at_home_enabled', false);
+      await _syncHomeGeofence();
+      if (!mounted) return;
+      setState(() => _autoPauseAtHome = false);
+      return;
+    }
+
+    // Turning on: ensure we have a saved home location first.
+    final existing = prefs.getString('home_location');
+    if (existing != null && existing.trim().isNotEmpty) {
+      await prefs.setBool('auto_pause_at_home_enabled', true);
+      await _syncHomeGeofence();
+      if (!mounted) return;
+      setState(() => _autoPauseAtHome = true);
+      return;
+    }
+
+    // No home set — prompt the user to pick one on the map.
+    final saved = await _promptSetHomeLocation();
+    if (!mounted) return;
+    if (!saved) {
+      // User cancelled — leave the toggle off.
+      setState(() => _autoPauseAtHome = false);
+      return;
+    }
+
+    await prefs.setBool('auto_pause_at_home_enabled', true);
+    await _syncHomeGeofence();
+    if (!mounted) return;
+    setState(() {
+      _autoPauseAtHome = true;
+      _homeLocationSet = true;
+    });
+  }
+
+  /// Pushes the home-location picker so the user can re-pick their saved
+  /// home spot. Overwrites the `home_location` + `home_radius` preferences.
+  Future<void> _changeHomeLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final initialRadius = prefs.getDouble('home_radius') ?? 25;
+    final picked = await Navigator.of(context).push<HomeLocationResult>(
+      MaterialPageRoute(
+        builder: (_) =>
+            HomeLocationPickerScreen(initialRadiusMeters: initialRadius),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    await prefs.setString(
+      'home_location',
+      '${picked.latLng.latitude},${picked.latLng.longitude}',
+    );
+    await prefs.setDouble('home_radius', picked.radiusMeters);
+    await _syncHomeGeofence();
+    if (!mounted) return;
+    setState(() => _homeLocationSet = true);
+    InAppNotifier.instance.show(
+      title: 'Home location updated',
+      message: 'Auto-pause will use this location.',
+      variant: InAppNotificationVariant.success,
+    );
+  }
+
+  /// Clears the saved home location and turns the auto-pause toggle off,
+  /// since the feature can't work without a saved location.
+  Future<void> _clearHomeLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('home_location');
+    await prefs.remove('home_radius');
+    await prefs.setBool('auto_pause_at_home_enabled', false);
+    await _syncHomeGeofence();
+    if (!mounted) return;
+    setState(() {
+      _homeLocationSet = false;
+      _autoPauseAtHome = false;
+    });
+    InAppNotifier.instance.show(
+      title: 'Home location cleared',
+      message: 'Auto-pause at home has been turned off.',
+      variant: InAppNotificationVariant.info,
+    );
+  }
+
+  /// Shows the "Set your home location" bottom sheet and, if the user
+  /// confirms, pushes the home-location picker. Returns `true` when a home
+  /// location was successfully persisted.
+  Future<bool> _promptSetHomeLocation() async {
+    final shouldPick = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.gridColors.surface,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
+                border: Border.all(color: context.gridColors.hairline),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: context.gridColors.mintFaint,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: context.gridColors.mintSoft,
+                            width: 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.home_outlined,
+                          color: context.gridColors.mint,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Set your home location',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pick the spot on the map. We use it locally to '
+                      'pause location sharing when your phone is at home.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text2,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        height: 1.35,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    GridButton(
+                      label: 'Pick on map',
+                      icon: Icons.map_outlined,
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(true),
+                    ),
+                    const SizedBox(height: 8),
+                    GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.ghost,
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldPick != true || !mounted) return false;
+
+    final picked = await Navigator.of(context).push<HomeLocationResult>(
+      MaterialPageRoute(
+        builder: (_) => const HomeLocationPickerScreen(),
+      ),
+    );
+
+    if (picked == null) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'home_location',
+      '${picked.latLng.latitude},${picked.latLng.longitude}',
+    );
+    await prefs.setDouble('home_radius', picked.radiusMeters);
+    await _syncHomeGeofence();
+    return true;
   }
 
   Future<void> _getDeviceAndIdentityKey() async {
@@ -436,11 +741,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             onPressed: () {
                               // Copy to clipboard functionality would go here
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('$title copied to clipboard'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
+                              InAppNotifier.instance.show(
+                                title: '$title copied to clipboard',
+                                message: 'Paste it wherever you need.',
+                                variant: InAppNotificationVariant.success,
                               );
                             },
                             icon: Icon(
@@ -509,10 +813,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildAvatar(String username) {
-    return CircleAvatar(
-      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-      child: RandomAvatar(_localpart!, height: 80.0, width: 80.0), // Increased size
-      radius: 50,  // Slightly larger radius
+    return ClipOval(
+      child: GridAvatarFallback(
+        name: _localpart!,
+        size: 100,
+      ),
     );
   }
 
@@ -595,8 +900,10 @@ class _SettingsPageState extends State<SettingsPage> {
         // Navigate to welcome screen
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to sign out: $e')),
+        InAppNotifier.instance.show(
+          title: 'Failed to sign out',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
     }
@@ -625,8 +932,10 @@ class _SettingsPageState extends State<SettingsPage> {
     // Grab the phone number from shared prefs
     final phoneNumber = sharedPreferences.getString('phone_number');
     if (phoneNumber == null || phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Phone number not found, is this a beta/test account?')),
+      InAppNotifier.instance.show(
+        title: 'Phone number not found',
+        message: 'Is this a beta/test account?',
+        variant: InAppNotificationVariant.warning,
       );
       return;
     }
@@ -635,8 +944,10 @@ class _SettingsPageState extends State<SettingsPage> {
       // Attempt to request deactivation
       final requestSuccess = await authProvider.requestDeactivateAccount(phoneNumber);
       if (!requestSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to request account deactivation')),
+        InAppNotifier.instance.show(
+          title: 'Failed to request account deactivation',
+          message: 'Please try again or contact support.',
+          variant: InAppNotificationVariant.error,
         );
         return;
       }
@@ -651,8 +962,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // If user canceled or code is empty, abort
       if (smsCode == null || smsCode.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Confirmation code was not entered')),
+        InAppNotifier.instance.show(
+          title: 'Confirmation code was not entered',
+          message: 'Account deactivation was canceled.',
+          variant: InAppNotificationVariant.warning,
         );
         return;
       }
@@ -660,8 +973,10 @@ class _SettingsPageState extends State<SettingsPage> {
       // Try confirming account deactivation
       final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
       if (!confirmSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to confirm account deactivation. Please try again.')),
+        InAppNotifier.instance.show(
+          title: 'Failed to confirm account deactivation',
+          message: 'Please try again.',
+          variant: InAppNotificationVariant.error,
         );
         return;
       }
@@ -693,8 +1008,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     } catch (e) {
       print('Error during deactivation request: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start account deactivation process')),
+      InAppNotifier.instance.show(
+        title: 'Failed to start account deactivation',
+        message: 'Please try again or contact support.',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -731,68 +1048,70 @@ class _SettingsPageState extends State<SettingsPage> {
                   maxHeight: MediaQuery.of(context).size.height * 0.7,
                 ),
                 decoration: BoxDecoration(
-                  color: colorScheme.background,
-                  borderRadius: BorderRadius.circular(20),
+                  color: context.gridColors.surface,
+                  borderRadius: BorderRadius.circular(GridTokens.rXl),
+                  border: Border.all(color: context.gridColors.hairline),
                   boxShadow: [
                     BoxShadow(
-                      color: colorScheme.shadow.withOpacity(0.2),
-                      blurRadius: 20,
-                      offset: Offset(0, 10),
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header Section
+                    // Header
                     Container(
-                      padding: EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.05),
+                        color: context.gridColors.mintFaint,
                         borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: colorScheme.outline.withOpacity(0.1),
-                            width: 1,
-                          ),
+                          topLeft: Radius.circular(GridTokens.rXl),
+                          topRight: Radius.circular(GridTokens.rXl),
                         ),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: EdgeInsets.all(10),
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
-                              color: colorScheme.primary.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(10),
+                              color: context.gridColors.mintSoft,
+                              borderRadius:
+                                  BorderRadius.circular(GridTokens.rMd),
                             ),
+                            alignment: Alignment.center,
                             child: Icon(
                               Icons.edit,
-                              color: colorScheme.primary,
+                              color: context.gridColors.mint,
                               size: 20,
                             ),
                           ),
-                          SizedBox(width: 12),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Edit Display Name',
-                                  style: TextStyle(
+                                  'Edit display name',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
                                     fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onBackground,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.015,
+                                    color: context.gridColors.text,
                                   ),
                                 ),
-                                SizedBox(height: 2),
+                                const SizedBox(height: 2),
                                 Text(
                                   'Choose how others see you',
-                                  style: TextStyle(
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
                                     fontSize: 13,
-                                    color: colorScheme.onBackground.withOpacity(0.6),
+                                    fontWeight: FontWeight.w400,
+                                    color: context.gridColors.text2,
                                   ),
                                 ),
                               ],
@@ -801,121 +1120,142 @@ class _SettingsPageState extends State<SettingsPage> {
                         ],
                       ),
                     ),
-                    
-                    // Content Section - Scrollable
+
+                    // Body
                     Flexible(
                       child: SingleChildScrollView(
-                        padding: EdgeInsets.all(20),
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Display Name',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: colorScheme.onBackground.withOpacity(0.7),
+                            TextField(
+                              controller: controller,
+                              autofocus: true,
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 15,
+                                color: context.gridColors.text,
                               ),
-                            ),
-                            SizedBox(height: 8),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: hasError 
-                                      ? Colors.red.withOpacity(0.5)
-                                      : colorScheme.outline.withOpacity(0.3),
-                                  width: 1,
+                              cursorColor: context.gridColors.mint,
+                              maxLength: 14,
+                              decoration: InputDecoration(
+                                hintText: 'Enter your display name',
+                                hintStyle: GoogleFonts.getFont(
+                                  'Geist',
+                                  color: context.gridColors.text3,
+                                  fontSize: 15,
+                                ),
+                                filled: true,
+                                fillColor: context.gridColors.surface2,
+                                prefixIcon: Icon(
+                                  Icons.person_outline,
+                                  color: context.gridColors.text3,
+                                  size: 20,
+                                ),
+                                counterText:
+                                    '${controller.text.trim().length}/14',
+                                counterStyle: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 11,
+                                  color: hasError
+                                      ? context.gridColors.danger
+                                      : context.gridColors.text3,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? context.gridColors.danger
+                                        : context.gridColors.hairline,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? context.gridColors.danger
+                                        : context.gridColors.hairline,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(GridTokens.rMd),
+                                  borderSide: BorderSide(
+                                    color: hasError
+                                        ? context.gridColors.danger
+                                        : context.gridColors.mint,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 14,
                                 ),
                               ),
-                              child: TextField(
-                                controller: controller,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: colorScheme.onSurface,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Enter your display name',
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                  hintStyle: TextStyle(
-                                    color: colorScheme.onSurface.withOpacity(0.4),
-                                  ),
-                                  prefixIcon: Icon(
-                                    Icons.person_outline,
-                                    color: colorScheme.onSurface.withOpacity(0.4),
-                                    size: 20,
-                                  ),
-                                  counterText: '${controller.text.trim().length}/14',
-                                  counterStyle: TextStyle(
-                                    fontSize: 11,
-                                    color: hasError 
-                                        ? Colors.red 
-                                        : colorScheme.onSurface.withOpacity(0.6),
-                                  ),
-                                ),
-                                maxLength: 14,
-                                onChanged: (value) {
-                                  setState(() {
-                                    hasError = !isValidName(value);
-                                    if (hasError) {
-                                      final trimmed = value.trim();
-                                      if (trimmed.isEmpty) {
-                                        errorText = 'Display name cannot be empty';
-                                      } else if (trimmed.length < 3) {
-                                        errorText = 'Must be at least 3 characters';
-                                      } else if (trimmed.length > 14) {
-                                        errorText = 'Must be 14 characters or less';
-                                      } else {
-                                        errorText = 'Contains invalid characters';
-                                      }
+                              onChanged: (value) {
+                                setState(() {
+                                  hasError = !isValidName(value);
+                                  if (hasError) {
+                                    final trimmed = value.trim();
+                                    if (trimmed.isEmpty) {
+                                      errorText =
+                                          'Display name cannot be empty';
+                                    } else if (trimmed.length < 3) {
+                                      errorText =
+                                          'Must be at least 3 characters';
+                                    } else if (trimmed.length > 14) {
+                                      errorText =
+                                          'Must be 14 characters or less';
                                     } else {
-                                      errorText = null;
+                                      errorText =
+                                          'Contains invalid characters';
                                     }
-                                  });
-                                },
-                              ),
+                                  } else {
+                                    errorText = null;
+                                  }
+                                });
+                              },
                             ),
                             if (errorText != null) ...[
-                              SizedBox(height: 6),
+                              const SizedBox(height: 6),
                               Text(
                                 errorText!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.red,
+                                style: GoogleFonts.getFont(
+                                  'Geist',
+                                  fontSize: 12,
+                                  color: context.gridColors.danger,
                                 ),
                               ),
                             ],
-                            SizedBox(height: 12),
-                            
-                            // Guidelines - More compact
+                            const SizedBox(height: 14),
                             Container(
-                              padding: EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: colorScheme.primary.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.2),
-                                  width: 1,
-                                ),
+                                color: context.gridColors.surface2,
+                                borderRadius:
+                                    BorderRadius.circular(GridTokens.rMd),
+                                border:
+                                    Border.all(color: context.gridColors.hairline),
                               ),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Icon(
-                                    Icons.visibility,
-                                    color: colorScheme.primary,
-                                    size: 14,
+                                    Icons.visibility_outlined,
+                                    color: context.gridColors.text2,
+                                    size: 18,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      'Display names are only visible to your contacts and group members',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: colorScheme.primary.withOpacity(0.8),
-                                        height: 1.3,
+                                      'Display names are only visible to your contacts and group members.',
+                                      style: GoogleFonts.getFont(
+                                        'Geist',
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                        color: context.gridColors.text2,
+                                        height: 1.35,
                                       ),
                                     ),
                                   ),
@@ -926,98 +1266,32 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ),
-                    
-                    // Actions Section
-                    Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: colorScheme.outline.withOpacity(0.1),
-                            width: 1,
-                          ),
-                        ),
-                      ),
+
+                    // Actions
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
                       child: Row(
                         children: [
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: colorScheme.outline.withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
+                            child: GridButton(
+                              label: 'Cancel',
+                              style: GridButtonStyle.secondary,
+                              onPressed: () => Navigator.pop(context),
                             ),
                           ),
-                          SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    hasError 
-                                        ? Colors.grey 
-                                        : colorScheme.primary,
-                                    hasError 
-                                        ? Colors.grey.withOpacity(0.8)
-                                        : colorScheme.primary.withOpacity(0.8),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: hasError ? [] : [
-                                  BoxShadow(
-                                    color: colorScheme.primary.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: TextButton(
-                                onPressed: hasError ? null : () {
-                                  if (isValidName(controller.text)) {
-                                    Navigator.pop(context, controller.text.trim());
-                                  }
-                                },
-                                style: TextButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Save',
-                                  style: TextStyle(
-                                    color: hasError 
-                                        ? Colors.white.withOpacity(0.5)
-                                        : Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
+                            child: GridButton(
+                              label: 'Save',
+                              style: GridButtonStyle.primary,
+                              onPressed: hasError
+                                  ? null
+                                  : () {
+                                      if (isValidName(controller.text)) {
+                                        Navigator.pop(
+                                            context, controller.text.trim());
+                                      }
+                                    },
                             ),
                           ),
                         ],
@@ -1050,20 +1324,16 @@ class _SettingsPageState extends State<SettingsPage> {
           _displayName = newDisplayName;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Display name updated successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Display name updated',
+          message: 'Friends will see your new name on next sync.',
+          variant: InAppNotificationVariant.success,
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update display name: $e'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.red,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Failed to update display name',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       } finally {
         setState(() {
@@ -1073,12 +1343,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _pickAndUploadAvatar() async {
+  Future<void> _pickAndUploadAvatar({ImageSource? presetSource}) async {
     final colorScheme = Theme.of(context).colorScheme;
     final ImagePicker picker = ImagePicker();
 
-    // Show dialog to choose between camera and gallery
-    final source = await showDialog<ImageSource>(
+    // When called from the new ProfilePhotoScreen we already know which
+    // source the user picked, so skip the legacy in-method chooser.
+    final ImageSource? source = presetSource ?? await showDialog<ImageSource>(
       context: context,
       builder: (BuildContext context) {
         final theme = Theme.of(context);
@@ -1373,12 +1644,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await _uploadAvatarToR2(finalImagePath);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to process image: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to process image',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1514,12 +1783,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await prefs.setString('avatar_uri', cdnUrl);
         await prefs.setBool('avatar_is_matrix', false);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Avatar uploaded successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Avatar updated',
+          message: 'Your new photo is visible to contacts.',
+          variant: InAppNotificationVariant.success,
         );
 
         // Step 4: Clear cache and reload the avatar to display it
@@ -1557,12 +1824,10 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.of(context).pop();
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload avatar: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to upload avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1680,12 +1945,10 @@ class _SettingsPageState extends State<SettingsPage> {
         await prefs.setBool('avatar_is_matrix', true);
         print('[Matrix Avatar] Stored in SharedPreferences');
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Avatar uploaded successfully'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colorScheme.primary,
-          ),
+        InAppNotifier.instance.show(
+          title: 'Avatar updated',
+          message: 'Your new photo is visible to contacts.',
+          variant: InAppNotificationVariant.success,
         );
 
         // Step 4: Clear cache and reload the avatar to display it
@@ -1726,12 +1989,54 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.of(context).pop();
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload avatar: $e'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.red,
-        ),
+      InAppNotifier.instance.show(
+        title: 'Failed to upload avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
+      );
+    }
+  }
+
+  /// Wipes the locally stored avatar entry. Used by ProfilePhotoScreen's
+  /// "Remove photo" action. Server-side avatar deletion isn't supported by
+  /// the current Matrix flow, so we just clear the cached pointer here —
+  /// the UI will fall back to the deterministic GridAvatar.
+  Future<void> _removeAvatar() async {
+    final client = Provider.of<Client>(context, listen: false);
+    final userId = client.userID ?? '';
+    final secureStorage = const FlutterSecureStorage();
+
+    try {
+      await secureStorage.delete(key: 'avatar_$userId');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('avatar_uri');
+      await prefs.remove('avatar_is_matrix');
+      await prefs.remove('avatar_is_matrix_$userId');
+      await prefs.remove('avatar_fallback_$userId');
+
+      _avatarBytes = null;
+      _cachedAvatarUri = null;
+      _hasLoadedAvatar = false;
+      _avatarCache.remove(userId);
+      _avatarUriCache.remove(userId);
+
+      if (!mounted) return;
+      setState(() {
+        _avatarUpdateCounter += 1;
+      });
+
+      InAppNotifier.instance.show(
+        title: 'Profile photo removed',
+        message: 'Contacts will see your default avatar.',
+        variant: InAppNotificationVariant.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      InAppNotifier.instance.show(
+        title: 'Failed to remove avatar',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -1996,13 +2301,17 @@ class _SettingsPageState extends State<SettingsPage> {
         Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
       } else {
         print("Failed to delete account: ${response.body}");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete account: ${response.body}')),
+        InAppNotifier.instance.show(
+          title: 'Failed to delete account',
+          message: response.body,
+          variant: InAppNotificationVariant.error,
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+      InAppNotifier.instance.show(
+        title: 'Error',
+        message: '$e',
+        variant: InAppNotificationVariant.error,
       );
     }
   }
@@ -2064,118 +2373,166 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isCustom = isCustomHomeserver();
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: context.gridColors.bg,
       appBar: AppBar(
+        backgroundColor: context.gridColors.bg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: context.gridColors.text,
+            size: 20,
+          ),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: Text(
           'Settings',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.onBackground,
+          style: GoogleFonts.getFont(
+            'Geist',
+            color: context.gridColors.text,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.015,
           ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Container(
-          margin: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: colorScheme.onSurface,
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
           children: [
-            // Profile Section
+            // Profile header card
             _buildProfileSection(theme, colorScheme),
-            SizedBox(height: 32),
 
-            // Privacy & Location Section
+            // ── Appearance ──────────────────────────────────
+            const GridSectionHeader(text: 'Appearance'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Privacy & Location',
               children: [
-                _buildToggleOption(
-                  icon: Icons.visibility_off,
-                  title: 'Incognito Mode',
-                  subtitle: 'Stops all location sharing services',
-                  value: _incognitoMode,
-                  onChanged: _toggleIncognitoMode,
-                  colorScheme: colorScheme,
-                ),
-                SizedBox(height: 16),
-                _buildToggleOption(
-                  icon: Icons.battery_saver,
-                  title: 'Battery Saver Mode',
-                  subtitle: 'Less accurate, but less power consumption',
-                  value: _batterySaver,
-                  onChanged: _toggleBatterySaver,
-                  colorScheme: colorScheme,
+                AnimatedBuilder(
+                  animation: ThemeController.instance,
+                  builder: (context, _) => _buildInfoRow(
+                    icon: Icons.brightness_6_outlined,
+                    title: 'Appearance',
+                    value: _themeModeLabel(ThemeController.instance.mode),
+                    onTap: _openAppearance,
+                    colorScheme: colorScheme,
+                  ),
                 ),
               ],
             ),
-            SizedBox(height: 24),
 
-            // Security Information Section
+            // ── Sharing ─────────────────────────────────────
+            const GridSectionHeader(text: 'Sharing'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Security Information',
               children: [
-                _buildInfoRow(
-                  icon: Icons.device_hub,
-                  title: 'Device ID',
-                  value: deviceID ?? 'Loading...',
-                  onTap: () => _showInfoModal('Device ID', deviceID ?? 'Loading...'),
+                _buildToggleOption(
+                  icon: Icons.location_on_outlined,
+                  title: 'Sharing location',
+                  // The screen historically called this "Incognito Mode"; the
+                  // redesign inverts the framing so a green toggle == sharing.
+                  value: !_incognitoMode,
+                  onChanged: (v) => _toggleIncognitoMode(!v),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildInfoRow(
-                  icon: Icons.key,
-                  title: 'Identity Key',
-                  value: identityKey ?? 'Loading...',
-                  onTap: () => _showInfoModal('Identity Key', identityKey ?? 'Loading...'),
+                  icon: Icons.tune_outlined,
+                  title: 'Sharing mode',
+                  value: _sharingModeLabel(_sharingMode),
+                  onTap: _openSharingMode,
                   colorScheme: colorScheme,
                 ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Passkeys Section (only for default homeserver)
-            if (!isCustomHomeserver()) ...[
-              _buildSectionCard(
-                theme: theme,
-                colorScheme: colorScheme,
-                title: 'Authentication',
-                children: [
+                _buildSettingsDivider(),
+                _buildToggleOption(
+                  icon: Icons.home_outlined,
+                  title: 'Pause sharing at home',
+                  subtitle:
+                      'Pauses automatically when you cross the geofence',
+                  value: _autoPauseAtHome,
+                  onChanged: _onAutoPauseAtHomeToggled,
+                  colorScheme: colorScheme,
+                ),
+                if (_autoPauseAtHome && _homeLocationSet) ...[
+                  _buildSettingsDivider(),
                   _buildMenuOption(
-                    icon: Icons.fingerprint,
+                    icon: Icons.edit_location_alt_outlined,
+                    title: 'Home location',
+                    trailing: 'Change',
+                    onTap: _changeHomeLocation,
+                    colorScheme: colorScheme,
+                  ),
+                  _buildSettingsDivider(),
+                  _buildMenuOption(
+                    icon: Icons.location_off_outlined,
+                    title: 'Clear home location',
+                    onTap: _clearHomeLocation,
+                    colorScheme: colorScheme,
+                    isDestructive: true,
+                  ),
+                ],
+              ],
+            ),
+
+            // ── Privacy & security ──────────────────────────
+            const GridSectionHeader(text: 'Privacy & security'),
+            _buildSectionCard(
+              theme: theme,
+              colorScheme: colorScheme,
+              children: [
+                if (!isCustom) ...[
+                  _buildMenuOption(
+                    icon: Icons.key_outlined,
                     title: 'Passkeys',
-                    subtitle: 'Manage passkey login credentials',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const PasskeyManagementScreen(),
+                          builder: (context) =>
+                              const PasskeyManagementScreen(),
+                        ),
+                      );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildSettingsDivider(),
+                ],
+                _buildInfoRow(
+                  icon: Icons.fingerprint_rounded,
+                  title: 'Device ID',
+                  value: deviceID ?? 'Loading…',
+                  onTap: _openEncryptionKeys,
+                  colorScheme: colorScheme,
+                  mono: true,
+                ),
+              ],
+            ),
+
+            // Subscriptions (still hidden — kept as a flag for parity).
+            // Hidden while sat-map provider is offline; re-enable by removing
+            // the `false &&` once subscriptions can deliver value again.
+            if (false && !isCustom) ...[
+              const GridSectionHeader(text: 'Subscription'),
+              _buildSectionCard(
+                theme: theme,
+                colorScheme: colorScheme,
+                children: [
+                  _buildMenuOption(
+                    icon: Icons.credit_card,
+                    title: 'Manage subscription',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SubscriptionScreen(),
                         ),
                       );
                     },
@@ -2183,134 +2540,47 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ],
               ),
-              SizedBox(height: 24),
             ],
 
-            // Subscriptions Section (only for default homeserver)
-            // Hidden while sat-map provider is offline; re-enable by removing
-            // the `false &&` once subscriptions can deliver value again.
-            if (false && !isCustomHomeserver()) ...[
-              _buildSectionCard(
-                theme: theme,
-                colorScheme: colorScheme,
-                title: 'Subscriptions',
-                children: [
-                  _buildMenuOption(
-                    icon: Icons.credit_card,
-                    title: 'Manage Subscriptions',
-                    subtitle: 'View and manage your subscriptions',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SubscriptionScreen()),
-                      );
-                    },
-                    colorScheme: colorScheme,
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-            ],
-
-            // Community Section
+            // ── About ───────────────────────────────────────
+            const GridSectionHeader(text: 'About'),
             _buildSectionCard(
               theme: theme,
               colorScheme: colorScheme,
-              title: 'Community',
               children: [
                 _buildMenuOption(
-                  icon: FontAwesomeIcons.discord,
-                  title: 'Join our Discord',
-                  subtitle: 'Connect with the Grid community',
-                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
+                  icon: Icons.code_rounded,
+                  title: 'Open source',
+                  trailing: 'github.com/Rezivure',
+                  onTap: () => _launchURL('https://github.com/Rezivure'),
                   colorScheme: colorScheme,
                 ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Support & Information Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Support & Information',
-              children: [
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.info_outline,
-                  title: 'About Grid',
-                  subtitle: 'Learn more about the app',
-                  onTap: () => _launchURL('https://mygrid.app/about'),
-                  colorScheme: colorScheme,
-                ),
-                SizedBox(height: 16),
-                _buildMenuOption(
-                  icon: Icons.shield_outlined,
-                  title: 'Privacy Policy',
-                  subtitle: 'How we protect your data',
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy policy',
                   onTap: () => _launchURL('https://mygrid.app/privacy'),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.feedback_outlined,
-                  title: 'Send Feedback',
-                  subtitle: 'Help us improve Grid',
-                  onTap: () => _launchURL('https://mygrid.app/feedback'),
+                  icon: FontAwesomeIcons.discord,
+                  title: 'Join our Discord',
+                  onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
                   colorScheme: colorScheme,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.report_outlined,
-                  title: 'Report Abuse',
-                  subtitle: 'Report inappropriate behavior',
-                  onTap: () => _launchURL('https://mygrid.app/report'),
-                  colorScheme: colorScheme,
-                ),
-              ],
-            ),
-            SizedBox(height: 24),
-
-            // Developer Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Developer',
-              children: [
-                _buildMenuOption(
-                  icon: Icons.bug_report_outlined,
-                  title: 'Debug Logging',
-                  subtitle: 'Configure remote debug logging',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const DeveloperSettingsScreen()),
-                    );
-                  },
-                  colorScheme: colorScheme,
-                ),
-              ],
-            ),
-            SizedBox(height: 32),
-
-            // Account Actions Section
-            _buildSectionCard(
-              theme: theme,
-              colorScheme: colorScheme,
-              title: 'Account Actions',
-              children: [
-                _buildMenuOption(
-                  icon: Icons.logout,
-                  title: 'Sign Out',
-                  subtitle: 'Sign out of your account',
+                  icon: Icons.logout_rounded,
+                  title: 'Sign out',
                   onTap: _logout,
                   colorScheme: colorScheme,
                   isDestructive: true,
                 ),
-                SizedBox(height: 16),
+                _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: Icons.delete_forever,
-                  title: 'Delete Account',
-                  subtitle: 'Permanently delete your account',
+                  icon: Icons.delete_forever_outlined,
+                  title: 'Delete account',
                   onTap: _deleteAccount,
                   colorScheme: colorScheme,
                   isDestructive: true,
@@ -2318,22 +2588,128 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ],
             ),
-            SizedBox(height: 40),
-            
-            // Version info at the bottom
+
+            const SizedBox(height: 28),
+
+            // Footer: mono "Grid vX.X · build XXX" with Grid mark.
+            // Easter egg: 5 quick taps opens the hidden Developer Tools screen.
             Center(
-              child: Text(
-                _appVersion,
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.4),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _onFooterTapped,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: context.gridColors.mint.withOpacity(0.18),
+                        border: Border.all(
+                          color: context.gridColors.mint,
+                          width: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GridMono(
+                      _buildFooterText(),
+                      color: context.gridColors.text3,
+                      size: 11,
+                      letterSpacing: 0.04,
+                      uppercase: false,
+                    ),
+                  ],
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 12),
           ],
         ),
+      ),
+    );
+  }
+
+  void _openEncryptionKeys() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EncryptionKeysScreen(
+          deviceId: deviceID,
+          identityKey: identityKey,
+        ),
+      ),
+    );
+  }
+
+  void _openAppearance() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()),
+    );
+  }
+
+  void _openSharingMode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SharingModeScreen(
+          initial: _sharingMode,
+          onChanged: _setSharingMode,
+        ),
+      ),
+    );
+  }
+
+  String _themeModeLabel(ThemeMode m) => switch (m) {
+        ThemeMode.system => 'System',
+        ThemeMode.light => 'Light',
+        ThemeMode.dark => 'Dark',
+      };
+
+  String _sharingModeLabel(SharingMode m) => switch (m) {
+        SharingMode.light => 'Light',
+        SharingMode.balanced => 'Balanced',
+        SharingMode.live => 'Live',
+      };
+
+  void _openProfilePhoto() {
+    final client = Provider.of<Client>(context, listen: false);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfilePhotoScreen(
+          userId: client.userID ?? '',
+          displayName: _displayName ?? _username ?? 'Grid',
+          onTakePhoto: () =>
+              _pickAndUploadAvatar(presetSource: ImageSource.camera),
+          onChooseFromGallery: () =>
+              _pickAndUploadAvatar(presetSource: ImageSource.gallery),
+          onRemovePhoto: _removeAvatar,
+        ),
+      ),
+    );
+  }
+
+  /// Footer line, e.g. "Grid v3.2 · build 612".
+  String _buildFooterText() {
+    final version = _appVersion.isEmpty ? '' : _appVersion;
+    final build = _buildNumber.isEmpty ? '' : 'build $_buildNumber';
+    if (version.isEmpty && build.isEmpty) return 'Grid';
+    if (version.isEmpty) return 'Grid · $build';
+    if (build.isEmpty) return 'Grid $version';
+    return 'Grid $version · $build';
+  }
+
+  /// Hairline separator between rows inside a settings group.
+  Widget _buildSettingsDivider() {
+    return Padding(
+      padding: EdgeInsets.only(left: 56),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: context.gridColors.hairline,
       ),
     );
   }
@@ -2341,125 +2717,141 @@ class _SettingsPageState extends State<SettingsPage> {
   // Helper Methods for New UI
   Widget _buildProfileSection(ThemeData theme, ColorScheme colorScheme) {
     final client = Provider.of<Client>(context, listen: false);
-    
+    final handle = _username ?? '';
+    final handlePrefix = handle.startsWith('@') ? handle : '@$handle';
+    final handleLine = handlePrefix;
+
     return Container(
-      padding: EdgeInsets.all(24),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: context.gridColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: context.gridColors.hairline),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Stack(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  _showExpandedAvatar(context);
-                },
-                child: Hero(
-                  tag: 'settings_avatar_${client.userID}',
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: colorScheme.primary.withOpacity(0.1),
+          // Avatar — 56pt with mint live ring, tap to expand, long-press / edit
+          // pencil flow preserved by the camera button trailing.
+          GestureDetector(
+            onTap: () => _showExpandedAvatar(context),
+            child: Hero(
+              tag: 'settings_avatar_${client.userID}',
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // The redesigned GridAvatar renders the deterministic
+                    // gradient + ring; UserAvatarBloc still wins when the
+                    // user has uploaded a custom image, so we overlay it
+                    // inside the ring container.
+                    GridAvatar(
+                      name: _displayName ?? _username ?? 'Grid',
+                      size: 56,
+                      ring: true,
+                      selfStatus: _incognitoMode
+                          ? SelfSharingStatus.paused
+                          : SelfSharingStatus.sharing,
                     ),
-                    child: UserAvatarBloc(
-                      userId: client.userID ?? '',
-                      size: 100,
+                    // Live user-uploaded avatar, clipped into the inner disc.
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: ClipOval(
+                          child: UserAvatarBloc(
+                            userId: client.userID ?? '',
+                            size: 54,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: _pickAndUploadAvatar,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.camera_alt,
-                      size: 16,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  _displayName ?? 'Unknown User',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onBackground,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              SizedBox(width: 8),
-              if (_isEditingDisplayName)
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colorScheme.primary,
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: _editDisplayName,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.edit,
-                      size: 16,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              '@$_username',
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w600,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _displayName ?? 'Unknown User',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          color: context.gridColors.text,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.015,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (_isEditingDisplayName)
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: context.gridColors.mint,
+                        ),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: _editDisplayName,
+                        child: Icon(
+                          Icons.edit_outlined,
+                          size: 14,
+                          color: context.gridColors.text3,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                GridMono(
+                  handleLine,
+                  color: context.gridColors.text2,
+                  size: 12,
+                  letterSpacing: 0.02,
+                  uppercase: false,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Mint QR shortcut. Wired to the avatar picker so the existing
+          // upload flow stays reachable (no QR sheet exists yet in this
+          // build of the app).
+          // TODO: wire to dedicated profile QR sheet when that lands.
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _openProfilePhoto,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: context.gridColors.mintFaint,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.gridColors.hairline),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.camera_alt_rounded,
+                  size: 22,
+                  color: context.gridColors.mint,
+                ),
               ),
             ),
           ),
@@ -2468,115 +2860,93 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// Grouped settings card — wraps a list of rows in the surface card style
+  /// used across the redesign. Rows handle their own padding so this widget
+  /// just clips and outlines them.
   Widget _buildSectionCard({
     required ThemeData theme,
     required ColorScheme colorScheme,
-    required String title,
     required List<Widget> children,
   }) {
     return Container(
-      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colorScheme.background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: context.gridColors.surface,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: context.gridColors.hairline),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-            ),
-          ),
-          SizedBox(height: 16),
-          ...children,
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
     );
   }
 
   Widget _buildToggleOption({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required bool value,
     required Function(bool) onChanged,
     required ColorScheme colorScheme,
+    bool enabled = true,
   }) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.15),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: value
-                  ? colorScheme.primary.withOpacity(0.15)
-                  : colorScheme.outline.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
               icon,
-              color: value ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.6),
               size: 20,
+              color: value && enabled ? context.gridColors.mint : context.gridColors.text2,
             ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSurface,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: context.gridColors.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.01,
+                    ),
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-              ],
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text3,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          Transform.scale(
-            scale: 0.9,
-            child: Switch(
+            const SizedBox(width: 12),
+            Switch(
               value: value,
-              onChanged: onChanged,
-              activeColor: colorScheme.primary,
+              onChanged: enabled ? onChanged : null,
+              thumbColor: WidgetStateProperty.all(Colors.white),
+              trackColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? context.gridColors.mint
+                    : context.gridColors.surface3,
+              ),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              trackOutlineColor:
+                  WidgetStateProperty.all(Colors.transparent),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2587,64 +2957,78 @@ class _SettingsPageState extends State<SettingsPage> {
     required String value,
     required VoidCallback onTap,
     required ColorScheme colorScheme,
+    bool mono = false,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: colorScheme.outline.withOpacity(0.15),
-            width: 1,
+    final displayValue = value.length > 36
+        ? '${value.substring(0, 36)}…'
+        : value;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: context.gridColors.mintFaint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 16, color: context.gridColors.mint),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.01,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    mono
+                        ? GridMono(
+                            displayValue,
+                            color: context.gridColors.text3,
+                            size: 11,
+                            letterSpacing: 0.04,
+                            uppercase: false,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : Text(
+                            displayValue,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              color: context.gridColors.text3,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: -0.005,
+                            ),
+                          ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: context.gridColors.text3,
+              ),
+            ],
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: colorScheme.primary,
-                size: 20,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    value.length > 30 ? '${value.substring(0, 30)}...' : value,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.visibility,
-              color: colorScheme.onSurface.withOpacity(0.4),
-              size: 18,
-            ),
-          ],
         ),
       ),
     );
@@ -2653,101 +3037,65 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildMenuOption({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? trailing,
     required VoidCallback onTap,
     required ColorScheme colorScheme,
     bool isDestructive = false,
     bool isHighRisk = false,
+    bool enabled = true,
   }) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    final iconColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade700 : Colors.red.shade600)
-        : colorScheme.primary;
-    final textColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade700 : Colors.red.shade600)
-        : colorScheme.onSurface;
-    final subtitleColor = isDestructive
-        ? (isHighRisk ? Colors.red.shade500 : Colors.red.shade400)
-        : colorScheme.onSurface.withOpacity(0.6);
+    final Color titleColor = isDestructive ? context.gridColors.danger : context.gridColors.text;
+    final Color iconColor = isDestructive ? context.gridColors.danger : context.gridColors.text2;
 
-    // Better colors for dark mode
-    final backgroundColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade900.withOpacity(0.3) : Colors.red.shade900.withOpacity(0.2))
-            : (isHighRisk ? Colors.red.shade50 : Colors.red.shade50))
-        : colorScheme.surface;
-        
-    final borderColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade700.withOpacity(0.4) : Colors.red.shade700.withOpacity(0.3))
-            : (isHighRisk ? Colors.red.shade200 : Colors.red.shade200))
-        : colorScheme.outline.withOpacity(0.15);
-        
-    final iconBackgroundColor = isDestructive
-        ? (isDarkMode 
-            ? (isHighRisk ? Colors.red.shade800.withOpacity(0.4) : Colors.red.shade800.withOpacity(0.3))
-            : (isHighRisk ? Colors.red.shade100 : Colors.red.shade50))
-        : colorScheme.primary.withOpacity(0.1);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: borderColor,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: iconBackgroundColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 20,
-              ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.55,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: iconColor),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: titleColor,
+                      fontSize: 15,
+                      fontWeight: isHighRisk
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      letterSpacing: -0.01,
                     ),
                   ),
-                  SizedBox(height: 2),
+                ),
+                if (trailing != null) ...[
                   Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: subtitleColor,
+                    trailing,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      color: context.gridColors.text2,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.005,
                     ),
                   ),
+                  const SizedBox(width: 8),
                 ],
-              ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: isDestructive
+                      ? context.gridColors.danger.withOpacity(0.6)
+                      : context.gridColors.text3,
+                ),
+              ],
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: isDestructive
-                  ? iconColor.withOpacity(0.6)
-                  : colorScheme.onSurface.withOpacity(0.4),
-              size: 16,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2789,8 +3137,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // Modern Delete Account Dialog Methods
   Widget _buildDeleteConfirmationDialog({bool isCustomServer = false}) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final bullets = <_DangerBullet>[
+      const _DangerBullet(Icons.delete_forever,
+          'Your account will be permanently deleted'),
+      const _DangerBullet(Icons.group_remove,
+          'You will be removed from all groups and contacts'),
+      if (isCustomServer)
+        const _DangerBullet(
+            Icons.storage, 'All your data will be permanently erased'),
+    ];
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -2800,68 +3155,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxHeight: MediaQuery.of(context).size.height * 0.6,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section with Warning
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: context.gridColors.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
+                    alignment: Alignment.center,
                     child: Icon(
-                      Icons.warning,
-                      color: Colors.red,
-                      size: 28,
+                      Icons.warning_amber_rounded,
+                      color: context.gridColors.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Delete account',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: context.gridColors.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
-                          'This action cannot be undone',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          'This action cannot be undone.',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -2870,84 +3226,56 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
+
+            // Body
             Flexible(
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Are you sure you want to delete your account?',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onBackground,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: context.gridColors.text2,
+                        height: 1.45,
                       ),
                     ),
-                    SizedBox(height: 16),
-                    
-                    // Warning cards
+                    const SizedBox(height: 14),
                     Container(
-                      padding: EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.red.withOpacity(0.2),
-                          width: 1,
-                        ),
+                        color: context.gridColors.surface2,
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        border: Border.all(color: context.gridColors.hairline),
                       ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(Icons.delete_forever, color: Colors.red, size: 20),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Your account will be permanently deleted',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.group_remove, color: Colors.red, size: 20),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'You will be removed from all groups and contacts',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (isCustomServer) ...[
-                            SizedBox(height: 8),
+                          for (int i = 0; i < bullets.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 10),
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.storage, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
+                                Icon(
+                                  bullets[i].icon,
+                                  color: context.gridColors.danger,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'All your data will be permanently erased',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.red,
+                                    bullets[i].text,
+                                    style: GoogleFonts.getFont(
+                                      'Geist',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                      color: context.gridColors.text2,
+                                      height: 1.35,
                                     ),
                                   ),
                                 ),
@@ -2961,81 +3289,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, false),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
@@ -3048,9 +3320,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSMSConfirmationDialog(TextEditingController codeController) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -3058,68 +3327,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: context.gridColors.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
+                    alignment: Alignment.center,
                     child: Icon(
-                      Icons.sms,
-                      color: Colors.red,
-                      size: 24,
+                      Icons.sms_outlined,
+                      color: context.gridColors.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Confirm Deletion',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Confirm deletion',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: context.gridColors.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'Enter SMS verification code',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3128,160 +3398,118 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.primary.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: context.gridColors.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           Icons.info_outline,
-                          color: colorScheme.primary,
-                          size: 20,
+                          color: context.gridColors.text2,
+                          size: 18,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Enter the confirmation code sent to your phone',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.primary,
-                              height: 1.3,
+                            'Enter the confirmation code sent to your phone.',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: context.gridColors.text2,
+                              height: 1.35,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
-                  Text(
-                    'SMS Code',
-                    style: TextStyle(
-                      fontSize: 14,
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground.withOpacity(0.7),
+                      letterSpacing: 4,
+                      color: context.gridColors.text,
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.3),
-                        width: 1,
+                    cursorColor: context.gridColors.mint,
+                    decoration: InputDecoration(
+                      hintText: 'Enter code',
+                      hintStyle: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text3,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0,
                       ),
-                    ),
-                    child: TextField(
-                      controller: codeController,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
+                      filled: true,
+                      fillColor: context.gridColors.surface2,
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            BorderSide(color: context.gridColors.hairline),
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter code',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.4),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            BorderSide(color: context.gridColors.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide: BorderSide(
+                          color: context.gridColors.mint,
+                          width: 1.5,
                         ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 16,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, null),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, null),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, codeController.text),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () =>
+                          Navigator.pop(context, codeController.text),
                     ),
                   ),
                 ],
@@ -3294,9 +3522,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildPasswordConfirmationDialog(TextEditingController passwordController) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -3304,68 +3529,69 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+                color: context.gridColors.dangerSoft,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.red.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: context.gridColors.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
                     ),
+                    alignment: Alignment.center,
                     child: Icon(
-                      Icons.lock,
-                      color: Colors.red,
-                      size: 24,
+                      Icons.lock_outline,
+                      color: context.gridColors.danger,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Confirm Deletion',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                          'Confirm deletion',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: context.gridColors.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'Enter your password to continue',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red.withOpacity(0.8),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3374,161 +3600,118 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.red.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: context.gridColors.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          Icons.warning,
-                          color: Colors.red,
-                          size: 20,
+                          Icons.warning_amber_rounded,
+                          color: context.gridColors.amber,
+                          size: 18,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'This will permanently delete your account and all associated data',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.red,
-                              height: 1.3,
+                            'This will permanently delete your account and all associated data.',
+                            style: GoogleFonts.getFont(
+                              'Geist',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: context.gridColors.text2,
+                              height: 1.35,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
-                  Text(
-                    'Password',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground.withOpacity(0.7),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    autofocus: true,
+                    obscureText: true,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 15,
+                      color: context.gridColors.text,
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.3),
-                        width: 1,
+                    cursorColor: context.gridColors.mint,
+                    decoration: InputDecoration(
+                      hintText: 'Enter your password',
+                      hintStyle: GoogleFonts.getFont(
+                        'Geist',
+                        color: context.gridColors.text3,
+                        fontSize: 15,
                       ),
-                    ),
-                    child: TextField(
-                      controller: passwordController,
-                      obscureText: true,
-                      style: TextStyle(
-                        fontSize: 16,
+                      filled: true,
+                      fillColor: context.gridColors.surface2,
+                      prefixIcon: Icon(
+                        Icons.lock_outline,
+                        color: context.gridColors.text3,
+                        size: 20,
                       ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter your password',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withOpacity(0.4),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            BorderSide(color: context.gridColors.hairline),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide:
+                            BorderSide(color: context.gridColors.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(GridTokens.rMd),
+                        borderSide: BorderSide(
+                          color: context.gridColors.mint,
+                          width: 1.5,
                         ),
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          color: colorScheme.onSurface.withOpacity(0.4),
-                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, null),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, null),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, passwordController.text),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Delete',
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(
+                          context, passwordController.text),
                     ),
                   ),
                 ],
@@ -3541,8 +3724,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSignOutDialog() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final bullets = <_DangerBullet>[
+      const _DangerBullet(
+          Icons.location_off, 'Location sharing will be stopped'),
+      const _DangerBullet(Icons.sync_disabled,
+          "You'll need to sign in again to access your account"),
+    ];
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -3551,68 +3738,70 @@ class _SettingsPageState extends State<SettingsPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: BorderRadius.circular(20),
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: context.gridColors.hairline),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Section
+            // Header
             Container(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.05),
+                color: context.gridColors.mintFaint,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
+                      color: context.gridColors.mintSoft,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
                     ),
+                    alignment: Alignment.center,
                     child: Icon(
                       Icons.logout,
-                      color: colorScheme.primary,
-                      size: 24,
+                      color: context.gridColors.mint,
+                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onBackground,
+                          'Sign out',
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.015,
+                            color: context.gridColors.text,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'You can always sign back in',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: colorScheme.onBackground.withOpacity(0.6),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: context.gridColors.text2,
                           ),
                         ),
                       ],
@@ -3621,167 +3810,87 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            
-            // Content Section
-            Container(
-              padding: EdgeInsets.all(24),
+
+            // Body
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Are you sure you want to sign out?',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onBackground,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: context.gridColors.text2,
+                      height: 1.45,
                     ),
                   ),
-                  SizedBox(height: 16),
-                  
-                  // Info card
+                  const SizedBox(height: 14),
                   Container(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: colorScheme.surfaceVariant.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.2),
-                        width: 1,
-                      ),
+                      color: context.gridColors.surface2,
+                      borderRadius:
+                          BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(color: context.gridColors.hairline),
                     ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.location_off,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Location sharing will be stopped',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
+                        for (int i = 0; i < bullets.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                bullets[i].icon,
+                                color: context.gridColors.text2,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  bullets[i].text,
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.gridColors.text2,
+                                    height: 1.35,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.sync_disabled,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 20,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'You\'ll need to sign in again to access your account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Actions Section
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: colorScheme.outline.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
+                    child: GridButton(
+                      label: 'Cancel',
+                      style: GridButtonStyle.secondary,
+                      onPressed: () => Navigator.pop(context, false),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.logout,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Confirm Sign Out',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    child: GridButton(
+                      label: 'Sign out',
+                      icon: Icons.logout,
+                      style: GridButtonStyle.danger,
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
@@ -3793,3 +3902,10 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+
+class _DangerBullet {
+  const _DangerBullet(this.icon, this.text);
+  final IconData icon;
+  final String text;
+}
+

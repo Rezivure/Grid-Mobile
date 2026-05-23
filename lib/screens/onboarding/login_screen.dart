@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -273,6 +276,61 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     );
   }
 
+  Widget _buildMapsIconButton(ColorScheme colorScheme) {
+    final active = !_useDefaultMapsUrl;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _useDefaultMapsUrl = !_useDefaultMapsUrl;
+          });
+        },
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? colorScheme.primary.withOpacity(0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: (active
+                      ? colorScheme.primary
+                      : colorScheme.onSurface)
+                  .withOpacity(active ? 0.4 : 0.12),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.map_outlined,
+                size: 13,
+                color: active
+                    ? colorScheme.primary
+                    : colorScheme.onSurface.withOpacity(0.55),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                active ? 'Custom map source' : 'Custom map source?',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: active
+                      ? colorScheme.primary
+                      : colorScheme.onSurface.withOpacity(0.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapsSelectionCard() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -476,68 +534,35 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     bool isLoading = false,
     IconData? icon,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isEnabled = onPressed != null && !isLoading;
-    
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isPrimary && isEnabled ? [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
-      ),
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5))
-              : Colors.transparent,
-          foregroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-              : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: isPrimary ? BorderSide.none : BorderSide(
-              color: isEnabled 
-                  ? colorScheme.outline.withOpacity(0.2)
-                  : colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
+    if (isLoading) {
+      return Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? context.gridColors.mint.withOpacity(0.55)
+              : context.gridColors.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: isPrimary
+              ? null
+              : Border.all(color: context.gridColors.hairlineStrong),
+        ),
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            color: isPrimary ? Colors.black : context.gridColors.mint,
+            strokeWidth: 2,
           ),
         ),
-        child: isLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: colorScheme.onPrimary,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 20),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-      ),
+      );
+    }
+    return GridButton(
+      label: text,
+      onPressed: onPressed,
+      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
+      icon: icon,
     );
   }
 
@@ -657,11 +682,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     const SizedBox(height: 24),
                   ],
                   
-                  // Maps Selection
-                  _buildMapsSelectionCard(),
-                  
-                  const SizedBox(height: 24),
-                  
                   // Server URL
                   _buildModernTextField(
                     controller: _homeserverController,
@@ -669,10 +689,21 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     hint: 'matrix.example.com',
                     icon: Icons.dns_outlined,
                   ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Custom Maps URL (if selected)
+
+                  // Custom map source is an obscure power-user setting —
+                  // 99.9% of users want Grid's hosted tiles. Surface it as a
+                  // tiny aligned icon button that pops the field on tap.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: _buildMapsIconButton(colorScheme),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Custom Maps URL field, only when the user opts in.
                   if (!_useDefaultMapsUrl) ...[
                     _buildModernTextField(
                       controller: _mapsUrlController,

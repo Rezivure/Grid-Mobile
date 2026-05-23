@@ -5,11 +5,11 @@ import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 void main() {
   group('TimeAgoFormatter.format', () {
     test('null returns Off Grid', () {
-      expect(TimeAgoFormatter.format(null), 'Off Grid');
+      expect(TimeAgoFormatter.format(null), 'Offline');
     });
 
     test('Offline string returns Off Grid', () {
-      expect(TimeAgoFormatter.format('Offline'), 'Off Grid');
+      expect(TimeAgoFormatter.format('Offline'), 'Offline');
     });
 
     test('just now (< 30 seconds)', () {
@@ -39,20 +39,20 @@ void main() {
 
     test('7+ days returns Off Grid', () {
       final ts = DateTime.now().subtract(const Duration(days: 7)).toIso8601String();
-      expect(TimeAgoFormatter.format(ts), 'Off Grid');
+      expect(TimeAgoFormatter.format(ts), 'Offline');
     });
 
     test('future timestamp returns Off Grid', () {
       final ts = DateTime.now().add(const Duration(hours: 1)).toIso8601String();
-      expect(TimeAgoFormatter.format(ts), 'Off Grid');
+      expect(TimeAgoFormatter.format(ts), 'Offline');
     });
 
     test('invalid string returns Off Grid', () {
-      expect(TimeAgoFormatter.format('not-a-date'), 'Off Grid');
+      expect(TimeAgoFormatter.format('not-a-date'), 'Offline');
     });
 
     test('empty string returns Off Grid', () {
-      expect(TimeAgoFormatter.format(''), 'Off Grid');
+      expect(TimeAgoFormatter.format(''), 'Offline');
     });
 
     test('1 minute ago', () {
@@ -80,7 +80,7 @@ void main() {
     final colorScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
 
     test('Off Grid returns dimmed color', () {
-      final color = TimeAgoFormatter.getStatusColor('Off Grid', colorScheme);
+      final color = TimeAgoFormatter.getStatusColor('Offline', colorScheme);
       expect(color.opacity, lessThan(1.0));
     });
 

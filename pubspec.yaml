@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 1.1.2+149
+version: 2.0.0+738
 environment:
   sdk: '>=3.3.3 <4.0.0'
 
@@ -10,6 +10,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   flutter_map: ^7.0.2
+  maplibre_gl: ^0.26.0
+  google_fonts: ^8.1.0
   timeago: ^3.1.0
   latlong2: ^0.9.1
   flutter_map_marker_popup: ^7.0.0
@@ -94,6 +96,7 @@ flutter:
     - assets/lottie/lottie-phone-verify.json
     - assets/extras/satellite.png
     - assets/extras/basemaps.png
+    - assets/geocoder/cities500.bin.gz
     - .env
 
   fonts:

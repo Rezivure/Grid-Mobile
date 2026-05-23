@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 
@@ -31,12 +32,16 @@ class UserKeysModal extends StatelessWidget {
       // Notify the parent widget that keys were approved
       Navigator.of(context).pop(true);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User keys verified.')),
+      InAppNotifier.instance.show(
+        title: 'User keys verified',
+        message: 'This contact is who they claim to be.',
+        variant: InAppNotificationVariant.success,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to verify user keys.')),
+      InAppNotifier.instance.show(
+        title: 'Failed to verify user keys',
+        message: 'Please try again.',
+        variant: InAppNotificationVariant.error,
       );
     }
   }

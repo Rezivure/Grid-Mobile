@@ -1,19 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:grid_frontend/widgets/status_indictator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
-import 'package:grid_frontend/widgets/custom_search_bar.dart';
-import 'package:random_avatar/random_avatar.dart';
 import 'package:grid_frontend/providers/selected_user_provider.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/local_geocoder.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'user_avatar.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'user_avatar_bloc.dart';
 import '../blocs/contacts/contacts_bloc.dart';
 import '../blocs/contacts/contacts_event.dart';
@@ -27,6 +33,12 @@ import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
+import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map/map_event.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 class ContactsSubscreen extends StatefulWidget {
   final ScrollController scrollController;
@@ -47,7 +59,6 @@ class ContactsSubscreen extends StatefulWidget {
 }
 
 class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProviderStateMixin {
-  TextEditingController _searchController = TextEditingController();
   Timer? _timer;
   bool _isRefreshing = false;
   late AnimationController _dotsAnimationController;
@@ -60,6 +71,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   SyncState? _previousSyncState;
   bool _hasShownInitialLoading = false;
 
+  final Map<String, String?> _placeCache = {};
+  final Set<String> _placeInflight = {};
 
   @override
   void initState() {
@@ -111,8 +124,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onSubscreenSelected('contacts');
     });
-
-    _searchController.addListener(_onSearchChanged);
   }
 
   @override
@@ -120,8 +131,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     _timer?.cancel();
     _dotsAnimationController.dispose();
     _checkmarkAnimationController.dispose();
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -135,30 +144,27 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       _isRefreshing = false;
     }
   }
-  
-  
+
+
   void _onSubscreenSelected(String subscreen) {
     Provider.of<SelectedSubscreenProvider>(context, listen: false)
         .setSelectedSubscreen(subscreen);
   }
 
-  void _onSearchChanged() {
-    context.read<ContactsBloc>().add(SearchContacts(_searchController.text));
+  /// Tap-on-contact handler. Centers the underlying map on the
+  /// contact (zoom unchanged — drawer-tap intent is "show me on the
+  /// map I'm already looking at," not "zoom me in to a specific
+  /// place"; that's reserved for marker-tap). The profile sheet is
+  /// rendered by MapTab inside its own Stack so the map underneath
+  /// stays interactive while the sheet is up.
+  void _openContactSheet(ContactDisplay contact) {
+    // Just nudge the camera center; preserve the user's current zoom.
+    context.read<MapBloc>().add(MapMoveToUser(contact.userId));
+    ContactSheetController.instance.open(contact);
   }
 
-  void _showOptionsDialog(ContactDisplay contact) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: ContactProfileModal(contact: contact, roomService: widget.roomService, sharingPreferencesRepo: widget.sharingPreferencesRepository),
-      ),
-    );
-  }
+  void _showOptionsDialog(ContactDisplay contact) =>
+      _openContactSheet(contact);
 
   List<ContactDisplay> _getContactsWithCurrentLocation(
       List<ContactDisplay> contacts,
@@ -167,6 +173,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     final contactsWithTimestamp = contacts.map((contact) {
       final lastSeenTimestamp = locationProvider.getLastSeen(contact.userId);
       final formattedLastSeen = TimeAgoFormatter.format(lastSeenTimestamp);
+      DateTime? lastUpdateAt;
+      if (lastSeenTimestamp != null) {
+        try {
+          lastUpdateAt = DateTime.parse(lastSeenTimestamp).toLocal();
+        } catch (_) {}
+      }
 
       return {
         'contact': ContactDisplay(
@@ -174,6 +186,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           displayName: contact.displayName,
           avatarUrl: contact.avatarUrl,
           lastSeen: formattedLastSeen,
+          lastUpdateAt: lastUpdateAt,
           membershipStatus: contact.membershipStatus,
         ),
         'timestamp': lastSeenTimestamp,
@@ -184,12 +197,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     contactsWithTimestamp.sort((a, b) {
       final timestampA = a['timestamp'] as String?;
       final timestampB = b['timestamp'] as String?;
-      
+
       // Handle null timestamps (put them at the end)
       if (timestampA == null && timestampB == null) return 0;
       if (timestampA == null) return 1;
       if (timestampB == null) return -1;
-      
+
       // Parse and compare timestamps
       try {
         final dateA = DateTime.parse(timestampA);
@@ -207,123 +220,290 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         .toList();
   }
 
+  // Section bucket — invites get their own; everyone else splits on
+  // freshness (live+stale ⇒ "sharing now", idle ⇒ "offline"). The dot
+  // color carries the live/stale distinction within "sharing now".
+  _ContactBucket _bucketFor(ContactDisplay c) {
+    if (c.membershipStatus == 'invite') return _ContactBucket.invited;
+    final s = statusFromLastUpdate(c.lastUpdateAt);
+    if (s == GridAvatarStatus.live || s == GridAvatarStatus.stale) {
+      return _ContactBucket.sharingNow;
+    }
+    return _ContactBucket.offline;
+  }
+
+  GridAvatarStatus _avatarStatusFor(ContactDisplay c) {
+    if (c.membershipStatus == 'invite') return GridAvatarStatus.idle;
+    return statusFromLastUpdate(c.lastUpdateAt);
+  }
+
+  String _placeKey(double lat, double lng) {
+    final a = (lat * 1000).round();
+    final b = (lng * 1000).round();
+    return '$a,$b';
+  }
+
+  void _ensurePlaceFor(double lat, double lng) {
+    final key = _placeKey(lat, lng);
+    if (_placeCache.containsKey(key) || _placeInflight.contains(key)) return;
+    _placeInflight.add(key);
+    LocalGeocoder.instance.lookup(lat, lng).then((name) {
+      if (!mounted) return;
+      setState(() {
+        _placeCache[key] = name;
+        _placeInflight.remove(key);
+      });
+    }).catchError((_) {
+      if (!mounted) return;
+      _placeCache[key] = null;
+      _placeInflight.remove(key);
+    });
+  }
+
+  String? _cachedPlace(double lat, double lng) {
+    return _placeCache[_placeKey(lat, lng)];
+  }
+
+  String _placeLineFor(ContactDisplay c, {String? place}) {
+    if (c.membershipStatus == 'invite') return 'Invite pending';
+    final time = c.lastSeen;
+    final bucket = _bucketFor(c);
+    if (place != null && place.isNotEmpty) return place;
+    if (bucket == _ContactBucket.sharingNow) return 'Sharing location';
+    if (time == 'Offline' || time.isEmpty || time == '-') {
+      return "Hasn't shared yet";
+    }
+    return 'Location unavailable';
+  }
+
+  String? _timeTextFor(ContactDisplay c) {
+    final time = c.lastSeen;
+    if (time.isEmpty) return null;
+    if (time == 'Just now') return 'now';
+    if (time.endsWith(' ago')) return time.substring(0, time.length - 4);
+    return time;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    // Single uniform surface for the whole subscreen — the Scaffold,
+    // the outer container, and every list background all resolve to
+    // context.gridColors.surface so the sheet doesn't bleed to a darker tone
+    // as the user scrolls past the bottom of the contact rows.
+    return Material(
+      color: context.gridColors.surface,
+      child: BlocListener<AvatarBloc, AvatarState>(
+        listenWhen: (previous, current) =>
+            previous.updateCounter != current.updateCounter,
+        listener: (context, avatarState) {
+          // Force rebuild when avatar updates occur
+          setState(() {});
+        },
+        child: BlocConsumer<ContactsBloc, ContactsState>(
+          listener: (context, state) {
+            if (state is ContactsError) {
+              InAppNotifier.instance.show(
+                title: 'Error',
+                message: state.message,
+                variant: InAppNotificationVariant.error,
+              );
+            }
+          },
+          builder: (context, state) {
+            if (state is ContactsLoading && !_hasShownInitialLoading) {
+              _hasShownInitialLoading = true;
+              return _buildLoadingState();
+            }
 
-    return Column(
-      children: [
-        CustomSearchBar(
-          controller: _searchController,
-          hintText: 'Search Contacts',
-        ),
-        Expanded(
-          child: BlocListener<AvatarBloc, AvatarState>(
-            listenWhen: (previous, current) => previous.updateCounter != current.updateCounter,
-            listener: (context, avatarState) {
-              // Force rebuild when avatar updates occur
-              setState(() {});
-            },
-            child: BlocConsumer<ContactsBloc, ContactsState>(
-              listener: (context, state) {
-                // Show snackbar for error states
-                if (state is ContactsError) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${state.message}'),
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+            if (state is ContactsError) {
+              return _buildErrorState(state.message);
+            }
+
+            if (state is ContactsLoaded) {
+              return Consumer<UserLocationProvider>(
+                builder: (context, locationProvider, child) {
+                  final contactsWithLocation =
+                      _getContactsWithCurrentLocation(
+                    state.contacts,
+                    locationProvider,
                   );
-                }
-              },
-              builder: (context, state) {
-              if (state is ContactsLoading && !_hasShownInitialLoading) {
-                _hasShownInitialLoading = true;
-                return _buildLoadingState();
-              }
 
-              if (state is ContactsError) {
-                return Center(child: Text('Error: ${state.message}'));
-              }
+                  return contactsWithLocation.isEmpty
+                      ? _buildEmptyState()
+                      : Consumer<SyncManager>(
+                          builder: (context, syncManager, child) {
+                            final isSyncing =
+                                syncManager.syncState != SyncState.ready;
 
-              if (state is ContactsLoaded) {
-                return Consumer<UserLocationProvider>(
-                  builder: (context, locationProvider, child) {
-                    final contactsWithLocation = _getContactsWithCurrentLocation(
-                      state.contacts,
-                      locationProvider,
-                    );
+                            // Handle sync state transitions
+                            if (_previousSyncState != null &&
+                                _previousSyncState != SyncState.ready &&
+                                syncManager.syncState == SyncState.ready) {
+                              _syncJustCompleted = true;
+                              _showCheckmark = true;
+                              _checkmarkAnimationController
+                                  .forward()
+                                  .then((_) {
+                                if (mounted) {
+                                  Future.delayed(
+                                      const Duration(milliseconds: 200), () {
+                                    if (mounted) {
+                                      setState(() {
+                                        _showCheckmark = false;
+                                        _syncJustCompleted = false;
+                                      });
+                                      _checkmarkAnimationController.reset();
+                                    }
+                                  });
+                                }
+                              });
+                            }
+                            _previousSyncState = syncManager.syncState;
 
-                    return contactsWithLocation.isEmpty
-                        ? _buildEmptyState(colorScheme)
-                        : Consumer<SyncManager>(
-                            builder: (context, syncManager, child) {
-                              final isSyncing = syncManager.syncState != SyncState.ready;
+                            return _buildContactsList(
+                              contactsWithLocation,
+                              isSyncing: isSyncing,
+                            );
+                          },
+                        );
+                },
+              );
+            }
 
-                              // Handle sync state transitions
-                              if (_previousSyncState != null &&
-                                  _previousSyncState != SyncState.ready &&
-                                  syncManager.syncState == SyncState.ready) {
-                                // Sync just completed
-                                _syncJustCompleted = true;
-                                _showCheckmark = true;
-                                _checkmarkAnimationController.forward().then((_) {
-                                  if (mounted) {
-                                    Future.delayed(const Duration(milliseconds: 200), () {
-                                      if (mounted) {
-                                        setState(() {
-                                          _showCheckmark = false;
-                                          _syncJustCompleted = false;
-                                        });
-                                        _checkmarkAnimationController.reset();
-                                      }
-                                    });
-                                  }
-                                });
-                              }
-                              _previousSyncState = syncManager.syncState;
-
-                              return ListView.builder(
-                                controller: widget.scrollController,
-                                itemCount: contactsWithLocation.length + (isSyncing || _showCheckmark ? 1 : 0),
-                                padding: const EdgeInsets.all(16.0),
-                                itemBuilder: (context, index) {
-                                  // Show sync indicator as first item
-                                  if ((isSyncing || _showCheckmark) && index == 0) {
-                                    return _buildSyncingIndicator(colorScheme, isSyncing: isSyncing);
-                                  }
-
-                                  // Adjust index for contacts when syncing indicator is shown
-                                  final contactIndex = (isSyncing || _showCheckmark) ? index - 1 : index;
-                                  final contact = contactsWithLocation[contactIndex];
-
-                                  return _buildModernContactCard(contact, colorScheme, theme);
-                                },
-                              );
-                            },
-                          );
-                  },
-                );
-              }
-
-              return const Center(child: Text('No contacts'));
-            },
-            ),
-          ),
+            return Center(
+              child: Text(
+                'No contacts',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  color: context.gridColors.text2,
+                  fontSize: 14,
+                ),
+              ),
+            );
+          },
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildSyncingIndicator(ColorScheme colorScheme, {required bool isSyncing}) {
+  // ── List with sections (SHARING NOW / PAUSED / OFFLINE) ──
+  Widget _buildContactsList(
+    List<ContactDisplay> contacts, {
+    required bool isSyncing,
+  }) {
+    // Group while preserving the upstream sort order (recent-first).
+    final live = <ContactDisplay>[];
+    final invited = <ContactDisplay>[];
+    final offline = <ContactDisplay>[];
+    for (final c in contacts) {
+      switch (_bucketFor(c)) {
+        case _ContactBucket.sharingNow:
+          live.add(c);
+          break;
+        case _ContactBucket.invited:
+          invited.add(c);
+          break;
+        case _ContactBucket.offline:
+          offline.add(c);
+          break;
+      }
+    }
+
+    final items = <_ListItem>[];
+    if (isSyncing || _showCheckmark) {
+      items.add(const _ListItem.syncing());
+    }
+    if (live.isNotEmpty) {
+      items.add(_ListItem.section('SHARING NOW', trailingCount: live.length));
+      for (int i = 0; i < live.length; i++) {
+        items.add(_ListItem.contact(live[i], isLast: i == live.length - 1));
+      }
+    }
+    if (invited.isNotEmpty) {
+      items.add(_ListItem.section('INVITED', trailingCount: invited.length));
+      for (int i = 0; i < invited.length; i++) {
+        items.add(
+            _ListItem.contact(invited[i], isLast: i == invited.length - 1));
+      }
+    }
+    if (offline.isNotEmpty) {
+      items.add(_ListItem.section('OFFLINE', trailingCount: offline.length));
+      for (int i = 0; i < offline.length; i++) {
+        items.add(
+            _ListItem.contact(offline[i], isLast: i == offline.length - 1));
+      }
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: context.gridColors.surface,
+      child: ListView.builder(
+        controller: widget.scrollController,
+        itemCount: items.length,
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
+        itemBuilder: (context, index) {
+        final item = items[index];
+          switch (item.kind) {
+            case _ListItemKind.syncing:
+              return _buildSyncingIndicator(isSyncing: isSyncing);
+            case _ListItemKind.section:
+              return GridSectionHeader(
+                text: item.sectionTitle!,
+                trailing:
+                    item.trailingCount != null && item.trailingCount! > 0
+                        ? GridMono(
+                            '${item.trailingCount}',
+                            color: context.gridColors.text3,
+                            size: 10.5,
+                            letterSpacing: 0.12,
+                          )
+                        : null,
+              );
+            case _ListItemKind.contact:
+              return _buildContactRow(item.contact!, isLast: item.isLast);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildContactRow(ContactDisplay contact, {required bool isLast}) {
+    final isInvite = contact.membershipStatus == 'invite';
+    final currentHomeserver = widget.roomService.getMyHomeserver();
+    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
+    final handle = showFullMatrixId
+        ? contact.userId
+        : '@${contact.userId.split(':')[0].replaceFirst('@', '')}';
+
+    String? place;
+    if (!isInvite) {
+      final loc = Provider.of<UserLocationProvider>(context, listen: false)
+          .getUserLocation(contact.userId);
+      if (loc != null) {
+        place = _cachedPlace(loc.latitude, loc.longitude);
+        if (place == null &&
+            !_placeCache.containsKey(_placeKey(loc.latitude, loc.longitude))) {
+          _ensurePlaceFor(loc.latitude, loc.longitude);
+        }
+      }
+    }
+
+    return GridContactRow(
+      name: contact.displayName,
+      handle: handle,
+      userId: contact.userId,
+      placeLine: _placeLineFor(contact, place: place),
+      timeText: _timeTextFor(contact),
+      avatarStatus: _avatarStatusFor(contact),
+      showDivider: !isLast,
+      statusKind: isInvite ? null : null,
+      statusLabel: null,
+      onTap: () => _openContactSheet(contact),
+    );
+  }
+
+  Widget _buildSyncingIndicator({required bool isSyncing}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       height: 24,
       child: Center(
         child: AnimatedSwitcher(
@@ -340,7 +520,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: colorScheme.primary,
+                            color: context.gridColors.mint,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -362,8 +542,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                             height: 8,
                             decoration: BoxDecoration(
                               color: index <= _dotsAnimation.value
-                                ? colorScheme.primary
-                                : colorScheme.primary.withOpacity(0.3),
+                                  ? context.gridColors.mint
+                                  : context.gridColors.mint.withOpacity(0.3),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -376,357 +556,190 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       ),
     );
   }
-  
+
   Widget _buildLoadingState() {
-    return ListView.builder(
-      controller: widget.scrollController,
-      padding: const EdgeInsets.all(16.0),
-      itemCount: 6, // Show 6 skeleton items
-      itemBuilder: (context, index) {
-        return _buildSkeletonContactCard();
-      },
+    return Container(
+      color: context.gridColors.surface,
+      child: ListView.builder(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.only(top: 8),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return _buildSkeletonContactRow();
+        },
+      ),
     );
   }
 
-  Widget _buildSkeletonContactCard() {
+  Widget _buildSkeletonContactRow() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          bottom: BorderSide(color: context.gridColors.hairline, width: 1),
+        ),
       ),
       child: Row(
         children: [
-          // Skeleton avatar
           Container(
-            width: 56,
-            height: 56,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.3),
+              color: context.gridColors.surface2,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Skeleton title
                 Container(
-                  height: 16,
-                  width: double.infinity,
+                  height: 12,
+                  width: 140,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(8),
+                    color: context.gridColors.surface2,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Skeleton subtitle
                 Container(
-                  height: 12,
-                  width: 120,
+                  height: 10,
+                  width: 100,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: context.gridColors.surface2.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(ColorScheme colorScheme) {
-    return ListView(
-      controller: widget.scrollController,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.people_outline,
-                  size: 64,
-                  color: colorScheme.primary.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'No contacts yet',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Add friends to start sharing your location and see where they are',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primary.withOpacity(0.8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    // Open add friends modal
-                    _showAddFriendModal(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.person_add,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  label: const Text(
-                    'Add Your First Contact',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModernContactCard(ContactDisplay contact, ColorScheme colorScheme, ThemeData theme) {
-    // Check if using custom homeserver
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+          const SizedBox(width: 8),
+          Container(
+            width: 32,
+            height: 10,
+            decoration: BoxDecoration(
+              color: context.gridColors.surface2.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(6),
+            ),
           ),
         ],
       ),
-      child: InkWell(
-        onTap: () {
-          Provider.of<SelectedUserProvider>(context, listen: false)
-              .setSelectedUserId(contact.userId, context);
-        },
-        onLongPress: () => _showContactMenu(contact),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: [
-              // Smaller avatar with status indicator
-              Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.15),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: UserAvatarBloc(
-                      userId: contact.userId,
-                      size: 56,
-                    ),
-                  ),
-                  // Online status indicator
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: _buildStatusDot(contact.lastSeen, colorScheme, membershipStatus: contact.membershipStatus),
-                  ),
-                ],
+    );
+  }
+
+  Widget _buildErrorState(String message) {
+    return Container(
+      color: context.gridColors.surface,
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: context.gridColors.dangerSoft,
+                borderRadius: BorderRadius.circular(GridTokens.rLg),
               ),
-              
-              const SizedBox(width: 12),
-              
-              // Contact information
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Display name
-                    Text(
-                      contact.displayName,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                        fontSize: 15,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    
-                    const SizedBox(height: 2),
-                    
-                    // User ID subtitle - show full matrix ID for custom homeservers
-                    Text(
-                      showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+              child: Icon(
+                Icons.error_outline_rounded,
+                color: context.gridColors.danger,
+                size: 28,
               ),
-              
-              // Status badge on the right
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Use StatusIndicator if we have membership status, otherwise use enhanced status
-                  contact.membershipStatus != null
-                      ? StatusIndicator(
-                          timeAgo: contact.lastSeen,
-                          membershipStatus: contact.membershipStatus,
-                        )
-                      : _buildEnhancedStatusIndicator(contact.lastSeen, colorScheme, theme),
-                  // Future: Add geocoding info here
-                  // const SizedBox(height: 4),
-                  // Text('2.3 km away', style: TextStyle(fontSize: 10)),
-                ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Something went wrong',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: context.gridColors.text,
+                letterSpacing: -0.01,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                color: context.gridColors.text2,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusDot(String timeAgo, ColorScheme colorScheme, {String? membershipStatus}) {
-    Color statusColor;
-    bool isOnline;
-    
-    // Check for invitation status first
-    if (membershipStatus == 'invite') {
-      statusColor = Colors.orange;
-      isOnline = false;
-    } else {
-      statusColor = _getStatusColor(timeAgo, colorScheme);
-      isOnline = _isRecentlyActive(timeAgo);
-    }
-    
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: colorScheme.surface,
-          width: 2,
-        ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: statusColor,
-          shape: BoxShape.circle,
-        ),
-        child: isOnline
-            ? Container(
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.circle,
-                  color: Colors.transparent,
-                  size: 8,
-                ),
-              )
-            : null,
-      ),
-    );
-  }
+  Widget _buildEmptyState() {
+    final myUserId = widget.roomService.getMyUserId();
+    final handle = myUserId == null
+        ? '@…'
+        : '@${utils.localpart(myUserId)}';
+    final qrData = myUserId ?? handle;
 
-  Widget _buildEnhancedStatusIndicator(String timeAgo, ColorScheme colorScheme, ThemeData theme) {
-    Color statusColor = _getStatusColor(timeAgo, colorScheme);
-    IconData statusIcon = _getStatusIcon(timeAgo);
-    String enhancedText = _getEnhancedStatusText(timeAgo);
-    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: statusColor.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      color: context.gridColors.surface,
+      child: ListView(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         children: [
-          Icon(
-            statusIcon,
-            size: 12,
-            color: statusColor,
+          // Handle / QR hero — gradient card with a tappable handle pill and
+          // an inline QR tile. Designed to be the obvious first move when
+          // there are no contacts yet.
+          _HandleHeroCard(
+            handle: handle,
+            qrData: qrData,
+            onCopy: () => _copyHandle(handle),
+            onShare: () => _shareInviteLink(handle),
           ),
-          const SizedBox(width: 4),
-          Text(
-            enhancedText,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: statusColor,
-              fontWeight: FontWeight.w500,
-              fontSize: 11,
+          const SizedBox(height: 18),
+          GridButton(
+            label: 'Share invite link',
+            icon: Icons.ios_share_rounded,
+            onPressed: () => _shareInviteLink(handle),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GridButton(
+                  label: 'Scan code',
+                  icon: Icons.qr_code_scanner_rounded,
+                  style: GridButtonStyle.secondary,
+                  onPressed: () => _showAddFriendModal(context),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GridButton(
+                  label: 'Type handle',
+                  icon: Icons.alternate_email_rounded,
+                  style: GridButtonStyle.secondary,
+                  onPressed: () => _showAddFriendModal(context),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'Nothing is shared until both of you confirm.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12.5,
+                color: context.gridColors.text3,
+                height: 1.45,
+                letterSpacing: -0.005,
+              ),
             ),
           ),
         ],
@@ -734,106 +747,31 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     );
   }
 
-  Color _getStatusColor(String timeAgo, ColorScheme colorScheme) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return colorScheme.primary; // Use primary green
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      // Extract minutes to check if over 10 minutes
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10 ? colorScheme.primary : Colors.orange;
-      }
-      return colorScheme.primary;
-    } else if (timeAgo.contains('h ago')) {
-      return Colors.orange;
-    } else if (timeAgo.contains('d ago')) {
-      return Colors.red;
-    } else {
-      return colorScheme.onSurface.withOpacity(0.4);
-    }
-  }
-
-  IconData _getStatusIcon(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return Icons.circle;
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      return Icons.circle;
-    } else if (timeAgo.contains('h ago')) {
-      return Icons.schedule;
-    } else if (timeAgo.contains('d ago')) {
-      return Icons.access_time;
-    } else {
-      return Icons.circle_outlined;
-    }
-  }
-
-  String _getEnhancedStatusText(String timeAgo) {
-    if (timeAgo == 'Just now') {
-      return 'Active now';
-    } else if (timeAgo.contains('s ago')) {
-      return 'Active now';
-    } else if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      return timeAgo;
-    } else if (timeAgo.contains('h ago')) {
-      return timeAgo;
-    } else if (timeAgo.contains('d ago')) {
-      return timeAgo;
-    } else {
-      return 'Offline';
-    }
-  }
-
-  bool _isRecentlyActive(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return true;
-    }
-    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10; // Only consider active if 10 minutes or less
-      }
-    }
-    return false;
-  }
-
-  void _showExpandedAvatar(BuildContext context, String userId) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.all(20),
-          child: GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Container(
-              color: Colors.transparent,
-              child: Center(
-                child: Hero(
-                  tag: 'contact_menu_avatar_$userId',
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    height: MediaQuery.of(context).size.width * 0.8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Theme.of(context).colorScheme.surface,
-                    ),
-                    child: ClipOval(
-                      child: UserAvatarBloc(
-                        userId: userId,
-                        size: MediaQuery.of(context).size.width * 0.8,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+  Future<void> _copyHandle(String handle) async {
+    await Clipboard.setData(ClipboardData(text: handle));
+    if (!mounted) return;
+    InAppNotifier.instance.show(
+      title: 'Copied $handle',
+      message: 'Share it so friends can add you.',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(seconds: 2),
     );
+  }
+
+  Future<void> _shareInviteLink(String handle) async {
+    try {
+      await Share.share(
+        'Join me on Grid! Download it at https://get.grid.lat and send $handle a friend request!',
+        subject: 'Join me on Grid: Private Location Sharing!',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      InAppNotifier.instance.show(
+        title: 'Unable to share invite',
+        message: 'Please try again.',
+        variant: InAppNotificationVariant.error,
+      );
+    }
   }
 
   void _showAddFriendModal(BuildContext context) {
@@ -850,11 +788,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           userService: Provider.of<UserService>(context, listen: false),
           groupsBloc: context.read<GroupsBloc>(),
           onGroupCreated: () {
-            // Refresh contacts when a new group is created
             context.read<ContactsBloc>().add(LoadContacts());
           },
           onContactAdded: () {
-            // Trigger immediate refresh - sync manager will handle the rest
             context.read<ContactsBloc>().add(RefreshContacts());
           },
         ),
@@ -862,270 +798,448 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     );
   }
 
-  void _showContactMenu(ContactDisplay contact) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    // Check if using custom homeserver
-    final currentHomeserver = widget.roomService.getMyHomeserver();
-    final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
-    
-    showModalBottomSheet(
+  void _showDeleteConfirmation(ContactDisplay contact) {
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Contact info header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: context.gridColors.surface,
+              borderRadius: BorderRadius.circular(GridTokens.rXl),
+              border: Border.all(color: context.gridColors.hairline),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        _showExpandedAvatar(context, contact.userId);
-                      },
-                      child: Hero(
-                        tag: 'contact_menu_avatar_${contact.userId}',
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: colorScheme.primary.withOpacity(0.1),
-                          child: UserAvatarBloc(
-                            userId: contact.userId,
-                            size: 56,
-                          ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: context.gridColors.dangerSoft,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(GridTokens.rXl),
+                      topRight: Radius.circular(GridTokens.rXl),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: context.gridColors.danger.withOpacity(0.18),
+                          borderRadius:
+                              BorderRadius.circular(GridTokens.rMd),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          color: context.gridColors.danger,
+                          size: 20,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            contact.displayName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Remove contact',
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.015,
+                                color: context.gridColors.text,
+                              ),
                             ),
-                          ),
-                          Text(
-                            showFullMatrixId ? contact.userId : '@${contact.userId.split(':')[0].replaceFirst('@', '')}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withOpacity(0.6),
+                            const SizedBox(height: 2),
+                            Text(
+                              "You can always add them back later.",
+                              style: GoogleFonts.getFont(
+                                'Geist',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: context.gridColors.text2,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+
+                // Body
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                  child: Text(
+                    'Remove "${contact.displayName}" from your contacts?',
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: context.gridColors.text2,
+                      height: 1.45,
                     ),
-                  ],
-                ),
-              ),
-              
-              // Menu options
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.person,
-                    color: colorScheme.primary,
-                    size: 20,
                   ),
                 ),
-                title: Text(
-                  'View Profile',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
+
+                // Actions
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GridButton(
+                          label: 'Cancel',
+                          style: GridButtonStyle.secondary,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GridButton(
+                          label: 'Remove',
+                          style: GridButtonStyle.danger,
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            final contactName = contact.displayName;
+
+                            context
+                                .read<ContactsBloc>()
+                                .add(DeleteContact(contact.userId));
+
+                            InAppNotifier.instance.show(
+                              title: 'Removing $contactName',
+                              message: 'Removing from contacts…',
+                              variant: InAppNotificationVariant.info,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showOptionsDialog(contact);
-                },
-              ),
-              
-              // Commented out for this release - history feature only for groups
-              // ListTile(
-              //   leading: Container(
-              //     padding: const EdgeInsets.all(8),
-              //     decoration: BoxDecoration(
-              //       color: colorScheme.primary.withOpacity(0.1),
-              //       borderRadius: BorderRadius.circular(8),
-              //     ),
-              //     child: Icon(
-              //       Icons.history,
-              //       color: colorScheme.primary,
-              //       size: 20,
-              //     ),
-              //   ),
-              //   title: Text(
-              //     'View History',
-              //     style: TextStyle(
-              //       color: colorScheme.onSurface,
-              //       fontWeight: FontWeight.w500,
-              //     ),
-              //   ),
-              //   onTap: () {
-              //     Navigator.pop(context);
-              //     _showLocationHistory(contact);
-              //   },
-              // ),
-              
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                    size: 20,
-                  ),
-                ),
-                title: const Text(
-                  'Remove Contact',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteConfirmation(contact);
-                },
-              ),
-              
-              const SizedBox(height: 16),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  void _showDeleteConfirmation(ContactDisplay contact) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.red,
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Remove Contact',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to remove "${contact.displayName}" from your contacts? This action cannot be undone.',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.8),
-              height: 1.4,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                final contactName = contact.displayName;
-                
-                // Send delete event
-                context.read<ContactsBloc>().add(DeleteContact(contact.userId));
-                
-                // Show immediate feedback - assume success unless error occurs
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Removing $contactName from contacts...'),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Remove',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-  
   void _showLocationHistory(ContactDisplay contact) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return LocationHistoryModal(
-          userId: contact.userId,
-          userName: contact.displayName,
-          avatarUrl: contact.avatarUrl,
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: LocationHistoryModal(
+            userId: contact.userId,
+            userName: contact.displayName,
+            avatarUrl: contact.avatarUrl,
+          ),
         );
       },
+    );
+  }
+}
+
+// ── Internal helpers ────────────────────────────────────────────────
+
+enum _ContactBucket { sharingNow, invited, offline }
+
+enum _ListItemKind { syncing, section, contact }
+
+class _ListItem {
+  const _ListItem._({
+    required this.kind,
+    this.sectionTitle,
+    this.trailingCount,
+    this.contact,
+    this.isLast = false,
+  });
+
+  const _ListItem.syncing()
+      : kind = _ListItemKind.syncing,
+        sectionTitle = null,
+        trailingCount = null,
+        contact = null,
+        isLast = false;
+
+  factory _ListItem.section(String title, {int? trailingCount}) => _ListItem._(
+        kind: _ListItemKind.section,
+        sectionTitle: title,
+        trailingCount: trailingCount,
+      );
+
+  factory _ListItem.contact(ContactDisplay c, {required bool isLast}) =>
+      _ListItem._(
+        kind: _ListItemKind.contact,
+        contact: c,
+        isLast: isLast,
+      );
+
+  final _ListItemKind kind;
+  final String? sectionTitle;
+  final int? trailingCount;
+  final ContactDisplay? contact;
+  final bool isLast;
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
+    required this.icon,
+    required this.iconBg,
+    required this.iconFg,
+    required this.label,
+    this.labelColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconFg;
+  final String label;
+  final Color? labelColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                ),
+                child: Icon(icon, color: iconFg, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: labelColor ?? context.gridColors.text,
+                    letterSpacing: -0.01,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: context.gridColors.text3, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Empty-state hero: gradient card with the user's @handle (tap to copy)
+/// alongside an inline QR tile that the user can show to a friend.
+class _HandleHeroCard extends StatelessWidget {
+  const _HandleHeroCard({
+    required this.handle,
+    required this.qrData,
+    required this.onCopy,
+    required this.onShare,
+  });
+
+  final String handle;
+  final String qrData;
+  final VoidCallback onCopy;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [context.gridColors.mintFaint, context.gridColors.surface],
+        ),
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: context.gridColors.mintSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 92,
+                height: 92,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.28),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    QrImageView(
+                      data: qrData,
+                      version: QrVersions.auto,
+                      size: 76,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: Colors.black,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: Colors.black,
+                      ),
+                    ),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: context.gridColors.mint,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.location_on_rounded,
+                        size: 9,
+                        color: Color(0xFF04201A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GridMono(
+                      'YOUR HANDLE',
+                      size: 10,
+                      letterSpacing: 0.12,
+                      color: context.gridColors.text3,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      handle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: context.gridColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Send this to a friend so they can find you.',
+                      maxLines: 2,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12,
+                        color: context.gridColors.text2,
+                        height: 1.35,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _CopyChip(handle: handle, onTap: onCopy),
+        ],
+      ),
+    );
+  }
+}
+
+class _CopyChip extends StatelessWidget {
+  const _CopyChip({required this.handle, required this.onTap});
+
+  final String handle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.gridColors.surface,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: context.gridColors.hairlineStrong),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.copy_rounded,
+                size: 14,
+                color: context.gridColors.mint,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Copy $handle',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.005,
+                  color: context.gridColors.text,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

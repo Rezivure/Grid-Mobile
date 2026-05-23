@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/apple_subscription_service.dart';
+import '../../services/in_app_notifier.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   @override
@@ -108,9 +109,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       } else if (_appleService.lastError != null) {
         // Check if user canceled (error code 2 is user canceled)
         if (_appleService.lastError!.code == 'storekit_cancelled_payment') {
-          _showFloatingSnackBar('Purchase canceled', isError: false);
+          _showFloatingSnackBar('Purchase canceled', isError: false, subtext: 'No charges were made.');
         } else {
-          _showFloatingSnackBar('Unable to complete purchase', isError: true);
+          _showFloatingSnackBar('Unable to complete purchase', isError: true, subtext: 'Please try again or contact support.');
         }
       }
     } else {
@@ -124,8 +125,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (await canLaunch(checkoutUrl)) {
         await launch(checkoutUrl);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open checkout')),
+        InAppNotifier.instance.show(
+          title: 'Could not open checkout',
+          message: 'Check your internet and try again.',
+          variant: InAppNotificationVariant.error,
         );
       }
     }
@@ -158,39 +161,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (await canLaunch(manageUrl)) {
         await launch(manageUrl);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open subscription management')),
+        InAppNotifier.instance.show(
+          title: 'Could not open subscription management',
+          message: 'Check your internet and try again.',
+          variant: InAppNotificationVariant.error,
         );
       }
     }
   }
 
-  void _showFloatingSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w500,
-            fontSize: 15,
-          ),
-        ),
-        backgroundColor: isError 
-            ? Colors.red.shade400 
-            : Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(
-          bottom: 20,
-          left: 20,
-          right: 20,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        duration: Duration(seconds: 3),
-        elevation: 6,
-      ),
+  void _showFloatingSnackBar(String message, {bool isError = false, String? subtext}) {
+    InAppNotifier.instance.show(
+      title: message,
+      message: subtext,
+      variant: isError
+          ? InAppNotificationVariant.error
+          : InAppNotificationVariant.success,
     );
   }
   
@@ -311,7 +297,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           if (mounted) {
                             Navigator.of(context).pop();
                             if (!subscriptionActive) {
-                              _showFloatingSnackBar('Subscription is being processed...', isError: false);
+                              _showFloatingSnackBar('Subscription is being processed...', isError: false, subtext: 'This may take a moment.');
                             }
                           }
                         },

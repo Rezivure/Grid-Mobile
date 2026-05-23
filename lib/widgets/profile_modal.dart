@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 
+import '../services/in_app_notifier.dart';
 import '../services/room_service.dart';
 
 class ProfileModal extends StatefulWidget {
@@ -255,16 +256,11 @@ class _ProfileModalState extends State<ProfileModal> {
                                 setState(() {
                                   _copied = true;
                                 });
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Username copied to clipboard'),
-                                    backgroundColor: Theme.of(context).colorScheme.primary,
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    duration: const Duration(seconds: 2),
-                                  ),
+                                InAppNotifier.instance.show(
+                                  title: 'Username copied',
+                                  message: 'Share it so friends can add you.',
+                                  variant: InAppNotificationVariant.success,
+                                  duration: const Duration(seconds: 2),
                                 );
                                 Future.delayed(Duration(seconds: 2), () {
                                   if (mounted) {

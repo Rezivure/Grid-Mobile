@@ -18,8 +18,8 @@ void main() {
         },
       });
       expect(result, isNotNull);
-      expect(result!['latitude'], 40.7128);
-      expect(result['longitude'], -74.0060);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, -74.0060);
     });
 
     test('returns null for non-location message', () {
@@ -82,8 +82,8 @@ void main() {
         },
       });
       expect(result, isNotNull);
-      expect(result!['latitude'], -33.8688);
-      expect(result['longitude'], closeTo(-151.2093, 0.0001));
+      expect(result!.latitude, -33.8688);
+      expect(result.longitude, closeTo(-151.2093, 0.0001));
     });
 
     test('parses zero coordinates', () {
@@ -94,8 +94,8 @@ void main() {
         },
       });
       expect(result, isNotNull);
-      expect(result!['latitude'], 0.0);
-      expect(result['longitude'], 0.0);
+      expect(result!.latitude, 0.0);
+      expect(result.longitude, 0.0);
     });
 
     test('handles geo_uri with altitude (third component)', () {
@@ -107,8 +107,8 @@ void main() {
       });
       // Should still parse lat/lon even with altitude
       expect(result, isNotNull);
-      expect(result!['latitude'], 40.7128);
-      expect(result['longitude'], -74.0060);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, -74.0060);
     });
 
     test('returns null for non-numeric coordinates', () {

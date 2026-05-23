@@ -1,378 +1,280 @@
 import 'package:flutter/material.dart';
-import 'package:random_avatar/random_avatar.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
+
 import 'user_avatar_bloc.dart';
 
-class UserMapMarker extends StatefulWidget {
+/// Map pin for a contact. Static — no pulse, no halo. Name pill shows
+/// only when selected; the pin tail anchor dot sits at the lat/lng.
+class UserMapMarker extends StatelessWidget {
   final String userId;
   final bool isSelected;
-  final bool showPulse;
   final String? timestamp;
+
+  /// When provided, used directly. Otherwise the marker fires a
+  /// one-shot UserRepository lookup on init and caches the result.
+  final String? displayName;
 
   const UserMapMarker({
     Key? key,
     required this.userId,
     this.isSelected = false,
-    this.showPulse = true,
     this.timestamp,
+    this.displayName,
   }) : super(key: key);
 
   @override
-  _UserMapMarkerState createState() => _UserMapMarkerState();
+  Widget build(BuildContext context) {
+    return _UserMapMarkerInner(
+      key: ValueKey('marker_$userId'),
+      userId: userId,
+      isSelected: isSelected,
+      timestamp: timestamp,
+      displayName: displayName,
+    );
+  }
 }
 
-class _UserMapMarkerState extends State<UserMapMarker>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _selectionController;
-  late AnimationController _bounceController;
-  late Animation<double> _pulseAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _shadowAnimation;
-  late Animation<double> _bounceAnimation;
+class _UserMapMarkerInner extends StatefulWidget {
+  const _UserMapMarkerInner({
+    Key? key,
+    required this.userId,
+    required this.isSelected,
+    required this.timestamp,
+    required this.displayName,
+  }) : super(key: key);
+
+  final String userId;
+  final bool isSelected;
+  final String? timestamp;
+  final String? displayName;
+
+  @override
+  State<_UserMapMarkerInner> createState() => _UserMapMarkerInnerState();
+}
+
+class _UserMapMarkerInnerState extends State<_UserMapMarkerInner> {
+  String? _displayName;
 
   @override
   void initState() {
     super.initState();
-
-    // Pulse animation controller
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-
-    // Selection animation controller
-    _selectionController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-
-    // Bounce animation controller
-    _bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    // Smooth pulse animation with easing
-    _pulseAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
-
-    // Scale animation for selection
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.15,
-    ).animate(CurvedAnimation(
-      parent: _selectionController,
-      curve: Curves.elasticOut,
-    ));
-
-    // Shadow animation for selection
-    _shadowAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _selectionController,
-      curve: Curves.easeOut,
-    ));
-
-    // Bounce animation sequence
-    _bounceAnimation = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 0.0, end: -30.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 35.0,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: -30.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.bounceOut)),
-        weight: 65.0,
-      ),
-    ]).animate(_bounceController);
-
-    if (widget.showPulse) {
-      _pulseController.repeat();
+    _displayName = widget.displayName;
+    if (_displayName == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadDisplayName());
     }
+  }
 
-    if (widget.isSelected) {
-      _selectionController.forward();
-      // Trigger bounce animation when initially selected
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _bounceController.forward();
-      });
+  Future<void> _loadDisplayName() async {
+    if (!mounted) return;
+    try {
+      final repo = context.read<UserRepository>();
+      final user = await repo.getUserById(widget.userId);
+      if (!mounted) return;
+      final n = user?.displayName?.trim();
+      if (n != null && n.isNotEmpty) {
+        setState(() => _displayName = n);
+      }
+    } catch (_) {
+      // No repo available — fall back to the localpart below.
     }
   }
 
   @override
-  void didUpdateWidget(UserMapMarker oldWidget) {
+  void didUpdateWidget(_UserMapMarkerInner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
-    if (widget.isSelected != oldWidget.isSelected) {
-      if (widget.isSelected) {
-        _selectionController.forward();
-        // Trigger bounce animation when becoming selected
-        _bounceController.reset();
-        _bounceController.forward();
-      } else {
-        _selectionController.reverse();
-      }
-    }
-
-    if (widget.showPulse != oldWidget.showPulse) {
-      if (widget.showPulse) {
-        _pulseController.repeat();
-      } else {
-        _pulseController.stop();
-      }
+    if (widget.displayName != null &&
+        widget.displayName != oldWidget.displayName) {
+      setState(() => _displayName = widget.displayName);
     }
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _selectionController.dispose();
-    _bounceController.dispose();
-    super.dispose();
-  }
-
-  Color _getStatusColor(ColorScheme colorScheme) {
-    if (widget.timestamp == null) {
-      return Colors.green; // Default to green if no timestamp
+  /// Mirrors People list / profile modal: recent (<=10m) is live (mint),
+  /// everything else is offline (text3). No amber for contacts.
+  Color _statusColor(BuildContext context) {
+    final ts = widget.timestamp;
+    if (ts == null) return context.gridColors.text3;
+    final ago = TimeAgoFormatter.format(ts);
+    if (ago == 'Just now' || ago.contains('s ago')) {
+      return context.gridColors.mint;
     }
-
-    final timeAgo = TimeAgoFormatter.format(widget.timestamp);
-    
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return colorScheme.primary; // Green for active (seconds)
-    } else if (timeAgo.contains('m ago')) {
-      // Parse minutes
-      final minutes = int.tryParse(timeAgo.split(' ')[0]) ?? 0;
-      if (minutes <= 10) {
-        return colorScheme.primary; // Still green for <= 10 minutes
-      } else {
-        return Colors.orange; // Orange for > 10 minutes
+    if (ago.contains('m ago') && !ago.contains('h')) {
+      final m = RegExp(r'(\d+)m ago').firstMatch(ago);
+      if (m != null) {
+        final minutes = int.tryParse(m.group(1)!) ?? 0;
+        if (minutes <= 10) return context.gridColors.mint;
       }
-    } else if (timeAgo.contains('h ago')) {
-      return Colors.orange; // Orange for hours
-    } else if (timeAgo.contains('d ago')) {
-      return Colors.red; // Red for days
-    } else {
-      return colorScheme.onSurface.withOpacity(0.4); // Grey for offline/very old
     }
+    return context.gridColors.text3;
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final username = widget.userId.split(':')[0].replaceFirst('@', '');
-    final statusColor = _getStatusColor(colorScheme);
+    final localpart = widget.userId.split(':')[0].replaceFirst('@', '');
+    final label = _displayName?.isNotEmpty == true ? _displayName! : localpart;
+    final accent = _statusColor(context);
 
-    return AnimatedBuilder(
-      animation: Listenable.merge([_pulseAnimation, _scaleAnimation, _bounceAnimation]),
-      builder: (context, child) {
-        return Transform.translate(
-          // Offset up by pin height (50/2 + 8) + bounce animation
-          offset: Offset(0, -33 + _bounceAnimation.value),
-          child: Transform.scale(
-            scale: _scaleAnimation.value,
-            child: SizedBox(
-              width: 100,
-              height: 100,
-              child: Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                // Pulse rings
-                if (widget.showPulse) ...[
-                  // Outer pulse
-                  Positioned(
-                    top: 25,
-                    child: Container(
-                      width: 50 + (30 * _pulseAnimation.value),
-                      height: 50 + (30 * _pulseAnimation.value),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: statusColor.withOpacity(0.2 * (1 - _pulseAnimation.value)),
-                      ),
-                    ),
-                  ),
-                  // Inner pulse
-                  Positioned(
-                    top: 25,
-                    child: Container(
-                      width: 50 + (15 * _pulseAnimation.value),
-                      height: 50 + (15 * _pulseAnimation.value),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: statusColor.withOpacity(0.3 * (1 - _pulseAnimation.value)),
-                      ),
-                    ),
-                  ),
-                ],
-                
-                // Pin shape with 3D effect
-                Positioned(
-                  top: 25,
-                  child: Column(
-                    children: [
-                      // Main circular container with 3D effect
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            // Bottom shadow for depth
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                              spreadRadius: 1,
-                            ),
-                            // Colored glow when selected
-                            if (widget.isSelected)
-                              BoxShadow(
-                                color: statusColor.withOpacity(0.4),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                              ),
-                          ],
-                        ),
-                        child: Stack(
-                          children: [
-                            // Background with gradient for 3D effect
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Colors.white,
-                                    Colors.grey[100]!,
-                                  ],
-                                ),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
-                                ),
-                              ),
-                            ),
-                            // Inner shadow for depth
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.black.withOpacity(0.05),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            // Avatar container
-                            Center(
-                              child: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: widget.isSelected 
-                                        ? statusColor.withOpacity(0.3)
-                                        : Colors.grey.withOpacity(0.1),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: ClipOval(
-                                  child: UserAvatarBloc(
-                                    key: ValueKey('avatar_${widget.userId}'),
-                                    userId: widget.userId,
-                                    size: 44,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Top highlight for 3D effect
-                            Positioned(
-                              top: 3,
-                              left: 10,
-                              child: Container(
-                                width: 15,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: Colors.white.withOpacity(0.6),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Pin point (triangle)
-                      CustomPaint(
-                        size: const Size(16, 8),
-                        painter: _PinPointPainter(
-                          color: Colors.white,
-                          shadowColor: Colors.black.withOpacity(0.2),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return SizedBox(
+      width: 140,
+      height: 110,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none,
+        children: [
+          if (widget.isSelected)
+            Positioned(
+              top: 0,
+              child: _NamePill(label: label, accent: accent),
+            ),
+          Positioned(
+            bottom: 0,
+            child: _PinBody(
+              userId: widget.userId,
+              accent: accent,
+              selected: widget.isSelected,
             ),
           ),
-        ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
 
-// Custom painter for the pin point
-class _PinPointPainter extends CustomPainter {
-  final Color color;
-  final Color shadowColor;
+class _NamePill extends StatelessWidget {
+  const _NamePill({required this.label, required this.accent});
+  final String label;
+  final Color accent;
 
-  _PinPointPainter({
-    required this.color,
-    required this.shadowColor,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.gridColors.hairlineStrong, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.28),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.005,
+                color: context.gridColors.text,
+                height: 1.1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pin body: avatar in a thin Grid-styled ring, small accent dot below
+/// where the avatar bottom meets the lat/lng anchor. Subtle drop shadow
+/// gives depth; no glow or halo.
+class _PinBody extends StatelessWidget {
+  const _PinBody({
+    required this.userId,
+    required this.accent,
+    required this.selected,
   });
 
+  final String userId;
+  final Color accent;
+  final bool selected;
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final shadowPaint = Paint()
-      ..color = shadowColor
-      ..style = PaintingStyle.fill
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-
-    // Draw shadow
-    canvas.save();
-    canvas.translate(0, 1);
-    canvas.drawPath(path, shadowPaint);
-    canvas.restore();
-
-    // Draw pin point
-    canvas.drawPath(path, paint);
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final innerRing = isDark ? context.gridColors.surface : context.gridColors.bg;
+    return SizedBox(
+      width: 60,
+      height: 64,
+      child: Stack(
+        alignment: Alignment.topCenter,
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: innerRing,
+              border: Border.all(
+                color: accent,
+                width: selected ? 2.5 : 1.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.30 : 0.18),
+                  blurRadius: isDark ? 12 : 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(2),
+            child: ClipOval(
+              child: UserAvatarBloc(
+                key: ValueKey('marker_avatar_$userId'),
+                userId: userId,
+                size: 50,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent,
+                border: Border.all(
+                  color: innerRing,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.20),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

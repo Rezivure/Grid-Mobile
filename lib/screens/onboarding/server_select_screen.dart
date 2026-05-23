@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
-import 'package:random_avatar/random_avatar.dart';
+
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
 import 'package:grid_frontend/widgets/turnstile_widget.dart';
@@ -76,6 +81,25 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
     _usernameController.addListener(_onUsernameChanged);
     _codeController.addListener(_onCodeChanged);
+  }
+
+  bool _didReadRouteArgs = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Welcome screen pushes us with `{isLoginFlow: true}` when the user
+    // tapped "I already have an account". Without this, _isLoginFlow
+    // stayed false and the screen rendered the username (signup) step.
+    if (_didReadRouteArgs) return;
+    _didReadRouteArgs = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args['isLoginFlow'] == true) {
+      setState(() {
+        _isLoginFlow = true;
+        _currentStep = 1; // land on passkey login, not username
+      });
+    }
   }
 
   @override
@@ -226,71 +250,35 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     bool isLoading = false,
     IconData? icon,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final isEnabled = onPressed != null && !isLoading;
-    
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isPrimary && isEnabled ? [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
-      ),
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5))
-              : Colors.transparent,
-          foregroundColor: isPrimary 
-              ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-              : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: isPrimary ? BorderSide.none : BorderSide(
-              color: isEnabled 
-                  ? colorScheme.outline.withOpacity(0.2)
-                  : colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
+    if (isLoading) {
+      return Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? context.gridColors.mint.withOpacity(0.55)
+              : context.gridColors.surface2,
+          borderRadius: BorderRadius.circular(14),
+          border: isPrimary
+              ? null
+              : Border.all(color: context.gridColors.hairlineStrong),
+        ),
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            color: isPrimary ? Colors.black : context.gridColors.mint,
+            strokeWidth: 2,
           ),
         ),
-        child: isLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: isPrimary ? colorScheme.onPrimary : colorScheme.primary,
-                  strokeWidth: 2,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 20),
-                    const SizedBox(width: 8),
-                  ],
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isPrimary 
-                          ? (isEnabled ? colorScheme.onPrimary : colorScheme.onPrimary.withOpacity(0.5))
-                          : (isEnabled ? colorScheme.primary : colorScheme.primary.withOpacity(0.5)),
-                    ),
-                  ),
-                ],
-              ),
-      ),
+      );
+    }
+    return GridButton(
+      label: text,
+      onPressed: onPressed,
+      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
+      icon: icon,
     );
   }
 
@@ -299,46 +287,41 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     required String subtitle,
     Widget? illustration,
   }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
     return Column(
       children: [
         if (illustration != null) ...[
           illustration,
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
         ],
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} OF ${_isLoginFlow ? 3 : 1}',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.primary,
-              letterSpacing: 1.0,
-            ),
-          ),
+        // Step counter — mono uppercase
+        GridMono(
+          'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} / ${_isLoginFlow ? 3 : 1}',
+          color: context.gridColors.mint,
+          size: 10.5,
+          letterSpacing: 0.12,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
           title,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: colorScheme.onSurface,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 28,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.025,
+            color: context.gridColors.text,
+            height: 1.1,
           ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           subtitle,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colorScheme.onSurface.withOpacity(0.7),
-            height: 1.4,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: context.gridColors.text2,
+            height: 1.45,
           ),
           textAlign: TextAlign.center,
         ),
@@ -459,18 +442,31 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           icon: Icons.fingerprint,
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        _buildModernButton(
-          text: 'Sign in with SMS instead',
+        // SMS is the fallback — demote it to a small text link instead
+        // of a full secondary button so passkey is clearly the default.
+        TextButton(
           onPressed: () {
             setState(() {
               _currentStep = 2;
             });
             _animateToNextStep();
           },
-          isPrimary: false,
-          icon: Icons.sms,
+          style: TextButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: colorScheme.onSurface.withOpacity(0.55),
+          ),
+          child: const Text(
+            'Sign in with SMS instead',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
 
         const SizedBox(height: 40),
@@ -480,44 +476,32 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
   Widget _buildUsernameStep() {
     final colorScheme = Theme.of(context).colorScheme;
-    String username = _usernameController.text.isNotEmpty ? _usernameController.text : 'default';
 
     return Column(
       children: [
         _buildStepHeader(
           title: 'Choose Your Username',
           subtitle: 'This is how others can find and add you on Grid',
-          illustration: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      colorScheme.primary.withOpacity(0.1),
-                      colorScheme.primary.withOpacity(0.05),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.3, 0.7, 1.0],
-                  ),
-                ),
-                child: RandomAvatar(
-                  username.toLowerCase(),
-                  height: 80,
-                  width: 80,
-                ),
+          illustration: Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.14),
+                  colorScheme.primary.withOpacity(0.05),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.6, 1.0],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Your unique avatar!',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.alternate_email_rounded,
+              size: 40,
+              color: colorScheme.primary,
+            ),
           ),
         ),
         
@@ -605,11 +589,10 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
               setState(() => _turnstileToken = token);
             },
             onError: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Verification failed. Please try again.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              InAppNotifier.instance.show(
+                title: 'Verification failed',
+                message: 'Please try again.',
+                variant: InAppNotificationVariant.error,
               );
             },
           ),
@@ -618,7 +601,13 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
         _buildModernButton(
           text: 'Sign up with Passkey',
-          onPressed: (_usernameStatusMessage == 'Username is available' &&
+          // Stays disabled (grey) until the user has typed at least 5
+          // characters, has a confirmed-available username, and has
+          // cleared turnstile. The 5-char floor blocks anyone hitting the
+          // button on a clearly-too-short handle before the availability
+          // check has even fired.
+          onPressed: (_usernameController.text.trim().length >= 5 &&
+                  _usernameStatusMessage == 'Username is available' &&
                   _turnstileToken != null &&
                   !_isPasskeyLoading)
               ? _signupWithPasskey
@@ -626,21 +615,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isPrimary: true,
           isLoading: _isPasskeyLoading,
           icon: Icons.fingerprint,
-        ),
-
-        const SizedBox(height: 16),
-
-        _buildModernButton(
-          text: 'Already have an account? Sign In',
-          onPressed: () {
-            setState(() {
-              _isLoginFlow = true;
-              _currentStep = 1;
-            });
-            _animateToNextStep();
-          },
-          isPrimary: false,
-          icon: Icons.login,
         ),
 
         const SizedBox(height: 40),
@@ -869,16 +843,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
                   username: username,
                 );
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Verification code resent'),
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
+              InAppNotifier.instance.show(
+                title: 'Verification code resent',
+                message: 'Check your messages for the new code.',
+                variant: InAppNotificationVariant.success,
+                duration: const Duration(seconds: 2),
               );
             } catch (e) {
               _showErrorDialog('Failed to resend SMS code');
@@ -1013,22 +982,19 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         if (jwt != null) {
           await _passkeyService.registerPasskey(jwt);
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Passkey set up successfully!'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-              ),
+            InAppNotifier.instance.show(
+              title: 'Passkey set up',
+              message: 'You can use it to sign in next time.',
+              variant: InAppNotificationVariant.success,
             );
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Could not set up passkey. You can add one later in Settings.'),
-              behavior: SnackBarBehavior.floating,
-            ),
+          InAppNotifier.instance.show(
+            title: 'Could not set up passkey',
+            message: 'You can add one later in Settings.',
+            variant: InAppNotificationVariant.warning,
           );
         }
       }

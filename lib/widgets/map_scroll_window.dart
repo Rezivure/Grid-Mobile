@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart';
+
+import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
+import 'package:grid_frontend/blocs/contacts/contacts_state.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 import 'package:grid_frontend/widgets/profile_modal.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
-import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
+import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
@@ -27,12 +36,12 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'group_avatar.dart';
 import 'group_avatar_bloc.dart';
 import 'user_avatar_bloc.dart';
-import 'group_profile_modal.dart';
 import 'location_history_modal.dart';
 import 'add_group_member_modal.dart';
 import 'group_markers_modal.dart';
 import '../repositories/map_icon_repository.dart';
 import '../services/database_service.dart';
+import 'package:grid_frontend/screens/settings/settings_page.dart';
 
 class MapScrollWindow extends StatefulWidget {
   final bool isEditingMapIcon;
@@ -226,7 +235,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
             duration: const Duration(milliseconds: 200),
             child: Container(
               decoration: BoxDecoration(
-                color: colorScheme.surface,
+                // One uniform surface for the entire sheet body (handle,
+                // segmented header, subscreen). context.gridColors.surface == #15181B
+                // — matches what the segmented pill renders against so the
+                // top of the sheet doesn't look gray-on-near-black.
+                color: context.gridColors.surface,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   topRight: Radius.circular(20),
@@ -267,36 +280,32 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                   ),
                 ),
                 
-                // Header Section
-                _buildModernHeader(colorScheme),
+                // Header Section — new segmented tabs.
+                _buildSegmentedHeader(colorScheme),
                 
-                // Expandable Group Selector
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: _isDropdownExpanded 
-                      ? _buildModernHorizontalScroller(colorScheme)
-                      : const SizedBox.shrink(),
-                ),
-                
-                // Content
+                // Content — paint the same surface underneath the subscreen
+                // so the area between the segmented header and the subscreen
+                // body never reveals the underlying scaffold.
                 Expanded(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification.metrics.pixels <= 0 &&
-                          notification is ScrollUpdateNotification &&
-                          notification.dragDetails != null &&
-                          !_isScrollingContent) {
-                        final delta = notification.dragDetails!.delta.dy / 
-                            MediaQuery.of(context).size.height;
-                        final newSize = (_scrollableController.size - delta)
-                            .clamp(0.3, 0.7);
-                        _scrollableController.jumpTo(newSize);
-                        return true;
-                      }
-                      return false;
-                    },
-                    child: _buildSubscreen(scrollController),
+                  child: ColoredBox(
+                    color: context.gridColors.surface,
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notification) {
+                        if (notification.metrics.pixels <= 0 &&
+                            notification is ScrollUpdateNotification &&
+                            notification.dragDetails != null &&
+                            !_isScrollingContent) {
+                          final delta = notification.dragDetails!.delta.dy /
+                              MediaQuery.of(context).size.height;
+                          final newSize = (_scrollableController.size - delta)
+                              .clamp(0.3, 0.7);
+                          _scrollableController.jumpTo(newSize);
+                          return true;
+                        }
+                        return false;
+                      },
+                      child: _buildSubscreen(scrollController),
+                    ),
                   ),
                 ),
               ],
@@ -310,6 +319,125 @@ class _MapScrollWindowState extends State<MapScrollWindow>
     ),  // End of Stack
     ],
   );
+  }
+
+  /// New segmented tabs header: People · Groups · Invites + search field.
+  /// Replaces the old dropdown header. Invites segment opens the existing
+  /// invites modal (preserves current routing behavior).
+  Widget _buildSegmentedHeader(ColorScheme colorScheme) {
+    final int contactCount = _contactsLiveCount();
+    final int groupCount = _groupsCount();
+    final int inviteCount = _invitesCount();
+
+    // groupDetails is a child view of Groups — keep the Groups pill lit when
+    // a specific group is selected so the segmented control doesn't snap
+    // back to People on group-tap.
+    final bool isGroupsView = _selectedOption == SubscreenOption.groups ||
+        _selectedOption == SubscreenOption.groupDetails;
+    final bool isInvitesView = _selectedOption == SubscreenOption.invites;
+    final int selected =
+        isInvitesView ? 2 : (isGroupsView ? 1 : 0);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: GridSegmented(
+                  selected: selected,
+                  tabs: [
+                    GridSegmentedTab(label: 'People', badgeCount: contactCount),
+                    GridSegmentedTab(label: 'Groups', badgeCount: groupCount),
+                    GridSegmentedTab(
+                      label: 'Invites',
+                      badgeCount: inviteCount,
+                      badgeColor: context.gridColors.amber,
+                    ),
+                  ],
+                  onChanged: (i) {
+                    setState(() {
+                      _selectedOption = switch (i) {
+                        2 => SubscreenOption.invites,
+                        1 => SubscreenOption.groups,
+                        _ => SubscreenOption.contacts,
+                      };
+                    });
+                    Provider.of<SelectedSubscreenProvider>(context,
+                            listen: false)
+                        .setSelectedSubscreen(switch (i) {
+                      2 => 'invites',
+                      1 => 'groups',
+                      _ => 'contacts',
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Swap based on the active pill — Add Friend on
+                  // People, Create Group on Groups. Defaults to Add
+                  // Friend on Invites (since Invites is read-only).
+                  GridNavIconButton(
+                    icon: isGroupsView
+                        ? Icons.group_add_outlined
+                        : Icons.person_add_outlined,
+                    size: 40,
+                    onPressed: () => isGroupsView
+                        ? _showCreateGroupModal(context)
+                        : _showAddFriendModal(context),
+                  ),
+                  const SizedBox(width: 8),
+                  GridNavIconButton(
+                    icon: Icons.settings_outlined,
+                    size: 40,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SettingsPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          // Search field lives inside each subscreen — don't render here.
+        ],
+      ),
+    );
+  }
+
+  int _contactsLiveCount() {
+    try {
+      final s = context.read<ContactsBloc>().state;
+      if (s is ContactsLoaded) {
+        return s.contacts.length;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  int _groupsCount() {
+    try {
+      final s = context.read<GroupsBloc>().state;
+      if (s is GroupsLoaded) return s.groups.length;
+    } catch (_) {}
+    return 0;
+  }
+
+  int _invitesCount() {
+    try {
+      final s = context.read<InvitationsBloc>().state;
+      if (s is InvitationsLoaded) return s.invitations.length;
+    } catch (_) {}
+    return 0;
   }
 
   Widget _buildModernHeader(ColorScheme colorScheme) {
@@ -804,7 +932,20 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   Widget _buildSubscreen(ScrollController scrollController) {
     switch (_selectedOption) {
       case SubscreenOption.groups:
-        return GroupsSubscreen(scrollController: scrollController);
+        return GroupsSubscreen(
+          scrollController: scrollController,
+          onGroupSelected: (room) {
+            setState(() {
+              _selectedRoom = room;
+              _selectedOption = SubscreenOption.groupDetails;
+              _selectedLabel = room.name.split(':').length > 3
+                  ? room.name.split(':')[3]
+                  : room.name;
+            });
+            Provider.of<SelectedSubscreenProvider>(context, listen: false)
+                .setSelectedSubscreen('group:${room.roomId}');
+          },
+        );
       case SubscreenOption.groupDetails:
         if (_selectedRoom != null) {
           return GroupDetailsSubscreen(
@@ -824,6 +965,16 @@ class _MapScrollWindowState extends State<MapScrollWindow>
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
           ),
+        );
+      case SubscreenOption.invites:
+        return InvitesSubscreen(
+          scrollController: scrollController,
+          roomService: _roomService,
+          onInviteHandled: () async {
+            try {
+              context.read<InvitationsBloc>().add(LoadInvitations());
+            } catch (_) {}
+          },
         );
       case SubscreenOption.contacts:
       default:
@@ -884,6 +1035,36 @@ class _MapScrollWindowState extends State<MapScrollWindow>
           ),
         );
       },
+    );
+  }
+
+  /// Opens the Add Friend modal pre-routed to the group-create flow.
+  /// Used by the drawer header's contextual icon when the Groups pill
+  /// is selected — `startInGroupCreate: true` skips the hub entirely.
+  void _showCreateGroupModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.95,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: AddFriendModal(
+          roomService: _roomService,
+          userService: _userService,
+          groupsBloc: _groupsBloc,
+          startInGroupCreate: true,
+          onGroupCreated: () {
+            _groupsBloc.add(RefreshGroups());
+          },
+        ),
+      ),
     );
   }
 
@@ -957,12 +1138,12 @@ class _MapScrollWindowState extends State<MapScrollWindow>
   }
 
 
-  void _showGroupDetailsMenu(BuildContext context) {
-    if (_selectedRoom == null) return;
+  void _showGroupDetailsMenu(BuildContext context, [GridRoom.Room? roomOverride]) {
+    final room = roomOverride ?? _selectedRoom;
+    if (room == null) return;
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final room = _selectedRoom!;
 
     // Get current members from the groups bloc
     final groupsState = context.read<GroupsBloc>().state;
@@ -1043,75 +1224,6 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 ),
               ),
 
-              // Menu options - EXACT MATCH to GroupDetailsSubscreen menu
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  'Group Settings',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (context) => Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.95,
-                      ),
-                      child: GroupProfileModal(
-                        room: room,
-                        roomService: _roomService,
-                        sharingPreferencesRepo: sharingPreferencesRepository,
-                        onMemberAdded: () {
-                          Navigator.pop(context);
-                          // Show add member modal
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) => Container(
-                              constraints: BoxConstraints(
-                                maxHeight: MediaQuery.of(context).size.height * 0.95,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                              ),
-                              child: AddGroupMemberModal(
-                                roomId: room.roomId,
-                                groupName: room.name.split(':').length >= 5
-                                    ? room.name.split(':')[3]
-                                    : room.name,
-                                roomService: _roomService,
-                                userService: _userService,
-                                userRepository: _userRepository,
-                                onInviteSent: null,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-
               // Add Member
               ListTile(
                 leading: Container(
@@ -1190,13 +1302,9 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
                     builder: (BuildContext context) {
-                      return Container(
+                      return ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.95,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                          maxHeight: MediaQuery.of(context).size.height * 0.85,
                         ),
                         child: LocationHistoryModal(
                           userId: room.roomId,
@@ -1238,22 +1346,20 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (context) => Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.95,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      ),
-                      child: GroupMarkersModal(
-                        roomId: room.roomId,
-                        roomName: room.name.split(':').length >= 5
-                            ? room.name.split(':')[3]
-                            : room.name,
-                        mapIconRepository: MapIconRepository(DatabaseService()),
-                      ),
-                    ),
+                    builder: (BuildContext context) {
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.85,
+                        ),
+                        child: GroupMarkersModal(
+                          roomId: room.roomId,
+                          roomName: room.name.split(':').length >= 5
+                              ? room.name.split(':')[3]
+                              : room.name,
+                          mapIconRepository: MapIconRepository(DatabaseService()),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -1282,36 +1388,142 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                 onTap: () async {
                   Navigator.pop(context);
                   // Show leave confirmation
+                  final groupName = room.name.split(':').length >= 5
+                      ? room.name.split(':')[3]
+                      : room.name;
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (BuildContext context) {
-                      return AlertDialog(
-                        backgroundColor: colorScheme.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: const Text('Leave Group'),
-                        content: Text('Are you sure you want to leave "${room.name.split(':').length >= 5 ? room.name.split(':')[3] : room.name}"?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            style: TextButton.styleFrom(
-                              foregroundColor: colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                            child: const Text('Cancel'),
+                      return Dialog(
+                        backgroundColor: Colors.transparent,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth:
+                                MediaQuery.of(context).size.width * 0.9,
                           ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: colorScheme.error,
-                              foregroundColor: colorScheme.onError,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                          decoration: BoxDecoration(
+                            color: context.gridColors.surface,
+                            borderRadius:
+                                BorderRadius.circular(GridTokens.rXl),
+                            border:
+                                Border.all(color: context.gridColors.hairline),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
-                            ),
-                            child: const Text('Leave'),
+                            ],
                           ),
-                        ],
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: context.gridColors.dangerSoft,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft:
+                                        Radius.circular(GridTokens.rXl),
+                                    topRight:
+                                        Radius.circular(GridTokens.rXl),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: context.gridColors.danger
+                                            .withOpacity(0.18),
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                                GridTokens.rMd),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        Icons.exit_to_app,
+                                        color: context.gridColors.danger,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Leave group',
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: -0.015,
+                                              color: context.gridColors.text,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "This action cannot be undone.",
+                                            style: GoogleFonts.getFont(
+                                              'Geist',
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w400,
+                                              color: context.gridColors.text2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 0),
+                                child: Text(
+                                  'Are you sure you want to leave "$groupName"?',
+                                  style: GoogleFonts.getFont(
+                                    'Geist',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.gridColors.text2,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    20, 18, 20, 20),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Cancel',
+                                        style: GridButtonStyle.secondary,
+                                        onPressed: () => Navigator.of(
+                                                context)
+                                            .pop(false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GridButton(
+                                        label: 'Leave',
+                                        style: GridButtonStyle.danger,
+                                        onPressed: () => Navigator.of(
+                                                context)
+                                            .pop(true),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   );
@@ -1321,14 +1533,18 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                       await _roomService.leaveRoom(room.roomId);
                       _navigateToContacts();
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Left group successfully')),
+                        InAppNotifier.instance.show(
+                          title: 'Left group',
+                          message: 'You will no longer share or see members.',
+                          variant: InAppNotificationVariant.success,
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error leaving group: $e')),
+                        InAppNotifier.instance.show(
+                          title: 'Error leaving group',
+                          message: '$e',
+                          variant: InAppNotificationVariant.error,
                         );
                       }
                     }

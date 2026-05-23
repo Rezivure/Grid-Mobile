@@ -1,11 +1,27 @@
 import 'dart:io' show Platform;
-import 'package:flutter/material.dart';
+
 import 'package:flutter/gestures.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
+import 'grid/grid_button.dart';
+import 'grid/grid_mono.dart';
+
+/// 2-step onboarding sheet shown the first time the user opens the map.
+///
+///   1. Welcome — Grid logo + value-prop one-liner + three privacy chips.
+///   2. Permissions — banner hero, single screen, inline rows for Location
+///      (required) and Motion (optional). Continue is enabled once
+///      Location is granted; Not now closes without granting and
+///      libre_location will re-prompt on the first sharing attempt.
+///
+/// Designed to fit on a single screen at any phone size — no scrolling.
 class OnboardingModal extends StatefulWidget {
   final VoidCallback? onComplete;
 
@@ -16,93 +32,45 @@ class OnboardingModal extends StatefulWidget {
 
   static Future<bool> shouldShowOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    // Use v2 flag to force all users to see the new permission disclosure
-    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding_v2') ?? false;
+    final hasSeenOnboarding =
+        prefs.getBool('has_seen_onboarding_v3') ?? false;
     return !hasSeenOnboarding;
   }
 
-  static Future<void> showOnboardingIfNeeded(BuildContext context, {VoidCallback? onComplete}) async {
+  static Future<void> showOnboardingIfNeeded(
+    BuildContext context, {
+    VoidCallback? onComplete,
+  }) async {
     final shouldShow = await shouldShowOnboarding();
     if (shouldShow && context.mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => OnboardingModal(onComplete: onComplete),
+        builder: (_) => OnboardingModal(onComplete: onComplete),
       );
     }
   }
 
   static Future<void> resetOnboardingPreference() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('has_seen_onboarding');
-    print('DEBUG: Onboarding preference reset');
+    await prefs.remove('has_seen_onboarding_v2');
+    await prefs.remove('has_seen_onboarding_v3');
   }
 }
 
+enum _PermState { idle, requesting, granted, deniedForever }
+
 class _OnboardingModalState extends State<OnboardingModal>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  late PageController _pageController;
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-  late AnimationController _bounceController;
-  late Animation<double> _bounceAnimation;
+  late final PageController _pageController;
+  late final AnimationController _fadeController;
+  late final Animation<double> _fadeAnimation;
+
   int _currentPage = 0;
+  _PermState _location = _PermState.idle;
+  _PermState _motion = _PermState.idle;
 
-  // Track permission grants (not just acknowledgments)
-  bool _locationAlwaysGranted = false;
-  bool _activityRecognitionGranted = false;
-
-  final List<OnboardingPage> _pages = [
-    OnboardingPage(
-      icon: Icons.rocket_launch_rounded,
-      title: 'Welcome to Grid!',
-      description: 'You\'re taking the next step in privacy! Grid uses end-to-end encryption to keep your location data completely private and secure.',
-      color: const Color(0xFF2196F3),
-    ),
-    OnboardingPage(
-      icon: Icons.shield_rounded,
-      title: 'Grant Permissions',
-      description: 'Your location is end-to-end encrypted and only visible to people you choose. Complete privacy guaranteed.',
-      color: const Color(0xFF4CAF50),
-      isPermissionPage: true,
-    ),
-    OnboardingPage(
-      icon: Icons.person_add_rounded,
-      title: 'Add Contacts',
-      description: 'Tap the + button to add friends and start sharing your location securely.',
-      color: const Color(0xFF00DBA4),
-    ),
-    OnboardingPage(
-      icon: Icons.group_add_rounded,
-      title: 'Create Groups',
-      description: 'Create temporary groups to share location with multiple people at once.',
-      color: const Color(0xFF267373),
-    ),
-    OnboardingPage(
-      icon: Icons.account_circle_rounded,
-      title: 'View Profiles',
-      description: 'Long press on any contact to see their profile and manage sharing windows.',
-      color: const Color(0xFF6B73FF),
-    ),
-    OnboardingPage(
-      icon: Icons.visibility_off_rounded,
-      title: 'Incognito Mode',
-      description: 'Go to Settings to enable incognito mode and control your visibility.',
-      color: const Color(0xFF9B59B6),
-    ),
-    OnboardingPage(
-      icon: Icons.sensors,
-      title: 'Ping Location',
-      description: 'Use the ping button (top right) to manually send your exact location to all contacts. Location is already shared, but this sends an immediate update if you\'ve been stationary.',
-      color: const Color(0xFFE74C3C),
-    ),
-    OnboardingPage(
-      icon: Icons.discord,
-      title: 'Join Our Community',
-      description: 'Join our Discord server to give feedback, report bugs, request features, and connect with other Grid users. We\'d love to hear from you!',
-      color: const Color(0xFF5865F2),  // Discord brand color
-    ),
-  ];
+  static const _pageCount = 2;
 
   @override
   void initState() {
@@ -110,42 +78,22 @@ class _OnboardingModalState extends State<OnboardingModal>
     WidgetsBinding.instance.addObserver(this);
     _pageController = PageController();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 280),
       vsync: this,
     );
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOut,
     );
     _fadeController.forward();
-
-    // Bounce animation for tap indicator
-    _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _bounceAnimation = Tween<double>(begin: -3.0, end: 3.0).animate(
-      CurvedAnimation(
-        parent: _bounceController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    // DON'T check permission status here - wait for user to reach permission page
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print('[Onboarding] App lifecycle state changed to: $state');
-    // When app comes back to foreground (e.g., from Settings), check permissions
-    if (state == AppLifecycleState.resumed) {
-      print('[Onboarding] App resumed - checking permissions');
-      // Add small delay to ensure Settings changes are propagated
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _checkPermissionStatus();
-        }
-      });
+    if (state == AppLifecycleState.resumed &&
+        _location == _PermState.deniedForever) {
+      Future.delayed(
+          const Duration(milliseconds: 400), _refreshLocationPermission);
     }
   }
 
@@ -154,330 +102,153 @@ class _OnboardingModalState extends State<OnboardingModal>
     WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     _fadeController.dispose();
-    _bounceController.dispose();
     super.dispose();
   }
 
-  bool _canProceed() {
-    // If on permission page, check if all required permissions are granted
-    if (_pages[_currentPage].isPermissionPage) {
-      final needsActivity = Platform.isAndroid;
-      return _locationAlwaysGranted && (!needsActivity || _activityRecognitionGranted);
-    }
-    // All other pages can always proceed
-    return true;
-  }
-
-  void _nextPage() {
-    if (_currentPage < _pages.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _completeOnboarding();
-    }
-  }
-
-  Future<void> _requestLocationPermission() async {
-    print('[Onboarding] Location permission tap - starting request');
-
+  Future<void> _refreshLocationPermission() async {
     try {
-      // Request permission using libre_location
-      final permission = await LibreLocation.requestPermission();
-      print('[Onboarding] LibreLocation permission result: $permission');
+      final p = await LibreLocation.checkPermission();
+      if (!mounted) return;
+      if (p == LocationPermission.always ||
+          p == LocationPermission.whileInUse) {
+        setState(() => _location = _PermState.granted);
+      }
+    } catch (_) {}
+  }
 
-      bool locationGranted = false;
+  Future<void> _requestLocation() async {
+    if (_location == _PermState.granted ||
+        _location == _PermState.requesting) {
+      return;
+    }
+    if (_location == _PermState.deniedForever) {
+      openAppSettings();
+      return;
+    }
+    setState(() => _location = _PermState.requesting);
+    try {
+      final permission = await LibreLocation.requestPermission();
+      if (!mounted) return;
       switch (permission) {
         case LocationPermission.always:
         case LocationPermission.whileInUse:
-          locationGranted = true;
-          break;
+          setState(() => _location = _PermState.granted);
+          return;
         case LocationPermission.denied:
-          // First denial: stay on the onboarding screen so the user can
-          // tap "Allow Location" again to re-prompt. App Review
-          // (Guideline 5.1.1) explicitly disallows auto-redirecting to
-          // Settings after a denial.
-          print('[Onboarding] Permission denied; user can retry');
-          break;
+          setState(() => _location = _PermState.idle);
+          return;
         case LocationPermission.deniedForever:
-          // OS won't show the system prompt again. Show an in-app message
-          // explaining how to enable manually — but the Settings link is a
-          // user-initiated action (SnackBarAction), not an automatic
-          // redirect. Required by App Review guideline 5.1.1.
-          print('[Onboarding] Permission deniedForever; offering manual settings link');
-          _showLocationDeniedNotice();
-          break;
+          setState(() => _location = _PermState.deniedForever);
+          return;
       }
-
-      print('[Onboarding] Final permission granted: $locationGranted');
-
-      setState(() {
-        _locationAlwaysGranted = locationGranted;
-      });
-    } catch (e) {
-      print('[Onboarding] ERROR requesting location permission: $e');
+    } catch (_) {
+      if (mounted) setState(() => _location = _PermState.idle);
     }
   }
 
-  void _showLocationDeniedNotice() {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Location access is needed to share your location with friends. '
-          'You can enable it in Settings.',
-        ),
-        duration: const Duration(seconds: 6),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'Open Settings',
-          onPressed: () async {
-            await openAppSettings();
-            await _checkPermissionStatus();
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _requestActivityPermission() async {
-    print('[Onboarding] Activity/Motion permission tap');
-
+  Future<void> _requestMotion() async {
+    if (_motion == _PermState.granted ||
+        _motion == _PermState.requesting) {
+      return;
+    }
+    setState(() => _motion = _PermState.requesting);
     try {
       if (Platform.isIOS) {
-        // Start tracking briefly with a preset to trigger motion permission request
+        // Briefly starting a tracking session is what triggers iOS to
+        // surface the Motion & Fitness prompt — there's no standalone
+        // request API in libre_location.
         await LibreLocation.start(
           preset: TrackingPreset.balanced,
           config: LocationConfig(
             backgroundPermissionRationale: PermissionRationale(
-              title: "Allow background location?",
-              message: "This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.",
-              positiveAction: "Allow",
-              negativeAction: "Cancel",
+              title: 'Allow background location?',
+              message:
+                  'This app collects location data to enable real-time location sharing with your chosen contacts, even when not open.',
+              positiveAction: 'Allow',
+              negativeAction: 'Cancel',
             ),
           ),
         );
-
-        // Give it a moment to request permission
         await Future.delayed(const Duration(milliseconds: 500));
-
-        // Stop it again since we're just in onboarding
         await LibreLocation.stop();
-
-        setState(() {
-          _activityRecognitionGranted = true;
-        });
-      } else {
-        // Android - just mark as granted since it's bundled with location
-        setState(() {
-          _activityRecognitionGranted = true;
-        });
       }
-    } catch (e) {
-      print('[Onboarding] ERROR requesting activity/motion permission: $e');
-      setState(() {
-        _activityRecognitionGranted = true;
-      });
+      // On Android the OS bundles activity recognition with location;
+      // marking as granted lets the UI reflect it.
+      if (mounted) setState(() => _motion = _PermState.granted);
+    } catch (_) {
+      if (mounted) setState(() => _motion = _PermState.granted);
     }
   }
 
-  Future<void> _checkPermissionStatus() async {
-    print('[Onboarding] ============ CHECKING PERMISSION STATUS ============');
-
-    try {
-      // Check permission status using libre_location
-      final permission = await LibreLocation.checkPermission();
-      print('[Onboarding] LibreLocation permission status: $permission');
-
-      bool locationGranted = false;
-      switch (permission) {
-        case LocationPermission.always:
-        case LocationPermission.whileInUse:
-          locationGranted = true;
-          break;
-        case LocationPermission.denied:
-        case LocationPermission.deniedForever:
-          locationGranted = false;
-          break;
-      }
-      print('[Onboarding]   - FINAL DECISION: locationGranted = $locationGranted (permission: $permission)');
-
-      // Motion/activity permission is handled by libre_location after onboarding
-      // We just mark it as true for UI purposes (to show users it will be requested)
-      bool activityGranted = true;
-
-      if (mounted) {
-        setState(() {
-          _locationAlwaysGranted = locationGranted;
-          _activityRecognitionGranted = activityGranted;
-        });
-      }
-
-      print('[Onboarding] ========== PERMISSION CHECK COMPLETE ==========');
-      print('[Onboarding] UI State - _locationAlwaysGranted: $_locationAlwaysGranted, _activityRecognitionGranted: $_activityRecognitionGranted');
-    } catch (e, stackTrace) {
-      print('[Onboarding] ERROR checking permission status: $e');
-      print('[Onboarding] Stack trace: $stackTrace');
-    }
-  }
-
-  void _previousPage() {
-    if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  Future<void> _completeOnboarding() async {
+  Future<void> _complete() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_seen_onboarding_v2', true);
+    await prefs.setBool('has_seen_onboarding_v3', true);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    widget.onComplete?.call();
+  }
 
-    if (mounted) {
-      Navigator.of(context).pop();
-      widget.onComplete?.call();
+  void _onContinue() {
+    if (_currentPage == 0) {
+      _pageController.animateToPage(
+        1,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _complete();
     }
   }
 
+  bool get _continueEnabled {
+    if (_currentPage == 0) return true;
+    return _location == _PermState.granted;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
+    final media = MediaQuery.of(context);
+    final isWide = media.size.width > 380;
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(20),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: media.padding.top + 16,
+      ),
       child: FadeTransition(
         opacity: _fadeAnimation,
         child: Container(
-          constraints: const BoxConstraints(maxHeight: 600),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+          constraints: BoxConstraints(
+            maxHeight: media.size.height - (media.padding.top + 32),
+            maxWidth: 460,
           ),
+          decoration: BoxDecoration(
+            color: context.gridColors.surface,
+            borderRadius: BorderRadius.circular(GridTokens.r2Xl),
+            border: Border.all(color: context.gridColors.hairline),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with conditional skip button
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Welcome',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    // Show skip button only AFTER permission page
-                    if (_currentPage > 1) // Pages 0, 1 are Welcome, Permissions (with encryption info)
-                      TextButton(
-                        onPressed: _completeOnboarding,
-                        child: Text(
-                          'Skip',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.6),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+              const SizedBox(height: 16),
+              _StepCounter(
+                step: _currentPage + 1,
+                total: _pageCount,
               ),
-
-              // Page content
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentPage = index;
-                    });
-                    // Don't auto-check permissions - only when user taps the card
-                  },
-                  itemCount: _pages.length,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _pageCount,
+                  onPageChanged: (i) => setState(() => _currentPage = i),
                   itemBuilder: (context, index) {
-                    return _buildPageContent(_pages[index]);
+                    if (index == 0) return _buildWelcomePage(isWide);
+                    return _buildPermissionsPage();
                   },
                 ),
               ),
-
-              // Page indicators
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _pages.length,
-                    (index) => _buildPageIndicator(index, colorScheme),
-                  ),
-                ),
-              ),
-
-              // Navigation buttons
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Row(
-                  children: [
-                    if (_currentPage > 0)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _previousPage,
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            side: BorderSide(color: colorScheme.outline),
-                          ),
-                          child: Text(
-                            'Back',
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_currentPage > 0) const SizedBox(width: 12),
-                    Expanded(
-                      flex: _currentPage == 0 ? 1 : 1,
-                      child: ElevatedButton(
-                        onPressed: _canProceed() ? _nextPage : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colorScheme.primary,
-                          foregroundColor: colorScheme.onPrimary,
-                          disabledBackgroundColor: colorScheme.surfaceVariant,
-                          disabledForegroundColor: colorScheme.onSurface.withOpacity(0.38),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          _currentPage == _pages.length - 1 ? 'Get Started' : 'Next',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildFooter(),
             ],
           ),
         ),
@@ -485,117 +256,36 @@ class _OnboardingModalState extends State<OnboardingModal>
     );
   }
 
-  Widget _buildPageContent(OnboardingPage page) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+  Widget _buildFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Icon with background (smaller on permission page to save space)
-          Container(
-            width: page.isPermissionPage ? 80 : 100,
-            height: page.isPermissionPage ? 80 : 100,
-            decoration: BoxDecoration(
-              color: page.color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              page.icon,
-              size: page.isPermissionPage ? 40 : 48,
-              color: page.color,
-            ),
+          GridButton(
+            label: 'Continue',
+            onPressed: _continueEnabled ? _onContinue : null,
           ),
-
-          SizedBox(height: page.isPermissionPage ? 20 : 32),
-
-          // Title
-          Text(
-            page.title,
-            style: (page.isPermissionPage
-                ? theme.textTheme.headlineSmall
-                : theme.textTheme.headlineMedium)?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          SizedBox(height: page.isPermissionPage ? 12 : 16),
-
-          // Description
-          Text(
-            page.description,
-            style: (page.isPermissionPage
-                ? theme.textTheme.bodyMedium
-                : theme.textTheme.bodyLarge)?.copyWith(
-              color: colorScheme.onSurface.withOpacity(0.7),
-              height: 1.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-
-          // Show permission explanation and privacy policy link if this is the permission page
-          if (page.isPermissionPage) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
+          if (_currentPage == 1) ...[
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: _complete,
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: context.gridColors.text3,
               ),
-              child: RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.7),
-                    height: 1.4,
-                  ),
-                  children: [
-                    const TextSpan(
-                      text: 'Skeptical? Read our ',
-                    ),
-                    TextSpan(
-                      text: 'Privacy Policy',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline,
-                      ),
-                      recognizer: TapGestureRecognizer()
-                        ..onTap = () async {
-                          final uri = Uri.parse('https://mygrid.app/privacy');
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
-                        },
-                    ),
-                  ],
+              child: Text(
+                'Not now',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: context.gridColors.text3,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            _buildPermissionCard(
-              context: context,
-              icon: Icons.location_on,
-              title: 'Location Always',
-              description: 'Don\'t worry, you can toggle this on/off in app',
-              isGranted: _locationAlwaysGranted,
-              onTap: _requestLocationPermission,
-              color: const Color(0xFF4CAF50),
-            ),
-            // Show Physical Activity/Motion for both Android and iOS
-            const SizedBox(height: 12),
-            _buildPermissionCard(
-              context: context,
-              icon: Icons.directions_run,
-              title: Platform.isIOS ? 'Motion & Fitness' : 'Physical Activity',
-              description: 'Better battery & accurate updates',
-              isGranted: _activityRecognitionGranted,
-              onTap: _requestActivityPermission,
-              color: const Color(0xFF2196F3),
             ),
           ],
         ],
@@ -603,155 +293,509 @@ class _OnboardingModalState extends State<OnboardingModal>
     );
   }
 
-  Widget _buildPermissionCard({
-    required BuildContext context,
-    required IconData icon,
-    required String title,
-    required String description,
-    required bool isGranted,
-    required VoidCallback onTap,
-    required Color color,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  // ── Page 1: Welcome ────────────────────────────────────────────────
 
-    return Material(
-      color: Colors.transparent,
-      elevation: isGranted ? 0 : 1,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: () {
-          print('[Onboarding] Permission card tapped: $title (isGranted: $isGranted)');
-          if (!isGranted) {
-            onTap();
-          }
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isGranted
-                ? colorScheme.primary.withOpacity(0.15)
-                : colorScheme.surfaceVariant.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isGranted
-                  ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.3),
-              width: 2,
+  Widget _buildWelcomePage(bool isWide) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _LogoHero(),
+                const SizedBox(height: 22),
+                Text(
+                  'Welcome to Grid.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 26,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.025 * 26,
+                    color: context.gridColors.text,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Location sharing without compromise — '
+                  'encrypted, private, fully yours.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 14,
+                    color: context.gridColors.text2,
+                    height: 1.45,
+                    letterSpacing: -0.005,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const _BenefitChips(),
+              ],
             ),
-          ),
-          child: Row(
-            children: [
-              // Icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isGranted
-                      ? colorScheme.primary.withOpacity(0.2)
-                      : colorScheme.surfaceVariant,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: isGranted ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Text content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: isGranted ? colorScheme.onSurface : colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Status indicator
-              if (isGranted)
-                Icon(
-                  Icons.check_circle,
-                  color: colorScheme.primary,
-                  size: 28,
-                )
-              else
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedBuilder(
-                      animation: _bounceAnimation,
-                      builder: (context, child) {
-                        return Transform.translate(
-                          offset: Offset(0, _bounceAnimation.value),
-                          child: Icon(
-                            Icons.touch_app,
-                            color: colorScheme.primary.withOpacity(0.7),
-                            size: 20,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.circle_outlined,
-                      color: colorScheme.outline.withOpacity(0.5),
-                      size: 28,
-                    ),
-                  ],
-                ),
-            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPageIndicator(int index, ColorScheme colorScheme) {
-    final isActive = index == _currentPage;
-    
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      width: isActive ? 24 : 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: isActive 
-            ? colorScheme.primary 
-            : colorScheme.primary.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
+  // ── Page 2: Permissions ────────────────────────────────────────────
+
+  Widget _buildPermissionsPage() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _PermissionBanner(),
+          const SizedBox(height: 22),
+          Text(
+            'Allow location',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.025 * 24,
+              color: context.gridColors.text,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'End-to-end encrypted. Only visible to people you add.',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 14,
+              color: context.gridColors.text2,
+              height: 1.4,
+              letterSpacing: -0.005,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _PermissionRow(
+            icon: Icons.location_on_rounded,
+            iconColor: context.gridColors.danger,
+            iconBg: context.gridColors.dangerSoft,
+            title: 'Location',
+            subtitle: 'Always',
+            state: _location,
+            requiredAction: true,
+            onAllow: _requestLocation,
+          ),
+          const SizedBox(height: 10),
+          _PermissionRow(
+            icon: Icons.directions_run_rounded,
+            iconColor: context.gridColors.amber,
+            iconBg: context.gridColors.amberSoft,
+            title: Platform.isIOS ? 'Motion & Fitness' : 'Motion',
+            subtitle: 'Saves battery',
+            state: _motion,
+            requiredAction: false,
+            onAllow: _requestMotion,
+          ),
+          const SizedBox(height: 14),
+          _PrivacyPolicyLine(),
+          const Spacer(),
+        ],
       ),
     );
   }
 }
 
-class OnboardingPage {
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color color;
-  final bool isPermissionPage;
+// ─────────────────────────────────────────────────────────────────────
+// Page 2 hero — the mint banner block from the design mock
+// ─────────────────────────────────────────────────────────────────────
 
-  OnboardingPage({
+class _PermissionBanner extends StatelessWidget {
+  const _PermissionBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0F5C4E),
+            Color(0xFF1E8E76),
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Faint dotted grid pattern — gives the banner texture without
+          // pulling in a real illustration.
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _DotPainter(
+                color: Colors.white.withOpacity(0.12),
+              ),
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.16),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.32),
+                  width: 1,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.location_on_rounded,
+                size: 32,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DotPainter extends CustomPainter {
+  _DotPainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    const spacing = 14.0;
+    for (var y = 8.0; y < size.height; y += spacing) {
+      for (var x = 8.0; x < size.width; x += spacing) {
+        canvas.drawCircle(Offset(x, y), 1.0, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Permission row
+// ─────────────────────────────────────────────────────────────────────
+
+class _PermissionRow extends StatelessWidget {
+  const _PermissionRow({
     required this.icon,
+    required this.iconColor,
+    required this.iconBg,
     required this.title,
-    required this.description,
-    required this.color,
-    this.isPermissionPage = false,
+    required this.subtitle,
+    required this.state,
+    required this.requiredAction,
+    required this.onAllow,
   });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final String subtitle;
+  final _PermState state;
+
+  /// Required rows get a mint border in the granted state; optional rows
+  /// stay neutral so they don't compete visually.
+  final bool requiredAction;
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    final granted = state == _PermState.granted;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: granted ? null : onAllow,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.gridColors.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rLg),
+            border: Border.all(
+              color: granted && requiredAction
+                  ? context.gridColors.mint.withOpacity(0.5)
+                  : context.gridColors.hairline,
+              width: granted && requiredAction ? 1.2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: context.gridColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12.5,
+                        color: context.gridColors.text2,
+                        height: 1.3,
+                        letterSpacing: -0.005,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _RowTrailing(state: state, onAllow: onAllow),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RowTrailing extends StatelessWidget {
+  const _RowTrailing({required this.state, required this.onAllow});
+  final _PermState state;
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (state) {
+      case _PermState.granted:
+        return Icon(
+          Icons.check_rounded,
+          color: context.gridColors.mint,
+          size: 22,
+        );
+      case _PermState.requesting:
+        return SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            color: context.gridColors.mint,
+            strokeWidth: 2,
+          ),
+        );
+      case _PermState.deniedForever:
+        return TextButton(
+          onPressed: onAllow,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: context.gridColors.amber,
+          ),
+          child: const Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      case _PermState.idle:
+        return TextButton(
+          onPressed: onAllow,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: context.gridColors.mint,
+          ),
+          child: const Text(
+            'Allow',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Welcome hero + benefit chips + step counter
+// ─────────────────────────────────────────────────────────────────────
+
+class _LogoHero extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 116,
+      height: 116,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            context.gridColors.mint.withOpacity(0.18),
+            context.gridColors.mint.withOpacity(0.05),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.6, 1.0],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Image.asset(
+        'assets/logos/png-file-2.png',
+        width: 76,
+        height: 76,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+}
+
+class _BenefitChips extends StatelessWidget {
+  const _BenefitChips();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      ('End-to-end encrypted', Icons.lock_outline_rounded),
+      ('Only people you choose', Icons.shield_outlined),
+      ('Open source', Icons.code_rounded),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (text, icon) in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _Chip(text: text, icon: icon),
+          ),
+      ],
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.text, required this.icon});
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.gridColors.hairline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: context.gridColors.mint),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: context.gridColors.text,
+              letterSpacing: -0.005,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyPolicyLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: TextSpan(
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 12,
+            color: context.gridColors.text3,
+            height: 1.4,
+          ),
+          children: [
+            const TextSpan(text: 'Skeptical? Read our '),
+            TextSpan(
+              text: 'Privacy Policy',
+              style: TextStyle(
+                color: context.gridColors.mint,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () async {
+                  final uri = Uri.parse('https://mygrid.app/privacy');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri,
+                        mode: LaunchMode.externalApplication);
+                  }
+                },
+            ),
+            const TextSpan(text: '.'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepCounter extends StatelessWidget {
+  const _StepCounter({required this.step, required this.total});
+  final int step;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.gridColors.hairline),
+      ),
+      child: GridMono(
+        'ONBOARDING · $step OF $total',
+        size: 10,
+        color: context.gridColors.text2,
+        letterSpacing: 0.12,
+      ),
+    );
+  }
 }

@@ -1,10 +1,13 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
-import 'package:random_avatar/random_avatar.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
@@ -12,6 +15,11 @@ import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:grid_frontend/services/location_manager.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 class FriendRequestModal extends StatefulWidget {
   final RoomService roomService;
@@ -20,7 +28,8 @@ class FriendRequestModal extends StatefulWidget {
   final String roomId;
   final Future<void> Function() onResponse; // Callback for refreshing
 
-  FriendRequestModal({
+  const FriendRequestModal({
+    super.key,
     required this.userId,
     required this.displayName,
     required this.roomId,
@@ -41,240 +50,235 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
     return utils.isCustomHomeserver(homeserver);
   }
 
+  String get _homeserverLabel {
+    final raw = widget.roomService.getMyHomeserver();
+    return raw
+        .replaceFirst('https://', '')
+        .replaceFirst('http://', '')
+        .replaceAll('/', '');
+  }
+
+  String get _handle {
+    // displayName already comes through as a handle in most paths; strip any
+    // leading @ so we can format it consistently as `@handle · homeserver`.
+    final clean = widget.displayName.replaceFirst(RegExp(r'^@'), '');
+    return clean;
+  }
+
+  String get _firstName {
+    final clean = widget.displayName.replaceFirst(RegExp(r'^@'), '').trim();
+    if (clean.isEmpty) return 'them';
+    final parts = clean.split(RegExp(r'[\s._-]+'));
+    final first = parts.first;
+    if (first.isEmpty) return clean;
+    return first[0].toUpperCase() + first.substring(1);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final bool isCustomServer = isCustomHomeserver();
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.75,  // Start taller
+      initialChildSize: 0.72,
       minChildSize: 0.5,
       maxChildSize: 0.9,
-      builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle indicator
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 32,
-              height: 4,
+      builder: (context, scrollController) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(GridTokens.r2Xl),
+          ),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
               decoration: BoxDecoration(
-                color: colorScheme.onSurfaceVariant.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(2),
+                color: context.gridColors.surface.withOpacity(0.96),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(GridTokens.r2Xl),
+                ),
+                border: Border(
+                  top: BorderSide(color: context.gridColors.hairlineStrong, width: 1),
+                ),
               ),
-            ),
-            
-            // Header with close button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.person_add,
-                    color: colorScheme.primary,
-                    size: 24,
+                  // Grab handle (36×4).
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: context.gridColors.text4,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      'Friend Request',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(
-                      Icons.close,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: colorScheme.surfaceVariant.withOpacity(0.3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 8),
+                          _buildIdentity(isCustomServer),
+                          const SizedBox(height: 22),
+                          _buildIntroCard(),
+                          const SizedBox(height: 14),
+                          _buildSharingCheckbox(),
+                          const SizedBox(height: 22),
+                          if (_isProcessing)
+                            _buildLoadingState()
+                          else
+                            _buildActionButtons(),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
-            Expanded(
-              child: SingleChildScrollView(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),  // Reduced top padding
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Profile section
-                    _buildProfileCard(theme, colorScheme, isCustomServer),
-                    
-                    const SizedBox(height: 16),  // Reduced from 24
-                    
-                    // Action buttons
-                    if (_isProcessing)
-                      _buildLoadingState(theme, colorScheme)
-                    else
-                      _buildActionButtons(theme, colorScheme),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildProfileCard(ThemeData theme, ColorScheme colorScheme, bool isCustomServer) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),  // Reduced from 24
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          // Avatar
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.1),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+  // ── Identity (avatar with mint pin badge + name + mono handle) ──────
+  Widget _buildIdentity(bool isCustomServer) {
+    final handleLine = isCustomServer
+        ? '@$_handle · $_homeserverLabel'
+        : '@$_handle';
+
+    return Column(
+      children: [
+        SizedBox(
+          width: 96,
+          height: 96,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Center(
+                child: GridAvatar(
+                  name: widget.userId.split(':').first.replaceFirst('@', ''),
+                  size: 80,
                 ),
-              ],
-            ),
-            child: RandomAvatar(
-              widget.userId.split(":").first.replaceFirst('@', ''),
-              height: 70.0,  // Reduced from 80
-              width: 70.0,   // Reduced from 80
-            ),
-          ),
-          
-          const SizedBox(height: 12),  // Reduced from 16
-          
-          // Display name
-          Text(
-            '@${widget.displayName}',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
-            ),
-          ),
-          
-          // User ID for custom servers
-          if (isCustomServer) ...[
-            const SizedBox(height: 4),
-            Text(
-              widget.userId,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-          
-          const SizedBox(height: 12),  // Reduced from 16
-          
-          // Description
-          Container(
-            padding: const EdgeInsets.all(12),  // Reduced from 16
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.location_on,
-                  color: colorScheme.primary,
-                  size: 18,  // Reduced from 20
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Wants to connect with you. You will begin sharing locations once you accept.',
-                    style: theme.textTheme.bodySmall?.copyWith(  // Changed from bodyMedium
-                      color: colorScheme.onSurface,
-                      height: 1.3,  // Reduced from 1.4
+              // Mint location-pin badge in the lower-right with a 3pt bg border.
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: context.gridColors.surface, width: 3),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.gridColors.mint,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: Color(0xFF04201A),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _firstName == 'them' ? '@$_handle' : _firstName,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.02,
+            color: context.gridColors.text,
+          ),
+        ),
+        const SizedBox(height: 4),
+        GridMono(
+          handleLine,
+          uppercase: false,
+          size: 12,
+          letterSpacing: 0.04,
+          color: context.gridColors.text3,
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
-  Widget _buildLoadingState(ThemeData theme, ColorScheme colorScheme) {
+  // ── Mint-faint "wants to share location with you" card ──────────────
+  Widget _buildIntroCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          CircularProgressIndicator(
-            color: colorScheme.primary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Processing request...',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.gridColors.mintFaint,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
+      ),
+      child: Text(
+        'Wants to share location with you.',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.getFont(
+          'Geist',
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          letterSpacing: -0.01,
+          color: context.gridColors.text,
+        ),
       ),
     );
   }
 
-  Widget _buildActionButtons(ThemeData theme, ColorScheme colorScheme) {
-    return Column(
-      children: [
-        // Location sharing checkbox
-        Container(
-          margin: const EdgeInsets.only(bottom: 16),
+  // ── Surface card with mint check tile + "Start sharing with X" ──────
+  Widget _buildSharingCheckbox() {
+    final on = _startSharingOnJoin;
+    final firstName = _firstName == 'them' ? _handle : _firstName;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        onTap: () => setState(() => _startSharingOnJoin = !on),
+        child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceVariant.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.1),
-            ),
+            color: context.gridColors.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
           child: Row(
             children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: Checkbox(
-                  value: _startSharingOnJoin,
-                  onChanged: (value) {
-                    setState(() {
-                      _startSharingOnJoin = value ?? true;
-                    });
-                  },
-                  activeColor: colorScheme.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
+              // Mint check tile.
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: on ? context.gridColors.mint : context.gridColors.surface3,
+                  borderRadius: BorderRadius.circular(GridTokens.rSm),
+                  border: Border.all(
+                    color: on ? context.gridColors.mint : context.gridColors.hairlineStrong,
+                    width: 1,
                   ),
                 ),
+                child: on
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 18,
+                        color: Color(0xFF04201A),
+                      )
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -282,19 +286,25 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Start sharing on join',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurface,
+                      'Start sharing with $firstName',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: context.gridColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _startSharingOnJoin 
-                        ? 'Share your location immediately when connecting'
-                        : 'Location sharing will be disabled for this contact',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                      on
+                          ? 'You can adjust this anytime.'
+                          : 'Location sharing will stay off for this contact.',
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400,
+                        color: context.gridColors.text2,
                       ),
                     ),
                   ],
@@ -303,69 +313,48 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
             ],
           ),
         ),
-        
-        // Accept button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _acceptRequest,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-              elevation: 0,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Accept Request',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
-              ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              valueColor: AlwaysStoppedAnimation<Color>(context.gridColors.mint),
             ),
           ),
+          const SizedBox(height: 14),
+          GridMono(
+            'PROCESSING REQUEST',
+            color: context.gridColors.text3,
+            size: 11,
+            letterSpacing: 0.12,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Column(
+      children: [
+        GridButton(
+          label: 'Accept request',
+          icon: Icons.check_rounded,
+          onPressed: _acceptRequest,
         ),
-        
-        const SizedBox(height: 12),
-        
-        // Decline button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: OutlinedButton(
-            onPressed: _declineRequest,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: BorderSide(color: Colors.red.withOpacity(0.5)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.close, size: 20, color: Colors.red),
-                const SizedBox(width: 8),
-                Text(
-                  'Decline',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 10),
+        GridButton(
+          label: 'Decline',
+          style: GridButtonStyle.danger,
+          onPressed: _declineRequest,
         ),
       ],
     );
@@ -374,92 +363,73 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   Future<void> _acceptRequest() async {
     if (!mounted) return;
 
-    setState(() {
-      _isProcessing = true;
-    });
+    // Capture everything we need from context before popping the modal.
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
+    final contactsBloc = context.read<ContactsBloc>();
+    final locationManager = context.read<LocationManager>();
+    final sharingPrefs = context.read<SharingPreferencesRepository>();
+    final roomId = widget.roomId;
+    final userId = widget.userId;
+    final roomService = widget.roomService;
+    final onResponse = widget.onResponse;
+    final startSharingOnJoin = _startSharingOnJoin;
 
-    try {
-      // Accept invitation and sync via SyncManager
-      await Provider.of<SyncManager>(context, listen: false).acceptInviteAndSync(widget.roomId);
+    // Optimistically close the modal so the inbox feels instant.
+    Navigator.of(context).pop();
 
-      print("Refreshing contacts via bloc...");
-
-      if (mounted) {
-        // Dispatch RefreshContacts to update ContactsBloc
-        context.read<ContactsBloc>().add(RefreshContacts());
-      }
-
-      // Handle location sharing based on checkbox
-      if (_startSharingOnJoin) {
-        // Send immediate location update
-        final locationManager = context.read<LocationManager>();
-        await locationManager.grabLocationAndPing();
-        
-        // Send location specifically to this room
-        await widget.roomService.updateSingleRoom(widget.roomId);
-      } else {
-        // Disable location sharing for this contact
-        final sharingPrefs = context.read<SharingPreferencesRepository>();
-        final preferences = SharingPreferences(
-          targetId: widget.userId,  // Use the user ID, not room ID
-          targetType: 'user',
-          activeSharing: false,
-          shareWindows: null,
-        );
-        await sharingPrefs.setSharingPreferences(preferences);
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop(); // Close the modal
-        await widget.onResponse(); // Execute callback to refresh any parent components
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Friend request accepted."),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        // Remove the invite from the list if it's expired or invalid
-        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-        Navigator.of(context).pop(); // Close the modal
-        await widget.onResponse(); // Refresh the list
-        
-        String errorMessage = "This invitation has expired or is no longer valid.";
-        if (e.toString().toLowerCase().contains('forbidden')) {
-          errorMessage = "This invitation has already been accepted or declined.";
-        }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Expanded(child: Text(errorMessage)),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
+    // Update sharing preference synchronously-ish but off the UI critical path.
+    if (!startSharingOnJoin) {
+      unawaited(sharingPrefs
+          .setSharingPreferences(SharingPreferences(
+            targetId: userId,
+            targetType: 'user',
+            activeSharing: false,
+            shareWindows: null,
+          ))
+          .catchError((e) => Logs().w('setSharingPreferences failed: $e')));
     }
+
+    unawaited(() async {
+      try {
+        await syncManager.acceptInviteAndSync(roomId);
+        contactsBloc.add(RefreshContacts());
+
+        if (startSharingOnJoin) {
+          unawaited(locationManager
+              .grabLocationAndPing()
+              .catchError((e) => Logs().w('location ping failed: $e')));
+          unawaited(roomService
+              .updateSingleRoom(roomId)
+              .catchError((e) => Logs().w('updateSingleRoom failed: $e')));
+        }
+
+        await onResponse();
+
+        InAppNotifier.instance.show(
+          title: 'Friend request accepted',
+          message: 'You will start sharing locations shortly.',
+          variant: InAppNotificationVariant.success,
+        );
+      } catch (e) {
+        syncManager.removeInvite(roomId);
+        try {
+          await onResponse();
+        } catch (_) {}
+
+        String errorMessage =
+            "This invitation has expired or is no longer valid.";
+        if (e.toString().toLowerCase().contains('forbidden')) {
+          errorMessage =
+              "This invitation has already been accepted or declined.";
+        }
+
+        InAppNotifier.instance.show(
+          title: 'Invitation unavailable',
+          message: errorMessage,
+          variant: InAppNotificationVariant.warning,
+        );
+      }
+    }());
   }
 
   Future<void> _declineRequest() async {
@@ -469,43 +439,33 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
 
     try {
       await widget.roomService.declineInvitation(widget.roomId);
-      
+
       // Remove invite from the list BEFORE closing modal
       if (mounted) {
-        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-        
+        Provider.of<SyncManager>(context, listen: false)
+            .removeInvite(widget.roomId);
+
         // Give time for the bloc state to update and UI to reflect changes
         await Future.delayed(const Duration(milliseconds: 300));
-        
+
         Navigator.of(context).pop();
         await widget.onResponse();
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Friend request declined."),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Friend request declined',
+          message: 'They will not be added to your contacts.',
+          variant: InAppNotificationVariant.info,
+          duration: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error declining the request: $e"),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Error declining the request',
+          message: '$e',
+          variant: InAppNotificationVariant.error,
         );
       }
     } finally {

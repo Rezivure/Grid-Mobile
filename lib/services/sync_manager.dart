@@ -78,6 +78,10 @@ class SyncManager with ChangeNotifier {
   final MapIconSyncService? mapIconSyncService;
   final LocationManager? locationManager;
   bool _isActive = true;
+  bool _disposed = false;
+  bool _isShuttingDown = false;
+  bool get isDisposed => _disposed;
+  bool get _stopped => _disposed || _isShuttingDown;
 
   bool _isSyncing = false;
   final Map<String, List<Map<String, dynamic>>> _roomMessages = {};
@@ -176,6 +180,7 @@ class SyncManager with ChangeNotifier {
 
   Future<void> initialize() async {
     if (_isInitialized || _syncState != SyncState.uninitialized) return;
+    _isShuttingDown = false;
 
     // Defer state change to avoid build phase conflicts
     await Future.microtask(() => _setSyncState(SyncState.loadingToken));
@@ -205,8 +210,16 @@ class SyncManager with ChangeNotifier {
     // Wire up decryption error callback
     messageProcessor.setDecryptionErrorCallback(_addDecryptionError);
 
-    // Ensure InvitationsBloc is ready before processing sync
-    await Future.delayed(const Duration(milliseconds: 200));
+    // Wait for InvitationsBloc to finish its initial LoadInvitations dispatch
+    // so the first sync's invite reconciliation sees the persisted list, not Initial.
+    if (invitationsBloc.state is InvitationsInitial ||
+        invitationsBloc.state is InvitationsLoading) {
+      await invitationsBloc.stream
+          .firstWhere(
+            (s) => s is InvitationsLoaded || s is InvitationsError,
+          )
+          .timeout(const Duration(seconds: 2), onTimeout: () => invitationsBloc.state);
+    }
 
     try {
       await _loadSinceToken();
@@ -306,8 +319,9 @@ class SyncManager with ChangeNotifier {
     print('[SyncManager] Processing ${_postSyncOperations.length} queued operations');
     final operations = List<Function>.from(_postSyncOperations);
     _postSyncOperations.clear();
-    
+
     for (final operation in operations) {
+      if (_disposed) return;
       try {
         await operation();
       } catch (e) {
@@ -418,6 +432,7 @@ class SyncManager with ChangeNotifier {
   }
 
   Future<void> clearAllState() async {
+    _isShuttingDown = true;
     invitationsBloc.add(ClearInvitations());
     _roomMessages.clear();
     _pendingMessages.clear();
@@ -427,7 +442,7 @@ class SyncManager with ChangeNotifier {
     // Clear the sync token so next login does a full sync
     _sinceToken = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('sync_since_token');
+    await prefs.remove('syncSinceToken');
 
     // Reset sync state to uninitialized so it can start fresh
     _syncState = SyncState.uninitialized;
@@ -585,11 +600,13 @@ class SyncManager with ChangeNotifier {
 
       // Force additional updates after a delay
       Future.delayed(const Duration(milliseconds: 500), () {
+        if (_stopped) return;
         groupsBloc.add(RefreshGroups());
         groupsBloc.add(LoadGroups());
       });
 
       Future.delayed(const Duration(seconds: 1), () {
+        if (_stopped) return;
         groupsBloc.add(RefreshGroups());
         groupsBloc.add(LoadGroups());
         mapBloc.add(MapLoadUserLocations());
@@ -711,6 +728,7 @@ class SyncManager with ChangeNotifier {
                 if (mapIconSyncService != null) {
                   // Small delay to ensure the new member's session is ready
                   Future.delayed(const Duration(seconds: 1), () async {
+                    if (_stopped) return;
                     print('[MapIconSync] Timeline: Sending icon state to new member ${event.stateKey}');
                     await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
                   });
@@ -1006,6 +1024,7 @@ class SyncManager with ChangeNotifier {
                 if (mapIconSyncService != null) {
                   // Small delay to ensure the new member is fully joined
                   Future.delayed(const Duration(seconds: 1), () async {
+                    if (_stopped) return;
                     print('[MapIconSync] Sending icon state to new member ${event.stateKey} in room $roomId');
                     await mapIconSyncService!.sendIconState(roomId, targetUserId: event.stateKey);
                   });
@@ -1161,6 +1180,7 @@ class SyncManager with ChangeNotifier {
 
           // Additional delayed updates to ensure sync
           Future.delayed(const Duration(milliseconds: 500), () {
+            if (_stopped) return;
             groupsBloc.add(LoadGroups());
             groupsBloc.add(LoadGroupMembers(roomId));
           });
@@ -1289,10 +1309,11 @@ class SyncManager with ChangeNotifier {
     final currentParticipants = customRoom.members;
     final existingParticipants = await roomRepository.getRoomParticipants(room.id);
 
-    for (var participantId in currentParticipants) {
+    await Future.wait(currentParticipants.map((participantId) async {
       try {
         // Fetch participant details using client.getUserProfile
-        final profileInfo = await client.getUserProfile(participantId);
+        final profileInfo = await client
+            .getUserProfile(participantId, timeout: const Duration(seconds: 8));
 
         // Create or update the user in the database
         final gridUser = GridUser.GridUser(
@@ -1316,7 +1337,7 @@ class SyncManager with ChangeNotifier {
             isDirect,
             membershipStatus: !isDirect ? membershipStatus : null
         );
-        
+
         // Also insert into RoomParticipants table for proper tracking
         await roomRepository.insertRoomParticipant(room.id, participantId);
 
@@ -1354,7 +1375,7 @@ class SyncManager with ChangeNotifier {
       } catch (e) {
         print('Error fetching profile for user $participantId: $e');
       }
-    }
+    }));
 
     // Remove participants who are no longer in the room
     for (var participant in existingParticipants) {
@@ -1389,23 +1410,14 @@ class SyncManager with ChangeNotifier {
         if (room != null) {
           await processJoinedRoom(room);
           
-          // Enhanced avatar exchange after accepting invite
-          try {
-            final avatarService = AvatarAnnouncementService(client);
-            
-            // 1. Announce our avatar to the room
-            await avatarService.announceProfPicToRoom(roomId);
-            
-            // 2. Request avatars from all room members
-            print('[Avatar Exchange] Requesting avatars from room members after accepting invite');
-            await avatarService.requestAvatars(roomId);
-            
-            // 4. For groups, existing members should send avatar state
-            // This is handled by the member join event in _processMemberStateEvent
-            
-          } catch (e) {
-            print('Error during avatar exchange after accepting invite: $e');
-          }
+          // Fire-and-forget avatar exchange so it doesn't block the accept critical path.
+          final avatarService = AvatarAnnouncementService(client);
+          unawaited(avatarService
+              .announceProfPicToRoom(roomId)
+              .catchError((e) => Logs().w('avatar announce failed: $e')));
+          unawaited(avatarService
+              .requestAvatars(roomId)
+              .catchError((e) => Logs().w('avatar request failed: $e')));
           
           groupsBloc.add(RefreshGroups());
         }
@@ -1796,4 +1808,24 @@ class SyncManager with ChangeNotifier {
   }
 
   bool get authenticationFailed => _authenticationFailed;
+
+  @override
+  void dispose() {
+    // Cancel our streams first; ChangeNotifier finalizes its state in super.dispose().
+    _disposed = true;
+    _isActive = false;
+    _isSyncing = false;
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
+    if (client.syncPending) {
+      try {
+        client.abortSync();
+      } catch (_) {}
+    }
+    _postSyncOperations.clear();
+    _roomMessages.clear();
+    _pendingMessages.clear();
+    _decryptionErrors.clear();
+    super.dispose();
+  }
 }

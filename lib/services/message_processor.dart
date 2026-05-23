@@ -3,6 +3,7 @@ import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/utilities/message_parser.dart';
 import 'package:grid_frontend/models/user_location.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -137,11 +138,11 @@ class MessageProcessor {
 
     final locationData = messageParser.parseLocationMessage(messageData);
     if (locationData != null) {
-      print('[Location Processing] Found location message from $sender at ${locationData['latitude']}, ${locationData['longitude']}');
+      print('[Location Processing] Found location message from $sender at ${locationData.latitude}, ${locationData.longitude}');
       final userLocation = UserLocation(
         userId: sender,
-        latitude: locationData['latitude']!,
-        longitude: locationData['longitude']!,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
         timestamp: timestamp,
         iv: '', // IV is generated or handled in the repository
       );
@@ -149,20 +150,35 @@ class MessageProcessor {
       await locationRepository.insertLocation(userLocation);
       print('[Location Processing] Location saved for user: $sender');
       var confirm = await locationRepository.getLatestLocation(sender);
-      
+
+      // Update the in-memory device-status cache (gridv 2). Older senders
+      // leave every field null, in which case we still touch the cache
+      // entry so updatedAt advances and the UI knows we're alive.
+      UserDeviceStatusCache.instance.update(
+        sender,
+        DeviceStatus(
+          accuracy: locationData.accuracy,
+          speed: locationData.speed,
+          heading: locationData.heading,
+          batteryLevel: locationData.batteryLevel,
+          isCharging: locationData.isCharging,
+          updatedAt: DateTime.now(),
+        ),
+      );
+
       // Save to room-specific location history
       if (roomLocationHistoryRepository != null) {
         await roomLocationHistoryRepository!.addLocationPoint(
           roomId: roomId,
           userId: sender,
-          latitude: locationData['latitude']!,
-          longitude: locationData['longitude']!,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
         );
         print('Room location history saved for user: $sender in room: $roomId');
       }
-      
+
       // Also save to legacy global history (can be deprecated later)
-      await locationHistoryRepository.addLocationPoint(sender, locationData['latitude']!, locationData['longitude']!);
+      await locationHistoryRepository.addLocationPoint(sender, locationData.latitude, locationData.longitude);
     } else {
       // It's a message, but not a location message
     }
@@ -449,7 +465,9 @@ class MessageProcessor {
         encryptedData = file.data;
       } else {
         // Download from R2
-        final response = await http.get(Uri.parse(avatarUrl));
+        final response = await http
+            .get(Uri.parse(avatarUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) {
           print('[Group Avatar Processing] Failed to download avatar from R2: ${response.statusCode}');
           return;
@@ -495,7 +513,9 @@ class MessageProcessor {
         encryptedData = file.data;
       } else {
         // Download from R2
-        final response = await http.get(Uri.parse(avatarUrl));
+        final response = await http
+            .get(Uri.parse(avatarUrl))
+            .timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) {
           print('[Avatar Processing] Failed to download avatar from R2: ${response.statusCode}');
           return;

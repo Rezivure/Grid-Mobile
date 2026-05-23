@@ -1,45 +1,86 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:grid_frontend/utilities/utils.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'dart:ui' show ImageFilter;
 import 'dart:io' show Platform;
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:provider/provider.dart';
+
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/utilities/time_ago_formatter.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
+
+/// Floating glass info card anchored above a tapped map pin. See spec §5.25.
+///
+/// Positioning is owned by the parent (MapTab); this widget keeps the
+/// existing `Positioned` envelope so the call-site doesn't change.
 class UserInfoBubble extends StatelessWidget {
   final String userId;
   final String userName;
   final LatLng position;
+  final String? lastUpdate;
   final VoidCallback? onClose;
 
   const UserInfoBubble({
-    Key? key,
+    super.key,
     required this.userId,
     required this.userName,
     required this.position,
+    this.lastUpdate,
     this.onClose,
-  }) : super(key: key);
+  });
+
+  /// `null` when we don't know the user's own location yet (so the cell is
+  /// hidden rather than showing a fake number).
+  String? _formatDistance(LatLng? from, LatLng to) {
+    if (from == null) return null;
+    final meters = const Distance().as(LengthUnit.Meter, from, to);
+    if (meters < 100) return '${meters.round()} m';
+    if (meters < 1000) return '${(meters / 10).round() * 10} m';
+    final km = meters / 1000;
+    if (km < 10) return '${km.toStringAsFixed(1)} km';
+    return '${km.round()} km';
+  }
+
+  String? _formatBearing(LatLng? from, LatLng to) {
+    if (from == null) return null;
+    final dLon = (to.longitude - from.longitude) * (math.pi / 180);
+    final fromLat = from.latitude * (math.pi / 180);
+    final toLat = to.latitude * (math.pi / 180);
+    final y = math.sin(dLon) * math.cos(toLat);
+    final x = math.cos(fromLat) * math.sin(toLat) -
+        math.sin(fromLat) * math.cos(toLat) * math.cos(dLon);
+    var bearing = math.atan2(y, x) * (180 / math.pi);
+    bearing = (bearing + 360) % 360;
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[((bearing + 22.5) ~/ 45) % 8];
+  }
 
   void _copyCoordinates(BuildContext context, LatLng position) {
-    final coordinates = '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+    final coordinates =
+        '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
     Clipboard.setData(ClipboardData(text: coordinates));
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Coordinates copied to clipboard'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
+
+    InAppNotifier.instance.show(
+      title: 'Coordinates copied',
+      message: 'Paste them into your maps app to navigate.',
+      variant: InAppNotificationVariant.success,
+      duration: const Duration(seconds: 2),
     );
   }
 
   Future<bool> _showPrivacyWarning(BuildContext context) async {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     final shouldProceed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -48,13 +89,14 @@ class UserInfoBubble extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 340),
             decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(24),
+              color: context.gridColors.surface,
+              borderRadius: BorderRadius.circular(GridTokens.r2Xl),
+              border: Border.all(color: context.gridColors.hairlineStrong),
               boxShadow: [
                 BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
                 ),
               ],
             ),
@@ -67,28 +109,33 @@ class UserInfoBubble extends StatelessWidget {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: colorScheme.error.withOpacity(0.1),
+                      color: context.gridColors.dangerSoft,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.warning_amber_rounded,
-                      color: colorScheme.error,
+                      color: context.gridColors.danger,
                       size: 32,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'Privacy Warning',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface,
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.02,
+                      color: context.gridColors.text,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(
                     'You are about to leave Grid and open this location in your maps application.\n\nThe location data will be shared with the external maps provider. Grid cannot ensure the privacy of this information once it leaves the app.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.8),
+                    style: GoogleFonts.getFont(
+                      'Geist',
+                      fontSize: 14,
+                      color: context.gridColors.text2,
                       height: 1.5,
                     ),
                     textAlign: TextAlign.center,
@@ -100,9 +147,11 @@ class UserInfoBubble extends StatelessWidget {
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pop(false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: colorScheme.onSurface,
-                            side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            foregroundColor: context.gridColors.text,
+                            side: BorderSide(
+                                color: context.gridColors.hairlineStrong),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -115,9 +164,10 @@ class UserInfoBubble extends StatelessWidget {
                         child: ElevatedButton(
                           onPressed: () => Navigator.of(context).pop(true),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: colorScheme.primary,
-                            foregroundColor: colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: context.gridColors.mint,
+                            foregroundColor: const Color(0xFF04201A),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -145,25 +195,24 @@ class UserInfoBubble extends StatelessWidget {
   Future<void> _openInMaps(BuildContext context, LatLng position) async {
     try {
       String? mapChoice;
-      
+
       if (Platform.isIOS) {
         // On iOS, show a dialog to choose between Apple Maps and Google Maps
         mapChoice = await showDialog<String>(
           context: context,
           builder: (BuildContext context) {
-            final colorScheme = Theme.of(context).colorScheme;
-            
             return Dialog(
               backgroundColor: Colors.transparent,
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 260),
                 decoration: BoxDecoration(
-                  color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  color: context.gridColors.surface,
+                  borderRadius: BorderRadius.circular(GridTokens.rXl),
+                  border: Border.all(color: context.gridColors.hairlineStrong),
                   boxShadow: [
                     BoxShadow(
-                      color: colorScheme.shadow.withOpacity(0.15),
-                      blurRadius: 20,
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 24,
                       offset: const Offset(0, 10),
                     ),
                   ],
@@ -175,89 +224,39 @@ class UserInfoBubble extends StatelessWidget {
                     children: [
                       Text(
                         'Open in',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: GoogleFonts.getFont(
+                          'Geist',
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
+                          color: context.gridColors.text,
                         ),
                       ),
                       const SizedBox(height: 20),
-                      // Apple Maps option
-                      InkWell(
+                      _MapChoiceTile(
+                        label: 'Apple Maps',
+                        icon: Icons.map_outlined,
+                        iconColor: context.gridColors.driving,
                         onTap: () => Navigator.of(context).pop('apple'),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceVariant.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: colorScheme.outline.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.map,
-                                color: Colors.blue[600],
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Apple Maps',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                       const SizedBox(height: 10),
-                      // Google Maps option
-                      InkWell(
+                      _MapChoiceTile(
+                        label: 'Google Maps',
+                        icon: Icons.map_outlined,
+                        iconColor: context.gridColors.walking,
                         onTap: () => Navigator.of(context).pop('google'),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceVariant.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: colorScheme.outline.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.map,
-                                color: Colors.green[600],
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Google Maps',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  color: colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                         ),
                         child: Text(
                           'Cancel',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withOpacity(0.6),
+                          style: GoogleFonts.getFont(
+                            'Geist',
+                            color: context.gridColors.text3,
                             fontSize: 14,
                           ),
                         ),
@@ -277,6 +276,7 @@ class UserInfoBubble extends StatelessWidget {
       }
 
       // Show privacy warning as the last step
+      if (!context.mounted) return;
       if (!await _showPrivacyWarning(context)) {
         return;
       }
@@ -285,240 +285,638 @@ class UserInfoBubble extends StatelessWidget {
       if (mapChoice == 'apple') {
         // Apple Maps URL scheme
         final appleMapsUrl = Uri.parse(
-          'maps://?q=${position.latitude},${position.longitude}'
-        );
-        
+            'maps://?q=${position.latitude},${position.longitude}');
+
         if (await canLaunchUrl(appleMapsUrl)) {
           await launchUrl(appleMapsUrl);
         } else {
           // Fallback to web-based Apple Maps
           final webAppleMapsUrl = Uri.parse(
-            'https://maps.apple.com/?q=${position.latitude},${position.longitude}'
-          );
-          await launchUrl(webAppleMapsUrl, mode: LaunchMode.externalApplication);
+              'https://maps.apple.com/?q=${position.latitude},${position.longitude}');
+          await launchUrl(webAppleMapsUrl,
+              mode: LaunchMode.externalApplication);
         }
       } else {
         // Google Maps
         if (Platform.isIOS) {
           // iOS Google Maps
           final googleMapsAppUrl = Uri.parse(
-            'comgooglemaps://?q=${position.latitude},${position.longitude}'
-          );
-          
+              'comgooglemaps://?q=${position.latitude},${position.longitude}');
+
           if (await canLaunchUrl(googleMapsAppUrl)) {
             await launchUrl(googleMapsAppUrl);
           } else {
             // Fallback to web
             final googleMapsWebUrl = Uri.parse(
-              'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}'
-            );
-            await launchUrl(googleMapsWebUrl, mode: LaunchMode.externalApplication);
+                'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}');
+            await launchUrl(googleMapsWebUrl,
+                mode: LaunchMode.externalApplication);
           }
         } else {
           // Android Google Maps
           final googleMapsUrl = Uri.parse(
-            'geo:${position.latitude},${position.longitude}?q=${position.latitude},${position.longitude}'
-          );
-          
+              'geo:${position.latitude},${position.longitude}?q=${position.latitude},${position.longitude}');
+
           if (await canLaunchUrl(googleMapsUrl)) {
             await launchUrl(googleMapsUrl);
           } else {
             // Fallback to web
             final googleMapsWebUrl = Uri.parse(
-              'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}'
-            );
-            await launchUrl(googleMapsWebUrl, mode: LaunchMode.externalApplication);
+                'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}');
+            await launchUrl(googleMapsWebUrl,
+                mode: LaunchMode.externalApplication);
           }
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not open maps application'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Could not open maps application',
+          message: 'Install a maps app, or copy coordinates instead.',
+          variant: InAppNotificationVariant.error,
+          duration: const Duration(seconds: 2),
         );
       }
     }
   }
 
+  /// "DRIVING" / "WALKING" / null. Bands chosen so the label maps to
+  /// what the user can actually tell from looking out the window:
+  ///   <1.4 m/s (~3 mph) → not moving, suppress
+  ///   1.4–5 m/s         → WALKING
+  ///   ≥5 m/s (~11 mph)  → DRIVING
+  String? _formatMotion(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    if (speedMps < 5) return 'WALKING';
+    return 'DRIVING';
+  }
+
+  /// Speed as "12 mph". Null when no useful motion or speed isn't
+  /// known.
+  String? _formatSpeed(double? speedMps) {
+    if (speedMps == null || speedMps < 1.4) return null;
+    final mph = speedMps * 2.236936;
+    return '${mph.round()} mph';
+  }
+
+  String _formatCoordinates(LatLng p) {
+    final lat = p.latitude;
+    final lng = p.longitude;
+    final latStr = '${lat.abs().toStringAsFixed(4)}° ${lat >= 0 ? 'N' : 'S'}';
+    final lngStr = '${lng.abs().toStringAsFixed(4)}° ${lng >= 0 ? 'E' : 'W'}';
+    return '$latStr  $lngStr';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final media = MediaQuery.of(context);
+    final screenWidth = media.size.width;
+    // Width up to 340, with at least 16pt margin per side. Centered.
+    final bubbleWidth =
+        (screenWidth - 32).clamp(260.0, 340.0).toDouble();
+    // Sit well below the top-of-map "SHARING WITH N" pill (which is at
+    // SafeArea + 60 + ~30 tall). Push the bubble below that comfortably.
+    final topOffset = media.padding.top + 96;
+    final myLocation =
+        Provider.of<LocationManager>(context, listen: false).currentLatLng;
+    final distanceLabel = _formatDistance(myLocation, position);
+    final bearingLabel = _formatBearing(myLocation, position);
+    final updatedLabel = lastUpdate == null
+        ? null
+        : TimeAgoFormatter.format(lastUpdate);
+
+    // gridv 2: opportunistic speed + battery from the sender's last
+    // m.location. context.watch so the bubble rebuilds as new fixes
+    // arrive while it's open.
+    final status =
+        context.watch<UserDeviceStatusCache>().statusFor(userId);
+    final motionLabel = _formatMotion(status?.speed);
+    final speedLabel = _formatSpeed(status?.speed);
 
     return Positioned(
-      top: 100,
-      left: screenWidth * 0.15,
-      right: screenWidth * 0.15,
+      top: topOffset,
+      left: (screenWidth - bubbleWidth) / 2,
+      width: bubbleWidth,
       child: Material(
         color: Colors.transparent,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 280),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.15),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Glass card ────────────────────────────────────────
+            ClipRRect(
+              borderRadius: BorderRadius.circular(GridTokens.rLg),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: context.gridColors.surface.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(GridTokens.rLg),
+                    border: Border.all(
+                      color: context.gridColors.hairlineStrong,
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.55),
+                        blurRadius: 32,
+                        offset: const Offset(0, 14),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _IdentityRow(
+                          userId: userId,
+                          userName: userName,
+                          coordinatesLabel: _formatCoordinates(position),
+                          onCopyCoordinates: () =>
+                              _copyCoordinates(context, position),
+                          onClose: onClose,
+                          batteryLevel: status?.batteryLevel,
+                          isCharging: status?.isCharging,
+                        ),
+                        const SizedBox(height: 12),
+                        _StatusRow(
+                          distance: distanceLabel,
+                          bearing: bearingLabel,
+                          updated: updatedLabel,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              // Status cell replaces the old (always-
+                              // disabled) Chat button. Mirrors the
+                              // visual weight of _MiniBtn but it's a
+                              // display rather than a tap target.
+                              child: _StatusCell(
+                                motion: motionLabel,
+                                speed: speedLabel,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: _MiniBtn(
+                                icon: Icons.near_me_rounded,
+                                label: 'Route',
+                                onTap: () => _openInMaps(context, position),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // ── Tail triangle pointing down at the pin ───────────
+            CustomPaint(
+              size: const Size(18, 9),
+              painter: _BubbleTailPainter(
+                fillColor: context.gridColors.surface.withOpacity(0.95),
+                strokeColor: context.gridColors.hairlineStrong,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IdentityRow extends StatelessWidget {
+  const _IdentityRow({
+    required this.userId,
+    required this.userName,
+    required this.coordinatesLabel,
+    required this.onCopyCoordinates,
+    required this.onClose,
+    this.batteryLevel,
+    this.isCharging,
+  });
+
+  final String userId;
+  final String userName;
+  final String coordinatesLabel;
+  final VoidCallback onCopyCoordinates;
+  final VoidCallback? onClose;
+  final double? batteryLevel;
+  final bool? isCharging;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Avatar 42 with live status dot.
+        SizedBox(
+          width: 42,
+          height: 42,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ClipOval(
+                child: SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: UserAvatarBloc(
+                    userId: userId,
+                    size: 42,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -1,
+                bottom: -1,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: context.gridColors.mint,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: context.gridColors.surface, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: context.gridColors.mint.withOpacity(0.6),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
+        ),
+        const SizedBox(width: 10),
+        // Identity column.
+        Expanded(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header with avatar and close button
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01,
+                        color: context.gridColors.text,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const GridLiveBadge(),
+                  const SizedBox(width: 6),
+                  // Always rendered. Pre-gridv-2 senders leave level
+                  // null, in which case we show a grey "?" placeholder
+                  // so the slot is visible and consistent across
+                  // contacts even before everyone is on the new build.
+                  _BatteryGlyph(
+                    level: batteryLevel,
+                    charging: isCharging ?? false,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              InkWell(
+                onTap: onCopyCoordinates,
+                borderRadius: BorderRadius.circular(GridTokens.rSm),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: GridMono(
+                    coordinatesLabel,
+                    size: 10.5,
+                    uppercase: false,
+                    color: context.gridColors.text3,
+                    letterSpacing: 0.04,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    // Avatar
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.2),
-                          width: 2,
-                        ),
-                      ),
-                      child: ClipOval(
-                        child: UserAvatarBloc(
-                          userId: userId,
-                          size: 40,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // User info
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            userName,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                size: 12,
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(0.7),
-                                    fontSize: 11,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              // Copy button
-                              InkWell(
-                                onTap: () => _copyCoordinates(context, position),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.copy,
-                                    size: 14,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Close button
-                    IconButton(
-                      onPressed: onClose,
-                      icon: Icon(
-                        Icons.close,
-                        size: 20,
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      style: IconButton.styleFrom(
-                        backgroundColor: colorScheme.surface.withOpacity(0.8),
-                        padding: const EdgeInsets.all(6),
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              
-              // Actions
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    // Open in Maps button
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _openInMaps(context, position),
-                        icon: Icon(
-                          Icons.map_outlined,
-                          size: 16,
-                          color: colorScheme.primary,
-                        ),
-                        label: const Text('Maps', style: TextStyle(fontSize: 13)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: colorScheme.primary,
-                          side: BorderSide(color: colorScheme.primary.withOpacity(0.5)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Close button
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: onClose,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colorScheme.primary,
-                          foregroundColor: colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Close',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        // Close (30×30).
+        _CloseButton(onTap: onClose),
+      ],
+    );
+  }
+}
+
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: context.gridColors.surface2,
+            shape: BoxShape.circle,
+            border: Border.all(color: context.gridColors.hairline, width: 1),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.close_rounded,
+            size: 16,
+            color: context.gridColors.text2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.distance,
+    required this.bearing,
+    required this.updated,
+  });
+
+  /// Two cells: distance/bearing on the left, "updated Xs ago" on
+  /// the right. Motion + speed used to live here too but moved into
+  /// the action row's left cell since they're meatier UI than tiny
+  /// mono pills justify.
+  final String? distance;
+  final String? bearing;
+  final String? updated;
+
+  @override
+  Widget build(BuildContext context) {
+    final cells = <Widget>[];
+    if (distance != null) {
+      cells.add(
+        _MonoCell(
+          primary: distance!,
+          secondary: bearing ?? '',
+        ),
+      );
+    }
+    if (updated != null) {
+      cells.add(
+        _MonoCell(
+          primary: 'updated',
+          secondary: updated!,
+        ),
+      );
+    }
+    if (cells.isEmpty) return const SizedBox.shrink();
+    return Row(
+      children: [
+        for (var i = 0; i < cells.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(child: cells[i]),
+        ],
+      ],
+    );
+  }
+}
+
+/// Action-row status display occupying what used to be the (always
+/// disabled) Chat slot. Matches _MiniBtn's height and chrome but
+/// renders motion + speed instead of being a tap target.
+class _StatusCell extends StatelessWidget {
+  const _StatusCell({required this.motion, this.speed});
+
+  final String? motion;
+  final String? speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = motion == null;
+    final color = muted ? context.gridColors.text3 : context.gridColors.mint;
+    final bg = muted ? context.gridColors.surface2 : context.gridColors.mintFaint;
+    final border = muted ? context.gridColors.hairline : context.gridColors.mintSoft;
+
+    final IconData icon;
+    if (motion == 'DRIVING') {
+      icon = Icons.directions_car_filled_rounded;
+    } else if (motion == 'WALKING') {
+      icon = Icons.directions_walk_rounded;
+    } else {
+      icon = Icons.do_not_disturb_on_total_silence_rounded;
+    }
+
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: border, width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: GridMono(
+              motion ?? 'STILL',
+              size: 10.5,
+              letterSpacing: 0.1,
+              color: color,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (speed != null) ...[
+            const SizedBox(width: 4),
+            Flexible(
+              child: GridMono(
+                speed!,
+                uppercase: false,
+                size: 10.5,
+                letterSpacing: 0.02,
+                color: color,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Tiny battery glyph + percentage, e.g. "🔋 14%". Color shifts based
+/// on level — danger red <20%, amber 20–40%, mint otherwise. Charging
+/// always shows a bolt and the mint tone regardless of level. When
+/// `level` is null (sender on a pre-gridv-2 build) we still render a
+/// grey "?" pill so the slot is always present and the user can spot
+/// the affordance even before everyone is upgraded.
+class _BatteryGlyph extends StatelessWidget {
+  const _BatteryGlyph({required this.level, required this.charging});
+
+  final double? level; // 0.0–1.0, or null when unknown
+  final bool charging;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final IconData icon;
+    final String label;
+
+    if (level == null) {
+      color = context.gridColors.text3;
+      icon = Icons.battery_unknown_rounded;
+      label = '?';
+    } else if (charging) {
+      color = context.gridColors.mint;
+      icon = Icons.bolt_rounded;
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.20) {
+      color = context.gridColors.danger;
+      icon = Icons.battery_alert_rounded;
+      label = '${(level! * 100).round()}%';
+    } else if (level! < 0.40) {
+      color = context.gridColors.amber;
+      icon = Icons.battery_3_bar_rounded;
+      label = '${(level! * 100).round()}%';
+    } else {
+      color = context.gridColors.text2;
+      icon = Icons.battery_5_bar_rounded;
+      label = '${(level! * 100).round()}%';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: GridTokens.fontMono,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: 0.06,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MonoCell extends StatelessWidget {
+  const _MonoCell({required this.primary, required this.secondary});
+
+  final String primary;
+  final String secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Flexible(
+            child: GridMono(
+              primary,
+              size: 10,
+              uppercase: false,
+              color: context.gridColors.text,
+              letterSpacing: 0.04,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: GridMono(
+              secondary,
+              size: 10,
+              uppercase: false,
+              color: context.gridColors.text3,
+              letterSpacing: 0.04,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniBtn extends StatelessWidget {
+  const _MiniBtn({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final fg = enabled ? context.gridColors.text : context.gridColors.text3;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          height: 38,
+          decoration: BoxDecoration(
+            color: context.gridColors.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: fg),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.005,
+                  color: fg,
                 ),
               ),
             ],
@@ -527,4 +925,86 @@ class UserInfoBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MapChoiceTile extends StatelessWidget {
+  const _MapChoiceTile({
+    required this.label,
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.gridColors.surface2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.gridColors.hairline),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: context.gridColors.text,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BubbleTailPainter extends CustomPainter {
+  _BubbleTailPainter({required this.fillColor, required this.strokeColor});
+  final Color fillColor;
+  final Color strokeColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fill = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = strokeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+
+    canvas.drawPath(path, fill);
+    // Draw only the two slanted edges so the top stays continuous with the
+    // card body above (no visible seam between card and tail).
+    final edge = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0);
+    canvas.drawPath(edge, stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BubbleTailPainter oldDelegate) =>
+      oldDelegate.fillColor != fillColor || oldDelegate.strokeColor != strokeColor;
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:math';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -18,6 +17,7 @@ import 'package:grid_frontend/repositories/map_icon_repository.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_manager.dart';
+import 'location/location_dispatch.dart';
 import 'location/location_update.dart';
 import 'package:grid_frontend/models/room.dart' as GridRoom;
 
@@ -42,13 +42,23 @@ class RoomService {
   // Offline queue for failed location sends
   final List<Map<String, dynamic>> _offlineQueue = [];
   static const int _maxOfflineQueueSize = 50;
+  // Drop queued locations older than this — stale GPS is misinformation, not delay.
+  static const Duration _maxQueueAge = Duration(minutes: 5);
 
   LocationUpdate? _currentLocation;
   DateTime? _lastUpdateTime;
-  
+
   LocationUpdate? get currentLocation => _currentLocation;
 
+  /// Activity-aware throttle that decides which raw fixes become Matrix
+  /// posts. Settable so existing wiring in `main.dart` (which constructs
+  /// `RoomService` before `LocationDispatch`) doesn't need a giant
+  /// constructor refactor — bootstrap sets this once at app boot.
+  LocationDispatch? locationDispatch;
 
+  StreamSubscription<LocationUpdate>? _locationStreamSub;
+  bool _disposed = false;
+  bool get isDisposed => _disposed;
 
   RoomService(
       this.client,
@@ -63,12 +73,31 @@ class RoomService {
       {this.roomLocationHistoryRepository}
       ) {
     // Subscribe to location updates
-    locationManager.locationStream.listen((location) {
-      // Update current location in room service
+    _locationStreamSub = locationManager.locationStream.listen((location) {
+      if (_disposed) return;
+      // Always keep `_currentLocation` warm — it's read by callers like
+      // `pingNow()` regardless of whether we choose to post this fix.
       _currentLocation = location;
-      // Defer updates until appropriate time
-      _handleLocationUpdate(location);
+      // Defer to the dispatcher's activity-aware throttle. When unset
+      // (very brief window during boot before `main.dart` wires it),
+      // fall through to the old "post every fix" behavior so we don't
+      // black-hole updates.
+      if (locationDispatch == null || locationDispatch!.shouldPost(location)) {
+        _handleLocationUpdate(location);
+      }
     });
+  }
+
+  void dispose() {
+    _disposed = true;
+    _locationStreamSub?.cancel();
+    _locationStreamSub = null;
+    _locationUpdateTimer?.cancel();
+    _locationUpdateTimer = null;
+    _pendingLocation = null;
+    _recentlySentMessages.clear();
+    _lastSentLocationByRoom.clear();
+    _offlineQueue.clear();
   }
   
   void _handleLocationUpdate(LocationUpdate location) {
@@ -88,6 +117,7 @@ class RoomService {
 
     // Minimal debounce (100ms) to batch rapid GPS updates while staying responsive
     _locationUpdateTimer = Timer(const Duration(milliseconds: 100), () {
+      if (_disposed) return;
       if (_pendingLocation != null) {
         updateRooms(_pendingLocation!);
         _pendingLocation = null;
@@ -101,21 +131,8 @@ class RoomService {
   }
 
  /// create direct grid room (contact)
+  /// Caller is responsible for verifying the user exists before invoking.
   Future<bool> createRoomAndInviteContact(String matrixUserId) async {
-
-
-
-    // Check if the user exists
-    try {
-      final exists = await userService.userExists(matrixUserId);
-      if (!exists) {
-        return false;
-      }
-    } catch (e) {
-      print('User $matrixUserId does not exist: $e');
-      return false;
-    }
-
     // Check if direct grid contact already exists
     final myUserId = client.userID ?? 'error';
 
@@ -132,14 +149,22 @@ class RoomService {
         initialState: [
           StateEvent(
             type: 'm.room.encryption',
-            content: {"algorithm": "m.megolm.v1.aes-sha2"},
+            content: {
+              'algorithm': 'm.megolm.v1.aes-sha2',
+              // ~1 year / ~1B msgs: effectively never rotate
+              'rotation_period_ms': 31536000000,
+              'rotation_period_msgs': 1000000000,
+            },
           ),
         ],
       );
-      
-      // Room created with invite - now we need to handle it immediately
-      // Note: invite is already sent via createRoom parameters
-      
+
+      // Pre-warm Megolm session off the send critical path; first event creates it anyway.
+      final prewarm = client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      if (prewarm != null) {
+        unawaited(prewarm.catchError((e) => Logs().w('[MegolmPrewarm] Failed for $roomId: $e')));
+      }
+
       return true; // success
     }
     return false; // failed
@@ -313,9 +338,9 @@ class RoomService {
       await client.joinRoom(roomId);
       print("Successfully joined room: $roomId");
 
-      // Wait a bit for sync to catch up
-      await Future.delayed(const Duration(seconds: 1));
-      
+      // Brief wait so sync populates participants before the validity check below.
+      await Future.delayed(const Duration(milliseconds: 200));
+
       // Check if the room exists
       final room = client.getRoomById(roomId);
       if (room == null) {
@@ -377,9 +402,10 @@ class RoomService {
 
   Future<void> cleanRooms() async {
     try {
-      // SAFETY: Ensure client is fully synced before cleaning
-      if (!client.isLogged() || client.syncPending == null) {
-        print("[CleanRooms] Client not fully synced yet, skipping cleanup");
+      // SAFETY: skip until first sync has persisted a prevBatch token —
+      // running against an incomplete sync silently deletes contacts.
+      if (!client.isLogged() || client.prevBatch == null) {
+        Logs().w('[cleanRooms] Skipping — first sync incomplete (prevBatch null)');
         return;
       }
       
@@ -593,7 +619,12 @@ class RoomService {
         initialState: [
           StateEvent(
             type: EventTypes.Encryption,
-            content: {'algorithm': 'm.megolm.v1.aes-sha2'},
+            content: {
+              'algorithm': 'm.megolm.v1.aes-sha2',
+              // ~1 year / ~1B msgs: effectively never rotate
+              'rotation_period_ms': 31536000000,
+              'rotation_period_msgs': 1000000000,
+            },
           ),
           StateEvent(
             type: EventTypes.RoomPowerLevels,
@@ -617,6 +648,11 @@ class RoomService {
       final room = client.getRoomById(roomId);
       if (room != null) {
         await room.addTag('Grid Group');
+      }
+
+      final prewarm = client.encryption?.keyManager.prepareOutboundGroupSession(roomId);
+      if (prewarm != null) {
+        unawaited(prewarm.catchError((e) => Logs().w('[MegolmPrewarm] Failed for $roomId: $e')));
       }
     } catch (e) {
       throw Exception('Failed to create group: $e');
@@ -686,14 +722,28 @@ class RoomService {
           return;
         }
 
-        // Build the event content
-        final eventContent = {
+        // Build the event content. `gridv: 2` flags the additive payload:
+        // accuracy/speed/heading and an optional battery block. Old
+        // clients reading the event still only consume `geo_uri` and
+        // ignore unknown fields, so this is backwards-compatible in
+        // both directions.
+        final eventContent = <String, dynamic>{
           'msgtype': 'm.location',
           'body': 'Current location',
           'geo_uri': 'geo:$latitude,$longitude',
           'description': 'Current location',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'gridv': 2,
+          'accuracy': accuracy,
+          'speed': location.speed,
+          'heading': location.heading,
         };
+        if (location.batteryLevel != null) {
+          eventContent['battery'] = <String, dynamic>{
+            'level': location.batteryLevel,
+            if (location.isCharging != null) 'charging': location.isCharging,
+          };
+        }
 
         try {
           await room.sendEvent(eventContent);
@@ -1101,6 +1151,19 @@ class RoomService {
   Future<void> _processOfflineQueue() async {
     if (_offlineQueue.isEmpty) return;
 
+    final now = DateTime.now();
+    final beforeCount = _offlineQueue.length;
+    _offlineQueue.removeWhere((entry) {
+      final ts = entry['timestamp'];
+      if (ts is! DateTime) return true;
+      return now.difference(ts) > _maxQueueAge;
+    });
+    final dropped = beforeCount - _offlineQueue.length;
+    if (dropped > 0) {
+      print("🗑  Dropped $dropped stale offline locations (>${_maxQueueAge.inMinutes}m old)");
+    }
+    if (_offlineQueue.isEmpty) return;
+
     print("📤 Processing ${_offlineQueue.length} offline locations...");
 
     final itemsToRetry = [..._offlineQueue];
@@ -1134,11 +1197,11 @@ class RoomService {
   // Helper: Calculate distance between two coordinates using Haversine formula
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371000; // Earth radius in meters
-    final dLat = (lat2 - lat1) * (3.14159265359 / 180);
-    final dLon = (lon2 - lon1) * (3.14159265359 / 180);
+    final dLat = (lat2 - lat1) * (pi / 180);
+    final dLon = (lon2 - lon1) * (pi / 180);
 
-    final lat1Rad = lat1 * (3.14159265359 / 180);
-    final lat2Rad = lat2 * (3.14159265359 / 180);
+    final lat1Rad = lat1 * (pi / 180);
+    final lat2Rad = lat2 * (pi / 180);
 
     final a = sin(dLat / 2) * sin(dLat / 2) +
         cos(lat1Rad) * cos(lat2Rad) *

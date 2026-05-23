@@ -102,7 +102,7 @@ int extractExpirationTimestamp(String roomName) {
 String formatUserId(String userId) {
   // Default homeserver fallback in case dotenv fails
   const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';
-  
+
   final homeserver = dotenv.env['HOMESERVER'] ?? FALLBACK_DEFAULT_HOMESERVER;
 
   // Split the userId into localpart and domain
@@ -114,6 +114,24 @@ String formatUserId(String userId) {
   // If domain matches homeserver from .env or fallback, return only localpart
   // Otherwise return full userId
   return (domain == homeserver || domain == FALLBACK_DEFAULT_HOMESERVER) ? parts[0] : userId;
+}
+
+/// Formats a Matrix user id for display next to a handle.
+/// Returns `@localpart` on the default homeserver; otherwise `@localpart · server`.
+String formatHandleWithServer(String userId) {
+  const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';
+  final defaultHomeserver = dotenv.env['HOMESERVER'] ?? FALLBACK_DEFAULT_HOMESERVER;
+
+  final parts = userId.split(':');
+  if (parts.length < 2) {
+    return userId.startsWith('@') ? userId : '@$userId';
+  }
+  final localpart = parts[0].startsWith('@') ? parts[0] : '@${parts[0]}';
+  final server = parts.sublist(1).join(':');
+  if (server == defaultHomeserver || server == FALLBACK_DEFAULT_HOMESERVER) {
+    return localpart;
+  }
+  return '$localpart · $server';
 }
 
 bool isCustomHomeserver(String currentHomeserver) {

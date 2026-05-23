@@ -1,7 +1,16 @@
-import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+
+/// Long-press-on-map → pick an icon type. Replaced the radial wheel with a
+/// glass card centered over the dim/blur backdrop (spec §5.26-ish, derived
+/// from the marker action menu treatment). The [position] argument is kept
+/// for API compatibility with `MapTab` but is no longer used for layout —
+/// the card is screen-centered. Tap-outside dismisses.
 class IconSelectionWheel extends StatefulWidget {
   final Offset position;
   final Function(IconType) onIconSelected;
@@ -18,37 +27,32 @@ class IconSelectionWheel extends StatefulWidget {
   State<IconSelectionWheel> createState() => _IconSelectionWheelState();
 }
 
-class _IconSelectionWheelState extends State<IconSelectionWheel> with SingleTickerProviderStateMixin {
+class _IconSelectionWheelState extends State<IconSelectionWheel>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
-  IconType? _hoveredIcon;
-  
-  // Define available icons
-  static const List<IconType> icons = [
-    IconType.pin,
-    IconType.warning,
-    IconType.food,
-    IconType.car,
-    IconType.home,
-    IconType.star,
-    IconType.heart,
-    IconType.flag,
+
+  static const List<_IconSlot> _slots = [
+    _IconSlot(IconType.pin, Icons.location_on_rounded),
+    _IconSlot(IconType.home, Icons.home_rounded),
+    _IconSlot(IconType.food, Icons.restaurant_rounded),
+    _IconSlot(IconType.car, Icons.directions_car_rounded),
+    _IconSlot(IconType.star, Icons.star_rounded),
+    _IconSlot(IconType.heart, Icons.favorite_rounded),
+    _IconSlot(IconType.warning, Icons.warning_rounded),
+    _IconSlot(IconType.flag, Icons.flag_rounded),
   ];
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 160),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
+    _scaleAnimation = Tween<double>(begin: 0.94, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
     _animationController.forward();
   }
 
@@ -60,199 +64,174 @@ class _IconSelectionWheelState extends State<IconSelectionWheel> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    const double wheelRadius = 90.0;
-    const double iconSize = 44.0;
-    final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return Stack(
       children: [
-        // Blurred backdrop
+        // Dim + blur backdrop. Tap dismisses.
         Positioned.fill(
           child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: widget.onCancel,
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-              child: Container(
-                color: Colors.black.withOpacity(0.1),
-              ),
+              filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+              child: Container(color: Colors.black.withOpacity(0.45)),
             ),
           ),
         ),
-        // The wheel
-        Positioned(
-          left: widget.position.dx - wheelRadius - iconSize/2,
-          top: widget.position.dy - wheelRadius - iconSize/2,
+        // Glass card.
+        Center(
           child: AnimatedBuilder(
             animation: _scaleAnimation,
-            builder: (context, child) {
-              return Transform.scale(
+            builder: (context, child) => Opacity(
+              opacity: _animationController.value,
+              child: Transform.scale(
                 scale: _scaleAnimation.value,
-                child: SizedBox(
-                  width: (wheelRadius + iconSize/2) * 2,
-                  height: (wheelRadius + iconSize/2) * 2,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Glass morphism background
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(wheelRadius + 10),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            width: wheelRadius * 2 + 20,
-                            height: wheelRadius * 2 + 20,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  colorScheme.surface.withOpacity(isDark ? 0.2 : 0.9),
-                                  colorScheme.surface.withOpacity(isDark ? 0.1 : 0.8),
-                                ],
-                              ),
-                              border: Border.all(
-                                color: colorScheme.outline.withOpacity(0.1),
-                                width: 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
-                                  blurRadius: 30,
-                                  spreadRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                child: child,
+              ),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 304),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(GridTokens.rXl),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.gridColors.surface.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(GridTokens.rXl),
+                      border: Border.all(
+                        color: context.gridColors.hairlineStrong,
+                        width: 1,
                       ),
-                      // Center tap location indicator with pulse
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colorScheme.primary.withOpacity(0.1),
-                          border: Border.all(
-                            color: colorScheme.primary.withOpacity(0.3),
-                            width: 2,
-                          ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.6),
+                          blurRadius: 36,
+                          offset: const Offset(0, 16),
                         ),
-                        child: Center(
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colorScheme.primary.withOpacity(0.6),
-                            ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _IconGrid(slots: _slots, onTap: _onTap),
+                          const SizedBox(height: 14),
+                          GridMono(
+                            'DROP A PIN HERE',
+                            size: 10.5,
+                            color: context.gridColors.text3,
+                            letterSpacing: 0.12,
                           ),
-                        ),
+                        ],
                       ),
-                      // Icons arranged in circle
-                      ...icons.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final iconType = entry.value;
-                        final angle = (index * 2 * math.pi) / icons.length - math.pi / 2;
-                        final isHovered = _hoveredIcon == iconType;
-                        
-                        return Positioned(
-                          left: wheelRadius + math.cos(angle) * wheelRadius - iconSize/2 + iconSize/2,
-                          top: wheelRadius + math.sin(angle) * wheelRadius - iconSize/2 + iconSize/2,
-                          child: GestureDetector(
-                            onTapDown: (_) {
-                              setState(() {
-                                _hoveredIcon = iconType;
-                              });
-                              // Call selection immediately on tap down for instant response
-                              widget.onIconSelected(iconType);
-                            },
-                            onTapUp: (_) {
-                              // No longer needed here since we handle on tap down
-                            },
-                            onTapCancel: () {
-                              setState(() {
-                                _hoveredIcon = null;
-                              });
-                            },
-                            child: Transform.scale(
-                              scale: isHovered ? 1.1 : 1.0,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 50),
-                                width: iconSize,
-                                height: iconSize,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isHovered 
-                                    ? colorScheme.primary
-                                    : colorScheme.surface,
-                                  border: isHovered ? Border.all(
-                                    color: colorScheme.onPrimary.withOpacity(0.3),
-                                    width: 1,
-                                  ) : null,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: isHovered 
-                                        ? colorScheme.primary.withOpacity(0.4)
-                                        : Colors.black.withOpacity(0.08),
-                                      blurRadius: isHovered ? 16 : 6,
-                                      offset: Offset(0, isHovered ? 4 : 2),
-                                      spreadRadius: isHovered ? 2 : 0,
-                                    ),
-                                    if (!isHovered && !isDark)
-                                      BoxShadow(
-                                        color: Colors.white.withOpacity(0.8),
-                                        blurRadius: 3,
-                                        offset: const Offset(0, -1),
-                                        spreadRadius: 0,
-                                      ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  _getIconData(iconType),
-                                  size: 22,
-                                  color: isHovered 
-                                    ? colorScheme.onPrimary
-                                    : colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ],
+                    ),
                   ),
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  IconData _getIconData(IconType type) {
-    switch (type) {
-      case IconType.pin:
-        return Icons.location_on;
-      case IconType.warning:
-        return Icons.warning;
-      case IconType.food:
-        return Icons.restaurant;
-      case IconType.car:
-        return Icons.directions_car;
-      case IconType.home:
-        return Icons.home;
-      case IconType.star:
-        return Icons.star;
-      case IconType.heart:
-        return Icons.favorite;
-      case IconType.flag:
-        return Icons.flag;
-    }
+  void _onTap(IconType type) {
+    widget.onIconSelected(type);
   }
+}
+
+/// 4×2 grid of icon tiles. Pulled into its own class so the parent stays
+/// declarative.
+class _IconGrid extends StatelessWidget {
+  const _IconGrid({required this.slots, required this.onTap});
+
+  final List<_IconSlot> slots;
+  final ValueChanged<IconType> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // 4 per row, 2 rows.
+    const cols = 4;
+    final rows = <Widget>[];
+    for (var r = 0; r < (slots.length / cols).ceil(); r++) {
+      final row = <Widget>[];
+      for (var c = 0; c < cols; c++) {
+        final idx = r * cols + c;
+        if (idx >= slots.length) {
+          row.add(const SizedBox(width: 56, height: 56));
+        } else {
+          row.add(_IconTile(slot: slots[idx], onTap: () => onTap(slots[idx].type)));
+        }
+        if (c < cols - 1) row.add(const SizedBox(width: 10));
+      }
+      rows.add(Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: row,
+      ));
+      if (r < (slots.length / cols).ceil() - 1) {
+        rows.add(const SizedBox(height: 10));
+      }
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: rows);
+  }
+}
+
+class _IconTile extends StatefulWidget {
+  const _IconTile({required this.slot, required this.onTap});
+
+  final _IconSlot slot;
+  final VoidCallback onTap;
+
+  @override
+  State<_IconTile> createState() => _IconTileState();
+}
+
+class _IconTileState extends State<_IconTile> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: context.gridColors.mintFaint,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(
+              color: context.gridColors.hairlineStrong,
+              width: 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            widget.slot.icon,
+            size: 24,
+            color: context.gridColors.mint,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconSlot {
+  const _IconSlot(this.type, this.icon);
+
+  final IconType type;
+  final IconData icon;
 }
 
 enum IconType {

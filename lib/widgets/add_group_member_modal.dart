@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'package:matrix/matrix_api_lite/generated/model.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
-import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/grid_user.dart' as GridUser;
 import '../repositories/user_repository.dart';
+import '../styles/tokens.dart';
+import '../styles/grid_colors.dart';
+import 'grid/grid_avatar.dart';
+import 'grid/grid_button.dart';
+import 'grid/grid_mono.dart';
 
 class AddGroupMemberModal extends StatefulWidget {
   final String roomId;
@@ -73,6 +76,8 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       if (_controller.text.isNotEmpty) {
         _matrixUserId = null;
       }
+      // Re-render so the preview avatar tracks the handle.
+      if (mounted) setState(() {});
     });
 
     _fadeController.forward();
@@ -103,15 +108,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     } catch (e) {
       print('Error sharing group invite: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Unable to share invite: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Unable to share invite',
+          message: e.toString(),
+          variant: InAppNotificationVariant.error,
         );
       }
     }
@@ -123,7 +123,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
 
     var username = _controller.text.trim().toLowerCase();
     bool isCustomServer = isCustomHomeserver();
-    
+
     if (username.isEmpty) {
       if (mounted) {
         setState(() {
@@ -132,7 +132,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       }
       return;
     }
-    
+
     if (isCustomServer) {
       // For custom homeservers, expect full matrix ID without @ prefix
       if (!username.contains(':')) {
@@ -223,15 +223,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invite sent successfully to ${utils.localpart(username)}.'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+        InAppNotifier.instance.show(
+          title: 'Invite sent',
+          message: 'Sent to @${utils.localpart(username)}',
+          variant: InAppNotificationVariant.success,
         );
       }
 
@@ -295,68 +290,165 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     _qrController?.resumeCamera();
   }
 
-  Widget _buildModernCard({required Widget child, EdgeInsets? padding}) {
-    final colorScheme = Theme.of(context).colorScheme;
+  // ── Build ────────────────────────────────────────────────────────────────
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: padding ?? const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  String get _handle => _controller.text.trim().toLowerCase();
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(GridTokens.r2Xl),
+            topRight: Radius.circular(GridTokens.r2Xl),
           ),
-        ],
+          border: Border(
+            top: BorderSide(color: context.gridColors.hairlineStrong, width: 1),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            // Sheet grabber
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.gridColors.hairlineStrong,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  top: 20,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 24),
+                    if (_isScanning)
+                      _buildQRScanner()
+                    else ...[
+                      _buildPreview(),
+                      const SizedBox(height: 20),
+                      GridMono('Username',
+                          color: context.gridColors.text3,
+                          size: 10,
+                          letterSpacing: 0.12),
+                      const SizedBox(height: 10),
+                      _buildHandleInput(),
+                      const SizedBox(height: 10),
+                      _buildHelperLine(),
+                      if (_contactError != null) ...[
+                        const SizedBox(height: 14),
+                        _buildErrorCard(),
+                      ],
+                      const SizedBox(height: 24),
+                      _buildSecondaryRow(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (!_isScanning) _buildActionButtons(),
+          ],
+        ),
       ),
-      child: child,
     );
   }
 
-  Widget _buildHeader() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  // ── Header ──────────────────────────────────────────────────────────────
 
-    return _buildModernCard(
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GridMono('Add member',
+            color: context.gridColors.text3, size: 10, letterSpacing: 0.14),
+        const SizedBox(height: 6),
+        Text(
+          widget.groupName == null
+              ? 'Invite to group.'
+              : 'Invite to ${widget.groupName}.',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 26,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.025 * 26,
+            color: context.gridColors.text,
+            height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Location sharing begins once they accept.',
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: context.gridColors.text2,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Member preview card ─────────────────────────────────────────────────
+
+  Widget _buildPreview() {
+    final hasHandle = _handle.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
+      ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.person_add,
-              color: colorScheme.primary,
-              size: 24,
-            ),
+          GridAvatar(
+            name: hasHandle ? _handle : '·',
+            size: 44,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Add Member',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.onSurface,
+                  hasHandle ? '@$_handle' : 'New member',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(
+                    'Geist Mono',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: context.gridColors.text,
+                    height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Invite someone to join this group',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface.withOpacity(0.7),
+                if (hasHandle) ...[
+                  const SizedBox(height: 4),
+                  GridMono(
+                    'Pending invite',
+                    color: context.gridColors.text3,
+                    size: 10,
+                    letterSpacing: 0.12,
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -365,196 +457,199 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     );
   }
 
-  Widget _buildUsernameInput() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  // ── Handle input (mint border, surface2 well, @ prefix) ─────────────────
 
-    return _buildModernCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHandleInput() {
+    final hasContent = _handle.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(
+          color: _contactError != null ? context.gridColors.danger : context.gridColors.mint,
+          width: 1.5,
+        ),
+        boxShadow: _contactError != null
+            ? null
+            : [
+                BoxShadow(
+                  color: context.gridColors.mint.withOpacity(0.18),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ],
+      ),
+      child: Row(
         children: [
           Text(
-            'Username',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onSurface,
+            '@',
+            style: GoogleFonts.getFont(
+              'Geist',
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: context.gridColors.text3,
+              height: 1.0,
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _controller,
-            decoration: InputDecoration(
-              hintText: isCustomHomeserver() ? 'john:homeserver.io' : 'Enter username',
-              prefixText: '@',
-              errorText: _contactError,
-              filled: true,
-              fillColor: colorScheme.surfaceVariant.withOpacity(0.3),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+          const SizedBox(width: 4),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              autocorrect: false,
+              enableSuggestions: false,
+              textCapitalization: TextCapitalization.none,
+              cursorColor: context.gridColors.mint,
+              cursorWidth: 2,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: context.gridColors.text,
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.outline.withOpacity(0.2),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                filled: false,
+                fillColor: Colors.transparent,
+                hintText: hasContent
+                    ? null
+                    : (isCustomHomeserver()
+                        ? 'john:homeserver.io'
+                        : 'username'),
+                hintStyle: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: context.gridColors.text3,
                 ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.primary,
-                  width: 2,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: colorScheme.error,
-                  width: 2,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            ),
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurface,
+              onSubmitted: (_) {
+                if (!_isProcessing) _addMember();
+              },
             ),
           ),
-          if (_contactError == null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.2),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: colorScheme.primary,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Secure location sharing begins once accepted',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildQRScannerCard() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildHelperLine() {
+    final body = GoogleFonts.getFont(
+      'Geist',
+      fontSize: 12,
+      fontWeight: FontWeight.w400,
+      color: context.gridColors.text3,
+    );
+    final mono = GoogleFonts.getFont(
+      'Geist Mono',
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      color: context.gridColors.text3,
+    );
+    if (isCustomHomeserver()) {
+      return Text(
+        'Enter the full Matrix ID (user:domain).',
+        style: body,
+      );
+    }
+    return Text(
+      'Enter your friend\'s handle.',
+      style: body,
+    );
+  }
 
-    return _buildModernCard(
+  // ── Inline error card (danger / dangerSoft) ─────────────────────────────
+
+  Widget _buildErrorCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.gridColors.dangerSoft,
+        borderRadius: BorderRadius.circular(GridTokens.rSm),
+        border: Border.all(color: context.gridColors.danger.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded,
+              color: context.gridColors.danger, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _contactError!,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: context.gridColors.danger,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Secondary row: scan QR ──────────────────────────────────────────────
+
+  Widget _buildSecondaryRow() {
+    return _SecondaryAction(
+      icon: Icons.qr_code_scanner_rounded,
+      label: 'Scan QR',
+      onTap: _scanQRCode,
+    );
+  }
+
+  // ── QR Scanner panel ────────────────────────────────────────────────────
+
+  Widget _buildQRScanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(GridTokens.rLg),
+        border: Border.all(color: context.gridColors.hairline, width: 1),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.qr_code_scanner,
-                  color: colorScheme.secondary,
-                  size: 20,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    _qrController?.pauseCamera();
+                    setState(() {
+                      _isScanning = false;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(GridTokens.rMd),
+                  child: Ink(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: context.gridColors.surface,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                      border: Border.all(
+                          color: context.gridColors.hairlineStrong, width: 1),
+                    ),
+                    child: Icon(Icons.arrow_back_rounded,
+                        size: 18, color: context.gridColors.text),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Quick Add',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Scan a user\'s QR code',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _scanQRCode,
-                icon: Icon(
-                  Icons.qr_code_scanner,
-                  size: 18,
-                  color: colorScheme.primary,
-                ),
-                label: Text(
-                  'Scan',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  backgroundColor: colorScheme.primary.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQRScanner() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return _buildModernCard(
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  _qrController?.pauseCamera();
-                  setState(() {
-                    _isScanning = false;
-                  });
-                },
-                icon: Icon(
-                  Icons.arrow_back,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 8),
               Text(
-                'Scan QR Code',
-                style: theme.textTheme.titleLarge?.copyWith(
+                'Scan QR code',
+                style: GoogleFonts.getFont(
+                  'Geist',
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
+                  color: context.gridColors.text,
+                  letterSpacing: -0.01,
                 ),
               ),
             ],
@@ -563,17 +658,16 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           Container(
             height: 300,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: colorScheme.outline.withOpacity(0.2),
-              ),
+              color: context.gridColors.bg,
+              borderRadius: BorderRadius.circular(GridTokens.rMd),
+              border: Border.all(color: context.gridColors.hairlineStrong),
             ),
             clipBehavior: Clip.antiAlias,
             child: QRView(
               key: qrKey,
               onQRViewCreated: _onQRViewCreated,
               overlay: QrScannerOverlayShape(
-                borderColor: colorScheme.primary,
+                borderColor: context.gridColors.mint,
                 borderRadius: 12,
                 borderLength: 30,
                 borderWidth: 4,
@@ -581,99 +675,22 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  color: colorScheme.onSurface.withOpacity(0.6),
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Point your camera at a user\'s QR code to add them instantly',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShareInviteCard() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return _buildModernCard(
-      child: Column(
-        children: [
+          const SizedBox(height: 14),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.share,
-                  color: colorScheme.secondary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
+              Icon(Icons.info_outline_rounded,
+                  size: 14, color: context.gridColors.text3),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Share Invite',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Invite friends to join this group',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton.icon(
-                onPressed: _shareGroupInvite,
-                icon: Icon(
-                  Icons.share,
-                  size: 18,
-                  color: colorScheme.primary,
-                ),
-                label: Text(
-                  'Share',
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  backgroundColor: colorScheme.primary.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                child: Text(
+                  "Point your camera at a user's QR code to add them instantly.",
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: context.gridColors.text3,
+                    height: 1.3,
                   ),
                 ),
               ),
@@ -684,120 +701,116 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     );
   }
 
-  Widget _buildActionButtons() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  // ── Bottom action bar ───────────────────────────────────────────────────
 
+  Widget _buildActionButtons() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        12,
+        24,
+        MediaQuery.of(context).padding.bottom + 16,
+      ),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: context.gridColors.surface,
         border: Border(
-          top: BorderSide(
-            color: colorScheme.outline.withOpacity(0.1),
-          ),
+          top: BorderSide(color: context.gridColors.hairline, width: 1),
         ),
       ),
       child: Row(
         children: [
           Expanded(
-            child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: colorScheme.onSurface,
-                side: BorderSide(color: colorScheme.outline.withOpacity(0.3)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text('Cancel'),
+            child: GridButton(
+              label: 'Cancel',
+              style: GridButtonStyle.secondary,
+              onPressed: _isProcessing
+                  ? null
+                  : () => Navigator.of(context).pop(),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: ElevatedButton(
-              onPressed: _isProcessing ? null : _addMember,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: _isProcessing
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: colorScheme.onPrimary,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text(
-                      'Send Invite',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-            ),
+            child: _isProcessing
+                ? _buildLoadingButton()
+                : GridButton(
+                    label: 'Add to group',
+                    onPressed: _addMember,
+                  ),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildLoadingButton() {
+    return Container(
+      height: 52,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: context.gridColors.mint.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.4,
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF04201A)),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tiny private widgets ────────────────────────────────────────────────────
+
+class _SecondaryAction extends StatelessWidget {
+  const _SecondaryAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colorScheme.background,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.gridColors.surface2,
+            borderRadius: BorderRadius.circular(GridTokens.rMd),
+            border: Border.all(color: context.gridColors.hairline, width: 1),
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            // Modern handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colorScheme.outline.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: 24,
-                  right: 24,
-                  top: 24,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-                ),
-                child: Column(
-                  children: [
-                    _buildHeader(),
-                    if (_isScanning) _buildQRScanner() else ...[
-                      _buildUsernameInput(),
-                      _buildQRScannerCard(),
-                      if (!isCustomHomeserver()) _buildShareInviteCard(),
-                    ],
-                  ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: context.gridColors.mint),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.getFont(
+                    'Geist',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.gridColors.text,
+                    letterSpacing: -0.005,
+                  ),
                 ),
               ),
-            ),
-
-            if (!_isScanning) _buildActionButtons(),
-          ],
+            ],
+          ),
         ),
       ),
     );
