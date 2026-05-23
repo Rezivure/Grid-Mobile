@@ -2354,10 +2354,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
               ),
 
-            // Top-center "SHARING WITH N" pill. The user_info_bubble
-            // that used to overlap this is gone — marker taps now open
-            // the profile sheet at the bottom, leaving the top clear.
-            Positioned(
+            // Top-center "SHARING WITH N" pill. Hidden while a map-icon
+            // detail bubble is open so it doesn't obscure the bubble.
+            if (!(_selectedMapIcon != null &&
+                _selectedIconPosition != null &&
+                !_showIconActionWheel))
+              Positioned(
                 top: 60,
                 left: 0,
                 right: 0,
