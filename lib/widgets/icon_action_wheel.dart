@@ -28,11 +28,6 @@ class IconActionWheel extends StatefulWidget {
   final VoidCallback onMove;
   final VoidCallback onCancel;
 
-  /// Optional callback so the user can share the icon with the group.
-  /// MapTab may not pass this yet — we fall back to the existing details
-  /// route when null so the row stays useful.
-  final VoidCallback? onShare;
-
   /// Material icon name used for the lifted preview tile. Defaults to
   /// [Icons.location_on_rounded] when not provided.
   final IconData? iconData;
@@ -49,7 +44,6 @@ class IconActionWheel extends StatefulWidget {
     required this.onZoom,
     required this.onMove,
     required this.onCancel,
-    this.onShare,
     this.iconData,
     this.label,
   }) : super(key: key);
@@ -141,7 +135,6 @@ class _IconActionWheelState extends State<IconActionWheel>
               onDetails: _wrap(widget.onDetails),
               onZoom: _wrap(widget.onZoom),
               onMove: _wrap(widget.onMove),
-              onShare: _wrap(widget.onShare ?? widget.onDetails),
               onDelete: _wrap(widget.onDelete),
             ),
           ),
@@ -168,8 +161,7 @@ class _IconActionWheelState extends State<IconActionWheel>
     final rightEdgeIfRight = iconCx + _previewSize / 2 + _gap + _menuWidth;
     final placeRight = rightEdgeIfRight <= mediaSize.width - 12;
 
-    // Estimate menu height — 5 rows + divider + padding ≈ 240.
-    const menuHeight = 244.0;
+    const menuHeight = 200.0;
 
     double menuLeft;
     double menuTop;
@@ -277,7 +269,6 @@ class _MenuCard extends StatelessWidget {
     required this.onDetails,
     required this.onZoom,
     required this.onMove,
-    required this.onShare,
     required this.onDelete,
   });
 
@@ -285,7 +276,6 @@ class _MenuCard extends StatelessWidget {
   final VoidCallback onDetails;
   final VoidCallback onZoom;
   final VoidCallback onMove;
-  final VoidCallback onShare;
   final VoidCallback onDelete;
 
   @override
@@ -330,11 +320,6 @@ class _MenuCard extends StatelessWidget {
                   icon: Icons.swap_horiz_rounded,
                   label: 'Move',
                   onTap: onMove,
-                ),
-                _MenuRow(
-                  icon: Icons.ios_share_rounded,
-                  label: 'Share with group',
-                  onTap: onShare,
                 ),
                 Divider(
                   height: 1,
