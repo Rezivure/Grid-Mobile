@@ -255,8 +255,8 @@ class _AddFriendModalState extends State<AddFriendModal>
       }
       try {
         print('AddFriendModal: Checking if user exists: $normalizedUserId');
-        bool userExists =
-            await widget.userService.userExists(normalizedUserId);
+        bool userExists = await widget.userService
+            .userExists(normalizedUserId, timeout: const Duration(seconds: 8));
         if (!userExists) {
           if (mounted) {
             setState(() {

@@ -112,21 +112,8 @@ class RoomService {
   }
 
  /// create direct grid room (contact)
+  /// Caller is responsible for verifying the user exists before invoking.
   Future<bool> createRoomAndInviteContact(String matrixUserId) async {
-
-
-
-    // Check if the user exists
-    try {
-      final exists = await userService.userExists(matrixUserId);
-      if (!exists) {
-        return false;
-      }
-    } catch (e) {
-      print('User $matrixUserId does not exist: $e');
-      return false;
-    }
-
     // Check if direct grid contact already exists
     final myUserId = client.userID ?? 'error';
 

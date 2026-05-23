@@ -1292,7 +1292,8 @@ class SyncManager with ChangeNotifier {
     await Future.wait(currentParticipants.map((participantId) async {
       try {
         // Fetch participant details using client.getUserProfile
-        final profileInfo = await client.getUserProfile(participantId);
+        final profileInfo = await client
+            .getUserProfile(participantId, timeout: const Duration(seconds: 8));
 
         // Create or update the user in the database
         final gridUser = GridUser.GridUser(

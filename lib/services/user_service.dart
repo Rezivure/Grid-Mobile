@@ -23,10 +23,10 @@ class UserService {
 
   UserService(this.client, this.locationRepository, this.sharingPreferencesRepository);
 
-  Future<bool> userExists(String userId) async {
+  Future<bool> userExists(String userId, {Duration timeout = const Duration(seconds: 8)}) async {
     try {
       print("Checking if $userId exists.");
-      final response = await client.getUserProfile(userId);
+      final response = await client.getUserProfile(userId, timeout: timeout);
       return response != null;
     } catch (e) {
       print('Error checking user existence: $e');
