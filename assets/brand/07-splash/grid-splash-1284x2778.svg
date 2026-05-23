@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1284" height="2778" viewBox="0 0 1284 2778" role="img" aria-label="Grid Splash Screen">
+  <title>Grid Splash · 1284×2778</title>
+  <rect width="1284" height="2778" fill="#191B1E"></rect>
+  <g transform="translate(462.24, 987) scale(8.988000000000001)">
+    <circle cx="20" cy="12" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="28" cy="12" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="12" cy="20" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="20" cy="20" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="28" cy="20" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="12" cy="28" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="20" cy="28" r="2.4" fill="#D6D8DA"></circle>
+    <circle cx="28" cy="28" r="2.4" fill="#D6D8DA"></circle>
+    <path d="M 12 14.5 Q 10.68 13.060582854123025 9.682 11.621 A 2.4 2.4 0 1 1 14.318 11.621 Q 13.32 13.060582854123025 12 14.5 Z" fill="#1FD9A0"></path>
+  </g>
+  
+  <text x="642" y="1508.304" font-family="Geist, -apple-system, system-ui, sans-serif" font-weight="600" font-size="166.92000000000002" fill="#FFFFFF" text-anchor="middle" letter-spacing="-6.6768">grid</text>
+  
+  <text x="642" y="2678" font-family="Geist Mono, ui-monospace, monospace" font-weight="500" font-size="23.112" fill="rgba(255,255,255,0.4)" text-anchor="middle" letter-spacing="2.3112">END-TO-END ENCRYPTED · OPEN SOURCE</text>
+</svg>

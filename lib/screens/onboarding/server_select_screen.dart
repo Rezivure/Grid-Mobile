@@ -334,7 +334,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: IconButton(
@@ -413,17 +413,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.fingerprint,
               size: 48,
@@ -480,22 +470,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     return Column(
       children: [
         _buildStepHeader(
-          title: 'Choose Your Username',
+          title: 'Choose Your Handle',
           subtitle: 'This is how others can find and add you on Grid',
           illustration: Container(
             width: 96,
             height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.14),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.0, 0.6, 1.0],
-              ),
-            ),
             alignment: Alignment.center,
             child: Icon(
               Icons.alternate_email_rounded,
@@ -526,8 +505,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           child: TextField(
             controller: _usernameController,
             decoration: InputDecoration(
-              labelText: 'Username',
-              hintText: 'Enter your unique username',
+              labelText: 'Handle',
+              hintText: 'Enter your unique handle',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -633,17 +612,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.phone_android,
               size: 48,
@@ -747,17 +716,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration: Container(
             width: 100,
             height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  colorScheme.primary.withOpacity(0.1),
-                  colorScheme.primary.withOpacity(0.05),
-                  Colors.transparent,
-                ],
-                stops: const [0.3, 0.7, 1.0],
-              ),
-            ),
+            alignment: Alignment.center,
             child: Icon(
               Icons.verified_user,
               size: 48,

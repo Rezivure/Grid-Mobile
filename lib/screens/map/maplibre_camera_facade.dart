@@ -48,6 +48,7 @@ class MaplibreCameraFacade {
 
   /// Snap to a position (no animation). Mirrors `MapController.move`.
   void move(LatLng center, double zoom) {
+    if (!_foregrounded) return;
     if (!isFiniteLatLng(center.latitude, center.longitude)) {
       debugPrint('[Camera] Skipping move — invalid coords: ${center.latitude},${center.longitude}');
       return;
@@ -64,6 +65,7 @@ class MaplibreCameraFacade {
   /// Animate to a position + rotation. Mirrors `MapController.moveAndRotate`.
   /// `rotation` is in degrees; flutter_map called this with 0 to clear bearing.
   void moveAndRotate(LatLng center, double zoom, double rotation) {
+    if (!_foregrounded) return;
     if (!isFiniteLatLng(center.latitude, center.longitude)) {
       debugPrint('[Camera] Skipping moveAndRotate — invalid coords: ${center.latitude},${center.longitude}');
       return;
@@ -78,6 +80,11 @@ class MaplibreCameraFacade {
       ),
     ));
   }
+
+  // Backgrounded MLNMapView has a zero-size layer; MapLibre's bounds-clamp
+  // math then produces NaN and the native LatLng constructor crashes the app.
+  bool get _foregrounded =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   double _safeZoom(double zoom) {
     if (zoom.isNaN || zoom.isInfinite) return 2.0;

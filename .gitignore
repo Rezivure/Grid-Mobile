@@ -85,3 +85,4 @@ maestro-core-debug-*/
 
 # Local-only design/scratch files (never commit)
 .scratch/
+.claude/

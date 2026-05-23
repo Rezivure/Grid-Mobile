@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="720" viewBox="0 0 600 720" role="img" aria-label="Grid Lockup · Vertical · Ink">
+  <title>Grid Lockup · Vertical · Ink</title>
+  
+  <g transform="translate(180, 40) scale(6)">
+    <circle cx="20" cy="12" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="28" cy="12" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="12" cy="20" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="20" cy="20" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="28" cy="20" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="12" cy="28" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="20" cy="28" r="2.4" fill="#A0A4A8"></circle>
+    <circle cx="28" cy="28" r="2.4" fill="#A0A4A8"></circle>
+    <path d="M 12 14.5 Q 10.68 13.060582854123025 9.682 11.621 A 2.4 2.4 0 1 1 14.318 11.621 Q 13.32 13.060582854123025 12 14.5 Z" fill="#1FD9A0"></path>
+  </g>
+  
+  <text x="300" y="630" font-family="Geist, -apple-system, system-ui, sans-serif" font-weight="600" font-size="220" fill="#0E1115" text-anchor="middle" letter-spacing="-8.8">grid</text>
+</svg>

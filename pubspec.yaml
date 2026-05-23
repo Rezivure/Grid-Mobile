@@ -62,14 +62,29 @@ dependencies:
   google_api_availability: ^5.0.1
 
 
-3flutter_launcher_icons:
+flutter_launcher_icons:
   android: true
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/appIcons/playstore.png"
-  adaptive_icon_padding: false #
   ios: true
-  image_path: "assets/appIcons/appstore.png"
+  image_path: "assets/brand/04-app-icon/grid-app-icon-appstore-1024.png"
+  remove_alpha_ios: true
   min_sdk_android: 21
+  adaptive_icon_background: "#191B1E"
+  adaptive_icon_foreground: "assets/brand/04-app-icon/grid-app-icon-1024.png"
+  adaptive_icon_padding: false
+
+flutter_native_splash:
+  color: "#F8F8F7"
+  color_dark: "#0B0D0F"
+  image: "assets/brand/01-logos/grid-symbol-color-512.png"
+  image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
+  android_12:
+    image: "assets/brand/01-logos/grid-symbol-color-512.png"
+    image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
+    color: "#F8F8F7"
+    color_dark: "#0B0D0F"
+  ios: true
+  android: true
+  fullscreen: true
 
 dev_dependencies:
   flutter_test:
@@ -88,10 +103,10 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   assets:
-    - assets/logos/Jpeg-2.jpg
-    - assets/logos/png-file-2.png
-    - assets/logos/Brand-Pattern-Full-Color.png
-    - assets/logos/Brand-Pattern-Low-color.png
+    - assets/brand/01-logos/grid-symbol-color-1024.png
+    - assets/brand/01-logos/grid-symbol-color-dark-1024.png
+    - assets/brand/02-wordmark/grid-wordmark-ink-1800.png
+    - assets/brand/02-wordmark/grid-wordmark-white-1800.png
     - assets/lottie/lottie-phone-pin.json
     - assets/lottie/lottie-phone-verify.json
     - assets/extras/satellite.png

@@ -85,7 +85,7 @@ class GridTokens {
   // Optional light scheme (designs are dark-primary; this is a safety net)
   static ColorScheme lightScheme() => const ColorScheme(
         brightness: Brightness.light,
-        primary: Color(0xFF0F9C76),
+        primary: mint,
         onPrimary: Colors.white,
         secondary: Color(0xFFB4881F),
         onSecondary: Colors.white,

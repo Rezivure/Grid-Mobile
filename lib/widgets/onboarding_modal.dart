@@ -309,7 +309,7 @@ class _OnboardingModalState extends State<OnboardingModal>
                 _LogoHero(),
                 const SizedBox(height: 22),
                 Text(
-                  'Welcome to Grid.',
+                  'Welcome to grid.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.getFont(
                     'Geist',
@@ -421,14 +421,8 @@ class _PermissionBanner extends StatelessWidget {
       height: 120,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F5C4E),
-            Color(0xFF1E8E76),
-          ],
-        ),
+        color: context.gridColors.mintFaint,
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
       ),
       child: Stack(
         children: [
@@ -437,7 +431,7 @@ class _PermissionBanner extends StatelessWidget {
           Positioned.fill(
             child: CustomPaint(
               painter: _DotPainter(
-                color: Colors.white.withOpacity(0.12),
+                color: context.gridColors.mint.withOpacity(0.18),
               ),
             ),
           ),
@@ -447,17 +441,17 @@ class _PermissionBanner extends StatelessWidget {
               height: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.16),
+                color: context.gridColors.mintSoft,
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.32),
+                  color: context.gridColors.mint.withOpacity(0.45),
                   width: 1,
                 ),
               ),
               alignment: Alignment.center,
-              child: const Icon(
+              child: Icon(
                 Icons.location_on_rounded,
                 size: 32,
-                color: Colors.white,
+                color: context.gridColors.mint,
               ),
             ),
           ),
@@ -654,26 +648,16 @@ class _RowTrailing extends StatelessWidget {
 class _LogoHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 116,
       height: 116,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            context.gridColors.mint.withOpacity(0.18),
-            context.gridColors.mint.withOpacity(0.05),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.6, 1.0],
+      child: Center(
+        child: Image.asset(
+          'assets/brand/01-logos/grid-symbol-color-1024.png',
+          width: 76,
+          height: 76,
+          fit: BoxFit.contain,
         ),
-      ),
-      alignment: Alignment.center,
-      child: Image.asset(
-        'assets/logos/png-file-2.png',
-        width: 76,
-        height: 76,
-        fit: BoxFit.contain,
       ),
     );
   }

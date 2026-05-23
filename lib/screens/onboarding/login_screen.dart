@@ -203,23 +203,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildModernLogo() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            colorScheme.primary.withOpacity(0.1),
-            colorScheme.primary.withOpacity(0.05),
-            Colors.transparent,
-          ],
-          stops: const [0.3, 0.7, 1.0],
-        ),
-      ),
       child: Image.asset(
-        'assets/logos/png-file-2.png',
+        'assets/brand/01-logos/grid-symbol-color-1024.png',
         height: 100,
         width: 100,
         fit: BoxFit.contain,
@@ -572,7 +559,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
@@ -714,11 +701,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     const SizedBox(height: 16),
                   ],
                   
-                  // Username
+                  // Handle
                   _buildModernTextField(
                     controller: _usernameController,
-                    label: 'Username',
-                    hint: 'Enter your username',
+                    label: 'Handle',
+                    hint: 'Enter your handle',
                     icon: Icons.person_outline,
                   ),
                   

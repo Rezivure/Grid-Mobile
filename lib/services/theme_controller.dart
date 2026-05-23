@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// User-overridable app theme mode. Default is `ThemeMode.system` so the app
-/// continues to follow OS brightness until the user explicitly picks Light or
-/// Dark from Settings. Singleton ChangeNotifier so the MaterialApp at the root
-/// can rebuild on change without restarting the app.
+/// User-overridable app theme mode. Defaults to `ThemeMode.dark` on first
+/// launch; the user can switch to Light or System from Settings.
 class ThemeController extends ChangeNotifier {
   ThemeController._();
   static final ThemeController instance = ThemeController._();
 
   static const _prefsKey = 'theme_mode';
 
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.dark;
   ThemeMode get mode => _mode;
 
   Future<void> load() async {
@@ -44,11 +42,11 @@ class ThemeController extends ChangeNotifier {
     switch (s) {
       case 'light':
         return ThemeMode.light;
-      case 'dark':
-        return ThemeMode.dark;
       case 'system':
-      default:
         return ThemeMode.system;
+      case 'dark':
+      default:
+        return ThemeMode.dark;
     }
   }
 }
