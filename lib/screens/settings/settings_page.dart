@@ -166,9 +166,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadIncognitoState() async {
-    final prefs = await SharedPreferences.getInstance();
+    final sharingState = context.read<SharingStateNotifier>();
+    if (!mounted) return;
     setState(() {
-      _incognitoMode = prefs.getBool('incognito_mode') ?? false;
+      _incognitoMode = sharingState.userIncognito;
     });
   }
 
@@ -281,16 +282,12 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final sharingState = context.read<SharingStateNotifier>();
-    final prefs = await SharedPreferences.getInstance();
 
     setState(() {
       _incognitoMode = value;
     });
 
-    // Keep the pref-write so on-disk state stays correct even if the
-    // notifier write races; setPaused() also writes the same key.
-    await prefs.setBool('incognito_mode', value);
-    await sharingState.setPaused(value);
+    await sharingState.setUserIncognito(value);
 
     if (value) {
       locationManager.stopTracking();

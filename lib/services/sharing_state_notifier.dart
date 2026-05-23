@@ -2,23 +2,28 @@
 //
 // Single source of truth for the user's "sharing paused" state.
 //
-// Today the value is persisted under the SharedPreferences key
-// `incognito_mode` (true when sharing is OFF / incognito ON). The
-// settings page wrote to that key directly, which meant other widgets
-// (notably the map's "SHARING WITH N" pill) had no way to react when
-// the user toggled sharing off.
+// Two independent inputs combine into the effective paused state:
+//   * `userIncognito` — the deliberate user toggle from settings.
+//     Persisted under the legacy `incognito_mode` pref key.
+//   * `pausedAtHome` — transient, set by HomeGeofenceService on
+//     ENTER/EXIT. NOT persisted; geofence re-fires on app boot.
 //
-// This notifier loads the value on construction and rebroadcasts any
-// changes so anything watching it (e.g. the pill) re-renders.
+// `isPaused = userIncognito || pausedAtHome` — what LocationDispatch
+// and the map pill consume. Settings UI should render `userIncognito`
+// so a geofence transition doesn't visually flip the toggle.
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharingStateNotifier extends ChangeNotifier {
-  static const String _prefsKey = 'incognito_mode';
+  static const String _userIncognitoKey = 'incognito_mode';
 
-  bool _isPaused = false;
-  bool get isPaused => _isPaused;
+  bool _userIncognito = false;
+  bool _pausedAtHome = false;
+
+  bool get userIncognito => _userIncognito;
+  bool get pausedAtHome => _pausedAtHome;
+  bool get isPaused => _userIncognito || _pausedAtHome;
 
   SharingStateNotifier() {
     _load();
@@ -26,27 +31,26 @@ class SharingStateNotifier extends ChangeNotifier {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getBool(_prefsKey) ?? false;
-    if (value != _isPaused) {
-      _isPaused = value;
+    final value = prefs.getBool(_userIncognitoKey) ?? false;
+    if (value != _userIncognito) {
+      _userIncognito = value;
       notifyListeners();
     }
   }
 
-  /// Persists [value] to SharedPreferences and notifies listeners.
-  /// `true`  = sharing OFF / incognito ON (paused)
-  /// `false` = sharing ON (normal)
-  Future<void> setPaused(bool value) async {
-    if (_isPaused == value) {
-      // Still write through so on-disk state matches, but don't spam
-      // listeners with no-op rebuilds.
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefsKey, value);
-      return;
-    }
-    _isPaused = value;
+  /// Persists the user's deliberate incognito toggle.
+  Future<void> setUserIncognito(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsKey, value);
+    await prefs.setBool(_userIncognitoKey, value);
+    if (_userIncognito == value) return;
+    _userIncognito = value;
+    notifyListeners();
+  }
+
+  /// Ephemeral geofence-driven pause; not persisted.
+  void setPausedAtHome(bool value) {
+    if (_pausedAtHome == value) return;
+    _pausedAtHome = value;
     notifyListeners();
   }
 }

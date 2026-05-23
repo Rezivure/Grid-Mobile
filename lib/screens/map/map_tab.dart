@@ -662,8 +662,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // Start location tracking (only called after permission disclosure/onboarding)
   Future<void> _startLocationTracking() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isIncognitoMode = prefs.getBool('incognito_mode') ?? false;
+    final isIncognitoMode =
+        context.read<SharingStateNotifier>().userIncognito;
 
     if (!isIncognitoMode) {
       _locationManager?.startTracking();

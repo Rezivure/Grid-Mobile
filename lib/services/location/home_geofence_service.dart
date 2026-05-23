@@ -131,10 +131,10 @@ class HomeGeofenceService {
         // reads isPaused on the next fix and stops posting; an "at
         // home" final post will already have been sent on the STILL
         // transition that triggered this enter.
-        _sharingState.setPaused(true);
+        _sharingState.setPausedAtHome(true);
         break;
       case libre.GeofenceTransition.exit:
-        _sharingState.setPaused(false);
+        _sharingState.setPausedAtHome(false);
         break;
       case libre.GeofenceTransition.dwell:
         // Not registered — no-op.
