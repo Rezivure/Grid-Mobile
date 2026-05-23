@@ -220,29 +220,21 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
         .toList();
   }
 
-  // No real "paused" signal exists for contacts — stale data is offline.
-  // Invites get their own bucket so they don't masquerade as offline.
+  // Section bucket — invites get their own; everyone else splits on
+  // freshness (live+stale ⇒ "sharing now", idle ⇒ "offline"). The dot
+  // color carries the live/stale distinction within "sharing now".
   _ContactBucket _bucketFor(ContactDisplay c) {
     if (c.membershipStatus == 'invite') return _ContactBucket.invited;
-    final ts = c.lastUpdateAt;
-    if (ts == null) return _ContactBucket.offline;
-    final age = DateTime.now().difference(ts);
-    if (age <= const Duration(minutes: 10)) return _ContactBucket.sharingNow;
+    final s = statusFromLastUpdate(c.lastUpdateAt);
+    if (s == GridAvatarStatus.live || s == GridAvatarStatus.stale) {
+      return _ContactBucket.sharingNow;
+    }
     return _ContactBucket.offline;
   }
 
-  bool _isLive(ContactDisplay c) =>
-      _bucketFor(c) == _ContactBucket.sharingNow;
-
   GridAvatarStatus _avatarStatusFor(ContactDisplay c) {
-    switch (_bucketFor(c)) {
-      case _ContactBucket.sharingNow:
-        return GridAvatarStatus.live;
-      case _ContactBucket.invited:
-        return GridAvatarStatus.paused;
-      case _ContactBucket.offline:
-        return GridAvatarStatus.offline;
-    }
+    if (c.membershipStatus == 'invite') return GridAvatarStatus.idle;
+    return statusFromLastUpdate(c.lastUpdateAt);
   }
 
   String _placeKey(double lat, double lng) {
@@ -501,7 +493,6 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       userId: contact.userId,
       placeLine: _placeLineFor(contact, place: place),
       timeText: _timeTextFor(contact),
-      live: _isLive(contact),
       avatarStatus: _avatarStatusFor(contact),
       showDivider: !isLast,
       statusKind: isInvite ? null : null,

@@ -825,15 +825,11 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         : '@${user.userId.split(':')[0].replaceFirst('@', '')}';
     final name = user.displayName ?? localpart(user.userId);
 
-    // No real "paused" signal exists for contacts. Stale data is offline.
     final isInvited = memberStatus == 'invite';
-    final isLive = !isInvited && _isRecentlyActive(lastUpdateAt);
-
-    final avatarStatus = isInvited
-        ? GridAvatarStatus.paused
-        : isLive
-            ? GridAvatarStatus.live
-            : GridAvatarStatus.offline;
+    // Dot is freshness-only; invited members get idle (the INVITED pill
+    // carries the membership semantic).
+    final avatarStatus =
+        isInvited ? GridAvatarStatus.idle : statusFromLastUpdate(lastUpdateAt);
 
     String? statusLabel;
     GridStatusKind? statusKind;
@@ -853,7 +849,6 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       distanceText: null,
       statusKind: statusKind,
       statusLabel: statusLabel,
-      live: isLive,
       avatarStatus: avatarStatus,
       showDivider: showDivider,
       onTap: isInvited
@@ -868,11 +863,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     return null;
   }
 
-  bool _isRecentlyActive(DateTime? lastUpdateAt) {
-    if (lastUpdateAt == null) return false;
-    final age = DateTime.now().difference(lastUpdateAt);
-    return age <= const Duration(minutes: 10);
-  }
+  bool _isRecentlyActive(DateTime? lastUpdateAt) =>
+      statusFromLastUpdate(lastUpdateAt) == GridAvatarStatus.live;
 
   Widget _buildEmptyState() {
     return Padding(

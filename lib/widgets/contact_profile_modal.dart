@@ -229,21 +229,19 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     return days;
   }
 
-  // No real "paused" signal exists for contacts — stale data is offline.
+  // Viewer-facing freshness only; never expose the friend's paused/incognito.
   GridAvatarStatus _contactStatus(BuildContext context) {
     final loc = context
         .watch<UserLocationProvider>()
         .getUserLocation(widget.contact.userId);
-    if (loc == null) return GridAvatarStatus.offline;
+    if (loc == null) return GridAvatarStatus.idle;
     DateTime? ts;
     try {
       ts = DateTime.parse(loc.timestamp).toLocal();
     } catch (_) {
-      return GridAvatarStatus.offline;
+      return GridAvatarStatus.idle;
     }
-    final age = DateTime.now().difference(ts);
-    if (age <= const Duration(minutes: 10)) return GridAvatarStatus.live;
-    return GridAvatarStatus.offline;
+    return statusFromLastUpdate(ts);
   }
 
   // ────────────────────────────────────────────────────────────────────
