@@ -46,6 +46,7 @@ import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
 import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
+import 'package:grid_frontend/services/home_location_signals.dart';
 import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
 import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
 import 'package:grid_frontend/screens/settings/sharing_mode_screen.dart';
@@ -381,6 +382,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     await prefs.setDouble('home_radius', picked.radiusMeters);
     await _syncHomeGeofence();
+    HomeLocationSignals.bump();
     if (!mounted) return;
     setState(() => _homeLocationSet = true);
     InAppNotifier.instance.show(
@@ -398,6 +400,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.remove('home_radius');
     await prefs.setBool('auto_pause_at_home_enabled', false);
     await _syncHomeGeofence();
+    HomeLocationSignals.bump();
     if (!mounted) return;
     setState(() {
       _homeLocationSet = false;
@@ -520,6 +523,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     await prefs.setDouble('home_radius', picked.radiusMeters);
     await _syncHomeGeofence();
+    HomeLocationSignals.bump();
     return true;
   }
 

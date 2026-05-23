@@ -44,6 +44,7 @@ import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/widgets/contact_profile_modal.dart';
 import 'package:grid_frontend/widgets/sharing_recipient_pill.dart';
 import 'package:grid_frontend/models/contact_display.dart';
+import 'package:grid_frontend/services/home_location_signals.dart';
 import 'package:grid_frontend/services/map_camera_signals.dart';
 import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
@@ -215,6 +216,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     // Load saved home location (set in Settings).
     _reloadHomeLocation();
+    HomeLocationSignals.changed.addListener(_onHomeLocationSignal);
 
     // Check if app was properly initialized
     _checkAndInitialize().then((_) {
@@ -800,6 +802,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _animationController?.dispose();
     _mapMoveTimer?.cancel();
     MapCameraSignals.resetRequested.removeListener(_onResetSignal);
+    HomeLocationSignals.changed.removeListener(_onHomeLocationSignal);
     ContactSheetController.instance.removeListener(_onSheetChanged);
     WidgetsBinding.instance.removeObserver(this);
     _locationManager?.removeListener(_onLocationUpdate);
@@ -1418,6 +1421,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     if (!mounted) return;
     context.read<MapBloc>().add(MapClearSelection());
     _resetToInitialZoom();
+  }
+
+  void _onHomeLocationSignal() {
+    if (!mounted) return;
+    _reloadHomeLocation();
   }
 
   Widget _buildInlineContactSheet() {

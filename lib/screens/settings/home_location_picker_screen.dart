@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
@@ -9,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../services/location_manager.dart';
 import '../../styles/tokens.dart';
 import '../../styles/grid_colors.dart';
+import '../../utilities/lat_lng_validation.dart';
 import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../map/grid_map_style.dart';
@@ -56,7 +58,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   static const double _minRadius = 50;
   static const double _maxRadius = 300;
 
-  // Fallback if the user has no last known location yet.
+  // Shown for ~1s while we fetch the real location, then replaced.
   static const ll.LatLng _fallbackCenter = ll.LatLng(37.7749, -122.4194);
 
   @override
@@ -73,6 +75,43 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
       parent: _tick,
       curve: Curves.easeInOut,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAndCenter());
+  }
+
+  /// Phase 2 of the two-phase center: fetch the real device location and
+  /// animate the camera to it, but only if the user hasn't started panning
+  /// yet (otherwise we'd yank the map out from under them).
+  Future<void> _fetchAndCenter() async {
+    if (!mounted) return;
+    final cached = Provider.of<LocationManager>(context, listen: false)
+        .currentLatLng;
+    if (cached != null && isFiniteLatLng(cached.latitude, cached.longitude)) {
+      _moveCameraTo(cached);
+      return;
+    }
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!isFiniteLatLng(pos.latitude, pos.longitude)) return;
+      _moveCameraTo(ll.LatLng(pos.latitude, pos.longitude));
+    } catch (_) {
+      // Stay on the SF fallback silently.
+    }
+  }
+
+  void _moveCameraTo(ll.LatLng target) {
+    if (!mounted || _isInteracting) return;
+    final controller = _mlController;
+    if (controller == null) return;
+    controller.animateCamera(ml.CameraUpdate.newCameraPosition(
+      ml.CameraPosition(
+        target: ml.LatLng(target.latitude, target.longitude),
+        zoom: 16,
+      ),
+    ));
   }
 
   @override
