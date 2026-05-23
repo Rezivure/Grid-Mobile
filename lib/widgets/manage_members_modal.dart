@@ -41,7 +41,7 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
     _refresh();
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     final room = widget.roomService.client.getRoomById(widget.roomId);
     if (room == null) {
       setState(() {
@@ -51,12 +51,33 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
       });
       return;
     }
+    // Force-fetch latest power_levels from server — our own setPower can
+    // out-race the sync echo and leave the local cache stale.
+    Map<String, dynamic>? freshPl;
+    try {
+      freshPl = await widget.roomService.client.getRoomStateWithKey(
+        widget.roomId,
+        EventTypes.RoomPowerLevels,
+        '',
+      );
+    } catch (_) {}
+    int plFor(String uid) {
+      if (freshPl != null) {
+        final users = freshPl['users'];
+        if (users is Map && users[uid] is int) return users[uid] as int;
+        final def = freshPl['users_default'];
+        if (def is int) return def;
+        return 0;
+      }
+      return room.getPowerLevelByUserId(uid);
+    }
+    if (!mounted) return;
     final joined = room
         .getParticipants()
         .where((p) => p.membership == Membership.join)
         .toList();
     final entries = joined.map((p) {
-      final pl = room.getPowerLevelByUserId(p.id);
+      final pl = plFor(p.id);
       final display = (p.displayName ?? '').trim().isNotEmpty
           ? p.displayName!.trim()
           : utils.formatUserId(p.id);
@@ -76,12 +97,19 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
               b.displayName.toLowerCase(),
             );
       });
-    final myPl = room.getPowerLevelByUserId(_myId);
+    final myPl = plFor(_myId);
     setState(() {
       _members = entries;
       _canKick = myPl >= 50;
       _canChangePower = myPl >= 100;
     });
+  }
+
+  int get _myPowerLevel {
+    for (final m in _members) {
+      if (m.userId == _myId) return m.powerLevel;
+    }
+    return 0;
   }
 
   String _friendlyError(Object e) {
@@ -96,6 +124,14 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
 
   Future<void> _onKick(_MemberEntry m) async {
     final firstName = _firstName(m.displayName);
+    if (m.powerLevel >= _myPowerLevel) {
+      InAppNotifier.instance.show(
+        title: 'Demote first',
+        message: 'You can\'t remove a fellow admin. Demote them first.',
+        variant: InAppNotificationVariant.warning,
+      );
+      return;
+    }
     final confirmed = await _confirmKick(firstName);
     if (confirmed != true || !mounted) return;
 
