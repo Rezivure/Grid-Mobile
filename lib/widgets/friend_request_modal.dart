@@ -148,7 +148,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   Widget _buildIdentity(bool isCustomServer) {
     final handleLine = isCustomServer
         ? '@$_handle · $_homeserverLabel'
-        : '@$_handle · grid.cloud';
+        : '@$_handle';
 
     return Column(
       children: [

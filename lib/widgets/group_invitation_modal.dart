@@ -19,6 +19,7 @@ import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
 
 class GroupInvitationModal extends StatefulWidget {
   final RoomService roomService;
@@ -80,12 +81,6 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   String get _inviterHandle {
     final raw = widget.inviter.split(':').first;
     return raw.replaceFirst('@', '');
-  }
-
-  /// Returns the homeserver (e.g. "grid.cloud") from a Matrix ID.
-  String get _inviterHomeserver {
-    final parts = widget.inviter.split(':');
-    return parts.length > 1 ? parts.sublist(1).join(':') : 'grid.cloud';
   }
 
   /// Synthesize avatar seeds for the stacked-avatar cluster at the top.
@@ -187,10 +182,10 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
                     const SizedBox(height: 6),
 
-                    // Mono subtitle: "@inviter · grid.cloud"
+                    // Mono subtitle: "@inviter" on default server, else "@inviter · server"
                     Center(
                       child: GridMono(
-                        '@$_inviterHandle · $_inviterHomeserver',
+                        utils.formatHandleWithServer(widget.inviter),
                         size: 12,
                         uppercase: false,
                         letterSpacing: 0.02,
