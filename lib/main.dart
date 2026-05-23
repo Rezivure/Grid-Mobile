@@ -113,9 +113,18 @@ void main() async {
   );
   await client.init();
 
-  // Auto-forward room keys to peers who request them; prevents "stuck offline" after key gaps
+  // Only forward room keys to peers who are still a Join member of the room.
+  // Refuse forwards to kicked / left / never-joined devices to avoid leaking history.
   client.onRoomKeyRequest.stream.listen((request) async {
     try {
+      final room = request.room;
+      final requestingUserId = request.requestingDevice.userId;
+      final participants = await room.requestParticipants([Membership.join]);
+      final stillMember = participants.any((p) => p.id == requestingUserId);
+      if (!stillMember) {
+        Logs().w('[KeyForward] Refusing forward to non-member $requestingUserId in ${room.id}');
+        return;
+      }
       await request.forwardKey();
     } catch (e) {
       Logs().w('[KeyForward] Failed to forward room key: $e');
