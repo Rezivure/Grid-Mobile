@@ -24,6 +24,7 @@ class GridContactRow extends StatelessWidget {
     this.highlighted = false,
     this.onTap,
     this.showDivider = true,
+    this.sharingActive = true,
   });
 
   final String name;
@@ -39,6 +40,7 @@ class GridContactRow extends StatelessWidget {
   final bool highlighted;
   final VoidCallback? onTap;
   final bool showDivider;
+  final bool sharingActive;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,9 @@ class GridContactRow extends StatelessWidget {
                   )
                 : null,
           ),
-          child: Row(
+          child: Opacity(
+            opacity: sharingActive ? 1.0 : 0.55,
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               GridAvatar(
@@ -88,6 +92,14 @@ class GridContactRow extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (!sharingActive) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.visibility_off_rounded,
+                            size: 12,
+                            color: context.gridColors.text3,
+                          ),
+                        ],
                         if (avatarStatus == GridAvatarStatus.live) ...[
                           const SizedBox(width: 6),
                           const GridLiveBadge(),
@@ -158,6 +170,7 @@ class GridContactRow extends StatelessWidget {
                 ],
               ),
             ],
+          ),
           ),
         ),
       ),

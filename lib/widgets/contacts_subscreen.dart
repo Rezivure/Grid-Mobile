@@ -30,6 +30,7 @@ import 'contact_profile_modal.dart';
 import 'add_friend_modal.dart';
 import 'location_history_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
@@ -73,6 +74,13 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
   final Map<String, String?> _placeCache = {};
   final Set<String> _placeInflight = {};
+
+  final Map<String, bool> _sharingActive = {};
+  bool _hasScheduledWindows = false;
+  Timer? _windowTicker;
+  int _sharingRecomputeSeq = 0;
+  SharingPreferencesRepository? _prefsRepo;
+  UserService? _userService;
 
   @override
   void initState() {
@@ -127,11 +135,62 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final repo = context.read<SharingPreferencesRepository>();
+    final user = context.read<UserService>();
+    if (repo != _prefsRepo) {
+      _prefsRepo?.removeListener(_recomputeSharing);
+      _prefsRepo = repo;
+      _prefsRepo!.addListener(_recomputeSharing);
+    }
+    _userService = user;
+    _recomputeSharing();
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
+    _windowTicker?.cancel();
+    _prefsRepo?.removeListener(_recomputeSharing);
     _dotsAnimationController.dispose();
     _checkmarkAnimationController.dispose();
     super.dispose();
+  }
+
+  void _ensureWindowTicker() {
+    if (_hasScheduledWindows && _windowTicker == null) {
+      _windowTicker =
+          Timer.periodic(const Duration(seconds: 30), (_) => _recomputeSharing());
+    } else if (!_hasScheduledWindows && _windowTicker != null) {
+      _windowTicker?.cancel();
+      _windowTicker = null;
+    }
+  }
+
+  Future<void> _recomputeSharing() async {
+    final repo = _prefsRepo;
+    final user = _userService;
+    if (repo == null || user == null) return;
+    final state = context.read<ContactsBloc>().state;
+    if (state is! ContactsLoaded) return;
+    final seq = ++_sharingRecomputeSeq;
+    final next = <String, bool>{};
+    bool anyScheduled = false;
+    for (final c in state.contacts) {
+      final prefs = await repo.getSharingPreferences(c.userId, 'user') ??
+          await repo.getSharingPreferences(c.userId, 'contact');
+      if (prefs != null && !prefs.activeSharing) anyScheduled = true;
+      next[c.userId] = await user.isInSharingWindow(c.userId);
+    }
+    if (!mounted || seq != _sharingRecomputeSeq) return;
+    setState(() {
+      _sharingActive
+        ..clear()
+        ..addAll(next);
+      _hasScheduledWindows = anyScheduled;
+    });
+    _ensureWindowTicker();
   }
 
   Future<void> _refreshContacts() async {
@@ -308,6 +367,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                 variant: InAppNotificationVariant.error,
               );
             }
+            if (state is ContactsLoaded) {
+              _recomputeSharing();
+            }
           },
           builder: (context, state) {
             if (state is ContactsLoading && !_hasShownInitialLoading) {
@@ -330,8 +392,8 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
 
                   return contactsWithLocation.isEmpty
                       ? _buildEmptyState()
-                      : Consumer<SyncManager>(
-                          builder: (context, syncManager, child) {
+                      : Consumer2<SyncManager, SharingStateNotifier>(
+                          builder: (context, syncManager, sharingState, child) {
                             final isSyncing =
                                 syncManager.syncState != SyncState.ready;
 
@@ -363,6 +425,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                             return _buildContactsList(
                               contactsWithLocation,
                               isSyncing: isSyncing,
+                              globallyPaused: sharingState.isPaused,
                             );
                           },
                         );
@@ -390,6 +453,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   Widget _buildContactsList(
     List<ContactDisplay> contacts, {
     required bool isSyncing,
+    required bool globallyPaused,
   }) {
     // Group while preserving the upstream sort order (recent-first).
     final live = <ContactDisplay>[];
@@ -459,14 +523,22 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
                         : null,
               );
             case _ListItemKind.contact:
-              return _buildContactRow(item.contact!, isLast: item.isLast);
+              return _buildContactRow(
+                item.contact!,
+                isLast: item.isLast,
+                globallyPaused: globallyPaused,
+              );
           }
         },
       ),
     );
   }
 
-  Widget _buildContactRow(ContactDisplay contact, {required bool isLast}) {
+  Widget _buildContactRow(
+    ContactDisplay contact, {
+    required bool isLast,
+    required bool globallyPaused,
+  }) {
     final isInvite = contact.membershipStatus == 'invite';
     final currentHomeserver = widget.roomService.getMyHomeserver();
     final showFullMatrixId = utils.isCustomHomeserver(currentHomeserver);
@@ -487,6 +559,9 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       }
     }
 
+    final activeWindow = _sharingActive[contact.userId] ?? true;
+    final sharingActive = isInvite || (!globallyPaused && activeWindow);
+
     return GridContactRow(
       name: contact.displayName,
       handle: handle,
@@ -497,6 +572,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       showDivider: !isLast,
       statusKind: isInvite ? null : null,
       statusLabel: null,
+      sharingActive: sharingActive,
       onTap: () => _openContactSheet(contact),
     );
   }

@@ -1,13 +1,19 @@
 // lib/widgets/groups_subscreen.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/models/room.dart' as gr;
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
@@ -36,11 +42,74 @@ class GroupsSubscreen extends StatefulWidget {
 }
 
 class _GroupsSubscreenState extends State<GroupsSubscreen> {
+  final Map<String, bool> _sharingActive = {};
+  bool _hasScheduledWindows = false;
+  Timer? _windowTicker;
+  int _sharingRecomputeSeq = 0;
+  SharingPreferencesRepository? _prefsRepo;
+  UserService? _userService;
+
   @override
   void initState() {
     super.initState();
     // Make sure the BLoC has up-to-date data.
     context.read<GroupsBloc>().add(LoadGroups());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final repo = context.read<SharingPreferencesRepository>();
+    final user = context.read<UserService>();
+    if (repo != _prefsRepo) {
+      _prefsRepo?.removeListener(_recomputeSharing);
+      _prefsRepo = repo;
+      _prefsRepo!.addListener(_recomputeSharing);
+    }
+    _userService = user;
+    _recomputeSharing();
+  }
+
+  @override
+  void dispose() {
+    _windowTicker?.cancel();
+    _prefsRepo?.removeListener(_recomputeSharing);
+    super.dispose();
+  }
+
+  void _ensureWindowTicker() {
+    if (_hasScheduledWindows && _windowTicker == null) {
+      _windowTicker =
+          Timer.periodic(const Duration(seconds: 30), (_) => _recomputeSharing());
+    } else if (!_hasScheduledWindows && _windowTicker != null) {
+      _windowTicker?.cancel();
+      _windowTicker = null;
+    }
+  }
+
+  Future<void> _recomputeSharing() async {
+    final repo = _prefsRepo;
+    final user = _userService;
+    if (repo == null || user == null) return;
+    final state = context.read<GroupsBloc>().state;
+    if (state is! GroupsLoaded) return;
+    final seq = ++_sharingRecomputeSeq;
+    final next = <String, bool>{};
+    bool anyScheduled = false;
+    for (final g in state.groups) {
+      if (!g.isGroup) continue;
+      final prefs = await repo.getSharingPreferences(g.roomId, 'group');
+      if (prefs != null && !prefs.activeSharing) anyScheduled = true;
+      next[g.roomId] = await user.isGroupInSharingWindow(g.roomId);
+    }
+    if (!mounted || seq != _sharingRecomputeSeq) return;
+    setState(() {
+      _sharingActive
+        ..clear()
+        ..addAll(next);
+      _hasScheduledWindows = anyScheduled;
+    });
+    _ensureWindowTicker();
   }
 
   /// "Grid:Group:<expiration>:<name>:<creator>" → human group name.
@@ -76,7 +145,10 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<GroupsBloc, GroupsState>(
+    return BlocConsumer<GroupsBloc, GroupsState>(
+      listener: (context, state) {
+        if (state is GroupsLoaded) _recomputeSharing();
+      },
       builder: (context, state) {
         if (state is GroupsLoading || state is GroupsInitial) {
           return Center(
@@ -93,45 +165,49 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
           return _emptyState();
         }
 
-        // Section header + cards. The header keeps groups in vertical
-        // alignment with People (which always has a SHARING NOW/PAUSED/
-        // OFFLINE header) and Invites (FROM PEOPLE/GROUP INVITES/EXPIRED)
-        // so the first card lands at the same Y across all three pills.
-        return ListView.builder(
-          controller: widget.scrollController,
-          padding: const EdgeInsets.only(top: 8, bottom: 24),
-          itemCount: groups.length + 1,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return GridSectionHeader(
-                text: 'MY GROUPS',
-                trailing: GridMono(
-                  '${groups.length}',
-                  color: context.gridColors.text3,
-                  size: 10.5,
-                  letterSpacing: 0.08,
-                ),
-              );
-            }
-            final groupIndex = index - 1;
-            final room = groups[groupIndex];
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                14,
-                0,
-                14,
-                groupIndex == groups.length - 1 ? 0 : 12,
-              ),
-              child: _GroupCard(
-                name: _parseGroupName(room),
-                memberIds: room.members,
-                memberCount: room.members.length,
-                place: _placeFor(room),
-                timerLabel: _timerFor(room),
-                isTrip: _isTripGroup(room),
-                featured: groupIndex == 0,
-                onTap: () => widget.onGroupSelected?.call(room),
-              ),
+        return Consumer<SharingStateNotifier>(
+          builder: (context, sharingState, _) {
+            final globallyPaused = sharingState.isPaused;
+            return ListView.builder(
+              controller: widget.scrollController,
+              padding: const EdgeInsets.only(top: 8, bottom: 24),
+              itemCount: groups.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return GridSectionHeader(
+                    text: 'MY GROUPS',
+                    trailing: GridMono(
+                      '${groups.length}',
+                      color: context.gridColors.text3,
+                      size: 10.5,
+                      letterSpacing: 0.08,
+                    ),
+                  );
+                }
+                final groupIndex = index - 1;
+                final room = groups[groupIndex];
+                final activeWindow = _sharingActive[room.roomId] ?? true;
+                final sharingActive = !globallyPaused && activeWindow;
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    14,
+                    0,
+                    14,
+                    groupIndex == groups.length - 1 ? 0 : 12,
+                  ),
+                  child: _GroupCard(
+                    name: _parseGroupName(room),
+                    memberIds: room.members,
+                    memberCount: room.members.length,
+                    place: _placeFor(room),
+                    timerLabel: _timerFor(room),
+                    isTrip: _isTripGroup(room),
+                    featured: groupIndex == 0,
+                    sharingActive: sharingActive,
+                    onTap: () => widget.onGroupSelected?.call(room),
+                  ),
+                );
+              },
             );
           },
         );
@@ -242,6 +318,7 @@ class _GroupCard extends StatelessWidget {
     required this.isTrip,
     required this.featured,
     required this.onTap,
+    this.sharingActive = true,
   });
 
   final String name;
@@ -252,6 +329,7 @@ class _GroupCard extends StatelessWidget {
   final bool isTrip;
   final bool featured;
   final VoidCallback onTap;
+  final bool sharingActive;
 
   @override
   Widget build(BuildContext context) {
@@ -277,7 +355,9 @@ class _GroupCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(GridTokens.rLg),
         child: Ink(
           decoration: decoration,
-          child: Padding(
+          child: Opacity(
+            opacity: sharingActive ? 1.0 : 0.55,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,6 +388,14 @@ class _GroupCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                              if (!sharingActive) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.visibility_off_rounded,
+                                  size: 12,
+                                  color: context.gridColors.text3,
+                                ),
+                              ],
                               if (isTrip) ...[
                                 const SizedBox(width: 8),
                                 const GridStatusPill(
@@ -371,6 +459,7 @@ class _GroupCard extends StatelessWidget {
                 ],
               ],
             ),
+          ),
           ),
         ),
       ),
