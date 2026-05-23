@@ -530,8 +530,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                         _buildSectionLabel('SECURITY'),
                         const SizedBox(height: 10),
                         _buildSecurityCard(),
-                        const SizedBox(height: 22),
-                        _buildRemoveContactButton(),
+                        if (_hasDirect) ...[
+                          const SizedBox(height: 22),
+                          _buildRemoveContactButton(),
+                        ],
                         const SizedBox(height: 16),
                       ],
                     ),

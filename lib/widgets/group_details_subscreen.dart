@@ -41,6 +41,7 @@ import '../utilities/time_ago_formatter.dart';
 import 'add_group_member_modal.dart';
 import 'group_sharing_windows_modal.dart';
 import 'location_history_modal.dart';
+import 'manage_members_modal.dart';
 
 class GroupDetailsSubscreen extends StatefulWidget {
   final UserService userService;
@@ -172,6 +173,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     required Color tint,
     required Color bgTint,
     VoidCallback? onTap,
+    Color? labelColor,
   }) {
     return Material(
       color: Colors.transparent,
@@ -201,9 +203,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                     fontWeight: FontWeight.w500,
                     color: onTap == null
                         ? context.gridColors.text4
-                        : (tint == context.gridColors.danger
-                            ? context.gridColors.danger
-                            : context.gridColors.text),
+                        : (labelColor ??
+                            (tint == context.gridColors.danger
+                                ? context.gridColors.danger
+                                : context.gridColors.text)),
                   ),
                 ),
               ),
@@ -439,6 +442,25 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
+  void _showManageMembersModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: ManageMembersModal(
+            roomId: widget.room.roomId,
+            roomService: widget.roomService,
+          ),
+        );
+      },
+    );
+  }
+
   void _showGroupMarkersModal() {
     showModalBottomSheet(
       context: context,
@@ -460,6 +482,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   }
 
   void _showGroupDetailsMenu() {
+    final matrixRoom =
+        widget.roomService.client.getRoomById(widget.room.roomId);
+    final canManage = matrixRoom != null &&
+        (matrixRoom.canKick || matrixRoom.canChangePowerLevel);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -538,6 +564,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                         _openGroupSharingWindowModal();
                       },
                     ),
+                    if (canManage)
+                      _menuRow(
+                        icon: Icons.admin_panel_settings_outlined,
+                        label: 'Manage members',
+                        tint: context.gridColors.amber,
+                        bgTint: context.gridColors.amberSoft,
+                        labelColor: context.gridColors.amber,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showManageMembersModal();
+                        },
+                      ),
                     _menuRow(
                       icon: Icons.exit_to_app_outlined,
                       label: 'Leave group',
