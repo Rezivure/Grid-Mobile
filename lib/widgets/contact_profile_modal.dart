@@ -76,7 +76,7 @@ class ContactProfileModal extends StatefulWidget {
 class _ContactProfileModalState extends State<ContactProfileModal> {
   bool _copied = false;
   bool _isLoading = true;
-  bool _alwaysShare = false;
+  bool _activeSharing = false;
 
   /// All device keys (fetched from the RoomService)
   late Map<String, Map<String, String>> _allOtherDeviceKeys;
@@ -120,13 +120,13 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
       setState(() {
         // Default to true for new contacts if no preferences exist
-        _alwaysShare = prefs?.activeSharing ?? true;
+        _activeSharing = prefs?.activeSharing ?? true;
         _sharingWindows = prefs?.shareWindows ?? [];
       });
     } catch (e) {
       print('Error loading sharing preferences: $e');
       setState(() {
-        _alwaysShare = true; // Default to sharing for new contacts
+        _activeSharing = true; // default for new contacts
         _sharingWindows = [];
       });
     }
@@ -136,7 +136,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     final preferences = SharingPreferences(
       targetId: widget.contact.userId,
       targetType: 'user', // Use 'user' to match what sync_manager creates
-      activeSharing: _alwaysShare,
+      activeSharing: _activeSharing,
       shareWindows: _sharingWindows,
     );
     await widget.sharingPreferencesRepo.setSharingPreferences(preferences);
@@ -295,23 +295,26 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   }
 
   Future<void> _toggleMutualSharing(bool v, String firstName) async {
-    final prev = _alwaysShare;
-    setState(() => _alwaysShare = v);
+    final prev = _activeSharing;
+    setState(() => _activeSharing = v);
     try {
       await _saveToDatabase();
       if (!mounted) return;
+      final hasWindows = _sharingWindows.any((w) => w.isActive == true);
       InAppNotifier.instance.show(
         title: v
             ? 'Sharing resumed for $firstName'
             : 'Sharing paused for $firstName',
         message: v
-            ? "They'll see updates during your active windows."
+            ? (hasWindows
+                ? "They'll see updates during your active windows."
+                : "They'll see your location continuously.")
             : 'Resume any time from this sheet.',
         variant: InAppNotificationVariant.success,
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _alwaysShare = prev);
+      setState(() => _activeSharing = prev);
       InAppNotifier.instance.show(
         title: 'Could not update sharing',
         message: '$e',
@@ -772,12 +775,49 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildMutualSharingCard(String firstName) {
+    final hasActiveWindows =
+        _sharingWindows.any((w) => w.isActive == true);
+    // 3 states: on (always), scheduled (off + active windows), paused (off + no windows)
+    final bool scheduled = !_activeSharing && hasActiveWindows;
+    final bool paused = !_activeSharing && !hasActiveWindows;
+
+    final String title;
+    final String subtitle;
+    final IconData iconData;
+    if (_activeSharing) {
+      title = 'Sharing with $firstName';
+      subtitle = 'End-to-end encrypted. Toggle off any time.';
+      iconData = Icons.shield_outlined;
+    } else if (scheduled) {
+      title = 'Scheduled with $firstName';
+      subtitle = 'They see your location during active windows.';
+      iconData = Icons.schedule_rounded;
+    } else {
+      title = 'Paused with $firstName';
+      subtitle = "$firstName won't see your location until you resume.";
+      iconData = Icons.pause_circle_outline_rounded;
+    }
+
+    // Paused (no windows) gets a neutral surface; scheduled & active keep mint.
+    final Color bgColor = paused
+        ? context.gridColors.surface2
+        : context.gridColors.mintFaint;
+    final Color borderColor = paused
+        ? context.gridColors.hairline
+        : context.gridColors.mintSoft;
+    final Color iconBgColor = paused
+        ? context.gridColors.surface
+        : context.gridColors.mintSoft;
+    final Color iconColor = paused
+        ? context.gridColors.text3
+        : context.gridColors.mint;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: context.gridColors.mintFaint,
+        color: bgColor,
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        border: Border.all(color: context.gridColors.mintSoft, width: 1),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Row(
         children: [
@@ -785,14 +825,14 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: context.gridColors.mintSoft,
+              color: iconBgColor,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
             child: Icon(
-              Icons.shield_outlined,
+              iconData,
               size: 18,
-              color: context.gridColors.mint,
+              color: iconColor,
             ),
           ),
           const SizedBox(width: 12),
@@ -801,9 +841,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _alwaysShare
-                      ? 'Sharing with $firstName'
-                      : 'Paused with $firstName',
+                  title,
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 15,
@@ -814,9 +852,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _alwaysShare
-                      ? 'End-to-end encrypted. Toggle off any time.'
-                      : '$firstName won\'t see your location until you turn it back on.',
+                  subtitle,
                   style: GoogleFonts.getFont(
                     'Geist',
                     fontSize: 12.5,
@@ -830,7 +866,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           ),
           const SizedBox(width: 10),
           Switch.adaptive(
-            value: _alwaysShare,
+            value: _activeSharing,
             activeColor: context.gridColors.mint,
             onChanged: (value) => _toggleMutualSharing(value, firstName),
           ),
@@ -956,27 +992,31 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   }
 
   // ────────────────────────────────────────────────────────────────────
-  // sharing windows (kept for when _alwaysShare is off)
+  // sharing windows (kept for when _activeSharing is off)
   // ────────────────────────────────────────────────────────────────────
 
   Widget _buildSharingWindows() {
-    // When _alwaysShare is true the backend ignores windows entirely
+    // When _activeSharing is true the backend ignores windows entirely
     // (see UserService.isInSharingWindow). Show the rows so the user
     // can still curate them, but visually flag the override.
-    final scheduleSuperseded = _alwaysShare;
+    final scheduleSuperseded = _activeSharing;
 
     if (_sharingWindows.isEmpty) {
+      final emptyCopy = _activeSharing
+          ? 'No sharing windows yet. Add one to share on a schedule.'
+          : 'Sharing is paused. Add a window to share on a schedule, or turn sharing back on for continuous updates.';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (scheduleSuperseded) _buildScheduleSupersededNote(),
           if (scheduleSuperseded) const SizedBox(height: 10),
           Text(
-            'No sharing windows yet. Add one to share on a schedule.',
+            emptyCopy,
             style: GoogleFonts.getFont(
               'Geist',
               fontSize: 13,
               color: context.gridColors.text2,
+              height: 1.35,
             ),
           ),
           const SizedBox(height: 10),
@@ -993,6 +1033,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
       children: [
         if (scheduleSuperseded) _buildScheduleSupersededNote(),
         if (scheduleSuperseded) const SizedBox(height: 10),
+        if (!_activeSharing) _buildScheduledModeNote(),
+        if (!_activeSharing) const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
             color: context.gridColors.surface,
@@ -1037,7 +1079,38 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Active 24/7 — schedule disabled',
+              'Sharing 24/7 — schedule paused',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12,
+                color: context.gridColors.text2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduledModeNote() {
+    final hasActive = _sharingWindows.any((w) => w.isActive == true);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.gridColors.mintFaint,
+        borderRadius: BorderRadius.circular(GridTokens.rMd),
+        border: Border.all(color: context.gridColors.mintSoft),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.schedule_rounded,
+              size: 14, color: context.gridColors.mint),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hasActive
+                  ? 'Schedule active — sharing during your windows'
+                  : 'All windows off — no scheduled sharing',
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 12,
@@ -1088,8 +1161,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     // Dim when always-share supersedes the schedule, or when the
     // window itself is paused. Per-row switch still works in both
     // states; trash always works.
-    final dim = _alwaysShare || !window.isActive;
-    final rowSwitchEnabled = !_alwaysShare;
+    final dim = _activeSharing || !window.isActive;
+    final rowSwitchEnabled = !_activeSharing;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1759,149 +1832,6 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-/// Single ShareToggle pill used inside the mutual-sharing card. Mint backing
-/// when on, hairline neutral when off.
-class _ShareToggle extends StatelessWidget {
-  const _ShareToggle({
-    required this.label,
-    required this.arrow,
-    required this.other,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String arrow;
-  final String other;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final disabled = onChanged == null;
-    return Opacity(
-      opacity: disabled ? 0.85 : 1,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
-        decoration: BoxDecoration(
-          color: value ? context.gridColors.mintSoft : context.gridColors.surface2,
-          borderRadius: BorderRadius.circular(GridTokens.rMd),
-          border: Border.all(
-            color: value ? context.gridColors.mint : context.gridColors.hairline,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            if (value) ...[
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: context.gridColors.mint,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: context.gridColors.mint, blurRadius: 6, spreadRadius: 0),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '$label ',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: value ? context.gridColors.mint : context.gridColors.text2,
-                          ),
-                        ),
-                        TextSpan(
-                          text: arrow,
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: value ? context.gridColors.mint : context.gridColors.text3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    other,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: value ? context.gridColors.mint : context.gridColors.text2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 4),
-            _MiniSwitch(value: value, onChanged: onChanged),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 30×18 mint-backed switch — compact form used inside the ShareToggle pills.
-class _MiniSwitch extends StatelessWidget {
-  const _MiniSwitch({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final track = value ? context.gridColors.mint : context.gridColors.surface3;
-    return GestureDetector(
-      onTap: onChanged == null ? null : () => onChanged!(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: 32,
-        height: 18,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: track,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          width: 14,
-          height: 14,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: Color(0x33000000), blurRadius: 3, offset: Offset(0, 1)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// One of the 4 action tiles in the action grid (Message / History / Route /
-/// Alerts). Disabled when `onTap` is null.
 /// Prominent floating X close button. Sits in the top-right of the
 /// inline profile sheet on top of the rounded corner so it reads as a
 /// distinct affordance, not a tucked-away link. 44pt tap target with
