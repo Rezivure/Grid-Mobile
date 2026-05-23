@@ -683,14 +683,18 @@ class _AddFriendModalState extends State<AddFriendModal>
         return;
       }
 
-      final localpart = utils.localpart(myUserId);
-
+      final handle = isCustomHomeserver()
+          ? myUserId
+          : '@${utils.localpart(myUserId)}';
       final message =
-          'Join me on Grid! Download it at https://get.grid.lat and send @$localpart a friend request!';
+          'Join me on Grid! Download it at https://get.grid.lat and send $handle a friend request!';
 
+      final box = context.findRenderObject() as RenderBox?;
       await Share.share(
         message,
         subject: 'Join me on Grid: Private Location Sharing!',
+        sharePositionOrigin:
+            box != null ? box.localToGlobal(Offset.zero) & box.size : null,
       );
     } catch (e) {
       print('Error sharing invite link: $e');
