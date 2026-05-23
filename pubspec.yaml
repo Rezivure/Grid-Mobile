@@ -75,8 +75,11 @@ flutter_launcher_icons:
 flutter_native_splash:
   color: "#0E1115"
   color_dark: "#0E1115"
-  background_image: "assets/brand/07-splash/grid-splash-1290x2796.png"
-  background_image_dark: "assets/brand/07-splash/grid-splash-1290x2796.png"
+  image: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
+  image_dark: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
+  branding: "assets/brand/02-wordmark/grid-wordmark-white-1800.png"
+  branding_dark: "assets/brand/02-wordmark/grid-wordmark-white-1800.png"
+  branding_mode: bottom
   android_12:
     image: "assets/brand/01-logos/grid-symbol-color-dark-1024.png"
     color: "#0E1115"
