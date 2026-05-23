@@ -107,6 +107,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   bool _isMapReady = false;
   bool _followUser = false;  // Changed default to false to prevent initial movement
+  String? _followedContactId;
+  StreamSubscription<MapState>? _mapStateSub;
+  String? _lastFollowedPositionKey;
   double _zoom = 3.5;  // Default to full country view for faster tile loading
   bool _initialZoomCalculated = false;
   LatLng? _initialCenter;  // Store the calculated center point
@@ -804,6 +807,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _syncManager?.removeListener(_onSyncStateChanged);
     _subscreenProvider?.removeListener(_onSubscreenChanged);
     _mlController?.removeListener(_onMaplibreCameraChanged);
+    _mapStateSub?.cancel();
+    _mapStateSub = null;
     _mapController.dispose();
     _syncManager?.stopSync();
     _locationManager?.stopTracking();
@@ -1188,6 +1193,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       setState(() {
         _isAtResetView = true;
         _followUser = false;  // Unlock follow mode when resetting
+        _unlockContactFollow();
       });
     }
   }
@@ -1456,7 +1462,55 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // No camera changes here — opening sets the contact, closing
     // hands off to MapCameraSignals from the sheet's own close
     // handler. We just rebuild to mount/unmount the sheet widget.
+    final contact = ContactSheetController.instance.contact;
+    if (contact != null) {
+      _engageContactFollow(contact.userId);
+    } else {
+      _unlockContactFollow();
+    }
     setState(() {});
+  }
+
+  void _engageContactFollow(String userId) {
+    _followedContactId = userId;
+    final current = context.read<MapBloc>().state.userLocations;
+    UserLocation? seed;
+    for (final u in current) {
+      if (u.userId == userId) { seed = u; break; }
+    }
+    _lastFollowedPositionKey = seed == null
+        ? null
+        : '${seed.position.latitude},${seed.position.longitude},${seed.timestamp}';
+    _ensureMapStateSubscription();
+  }
+
+  void _unlockContactFollow() {
+    if (_followedContactId == null) return;
+    _followedContactId = null;
+    _lastFollowedPositionKey = null;
+  }
+
+  void _ensureMapStateSubscription() {
+    if (_mapStateSub != null) return;
+    _mapStateSub = context.read<MapBloc>().stream.listen(_onMapStateForFollow);
+  }
+
+  void _onMapStateForFollow(MapState state) {
+    if (!mounted) return;
+    final id = _followedContactId;
+    if (id == null) return;
+    UserLocation? loc;
+    for (final u in state.userLocations) {
+      if (u.userId == id) { loc = u; break; }
+    }
+    if (loc == null) return;
+    final p = loc.position;
+    if (!isFiniteLatLng(p.latitude, p.longitude)) return;
+    final key = '${p.latitude},${p.longitude},${loc.timestamp}';
+    if (key == _lastFollowedPositionKey) return;
+    _lastFollowedPositionKey = key;
+    final z = _mapController.camera.zoom;
+    _mapController.move(p, z == 0 ? 15.0 : z);
   }
 
   void _onMarkerTap(String userId, LatLng position) async {
@@ -1582,7 +1636,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 child: LayoutBuilder(builder: (context, constraints) {
                   _mapController.setMapSize(Size(constraints.maxWidth, constraints.maxHeight));
                   return Stack(children: [
-                  ml.MapLibreMap(
+                  Listener(
+                    behavior: HitTestBehavior.translucent,
+                    onPointerDown: (_) {
+                      if (_followedContactId != null) {
+                        setState(() => _unlockContactFollow());
+                      }
+                    },
+                    child: ml.MapLibreMap(
                   key: _mapKey,
                   styleString: _styleJson ?? buildGridMapStyle(dark: isDarkMode),
                   initialCameraPosition: ml.CameraPosition(
@@ -1749,6 +1810,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     if (_followUser) setState(() => _followUser = false);
                   },
                 ),
+                  ),
                 // Home-location pin overlay (under user-location markers).
                 Builder(
                   builder: (context) {
@@ -2363,6 +2425,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       setState(() {
                         _followUser = true;
                         _isAtResetView = false;
+                        _unlockContactFollow();
                       });
                     },
                   ),
