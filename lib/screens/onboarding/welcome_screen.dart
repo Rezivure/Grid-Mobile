@@ -222,7 +222,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         theme.brightness == Brightness.dark
                             ? 'assets/brand/02-wordmark/grid-wordmark-white-1800.png'
                             : 'assets/brand/02-wordmark/grid-wordmark-ink-1800.png',
-                        height: 38,
+                        height: 52,
                         fit: BoxFit.contain,
                       ),
                     ],
