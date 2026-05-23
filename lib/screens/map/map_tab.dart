@@ -407,16 +407,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           width: double.infinity,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: colorScheme.primary,
+                              color: context.gridColors.surface,
                               borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      colorScheme.primary.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                              border: Border.all(
+                                color: context.gridColors.mint,
+                                width: 2,
+                              ),
                             ),
                             child: TextButton(
                               onPressed: () {
@@ -441,13 +437,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.fingerprint,
-                                      color: colorScheme.onPrimary,
+                                      color: context.gridColors.mint,
                                       size: 20),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Add Passkey Now',
                                     style: TextStyle(
-                                      color: colorScheme.onPrimary,
+                                      color: context.gridColors.mint,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                     ),

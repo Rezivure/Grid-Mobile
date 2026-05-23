@@ -421,14 +421,8 @@ class _PermissionBanner extends StatelessWidget {
       height: 120,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(GridTokens.rLg),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F5C4E),
-            Color(0xFF1E8E76),
-          ],
-        ),
+        color: context.gridColors.mintFaint,
+        border: Border.all(color: context.gridColors.mintSoft, width: 1),
       ),
       child: Stack(
         children: [
@@ -437,7 +431,7 @@ class _PermissionBanner extends StatelessWidget {
           Positioned.fill(
             child: CustomPaint(
               painter: _DotPainter(
-                color: Colors.white.withOpacity(0.12),
+                color: context.gridColors.mint.withOpacity(0.18),
               ),
             ),
           ),
@@ -447,17 +441,17 @@ class _PermissionBanner extends StatelessWidget {
               height: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.16),
+                color: context.gridColors.mintSoft,
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.32),
+                  color: context.gridColors.mint.withOpacity(0.45),
                   width: 1,
                 ),
               ),
               alignment: Alignment.center,
-              child: const Icon(
+              child: Icon(
                 Icons.location_on_rounded,
                 size: 32,
-                color: Colors.white,
+                color: context.gridColors.mint,
               ),
             ),
           ),
