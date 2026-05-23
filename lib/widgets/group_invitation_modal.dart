@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/room_service.dart';
-import 'package:grid_frontend/components/modals/notice_continue_modal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
@@ -67,7 +69,6 @@ String calculateExpiryTime(int expiration) {
 }
 
 class _GroupInvitationModalState extends State<GroupInvitationModal> {
-  bool _isProcessing = false;
   bool _startSharingOnJoin = true; // Default to checked
   late String expiry;
 
@@ -200,11 +201,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
                     const SizedBox(height: 12),
 
-                    // Action buttons / loading state
-                    if (_isProcessing)
-                      _buildLoadingState()
-                    else
-                      _buildActionButtons(),
+                    _buildActionButtons(),
                   ],
                 ),
               ),
@@ -268,31 +265,6 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     );
   }
 
-  Widget _buildLoadingState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Column(
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.4,
-              color: context.gridColors.mint,
-            ),
-          ),
-          const SizedBox(height: 14),
-          GridMono(
-            'PROCESSING INVITATION',
-            size: 11,
-            letterSpacing: 0.12,
-            color: context.gridColors.text3,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -325,167 +297,121 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
   Future<void> _acceptGroupInvitation() async {
     if (!mounted) return;
 
-    setState(() {
-      _isProcessing = true;
-    });
+    // Capture everything we need from context before popping the modal.
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
+    final groupsBloc = context.read<GroupsBloc>();
+    final mapBloc = context.read<MapBloc>();
+    final locationManager = context.read<LocationManager>();
+    final sharingPrefs = context.read<SharingPreferencesRepository>();
+    final roomService = widget.roomService;
+    final roomId = widget.roomId;
+    final groupName = widget.groupName;
+    final refreshCallback = widget.refreshCallback;
+    final startSharingOnJoin = _startSharingOnJoin;
 
-    try {
-      final syncManager = Provider.of<SyncManager>(context, listen: false);
-      final groupsBloc = context.read<GroupsBloc>();
-      final mapBloc = context.read<MapBloc>();
+    // Optimistically close the modal so the inbox feels instant.
+    Navigator.of(context).pop();
+    InAppNotifier.instance.show(
+      title: 'Joining $groupName...',
+      variant: InAppNotificationVariant.info,
+    );
 
-      // Accept the invitation through SyncManager to ensure proper syncing
-      await syncManager.acceptInviteAndSync(widget.roomId);
-
-      // Handle location sharing based on checkbox
-      if (_startSharingOnJoin) {
-        // Send immediate location update
-        final locationManager = context.read<LocationManager>();
-        await locationManager.grabLocationAndPing();
-
-        // Send location specifically to this room
-        await widget.roomService.updateSingleRoom(widget.roomId);
-      } else {
-        // Disable location sharing for this group
-        final sharingPrefs = context.read<SharingPreferencesRepository>();
-        final preferences = SharingPreferences(
-          targetId: widget.roomId,
-          targetType: 'group',
-          activeSharing: false,
-          shareWindows: null,
-        );
-        await sharingPrefs.setSharingPreferences(preferences);
-      }
-
-      // Close the modal immediately after successful join
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
-      // Show success message
-      if (mounted) {
-        InAppNotifier.instance.show(
-          title: 'Group invitation accepted',
-          variant: InAppNotificationVariant.success,
-          duration: const Duration(seconds: 2),
-        );
-      }
-
-      // Now do the cleanup and updates
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Remove invite and update UI
-      syncManager.removeInvite(widget.roomId);
-
-      // Multiple updates to ensure UI synchronization
-      groupsBloc.add(RefreshGroups());
-      groupsBloc.add(LoadGroups());
-      mapBloc.add(MapLoadUserLocations());
-
-      // Staggered updates to ensure everything syncs properly
-      Future.delayed(const Duration(milliseconds: 750), () {
-        if (mounted) {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-          groupsBloc.add(LoadGroupMembers(widget.roomId));
-        }
-      });
-
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          groupsBloc.add(RefreshGroups());
-          groupsBloc.add(LoadGroups());
-          mapBloc.add(MapLoadUserLocations());
-        }
-      });
-
-      // Call the refresh callback if it exists
-      try {
-        await widget.refreshCallback();
-      } catch (callbackError) {
-        print('Error in refresh callback: $callbackError');
-        // Don't throw, as the join was successful
-      }
-    } catch (e) {
-      print('Error in _acceptGroupInvitation: $e');
-      print('Error type: ${e.runtimeType}');
-
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-
-        // Only show the invalid invite modal for specific errors
-        if (e.toString().contains('403') || e.toString().contains('not_in_room') || e.toString().contains('Invalid')) {
-          Navigator.of(context).pop();
-          Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-
-          await showDialog(
-            context: context,
-            builder: (context) => NoticeContinueModal(
-              message: "The invite is no longer valid. It may have been removed.",
-              onContinue: () {},
-            ),
-          );
-        } else {
-          InAppNotifier.instance.show(
-            title: 'Error accepting invitation',
-            message: e.toString(),
-            variant: InAppNotificationVariant.error,
-          );
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
+    // Apply sharing preference off the critical path when opting out.
+    if (!startSharingOnJoin) {
+      unawaited(sharingPrefs
+          .setSharingPreferences(SharingPreferences(
+            targetId: roomId,
+            targetType: 'group',
+            activeSharing: false,
+            shareWindows: null,
+          ))
+          .catchError((e) => Logs().w('setSharingPreferences failed: $e')));
     }
+
+    unawaited(() async {
+      try {
+        await syncManager.acceptInviteAndSync(roomId);
+
+        if (startSharingOnJoin) {
+          unawaited(locationManager
+              .grabLocationAndPing()
+              .catchError((e) => Logs().w('location ping failed: $e')));
+          unawaited(roomService
+              .updateSingleRoom(roomId)
+              .catchError((e) => Logs().w('updateSingleRoom failed: $e')));
+        }
+
+        syncManager.removeInvite(roomId);
+        groupsBloc.add(RefreshGroups());
+        groupsBloc.add(LoadGroups());
+        groupsBloc.add(LoadGroupMembers(roomId));
+        mapBloc.add(MapLoadUserLocations());
+
+        try {
+          await refreshCallback();
+        } catch (callbackError) {
+          Logs().w('refreshCallback failed: $callbackError');
+        }
+
+        InAppNotifier.instance.show(
+          title: 'Joined $groupName',
+          variant: InAppNotificationVariant.success,
+        );
+      } catch (e) {
+        syncManager.removeInvite(roomId);
+        try {
+          await refreshCallback();
+        } catch (_) {}
+
+        String errorMessage =
+            "This invitation has expired or is no longer valid.";
+        final lower = e.toString().toLowerCase();
+        if (lower.contains('forbidden') ||
+            lower.contains('403') ||
+            lower.contains('not_in_room')) {
+          errorMessage =
+              "The invite is no longer valid. It may have been removed.";
+        }
+
+        InAppNotifier.instance.show(
+          title: "Couldn't join $groupName",
+          message: errorMessage,
+          variant: InAppNotificationVariant.warning,
+        );
+      }
+    }());
   }
 
   Future<void> _declineGroupInvitation() async {
     if (!mounted) return;
 
-    setState(() {
-      _isProcessing = true;
-    });
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
+    final roomService = widget.roomService;
+    final roomId = widget.roomId;
+    final refreshCallback = widget.refreshCallback;
 
-    try {
-      // Decline the invitation using RoomService
-      await widget.roomService.declineInvitation(widget.roomId);
+    Navigator.of(context).pop();
+    InAppNotifier.instance.show(
+      title: 'Group invitation declined',
+      variant: InAppNotificationVariant.info,
+      duration: const Duration(seconds: 2),
+    );
 
-      // Remove the invitation from SyncManager BEFORE closing modal
-      if (mounted) {
-        Provider.of<SyncManager>(context, listen: false).removeInvite(widget.roomId);
-
-        // Give time for the bloc state to update and UI to reflect changes
-        await Future.delayed(const Duration(milliseconds: 300));
-
-        Navigator.of(context).pop(); // Close the modal
-        await widget.refreshCallback(); // Trigger the callback to refresh
-
-        InAppNotifier.instance.show(
-          title: 'Group invitation declined',
-          variant: InAppNotificationVariant.info,
-          duration: const Duration(seconds: 2),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
+    unawaited(() async {
+      try {
+        await roomService.declineInvitation(roomId);
+        syncManager.removeInvite(roomId);
+        try {
+          await refreshCallback();
+        } catch (_) {}
+      } catch (e) {
         InAppNotifier.instance.show(
           title: 'Failed to decline group invitation',
           message: '$e',
           variant: InAppNotificationVariant.error,
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
-    }
+    }());
   }
 }
 
