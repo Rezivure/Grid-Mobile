@@ -2,6 +2,7 @@ import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
 import 'package:grid_frontend/utilities/message_parser.dart';
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 import 'package:grid_frontend/models/user_location.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:matrix/encryption/encryption.dart';
@@ -138,6 +139,10 @@ class MessageProcessor {
 
     final locationData = messageParser.parseLocationMessage(messageData);
     if (locationData != null) {
+      if (!isFiniteLatLng(locationData.latitude, locationData.longitude)) {
+        print('[Location Processing] Dropping invalid coords from $sender: ${locationData.latitude}, ${locationData.longitude}');
+        return;
+      }
       print('[Location Processing] Found location message from $sender at ${locationData.latitude}, ${locationData.longitude}');
       final userLocation = UserLocation(
         userId: sender,

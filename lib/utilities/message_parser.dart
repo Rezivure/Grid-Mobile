@@ -1,3 +1,5 @@
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
+
 /// Parsed form of an inbound `m.location` event. `gridv: 2` senders
 /// include optional accuracy/speed/heading + a battery block; older
 /// senders only provide the `geo_uri` so all of those will be null.
@@ -40,6 +42,7 @@ class MessageParser {
 
       final coords = _parseGeoUri(geoUri);
       if (coords == null) return null;
+      if (!isFiniteLatLng(coords[0], coords[1])) return null;
 
       // Extras live at the top level of the event content. Each is
       // independently optional; absence = "sender didn't tell us".

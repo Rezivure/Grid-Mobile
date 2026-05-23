@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 
 /// Thin shim that exposes the small subset of `flutter_map`'s `MapController`
 /// API that `map_tab.dart` actually uses, but delegates the work to a
@@ -46,10 +48,15 @@ class MaplibreCameraFacade {
 
   /// Snap to a position (no animation). Mirrors `MapController.move`.
   void move(LatLng center, double zoom) {
+    if (!isFiniteLatLng(center.latitude, center.longitude)) {
+      debugPrint('[Camera] Skipping move — invalid coords: ${center.latitude},${center.longitude}');
+      return;
+    }
+    final z = _safeZoom(zoom);
     _ml?.moveCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(center.latitude, center.longitude),
-        zoom: zoom,
+        zoom: z,
       ),
     ));
   }
@@ -57,13 +64,24 @@ class MaplibreCameraFacade {
   /// Animate to a position + rotation. Mirrors `MapController.moveAndRotate`.
   /// `rotation` is in degrees; flutter_map called this with 0 to clear bearing.
   void moveAndRotate(LatLng center, double zoom, double rotation) {
+    if (!isFiniteLatLng(center.latitude, center.longitude)) {
+      debugPrint('[Camera] Skipping moveAndRotate — invalid coords: ${center.latitude},${center.longitude}');
+      return;
+    }
+    final z = _safeZoom(zoom);
+    final r = (rotation.isNaN || rotation.isInfinite) ? 0.0 : rotation;
     _ml?.animateCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(center.latitude, center.longitude),
-        zoom: zoom,
-        bearing: rotation,
+        zoom: z,
+        bearing: r,
       ),
     ));
+  }
+
+  double _safeZoom(double zoom) {
+    if (zoom.isNaN || zoom.isInfinite) return 2.0;
+    return zoom.clamp(0.0, 22.0);
   }
 
   /// Mirrors `MapController.camera` from flutter_map.

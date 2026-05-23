@@ -37,6 +37,7 @@ import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_event.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_state.dart';
 import 'package:grid_frontend/models/user_location.dart';
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
@@ -1194,15 +1195,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
     print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
 
+    final userValid = isFiniteLatLng(userPosition.latitude, userPosition.longitude);
+    userLocations = userLocations
+        .where((l) => isFiniteLatLng(l.position.latitude, l.position.longitude))
+        .toList();
+
     if (userLocations.isEmpty) {
-      return MapZoomResult(zoom: 4.5, center: userPosition);
+      if (userValid) return MapZoomResult(zoom: 4.5, center: userPosition);
+      return MapZoomResult(zoom: 2.0, center: const LatLng(0, 0));
     }
 
+    final seed = userValid ? userPosition : userLocations.first.position;
+
     // Calculate bounds that include ALL contacts plus the user
-    double minLat = userPosition.latitude;
-    double maxLat = userPosition.latitude;
-    double minLng = userPosition.longitude;
-    double maxLng = userPosition.longitude;
+    double minLat = seed.latitude;
+    double maxLat = seed.latitude;
+    double minLng = seed.longitude;
+    double maxLng = seed.longitude;
 
     // Find the bounding box of all users
     for (final location in userLocations) {
@@ -1266,21 +1275,27 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
 
     // Check if current user would be visible from the midpoint center
-    final distanceFromCenter = ((userPosition.latitude - centerLat).abs() +
-                                 (userPosition.longitude - centerLng).abs()) / 2;
+    final distanceFromCenter = ((seed.latitude - centerLat).abs() +
+                                 (seed.longitude - centerLng).abs()) / 2;
 
     // If current user is too far from midpoint, adjust center to keep them visible
     if (distanceFromCenter > viewportRadius) {
       // Shift center toward current user to ensure they're at the edge of viewport
       final shiftFactor = (distanceFromCenter - viewportRadius) / distanceFromCenter;
-      final adjustedLat = centerLat + (userPosition.latitude - centerLat) * shiftFactor;
-      final adjustedLng = centerLng + (userPosition.longitude - centerLng) * shiftFactor;
+      final adjustedLat = centerLat + (seed.latitude - centerLat) * shiftFactor;
+      final adjustedLng = centerLng + (seed.longitude - centerLng) * shiftFactor;
 
       print('[SmartZoom] Adjusted center to keep current user visible');
+      if (!isFiniteLatLng(adjustedLat, adjustedLng)) {
+        return MapZoomResult(zoom: 2.0, center: const LatLng(0, 0));
+      }
       return MapZoomResult(zoom: zoomLevel, center: LatLng(adjustedLat, adjustedLng));
     }
 
     print('[SmartZoom] Calculated zoom: $zoomLevel for span: $maxDiff degrees');
+    if (!isFiniteLatLng(centerPoint.latitude, centerPoint.longitude)) {
+      return MapZoomResult(zoom: 2.0, center: const LatLng(0, 0));
+    }
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
@@ -1385,13 +1400,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     final List<ml.LatLng> mlPoints = [];
     final List<String> keys = [];
     for (final u in userLocations) {
+      if (!isFiniteLatLng(u.position.latitude, u.position.longitude)) continue;
       mlPoints.add(ml.LatLng(u.position.latitude, u.position.longitude));
       keys.add(_latLngKey(u.position));
     }
     for (final i in mapIcons) {
+      if (!isFiniteLatLng(i.position.latitude, i.position.longitude)) continue;
       mlPoints.add(ml.LatLng(i.position.latitude, i.position.longitude));
       keys.add(_latLngKey(i.position));
     }
+    if (mlPoints.isEmpty) return;
 
     final seq = ++_projectionSeq;
     try {

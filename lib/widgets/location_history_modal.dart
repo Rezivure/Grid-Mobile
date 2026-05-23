@@ -19,6 +19,7 @@ import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_sheet.dart';
 import 'package:matrix/matrix.dart';
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 
 class LocationHistoryModal extends StatefulWidget {
   final String userId;  // For individual history, this is userId. For groups, this is roomId
@@ -422,10 +423,15 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   }
 
   void _moveCamera(LatLng target, double zoom) {
+    if (!isFiniteLatLng(target.latitude, target.longitude)) {
+      debugPrint('[History] Skipping moveCamera — invalid coords: ${target.latitude},${target.longitude}');
+      return;
+    }
+    final z = (zoom.isNaN || zoom.isInfinite) ? 2.0 : zoom.clamp(0.0, 22.0);
     _mapController?.moveCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
-        zoom: zoom,
+        zoom: z,
       ),
     ));
   }
@@ -559,7 +565,9 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           if (s.points.isNotEmpty)
             ml.LineOptions(
               geometry: [
-                for (final p in s.points) ml.LatLng(p.latitude, p.longitude),
+                for (final p in s.points)
+                  if (isFiniteLatLng(p.latitude, p.longitude))
+                    ml.LatLng(p.latitude, p.longitude),
               ],
               lineColor: _hex(s.color),
               lineWidth: 3.0,
@@ -588,6 +596,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     final keys = <String>[];
     final pts = <ml.LatLng>[];
     _currentPositions.forEach((k, v) {
+      if (!isFiniteLatLng(v.latitude, v.longitude)) return;
       keys.add(k);
       pts.add(ml.LatLng(v.latitude, v.longitude));
     });
@@ -1242,6 +1251,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
 
   // Smart zoom calculation matching main map logic
   ({LatLng center, double zoom}) _calculateSmartZoom(List<LatLng> points) {
+    points = points.where((p) => isFiniteLatLng(p.latitude, p.longitude)).toList();
     if (points.isEmpty) {
       return (center: const LatLng(37.7749, -122.4194), zoom: 4.0);
     }

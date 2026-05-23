@@ -25,6 +25,8 @@ import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../utilities/lat_lng_validation.dart';
+
 import '../screens/map/grid_map_style.dart';
 
 import '../models/sharing_window.dart';
@@ -1991,11 +1993,13 @@ class _MapSnapshotState extends State<_MapSnapshot> {
       _styleJson = buildGridMapStyle(dark: isDark);
     }
     final pos = widget.position;
+    final safeLat = isFiniteLatLng(pos.latitude, pos.longitude) ? pos.latitude : 0.0;
+    final safeLng = isFiniteLatLng(pos.latitude, pos.longitude) ? pos.longitude : 0.0;
     return IgnorePointer(
       child: ml.MapLibreMap(
         styleString: _styleJson!,
         initialCameraPosition: ml.CameraPosition(
-          target: ml.LatLng(pos.latitude, pos.longitude),
+          target: ml.LatLng(safeLat, safeLng),
           zoom: 14,
         ),
         myLocationEnabled: false,

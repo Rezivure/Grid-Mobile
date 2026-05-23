@@ -84,7 +84,15 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   ll.LatLng _resolveInitialCenter() {
     final locationManager =
         Provider.of<LocationManager>(context, listen: false);
-    return locationManager.currentLatLng ?? _fallbackCenter;
+    final c = locationManager.currentLatLng;
+    if (c == null) return _fallbackCenter;
+    if (!_finite(c.latitude, c.longitude)) return _fallbackCenter;
+    return c;
+  }
+
+  bool _finite(double lat, double lng) {
+    if (lat.isNaN || lat.isInfinite || lng.isNaN || lng.isInfinite) return false;
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
   }
 
   Future<void> _confirm() async {
