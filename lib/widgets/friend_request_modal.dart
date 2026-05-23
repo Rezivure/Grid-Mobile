@@ -363,60 +363,57 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
   Future<void> _acceptRequest() async {
     if (!mounted) return;
 
-    setState(() {
-      _isProcessing = true;
-    });
+    // Capture everything we need from context before popping the modal.
+    final syncManager = Provider.of<SyncManager>(context, listen: false);
+    final contactsBloc = context.read<ContactsBloc>();
+    final locationManager = context.read<LocationManager>();
+    final sharingPrefs = context.read<SharingPreferencesRepository>();
+    final roomId = widget.roomId;
+    final userId = widget.userId;
+    final roomService = widget.roomService;
+    final onResponse = widget.onResponse;
+    final startSharingOnJoin = _startSharingOnJoin;
 
-    try {
-      // Accept invitation and sync via SyncManager
-      await Provider.of<SyncManager>(context, listen: false)
-          .acceptInviteAndSync(widget.roomId);
+    // Optimistically close the modal so the inbox feels instant.
+    Navigator.of(context).pop();
 
-      print("Refreshing contacts via bloc...");
+    // Update sharing preference synchronously-ish but off the UI critical path.
+    if (!startSharingOnJoin) {
+      unawaited(sharingPrefs
+          .setSharingPreferences(SharingPreferences(
+            targetId: userId,
+            targetType: 'user',
+            activeSharing: false,
+            shareWindows: null,
+          ))
+          .catchError((e) => Logs().w('setSharingPreferences failed: $e')));
+    }
 
-      if (mounted) {
-        // Dispatch RefreshContacts to update ContactsBloc
-        context.read<ContactsBloc>().add(RefreshContacts());
-      }
+    unawaited(() async {
+      try {
+        await syncManager.acceptInviteAndSync(roomId);
+        contactsBloc.add(RefreshContacts());
 
-      // Handle location sharing based on checkbox
-      if (_startSharingOnJoin) {
-        // Fire-and-forget so the modal closes immediately.
-        final locationManager = context.read<LocationManager>();
-        unawaited(locationManager
-            .grabLocationAndPing()
-            .catchError((e) => Logs().w('location ping failed: $e')));
-        unawaited(widget.roomService
-            .updateSingleRoom(widget.roomId)
-            .catchError((e) => Logs().w('updateSingleRoom failed: $e')));
-      } else {
-        // Disable location sharing for this contact
-        final sharingPrefs = context.read<SharingPreferencesRepository>();
-        final preferences = SharingPreferences(
-          targetId: widget.userId, // Use the user ID, not room ID
-          targetType: 'user',
-          activeSharing: false,
-          shareWindows: null,
-        );
-        await sharingPrefs.setSharingPreferences(preferences);
-      }
+        if (startSharingOnJoin) {
+          unawaited(locationManager
+              .grabLocationAndPing()
+              .catchError((e) => Logs().w('location ping failed: $e')));
+          unawaited(roomService
+              .updateSingleRoom(roomId)
+              .catchError((e) => Logs().w('updateSingleRoom failed: $e')));
+        }
 
-      if (mounted) {
-        Navigator.of(context).pop(); // Close the modal
-        await widget.onResponse(); // Execute callback to refresh any parent components
+        await onResponse();
 
         InAppNotifier.instance.show(
           title: 'Friend request accepted',
           variant: InAppNotificationVariant.success,
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        // Remove the invite from the list if it's expired or invalid
-        Provider.of<SyncManager>(context, listen: false)
-            .removeInvite(widget.roomId);
-        Navigator.of(context).pop(); // Close the modal
-        await widget.onResponse(); // Refresh the list
+      } catch (e) {
+        syncManager.removeInvite(roomId);
+        try {
+          await onResponse();
+        } catch (_) {}
 
         String errorMessage =
             "This invitation has expired or is no longer valid.";
@@ -431,13 +428,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
           variant: InAppNotificationVariant.warning,
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
-    }
+    }());
   }
 
   Future<void> _declineRequest() async {

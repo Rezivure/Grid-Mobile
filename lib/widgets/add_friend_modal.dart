@@ -4,6 +4,8 @@
 // "Scan QR". All existing logic — QR scanning, share-link generation, handle
 // lookup, invite-sending, error handling, group creation — is preserved.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
@@ -253,29 +255,68 @@ class _AddFriendModalState extends State<AddFriendModal>
           _contactError = null; // Reset error before trying to add
         });
       }
+
+      // Validate existence first (blocking) so we can still show an inline error
+      // for "Invalid username" without popping the modal.
+      bool userExists;
       try {
         print('AddFriendModal: Checking if user exists: $normalizedUserId');
-        bool userExists = await widget.userService
+        userExists = await widget.userService
             .userExists(normalizedUserId, timeout: const Duration(seconds: 8));
-        if (!userExists) {
-          if (mounted) {
-            setState(() {
-              _contactError = 'Invalid username: @$inputText';
-              _isProcessing = false;
-            });
-          }
-          return;
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'Error sending friend request';
+            _isProcessing = false;
+          });
         }
+        return;
+      }
 
-        final result = await widget.roomService
-            .createRoomAndInviteContact(normalizedUserId);
+      if (!userExists) {
+        if (mounted) {
+          setState(() {
+            _contactError = 'Invalid username: @$inputText';
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
 
-        if (result) {
-          // Get the room ID for the newly created direct room
-          final myUserId = widget.roomService.getMyUserId();
+      // Validated: optimistically close the modal, then continue in background.
+      final handle = utils.localpart(normalizedUserId);
+      final roomService = widget.roomService;
+      final contactsBloc = context.read<ContactsBloc>();
+      final onContactAdded = widget.onContactAdded;
+
+      _matrixUserId = null;
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      InAppNotifier.instance.show(
+        title: 'Sending friend request',
+        message: 'Sending to @$handle...',
+        variant: InAppNotificationVariant.info,
+      );
+
+      unawaited(() async {
+        try {
+          final result =
+              await roomService.createRoomAndInviteContact(normalizedUserId);
+
+          if (!result) {
+            InAppNotifier.instance.show(
+              title: 'Could not send request',
+              message: 'Already friends or request pending with @$handle.',
+              variant: InAppNotificationVariant.warning,
+            );
+            return;
+          }
+
+          final myUserId = roomService.getMyUserId();
           if (myUserId != null) {
-            // Find the direct room we just created
-            final rooms = widget.roomService.client.rooms;
+            final rooms = roomService.client.rooms;
             final directRoom = rooms.where((room) {
               final name = room.name ?? '';
               return name == "Grid:Direct:$myUserId:$normalizedUserId" ||
@@ -283,51 +324,29 @@ class _AddFriendModalState extends State<AddFriendModal>
             }).firstOrNull;
 
             if (directRoom != null) {
-              // Handle the new contact invite immediately using ContactsBloc
               try {
-                final contactsBloc = context.read<ContactsBloc>();
                 await contactsBloc.handleNewContactInvited(
                     directRoom.id, normalizedUserId);
-                print('AddFriendModal: Handled new contact invite via ContactsBloc');
               } catch (e) {
                 print('AddFriendModal: Error calling ContactsBloc: $e');
               }
             }
           }
 
-          // Clear _matrixUserId after successful use
-          _matrixUserId = null;
-          if (mounted) {
-            InAppNotifier.instance.show(
-              title: 'Friend request sent',
-              message: 'Sent to ${utils.localpart(normalizedUserId)}.',
-              variant: InAppNotificationVariant.success,
-            );
-            // Trigger contact refresh callback
-            widget.onContactAdded?.call();
-            Navigator.of(context).pop();
-          }
-        } else {
-          if (mounted) {
-            setState(() {
-              _contactError = 'Already friends or request pending';
-            });
-          }
+          onContactAdded?.call();
+          InAppNotifier.instance.show(
+            title: 'Friend request sent',
+            message: 'Sent to @$handle.',
+            variant: InAppNotificationVariant.success,
+          );
+        } catch (e) {
+          InAppNotifier.instance.show(
+            title: 'Friend request failed',
+            message: 'Failed to send request to @$handle: $e',
+            variant: InAppNotificationVariant.error,
+          );
         }
-      } catch (e) {
-        // Catch any other errors
-        if (mounted) {
-          setState(() {
-            _contactError = 'Error sending friend request';
-          });
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
-        }
-      }
+      }());
     }
   }
 
