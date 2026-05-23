@@ -76,11 +76,20 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
               b.displayName.toLowerCase(),
             );
       });
+    final myPl = room.getPowerLevelByUserId(_myId);
     setState(() {
       _members = entries;
-      _canKick = room.canKick;
-      _canChangePower = room.canChangePowerLevel;
+      _canKick = myPl >= 50;
+      _canChangePower = myPl >= 100;
     });
+  }
+
+  String _friendlyError(Object e) {
+    final s = e.toString();
+    if (s.contains('M_FORBIDDEN')) {
+      return 'Admin privileges are required for this action.';
+    }
+    return 'Please try again.';
   }
 
   String _firstName(String s) => s.split(' ').first;
@@ -110,7 +119,7 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
       setState(() => _members = snapshot);
       InAppNotifier.instance.show(
         title: 'Could not remove member',
-        message: '$e',
+        message: _friendlyError(e),
         variant: InAppNotificationVariant.warning,
       );
     }
@@ -146,7 +155,7 @@ class _ManageMembersModalState extends State<ManageMembersModal> {
       if (!mounted) return;
       InAppNotifier.instance.show(
         title: 'Could not update role',
-        message: '$e',
+        message: _friendlyError(e),
         variant: InAppNotificationVariant.warning,
       );
     }

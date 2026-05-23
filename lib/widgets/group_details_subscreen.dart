@@ -484,8 +484,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   void _showGroupDetailsMenu() {
     final matrixRoom =
         widget.roomService.client.getRoomById(widget.room.roomId);
-    final canManage = matrixRoom != null &&
-        (matrixRoom.canKick || matrixRoom.canChangePowerLevel);
+    final myPl = matrixRoom?.getPowerLevelByUserId(_currentUserId ?? '') ?? 0;
+    final canManage = myPl >= 50;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -510,6 +510,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                       label: 'Add member',
                       tint: context.gridColors.mint,
                       bgTint: context.gridColors.mintFaint,
+                      labelColor: context.gridColors.mint,
                       onTap: () {
                         Navigator.pop(context);
                         _showAddGroupMemberModal();
