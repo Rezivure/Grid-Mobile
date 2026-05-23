@@ -126,7 +126,8 @@ class _AddSharingPreferenceModalState
           mainAxisSize: MainAxisSize.min,
           children: [
             const GridSheetHeader(title: 'New sharing window'),
-            Flexible(
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 child: Column(
