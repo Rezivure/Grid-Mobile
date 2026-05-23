@@ -18,8 +18,7 @@ class GridContactRow extends StatelessWidget {
     this.distanceText,
     this.statusKind,
     this.statusLabel,
-    this.live = false,
-    this.avatarStatus = GridAvatarStatus.live,
+    this.avatarStatus = GridAvatarStatus.idle,
     this.imageUrl,
     this.userId,
     this.highlighted = false,
@@ -34,7 +33,6 @@ class GridContactRow extends StatelessWidget {
   final String? distanceText;
   final GridStatusKind? statusKind;
   final String? statusLabel;
-  final bool live;
   final GridAvatarStatus avatarStatus;
   final String? imageUrl;
   final String? userId;
@@ -90,7 +88,7 @@ class GridContactRow extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (live) ...[
+                        if (avatarStatus == GridAvatarStatus.live) ...[
                           const SizedBox(width: 6),
                           const GridLiveBadge(),
                         ],

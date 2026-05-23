@@ -3,8 +3,24 @@ import 'package:flutter/material.dart';
 import '../../styles/grid_colors.dart';
 import '../user_avatar_bloc.dart';
 
-/// Status indicator at the bottom-right of an avatar.
-enum GridAvatarStatus { none, live, paused, offline }
+/// Status indicator at the bottom-right of an avatar — viewer-facing
+/// freshness tri-state. Never expresses the friend's chosen sharing mode
+/// (paused/incognito leak self-state); see [SelfSharingStatus] for that.
+enum GridAvatarStatus { none, live, stale, idle }
+
+/// Self-only sharing state — local user looking at their own avatar.
+/// Never use for someone else.
+enum SelfSharingStatus { sharing, paused }
+
+/// Maps a last-update timestamp to a viewer-facing freshness state.
+/// live ≤ 15m, stale ≤ 60m, idle otherwise (incl. null).
+GridAvatarStatus statusFromLastUpdate(DateTime? lastUpdateAt) {
+  if (lastUpdateAt == null) return GridAvatarStatus.idle;
+  final age = DateTime.now().difference(lastUpdateAt);
+  if (age <= const Duration(minutes: 15)) return GridAvatarStatus.live;
+  if (age <= const Duration(minutes: 60)) return GridAvatarStatus.stale;
+  return GridAvatarStatus.idle;
+}
 
 /// Deterministic gradient avatar with optional ring + status dot.
 ///
@@ -18,6 +34,7 @@ class GridAvatar extends StatelessWidget {
     this.imageUrl,
     this.userId,
     this.status = GridAvatarStatus.none,
+    this.selfStatus,
     this.ring = false,
     this.padding = 0,
   });
@@ -32,6 +49,10 @@ class GridAvatar extends StatelessWidget {
   /// share a single avatar pipeline.
   final String? userId;
   final GridAvatarStatus status;
+
+  /// Self-only override — when set, drives the dot instead of [status].
+  /// Use only when rendering the local user's own avatar in their own UI.
+  final SelfSharingStatus? selfStatus;
 
   /// Outer halo ring; mint when [status] is live, otherwise hairlineStrong.
   final bool ring;
@@ -112,6 +133,9 @@ class GridAvatar extends StatelessWidget {
 
     Widget body = inner;
 
+    final isLive = selfStatus == SelfSharingStatus.sharing ||
+        (selfStatus == null && status == GridAvatarStatus.live);
+
     if (ring) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
       // Light mode: softer off-white fill + drop shadow instead of white halo.
@@ -122,7 +146,7 @@ class GridAvatar extends StatelessWidget {
           color: isDark ? context.gridColors.bg : context.gridColors.surface2,
           border: Border.all(
             width: 2,
-            color: status == GridAvatarStatus.live
+            color: isLive
                 ? context.gridColors.mint
                 : context.gridColors.hairlineStrong,
           ),
@@ -149,14 +173,22 @@ class GridAvatar extends StatelessWidget {
       );
     }
 
-    if (status == GridAvatarStatus.none) return body;
+    if (selfStatus == null && status == GridAvatarStatus.none) return body;
 
-    final dotColor = switch (status) {
-      GridAvatarStatus.live => context.gridColors.mint,
-      GridAvatarStatus.paused => context.gridColors.paused,
-      GridAvatarStatus.offline => context.gridColors.text3,
-      _ => Colors.transparent,
-    };
+    final Color dotColor;
+    if (selfStatus != null) {
+      dotColor = switch (selfStatus!) {
+        SelfSharingStatus.sharing => context.gridColors.mint,
+        SelfSharingStatus.paused => context.gridColors.paused,
+      };
+    } else {
+      dotColor = switch (status) {
+        GridAvatarStatus.live => context.gridColors.mint,
+        GridAvatarStatus.stale => context.gridColors.amber,
+        GridAvatarStatus.idle => context.gridColors.text3,
+        _ => Colors.transparent,
+      };
+    }
     final dotSize = (size * 0.28).clamp(8.0, 16.0);
 
     return Stack(
@@ -173,7 +205,7 @@ class GridAvatar extends StatelessWidget {
               color: dotColor,
               shape: BoxShape.circle,
               border: Border.all(color: context.gridColors.bg, width: 2),
-              boxShadow: status == GridAvatarStatus.live
+              boxShadow: isLive
                   ? [
                       BoxShadow(
                         color: context.gridColors.mint.withOpacity(0.6),
