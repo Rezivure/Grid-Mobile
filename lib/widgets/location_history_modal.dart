@@ -741,6 +741,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
 
     return GridSheetContainer(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           GridSheetHeader(
             title: headerTitle,

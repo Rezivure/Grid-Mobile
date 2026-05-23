@@ -954,10 +954,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return LocationHistoryModal(
-          userId: contact.userId,
-          userName: contact.displayName,
-          avatarUrl: contact.avatarUrl,
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: LocationHistoryModal(
+            userId: contact.userId,
+            userName: contact.displayName,
+            avatarUrl: contact.avatarUrl,
+          ),
         );
       },
     );

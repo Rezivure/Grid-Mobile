@@ -1304,7 +1304,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     builder: (BuildContext context) {
                       return ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.95,
+                          maxHeight: MediaQuery.of(context).size.height * 0.85,
                         ),
                         child: LocationHistoryModal(
                           userId: room.roomId,
@@ -1346,22 +1346,20 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (context) => Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.95,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      ),
-                      child: GroupMarkersModal(
-                        roomId: room.roomId,
-                        roomName: room.name.split(':').length >= 5
-                            ? room.name.split(':')[3]
-                            : room.name,
-                        mapIconRepository: MapIconRepository(DatabaseService()),
-                      ),
-                    ),
+                    builder: (BuildContext context) {
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.85,
+                        ),
+                        child: GroupMarkersModal(
+                          roomId: room.roomId,
+                          roomName: room.name.split(':').length >= 5
+                              ? room.name.split(':')[3]
+                              : room.name,
+                          mapIconRepository: MapIconRepository(DatabaseService()),
+                        ),
+                      );
+                    },
                   );
                 },
               ),

@@ -478,11 +478,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => GroupMarkersModal(
-        roomId: widget.room.roomId,
-        roomName: _groupName,
-        mapIconRepository: MapIconRepository(DatabaseService()),
-      ),
+      builder: (BuildContext context) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
+          child: GroupMarkersModal(
+            roomId: widget.room.roomId,
+            roomName: _groupName,
+            mapIconRepository: MapIconRepository(DatabaseService()),
+          ),
+        );
+      },
     );
   }
 
@@ -528,12 +535,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
                           isScrollControlled: true,
                           backgroundColor: Colors.transparent,
                           builder: (BuildContext context) {
-                            return LocationHistoryModal(
-                              userId: widget.room.roomId,
-                              userName: _groupName,
-                              memberIds: _filteredMembers
-                                  .map((m) => m.userId)
-                                  .toList(),
+                            return ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight:
+                                    MediaQuery.of(context).size.height * 0.85,
+                              ),
+                              child: LocationHistoryModal(
+                                userId: widget.room.roomId,
+                                userName: _groupName,
+                                memberIds: _filteredMembers
+                                    .map((m) => m.userId)
+                                    .toList(),
+                              ),
                             );
                           },
                         );
