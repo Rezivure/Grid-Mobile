@@ -215,7 +215,7 @@ void main() async {
         Provider<UserService>.value(value: userService),
         Provider<UserRepository>.value(value: userRepository),
         Provider<RoomRepository>.value(value: roomRepository),
-        Provider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
+        ListenableProvider<SharingPreferencesRepository>.value(value: sharingPreferencesRepository),
 
         ChangeNotifierProvider(create: (_) => SelectedUserProvider()),
         ChangeNotifierProvider(create: (_) => SelectedSubscreenProvider()),

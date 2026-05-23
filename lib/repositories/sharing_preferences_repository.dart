@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/services/database_service.dart';
 
-class SharingPreferencesRepository {
+class SharingPreferencesRepository extends ChangeNotifier {
   final DatabaseService _databaseService;
 
   SharingPreferencesRepository(this._databaseService);
@@ -29,6 +30,7 @@ class SharingPreferencesRepository {
       preferences.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace, // Replace if exists
     );
+    notifyListeners();
   }
 
   /// Fetch sharing preferences for a specific target
@@ -60,11 +62,13 @@ class SharingPreferencesRepository {
       where: 'targetId = ? AND targetType = ?',
       whereArgs: [targetId, targetType],
     );
+    notifyListeners();
   }
 
   /// Clear all sharing preferences (used for resets or testing)
   Future<void> clearAllSharingPreferences() async {
     final db = await _databaseService.database;
     await db.delete('SharingPreferences');
+    notifyListeners();
   }
 }

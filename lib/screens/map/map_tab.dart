@@ -42,6 +42,7 @@ import 'package:grid_frontend/widgets/user_map_marker.dart';
 import 'package:grid_frontend/widgets/map_scroll_window.dart';
 import 'package:grid_frontend/widgets/user_info_bubble.dart';
 import 'package:grid_frontend/widgets/contact_profile_modal.dart';
+import 'package:grid_frontend/widgets/sharing_recipient_pill.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/services/map_camera_signals.dart';
 import 'package:grid_frontend/services/contact_sheet_controller.dart';
@@ -1299,71 +1300,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
-  /// "SHARING WITH N" pill rendered top-center over the map.
-  ///
-  /// When the user has paused sharing (incognito on), the mint glow dot
-  /// is swapped for a purple dot with no glow and the label reads
-  /// "SHARING PAUSED" instead of the contact count.
-  Widget _buildSharingPill() {
-    return BlocBuilder<MapBloc, MapState>(
-      buildWhen: (p, c) => p.userLocations.length != c.userLocations.length,
-      builder: (context, state) {
-        final count = state.userLocations.length;
-        return Consumer<SharingStateNotifier>(
-          builder: (context, sharingState, _) {
-            final paused = sharingState.isPaused;
-            final dotColor = paused ? context.gridColors.paused : context.gridColors.mint;
-            final textColor = paused ? context.gridColors.paused : context.gridColors.text;
-            final label = paused ? 'SHARING PAUSED' : 'SHARING WITH $count';
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: context.gridColors.surface.withOpacity(0.92),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: context.gridColors.hairlineStrong),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: dotColor,
-                      shape: BoxShape.circle,
-                      boxShadow: paused
-                          ? null
-                          : [
-                              BoxShadow(
-                                color: context.gridColors.mint.withOpacity(0.55),
-                                blurRadius: 6,
-                              ),
-                            ],
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  GridMono(
-                    label,
-                    color: textColor,
-                    size: 10.5,
-                    letterSpacing: 0.1,
-                    weight: FontWeight.w600,
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  /// Top-of-map "SHARING WITH N" pill — delegates to [SharingRecipientPill]
+  /// which owns the recipient-count math and reactivity.
+  Widget _buildSharingPill() => const SharingRecipientPill();
 
   int _invitesBadgeCount(BuildContext context) {
     try {
