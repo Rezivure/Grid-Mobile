@@ -144,6 +144,7 @@ class _KeyRow extends StatelessWidget {
     if (!context.mounted) return;
     InAppNotifier.instance.show(
       title: '$label copied',
+      message: 'Paste it somewhere safe.',
       variant: InAppNotificationVariant.success,
     );
   }

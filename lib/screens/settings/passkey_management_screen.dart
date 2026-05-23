@@ -74,26 +74,32 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
       setState(() => _isLoading = true);
       await _passkeyService.registerPasskey(jwt);
 
-      _showStyledSnackBar('Passkey added successfully');
+      _showStyledSnackBar('Passkey added successfully', subtext: 'You can use it to sign in next time.');
 
       await _loadPasskeys();
     } on ExcludeCredentialsCanNotBeRegisteredException {
       setState(() => _isLoading = false);
-      _showStyledSnackBar('A passkey from this device is already registered');
+      _showStyledSnackBar('A passkey from this device is already registered', subtext: 'No need to add it again.');
     } on PasskeyAuthCancelledException {
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() => _isLoading = false);
-      final message = e.toString().contains('not expected challenge')
+      final isUnsupported = e.toString().contains('not expected challenge');
+      final message = isUnsupported
           ? 'This passkey provider is not supported. Please use iCloud Keychain.'
           : 'Failed to add passkey';
-      _showStyledSnackBar(message, isError: true);
+      _showStyledSnackBar(
+        message,
+        isError: true,
+        subtext: isUnsupported ? null : 'Please try again.',
+      );
     }
   }
 
-  void _showStyledSnackBar(String message, {bool isError = false}) {
+  void _showStyledSnackBar(String message, {bool isError = false, String? subtext}) {
     InAppNotifier.instance.show(
       title: message,
+      message: subtext,
       variant: isError
           ? InAppNotificationVariant.error
           : InAppNotificationVariant.success,
@@ -253,14 +259,21 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
 
       setState(() => _isLoading = true);
       await _passkeyService.deletePasskey(jwt, passkey.credentialId);
-      _showStyledSnackBar('Passkey deleted');
+      _showStyledSnackBar('Passkey deleted', subtext: 'It can no longer be used to sign in.');
       await _loadPasskeys();
     } catch (e) {
       setState(() => _isLoading = false);
-      final message = e.toString().contains('only passkey')
+      final isOnlyPasskey = e.toString().contains('only passkey');
+      final message = isOnlyPasskey
           ? 'Cannot delete your only passkey'
           : 'Failed to delete passkey';
-      _showStyledSnackBar(message, isError: true);
+      _showStyledSnackBar(
+        message,
+        isError: true,
+        subtext: isOnlyPasskey
+            ? 'Add another passkey first, then remove this one.'
+            : 'Please try again.',
+      );
     }
   }
 
@@ -436,7 +449,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
       await _passkeyService.renamePasskey(jwt, passkey.credentialId, name);
       await _loadPasskeys();
     } catch (e) {
-      _showStyledSnackBar('Failed to rename passkey', isError: true);
+      _showStyledSnackBar('Failed to rename passkey', isError: true, subtext: 'Please try again.');
     }
   }
 

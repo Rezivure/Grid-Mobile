@@ -944,6 +944,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Show confirmation immediately with shorter duration
     InAppNotifier.instance.show(
       title: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed',
+      message: 'Group members will see it on the map.',
       variant: InAppNotificationVariant.success,
       duration: const Duration(milliseconds: 1800),
     );
@@ -958,6 +959,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       
       InAppNotifier.instance.show(
         title: 'Failed to save icon',
+        message: 'Check your connection and try again.',
         variant: InAppNotificationVariant.error,
         duration: const Duration(seconds: 2),
       );
@@ -1694,6 +1696,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       if (_movingIcon!.creatorId != context.read<Client>().userID) {
                         InAppNotifier.instance.show(
                           title: 'You can only move icons you created',
+                          message: 'Ask the creator to move it instead.',
                           variant: InAppNotificationVariant.warning,
                           duration: const Duration(seconds: 2),
                         );
@@ -1734,6 +1737,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
                       InAppNotifier.instance.show(
                         title: 'Icon moved',
+                        message: 'Group members will see the new location.',
                         variant: InAppNotificationVariant.success,
                         duration: const Duration(seconds: 2),
                       );
@@ -2023,6 +2027,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   if (_selectedMapIcon!.creatorId != context.read<Client>().userID) {
                     InAppNotifier.instance.show(
                       title: 'You can only delete icons you created',
+                      message: 'Ask the creator to remove it instead.',
                       variant: InAppNotificationVariant.warning,
                       duration: const Duration(seconds: 2),
                     );
@@ -2191,6 +2196,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     });
                     InAppNotifier.instance.show(
                       title: 'Icon deleted',
+                      message: 'It is no longer visible to the group.',
                       variant: InAppNotificationVariant.success,
                       duration: const Duration(seconds: 2),
                     );

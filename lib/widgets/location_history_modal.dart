@@ -306,6 +306,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
         if (mounted) {
           InAppNotifier.instance.show(
             title: 'Location history cleared',
+            message: 'Past locations are no longer stored on this device.',
             variant: InAppNotificationVariant.success,
           );
         }

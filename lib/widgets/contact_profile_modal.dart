@@ -1456,6 +1456,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
                   Clipboard.setData(ClipboardData(text: keyValue));
                   InAppNotifier.instance.show(
                     title: '$keyType key copied',
+                    message: 'Compare it against the contact to verify.',
                     variant: InAppNotificationVariant.success,
                     duration: const Duration(seconds: 2),
                   );

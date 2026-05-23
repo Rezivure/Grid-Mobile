@@ -845,6 +845,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
               }
               InAppNotifier.instance.show(
                 title: 'Verification code resent',
+                message: 'Check your messages for the new code.',
                 variant: InAppNotificationVariant.success,
                 duration: const Duration(seconds: 2),
               );
@@ -983,6 +984,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           if (mounted) {
             InAppNotifier.instance.show(
               title: 'Passkey set up',
+              message: 'You can use it to sign in next time.',
               variant: InAppNotificationVariant.success,
             );
           }

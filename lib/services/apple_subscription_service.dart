@@ -85,6 +85,7 @@ class AppleSubscriptionService {
         print('[IAP] Still no products after loading attempt');
         InAppNotifier.instance.show(
           title: 'Subscription not available',
+          message: 'Please check your connection and try again.',
           variant: InAppNotificationVariant.error,
           duration: const Duration(seconds: 2),
         );
@@ -125,6 +126,7 @@ class AppleSubscriptionService {
       print('[IAP] Error getting UUID: $e');
       InAppNotifier.instance.show(
         title: 'Failed to initialize purchase',
+        message: 'Please check your connection and try again.',
         variant: InAppNotificationVariant.error,
         duration: const Duration(seconds: 2),
       );
@@ -142,7 +144,7 @@ class AppleSubscriptionService {
       print('[IAP] buyNonConsumable returned: $result');
     } catch (e) {
       print('[IAP] Purchase error: $e');
-      _showErrorSnackBar(context, 'Unable to complete purchase');
+      _showErrorSnackBar(context, 'Unable to complete purchase', subtext: 'Please try again or contact support.');
     }
   }
   
@@ -233,9 +235,10 @@ class AppleSubscriptionService {
     }
   }
   
-  void _showErrorSnackBar(BuildContext context, String message) {
+  void _showErrorSnackBar(BuildContext context, String message, {String? subtext}) {
     InAppNotifier.instance.show(
       title: message,
+      message: subtext,
       variant: InAppNotificationVariant.error,
       duration: const Duration(seconds: 2),
     );

@@ -83,6 +83,7 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
     if (!mounted) return;
     InAppNotifier.instance.show(
       title: 'Copied ${entries.length} lines',
+      message: 'Logs are on your clipboard.',
       variant: InAppNotificationVariant.success,
       duration: const Duration(seconds: 2),
     );

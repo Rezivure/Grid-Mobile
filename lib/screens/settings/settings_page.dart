@@ -268,12 +268,14 @@ class _SettingsPageState extends State<SettingsPage> {
       locationManager.toggleBatterySaverMode(value);
       InAppNotifier.instance.show(
         title: 'Battery Saver Mode enabled',
+        message: 'Location updates less frequently to save power.',
         variant: InAppNotificationVariant.success,
       );
     } else {
       locationManager.toggleBatterySaverMode(value);
       InAppNotifier.instance.show(
         title: 'Battery Saver Mode disabled',
+        message: 'Location now updates at full frequency.',
         variant: InAppNotificationVariant.info,
       );
     }
@@ -382,6 +384,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _homeLocationSet = true);
     InAppNotifier.instance.show(
       title: 'Home location updated',
+      message: 'Auto-pause will use this location.',
       variant: InAppNotificationVariant.success,
     );
   }
@@ -401,6 +404,7 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     InAppNotifier.instance.show(
       title: 'Home location cleared',
+      message: 'Auto-pause at home has been turned off.',
       variant: InAppNotificationVariant.info,
     );
   }
@@ -739,6 +743,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               Navigator.pop(context);
                               InAppNotifier.instance.show(
                                 title: '$title copied to clipboard',
+                                message: 'Paste it wherever you need.',
                                 variant: InAppNotificationVariant.success,
                               );
                             },
@@ -941,6 +946,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!requestSuccess) {
         InAppNotifier.instance.show(
           title: 'Failed to request account deactivation',
+          message: 'Please try again or contact support.',
           variant: InAppNotificationVariant.error,
         );
         return;
@@ -958,6 +964,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (smsCode == null || smsCode.isEmpty) {
         InAppNotifier.instance.show(
           title: 'Confirmation code was not entered',
+          message: 'Account deactivation was canceled.',
           variant: InAppNotificationVariant.warning,
         );
         return;
@@ -1003,6 +1010,7 @@ class _SettingsPageState extends State<SettingsPage> {
       print('Error during deactivation request: $e');
       InAppNotifier.instance.show(
         title: 'Failed to start account deactivation',
+        message: 'Please try again or contact support.',
         variant: InAppNotificationVariant.error,
       );
     }
@@ -1318,6 +1326,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         InAppNotifier.instance.show(
           title: 'Display name updated',
+          message: 'Friends will see your new name on next sync.',
           variant: InAppNotificationVariant.success,
         );
       } catch (e) {
@@ -1776,6 +1785,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         InAppNotifier.instance.show(
           title: 'Avatar updated',
+          message: 'Your new photo is visible to contacts.',
           variant: InAppNotificationVariant.success,
         );
 
@@ -1937,6 +1947,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         InAppNotifier.instance.show(
           title: 'Avatar updated',
+          message: 'Your new photo is visible to contacts.',
           variant: InAppNotificationVariant.success,
         );
 
@@ -2017,6 +2028,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       InAppNotifier.instance.show(
         title: 'Profile photo removed',
+        message: 'Contacts will see your default avatar.',
         variant: InAppNotificationVariant.success,
       );
     } catch (e) {

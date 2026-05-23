@@ -1535,6 +1535,7 @@ class _MapScrollWindowState extends State<MapScrollWindow>
                       if (context.mounted) {
                         InAppNotifier.instance.show(
                           title: 'Left group',
+                          message: 'You will no longer share or see members.',
                           variant: InAppNotificationVariant.success,
                         );
                       }

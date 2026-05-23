@@ -158,9 +158,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     ContactSheetController.instance.open(contact);
   }
 
-  void _showToast(String text, {required bool danger}) {
+  void _showToast(String text, {required bool danger, String? subtext}) {
     InAppNotifier.instance.show(
       title: text,
+      message: subtext,
       variant: danger
           ? InAppNotificationVariant.error
           : InAppNotificationVariant.success,
@@ -376,7 +377,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       await widget.roomService.leaveRoom(widget.room.roomId);
       if (mounted) {
         context.read<GroupsBloc>().add(RefreshGroups());
-        _showToast('You have left the group', danger: false);
+        _showToast('You have left the group', danger: false, subtext: 'You will no longer share or see members.');
       }
       widget.onGroupLeft();
     } catch (e) {

@@ -300,6 +300,7 @@ Widget _buildInvitesList({
             if (ok) {
               InAppNotifier.instance.show(
                 title: 'Expired invite removed',
+                message: 'It will no longer appear in your invites.',
                 variant: InAppNotificationVariant.success,
               );
             } else {
@@ -661,6 +662,7 @@ class _InvitesModalState extends State<InvitesModal> {
     if (ok) {
       InAppNotifier.instance.show(
         title: 'Expired invite removed',
+        message: 'It will no longer appear in your invites.',
         variant: InAppNotificationVariant.success,
       );
     } else {

@@ -493,6 +493,7 @@ class _AddFriendModalState extends State<AddFriendModal>
     if (_groupNameController.text.trim().isEmpty) {
       InAppNotifier.instance.show(
         title: 'Please enter a group name',
+        message: 'Give your group a name so members can recognize it.',
         variant: InAppNotificationVariant.warning,
       );
       return;
@@ -553,6 +554,7 @@ class _AddFriendModalState extends State<AddFriendModal>
 
         InAppNotifier.instance.show(
           title: 'Group created',
+          message: 'Invite friends from the group settings.',
           variant: InAppNotificationVariant.success,
           duration: const Duration(seconds: 3),
         );
@@ -569,6 +571,7 @@ class _AddFriendModalState extends State<AddFriendModal>
 
         InAppNotifier.instance.show(
           title: errorMsg,
+          message: 'Please try again.',
           variant: InAppNotificationVariant.error,
           duration: const Duration(seconds: 2),
         );
@@ -674,6 +677,7 @@ class _AddFriendModalState extends State<AddFriendModal>
       if (myUserId == null) {
         InAppNotifier.instance.show(
           title: 'Unable to get your username',
+          message: 'Try signing out and back in.',
           variant: InAppNotificationVariant.error,
         );
         return;
@@ -693,6 +697,7 @@ class _AddFriendModalState extends State<AddFriendModal>
       if (mounted) {
         InAppNotifier.instance.show(
           title: 'Unable to share invite',
+          message: 'Please try again.',
           variant: InAppNotificationVariant.error,
         );
       }

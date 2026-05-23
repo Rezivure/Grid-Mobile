@@ -34,11 +34,13 @@ class UserKeysModal extends StatelessWidget {
 
       InAppNotifier.instance.show(
         title: 'User keys verified',
+        message: 'This contact is who they claim to be.',
         variant: InAppNotificationVariant.success,
       );
     } catch (e) {
       InAppNotifier.instance.show(
         title: 'Failed to verify user keys',
+        message: 'Please try again.',
         variant: InAppNotificationVariant.error,
       );
     }

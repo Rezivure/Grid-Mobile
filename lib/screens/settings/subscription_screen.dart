@@ -109,9 +109,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       } else if (_appleService.lastError != null) {
         // Check if user canceled (error code 2 is user canceled)
         if (_appleService.lastError!.code == 'storekit_cancelled_payment') {
-          _showFloatingSnackBar('Purchase canceled', isError: false);
+          _showFloatingSnackBar('Purchase canceled', isError: false, subtext: 'No charges were made.');
         } else {
-          _showFloatingSnackBar('Unable to complete purchase', isError: true);
+          _showFloatingSnackBar('Unable to complete purchase', isError: true, subtext: 'Please try again or contact support.');
         }
       }
     } else {
@@ -127,6 +127,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       } else {
         InAppNotifier.instance.show(
           title: 'Could not open checkout',
+          message: 'Check your internet and try again.',
           variant: InAppNotificationVariant.error,
         );
       }
@@ -162,15 +163,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       } else {
         InAppNotifier.instance.show(
           title: 'Could not open subscription management',
+          message: 'Check your internet and try again.',
           variant: InAppNotificationVariant.error,
         );
       }
     }
   }
 
-  void _showFloatingSnackBar(String message, {bool isError = false}) {
+  void _showFloatingSnackBar(String message, {bool isError = false, String? subtext}) {
     InAppNotifier.instance.show(
       title: message,
+      message: subtext,
       variant: isError
           ? InAppNotificationVariant.error
           : InAppNotificationVariant.success,
@@ -294,7 +297,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           if (mounted) {
                             Navigator.of(context).pop();
                             if (!subscriptionActive) {
-                              _showFloatingSnackBar('Subscription is being processed...', isError: false);
+                              _showFloatingSnackBar('Subscription is being processed...', isError: false, subtext: 'This may take a moment.');
                             }
                           }
                         },

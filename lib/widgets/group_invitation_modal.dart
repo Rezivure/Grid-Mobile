@@ -313,6 +313,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     Navigator.of(context).pop();
     InAppNotifier.instance.show(
       title: 'Joining $groupName...',
+      message: 'Setting up your membership.',
       variant: InAppNotificationVariant.info,
     );
 
@@ -355,6 +356,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
 
         InAppNotifier.instance.show(
           title: 'Joined $groupName',
+          message: 'You can see members on the map now.',
           variant: InAppNotificationVariant.success,
         );
       } catch (e) {
@@ -393,6 +395,7 @@ class _GroupInvitationModalState extends State<GroupInvitationModal> {
     Navigator.of(context).pop();
     InAppNotifier.instance.show(
       title: 'Group invitation declined',
+      message: 'You will not be added to the group.',
       variant: InAppNotificationVariant.info,
       duration: const Duration(seconds: 2),
     );

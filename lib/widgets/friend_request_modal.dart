@@ -407,6 +407,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
 
         InAppNotifier.instance.show(
           title: 'Friend request accepted',
+          message: 'You will start sharing locations shortly.',
           variant: InAppNotificationVariant.success,
         );
       } catch (e) {
@@ -454,6 +455,7 @@ class _FriendRequestModalState extends State<FriendRequestModal> {
       if (mounted) {
         InAppNotifier.instance.show(
           title: 'Friend request declined',
+          message: 'They will not be added to your contacts.',
           variant: InAppNotificationVariant.info,
           duration: const Duration(seconds: 2),
         );

@@ -258,6 +258,7 @@ class _ProfileModalState extends State<ProfileModal> {
                                 });
                                 InAppNotifier.instance.show(
                                   title: 'Username copied',
+                                  message: 'Share it so friends can add you.',
                                   variant: InAppNotificationVariant.success,
                                   duration: const Duration(seconds: 2),
                                 );

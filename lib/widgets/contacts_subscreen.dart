@@ -752,6 +752,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     if (!mounted) return;
     InAppNotifier.instance.show(
       title: 'Copied $handle',
+      message: 'Share it so friends can add you.',
       variant: InAppNotificationVariant.success,
       duration: const Duration(seconds: 2),
     );
@@ -767,6 +768,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       if (!mounted) return;
       InAppNotifier.instance.show(
         title: 'Unable to share invite',
+        message: 'Please try again.',
         variant: InAppNotificationVariant.error,
       );
     }

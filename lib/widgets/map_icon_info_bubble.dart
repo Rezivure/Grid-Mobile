@@ -228,6 +228,7 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
 
     InAppNotifier.instance.show(
       title: 'Coordinates copied',
+      message: 'Paste them into your maps app to navigate.',
       variant: InAppNotificationVariant.success,
       duration: const Duration(seconds: 2),
     );
@@ -467,6 +468,7 @@ class _MapIconInfoBubbleState extends State<MapIconInfoBubble> {
       if (context.mounted) {
         InAppNotifier.instance.show(
           title: 'Could not open maps application',
+          message: 'Install a maps app, or copy coordinates instead.',
           variant: InAppNotificationVariant.error,
           duration: const Duration(seconds: 2),
         );
