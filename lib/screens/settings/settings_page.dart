@@ -15,6 +15,7 @@ import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
+import 'dart:async';
 import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -1997,14 +1998,15 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  /// Wipes the locally stored avatar entry. Used by ProfilePhotoScreen's
-  /// "Remove photo" action. Server-side avatar deletion isn't supported by
-  /// the current Matrix flow, so we just clear the cached pointer here —
-  /// the UI will fall back to the deterministic GridAvatar.
+  /// Clears the local user's avatar everywhere we cache it and broadcasts a
+  /// removal announcement to all rooms so contacts can drop their cached
+  /// copy. Server-side avatar deletion isn't supported, so the photo is left
+  /// orphaned in storage — the UI falls back to the deterministic GridAvatar.
   Future<void> _removeAvatar() async {
     final client = Provider.of<Client>(context, listen: false);
     final userId = client.userID ?? '';
     final secureStorage = const FlutterSecureStorage();
+    final avatarBloc = context.read<AvatarBloc>();
 
     try {
       await secureStorage.delete(key: 'avatar_$userId');
@@ -2021,6 +2023,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _avatarCache.remove(userId);
       _avatarUriCache.remove(userId);
 
+      avatarBloc.add(ClearAvatarCache(userId));
+      await UserAvatar.clearCache(userId);
+
       if (!mounted) return;
       setState(() {
         _avatarUpdateCounter += 1;
@@ -2028,8 +2033,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
       InAppNotifier.instance.show(
         title: 'Profile photo removed',
-        message: 'Contacts will see your default avatar.',
+        message: 'Contacts will see your initial shortly.',
         variant: InAppNotificationVariant.success,
+      );
+
+      unawaited(
+        AvatarAnnouncementService(client).broadcastProfPicRemovalToAllRooms(),
       );
     } catch (e) {
       if (!mounted) return;

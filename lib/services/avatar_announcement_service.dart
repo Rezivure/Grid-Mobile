@@ -109,6 +109,54 @@ class AvatarAnnouncementService {
     }
   }
 
+  /// Announce that the local user has removed their profile picture.
+  Future<void> announceProfPicRemovalToRoom(String roomId) async {
+    try {
+      final room = client.getRoomById(roomId);
+      if (room == null || room.membership != Membership.join) {
+        print('[Avatar Removal] Skipping room $roomId - not a member');
+        return;
+      }
+
+      final userId = client.userID;
+      if (userId == null) {
+        print('[Avatar Removal] No user ID found');
+        return;
+      }
+
+      final eventContent = {
+        'msgtype': 'm.avatar.removal',
+        'body': 'Profile picture removed',
+        'user_id': userId,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await room.sendEvent(eventContent);
+      print('[Avatar Removal] Sent removal announcement to room ${room.name} ($roomId)');
+    } catch (e) {
+      print('[Avatar Removal] Error sending to room $roomId: $e');
+    }
+  }
+
+  /// Broadcast profile picture removal to all joined Grid rooms.
+  Future<void> broadcastProfPicRemovalToAllRooms() async {
+    try {
+      final rooms = client.rooms.where((room) =>
+        room.membership == Membership.join &&
+        room.name.startsWith('Grid:')
+      ).toList();
+
+      print('[Avatar Removal] Broadcasting removal to ${rooms.length} rooms');
+
+      for (final room in rooms) {
+        await announceProfPicRemovalToRoom(room.id);
+        await Future.delayed(Duration(milliseconds: 100));
+      }
+    } catch (e) {
+      print('[Avatar Removal] Error broadcasting: $e');
+    }
+  }
+
   /// Broadcast user profile picture to all joined rooms
   Future<void> broadcastProfPicToAllRooms() async {
     try {

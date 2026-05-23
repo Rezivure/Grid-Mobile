@@ -101,6 +101,8 @@ class MessageProcessor {
       
       if (msgType == 'm.avatar.announcement') {
         await _handleAvatarAnnouncement(messageData);
+      } else if (msgType == 'm.avatar.removal') {
+        await _handleAvatarRemoval(messageData);
       } else if (msgType == 'm.group.avatar.announcement') {
         await _handleGroupAvatarAnnouncement(messageData, roomId);
       } else if (msgType == 'm.avatar.state') {
@@ -264,6 +266,32 @@ class MessageProcessor {
       
     } catch (e) {
       print('[Avatar Processing] Error handling avatar announcement: $e');
+    }
+  }
+
+  /// Handle avatar removal messages from peers.
+  Future<void> _handleAvatarRemoval(Map<String, dynamic> messageData) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      if (sender == null) {
+        print('[Avatar Removal] Invalid removal - missing sender');
+        return;
+      }
+
+      print('[Avatar Removal] Clearing cached avatar for $sender');
+
+      await secureStorage.delete(key: 'avatar_$sender');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('avatar_is_matrix_$sender');
+      await prefs.remove('avatar_fallback_$sender');
+
+      await UserAvatar.clearCache(sender);
+
+      if (avatarBloc != null) {
+        avatarBloc!.add(ClearAvatarCache(sender));
+      }
+    } catch (e) {
+      print('[Avatar Removal] Error handling removal: $e');
     }
   }
 
