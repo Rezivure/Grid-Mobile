@@ -427,7 +427,7 @@ class SyncManager with ChangeNotifier {
     // Clear the sync token so next login does a full sync
     _sinceToken = null;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('sync_since_token');
+    await prefs.remove('syncSinceToken');
 
     // Reset sync state to uninitialized so it can start fresh
     _syncState = SyncState.uninitialized;
