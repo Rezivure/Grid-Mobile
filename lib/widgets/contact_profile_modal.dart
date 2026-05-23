@@ -842,11 +842,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     if (timestamp == null) return 'NEVER';
     final ago = TimeAgoFormatter.format(timestamp);
     if (ago == 'Offline') return 'NEVER';
-    if (ago == 'Just now') return 'LAST JUST NOW';
-    final stripped = ago.endsWith(' ago')
-        ? ago.substring(0, ago.length - 4)
-        : ago;
-    return 'LAST ${stripped.toUpperCase()} AGO';
+    if (ago == 'Just now') return 'JUST NOW';
+    return ago.toUpperCase();
   }
 
   // Same banding as the old user_info_bubble.
