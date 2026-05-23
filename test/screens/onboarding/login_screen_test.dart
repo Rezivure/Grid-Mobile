@@ -63,7 +63,7 @@ void main() {
       await pumpLogin(tester);
 
       expect(find.text('Homeserver URL'), findsOneWidget);
-      expect(find.text('Username'), findsOneWidget);
+      expect(find.text('Handle'), findsOneWidget);
       expect(find.text('Password'), findsOneWidget);
       expect(find.text('Sign In'), findsOneWidget);
     });
@@ -150,7 +150,7 @@ void main() {
       await pumpLogin(tester);
 
       expect(find.text('matrix.example.com'), findsOneWidget);
-      expect(find.text('Enter your username'), findsOneWidget);
+      expect(find.text('Enter your handle'), findsOneWidget);
       expect(find.text('Enter your password'), findsOneWidget);
     });
 
