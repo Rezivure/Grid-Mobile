@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/screens/onboarding/login_screen.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 
 // Mock classes
 class MockClient extends Mock implements Client {}
@@ -36,7 +37,11 @@ void main() {
     });
 
     Widget createLoginScreen() {
+      final theme = ThemeData.light(useMaterial3: true).copyWith(
+        extensions: <ThemeExtension<dynamic>>[GridColors.light()],
+      );
       return MaterialApp(
+        theme: theme,
         home: Provider<Client>.value(
           value: mockClient,
           child: LoginScreen(),
@@ -71,12 +76,10 @@ void main() {
       expect(find.text('Connect to Custom Server'), findsOneWidget);
     });
 
-    testWidgets('should display maps configuration section', (WidgetTester tester) async {
+    testWidgets('should display maps configuration toggle', (WidgetTester tester) async {
       await pumpLogin(tester);
 
-      expect(find.text('Maps Configuration'), findsOneWidget);
-      expect(find.text('Grid Maps'), findsOneWidget);
-      expect(find.text('Custom Maps'), findsOneWidget);
+      expect(find.text('Custom map source?'), findsOneWidget);
     });
 
     testWidgets('should have text input fields', (WidgetTester tester) async {
@@ -132,11 +135,15 @@ void main() {
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
     });
 
-    testWidgets('maps selection should toggle between options', (WidgetTester tester) async {
+    testWidgets('maps selection toggle reveals custom URL field when tapped', (WidgetTester tester) async {
       await pumpLogin(tester);
 
-      expect(find.text('Grid Maps'), findsOneWidget);
-      expect(find.text('Custom Maps'), findsOneWidget);
+      expect(find.text('Custom map source?'), findsOneWidget);
+      await tester.tap(find.text('Custom map source?'));
+      await tester.pump();
+
+      expect(find.text('Custom map source'), findsOneWidget);
+      expect(find.text('Custom Maps URL'), findsOneWidget);
     });
 
     testWidgets('should display proper form hints and labels', (WidgetTester tester) async {
