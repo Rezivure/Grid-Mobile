@@ -1,21 +1,17 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vector_map_tiles/vector_map_tiles.dart';
-import 'package:vector_map_tiles_pmtiles/vector_map_tiles_pmtiles.dart';
-import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vector_renderer;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/models/location_history.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
+import 'package:grid_frontend/screens/map/grid_map_style.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
-import 'package:grid_frontend/services/subscription_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
@@ -45,84 +41,42 @@ class LocationHistoryModal extends StatefulWidget {
 }
 
 class _LocationHistoryModalState extends State<LocationHistoryModal> {
-  late MapController _mapController;
+  ml.MapLibreMapController? _mapController;
+  String? _styleJson;
+  bool? _isDarkStyle;
+  bool _styleLoaded = false;
+  final List<ml.Line> _activeLines = [];
+  final Map<String, Offset> _markerScreenPositions = {};
+  int _projectionSeq = 0;
   LocationHistory? _locationHistory;
   Map<String, LocationHistory>? _groupHistories;
   double _sliderValue = 1.0;
   DateTime? _currentTime;
   Map<String, LatLng> _currentPositions = {};
   bool _isLoading = true;
-  bool _isMapLoading = true; // Separate loading state for map
-  VectorTileProvider? _tileProvider;
-  late vector_renderer.Theme _mapTheme;
   DateTime? _earliestTime;
   DateTime? _latestTime;
   bool _initialMapSetupDone = false;
   String? _selectedMemberId; // For group view, which member is selected
   bool _showAllMembers = false; // Toggle for showing all members vs single
   bool _mapReady = false;
-  String _currentMapStyle = 'base';
-  String? _satelliteMapToken;
-  final SubscriptionService _subscriptionService = SubscriptionService();
   Map<String, String> _userDisplayNames = {}; // Cache for display names
   late RoomLocationHistoryRepository _roomHistoryRepo;
   int _playbackSpeed = 1; // 1x / 2x / 4x — UI chrome to match design spec
   static const List<int> _speedOptions = [1, 2, 4];
-  
+
   @override
   void initState() {
     super.initState();
-    _mapController = MapController();
     _roomHistoryRepo = RoomLocationHistoryRepository(DatabaseService());
     // Default to showing all members for group history
     _showAllMembers = widget.memberIds != null;
-    _initializeMap();
     _loadLocationHistory();
-  }
-  
-  Future<void> _initializeMap() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Load the user's map style preference
-      _currentMapStyle = prefs.getString('selected_map_style') ?? 'base';
-      
-      // Check if user has subscription for satellite maps
-      if (_currentMapStyle == 'satellite') {
-        final hasSubscription = await _subscriptionService.hasActiveSubscription();
-        if (hasSubscription) {
-          // Get satellite map token
-          _satelliteMapToken = await _subscriptionService.getMapToken();
-        } else {
-          // No subscription, fallback to base maps
-          _currentMapStyle = 'base';
-        }
-      }
-      
-      // Initialize base map provider (still needed for fallback)
-      if (_currentMapStyle == 'base') {
-        final mapUrl = prefs.getString('maps_url') ?? 'https://map.mygrid.app/v1/protomaps.pmtiles';
-        _mapTheme = ProtomapsThemes.light();
-        _tileProvider = await PmTilesVectorTileProvider.fromSource(mapUrl);
-      }
-      
-      if (mounted) {
-        setState(() {
-          _isMapLoading = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading map provider: $e');
-      if (mounted) {
-        setState(() {
-          _isMapLoading = false;
-        });
-      }
-    }
   }
 
   @override
   void dispose() {
+    _mapController = null;
     super.dispose();
   }
 
@@ -409,29 +363,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   void _setupInitialMapView() {
     if (!_initialMapSetupDone && _currentPositions.isNotEmpty && mounted) {
       _initialMapSetupDone = true;
-      
-      // Wait for map to be ready
-      if (!_mapReady) {
-        // The onMapReady callback will handle fitting the view
-        return;
-      }
-      
+
+      if (!_mapReady) return;
+
       try {
         final points = _currentPositions.values.toList();
         if (points.length == 1) {
-          // For single point, just center on it
-          _mapController.move(points.first, 12.0);
+          _moveCamera(points.first, 12.0);
         } else if (points.length > 1) {
-          // For multiple points, fit bounds with more padding for group view
-          final bounds = LatLngBounds.fromPoints(points);
-          _mapController.fitCamera(
-            CameraFit.bounds(
-              bounds: bounds,
-              padding: _showAllMembers 
-                  ? const EdgeInsets.all(80)  // More padding for group view
-                  : const EdgeInsets.all(50),
-            ),
-          );
+          final result = _calculateSmartZoom(points);
+          _moveCamera(result.center, result.zoom);
         }
       } catch (e) {
         print('Error setting up initial map view: $e');
@@ -440,19 +381,18 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   }
 
   void _updateCurrentPositions() {
+    final currentZoom = _mapController?.cameraPosition?.zoom ?? 12.0;
     if (_locationHistory != null && _currentTime != null) {
       // Single user
       final position = _getPositionAtTime(_locationHistory!, _currentTime!);
       if (position != null) {
         _currentPositions[widget.userId] = position;
-        // Pan map to follow the user
-        _mapController.move(position, _mapController.camera.zoom);
+        _moveCamera(position, currentZoom);
       }
     } else if (_groupHistories != null && _currentTime != null) {
       // Multiple users
       final newPositions = <String, LatLng>{};
       if (_showAllMembers) {
-        // Show all members
         _groupHistories!.forEach((userId, history) {
           final position = _getPositionAtTime(history, _currentTime!);
           if (position != null) {
@@ -460,26 +400,33 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           }
         });
       } else if (_selectedMemberId != null && _groupHistories!.containsKey(_selectedMemberId!)) {
-        // Show only selected member
         final selectedHistory = _groupHistories![_selectedMemberId!]!;
-        
-        // If current time is beyond this user's history, use their last point
-        final userLatestTime = selectedHistory.points.isNotEmpty 
-            ? selectedHistory.points.last.timestamp 
+        final userLatestTime = selectedHistory.points.isNotEmpty
+            ? selectedHistory.points.last.timestamp
             : _currentTime!;
-        final effectiveTime = _currentTime!.isAfter(userLatestTime) 
-            ? userLatestTime 
+        final effectiveTime = _currentTime!.isAfter(userLatestTime)
+            ? userLatestTime
             : _currentTime!;
-            
+
         final position = _getPositionAtTime(selectedHistory, effectiveTime);
         if (position != null) {
           newPositions[_selectedMemberId!] = position;
-          // Pan map to follow the selected member
-          _mapController.move(position, _mapController.camera.zoom);
+          _moveCamera(position, currentZoom);
         }
       }
       _currentPositions = newPositions;
     }
+    _redrawPaths();
+    _refreshMarkerScreenPositions();
+  }
+
+  void _moveCamera(LatLng target, double zoom) {
+    _mapController?.moveCamera(ml.CameraUpdate.newCameraPosition(
+      ml.CameraPosition(
+        target: ml.LatLng(target.latitude, target.longitude),
+        zoom: zoom,
+      ),
+    ));
   }
 
   LatLng? _getPositionAtTime(LocationHistory history, DateTime time) {
@@ -556,46 +503,105 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     return atan2(y, x) * 180 / pi;
   }
   
-  List<Polyline> _getPolylinesForGroup() {
+  List<({List<LatLng> points, Color color})> _buildPathSpecs() {
     final colorScheme = Theme.of(context).colorScheme;
-    
-    if (_showAllMembers && _groupHistories != null && _currentTime != null) {
-      // Show all members
-      return _groupHistories!.entries.map((entry) {
-        final color = _getUserColor(entry.key);
-        return Polyline(
-          points: _getPathForUser(entry.value, _currentTime!),
-          strokeWidth: 3.0,
-          color: color,
-        );
-      }).toList();
-    } else if (!_showAllMembers && 
-               _selectedMemberId != null && 
-               _groupHistories != null &&
-               _groupHistories!.containsKey(_selectedMemberId!) &&
-               _currentTime != null) {
-      // Show single selected member
-      final selectedHistory = _groupHistories![_selectedMemberId!]!;
-      
-      // If current time is beyond this user's history, use their last point
-      final userLatestTime = selectedHistory.points.isNotEmpty 
-          ? selectedHistory.points.last.timestamp 
-          : _currentTime!;
-      final effectiveTime = _currentTime!.isAfter(userLatestTime) 
-          ? userLatestTime 
-          : _currentTime!;
-      
+    if (_locationHistory != null && _currentTime != null) {
       return [
-        Polyline(
-          points: _getPathForUser(selectedHistory, effectiveTime),
-          strokeWidth: 3.0,
+        (
+          points: _getPathForUser(_locationHistory!, _currentTime!),
           color: colorScheme.primary,
         ),
       ];
     }
-    
-    // Return empty list if no data
-    return [];
+    if (_showAllMembers && _groupHistories != null && _currentTime != null) {
+      return _groupHistories!.entries
+          .map((entry) => (
+                points: _getPathForUser(entry.value, _currentTime!),
+                color: _getUserColor(entry.key),
+              ))
+          .toList();
+    }
+    if (!_showAllMembers &&
+        _selectedMemberId != null &&
+        _groupHistories != null &&
+        _groupHistories!.containsKey(_selectedMemberId!) &&
+        _currentTime != null) {
+      final selectedHistory = _groupHistories![_selectedMemberId!]!;
+      final userLatestTime = selectedHistory.points.isNotEmpty
+          ? selectedHistory.points.last.timestamp
+          : _currentTime!;
+      final effectiveTime = _currentTime!.isAfter(userLatestTime)
+          ? userLatestTime
+          : _currentTime!;
+      return [
+        (
+          points: _getPathForUser(selectedHistory, effectiveTime),
+          color: colorScheme.primary,
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  Future<void> _redrawPaths() async {
+    final controller = _mapController;
+    if (controller == null || !_styleLoaded) return;
+    try {
+      if (_activeLines.isNotEmpty) {
+        await controller.removeLines(List<ml.Line>.from(_activeLines));
+        _activeLines.clear();
+      }
+      final specs = _buildPathSpecs();
+      if (specs.isEmpty) return;
+      final options = <ml.LineOptions>[
+        for (final s in specs)
+          if (s.points.isNotEmpty)
+            ml.LineOptions(
+              geometry: [
+                for (final p in s.points) ml.LatLng(p.latitude, p.longitude),
+              ],
+              lineColor: _hex(s.color),
+              lineWidth: 3.0,
+              lineOpacity: 0.95,
+              lineJoin: 'round',
+            ),
+      ];
+      if (options.isEmpty) return;
+      final lines = await controller.addLines(options);
+      _activeLines.addAll(lines);
+    } catch (e) {
+      print('Error redrawing history paths: $e');
+    }
+  }
+
+  String _hex(Color c) {
+    final r = c.red.toRadixString(16).padLeft(2, '0');
+    final g = c.green.toRadixString(16).padLeft(2, '0');
+    final b = c.blue.toRadixString(16).padLeft(2, '0');
+    return '#$r$g$b';
+  }
+
+  Future<void> _refreshMarkerScreenPositions() async {
+    final controller = _mapController;
+    if (controller == null || !mounted || _currentPositions.isEmpty) return;
+    final keys = <String>[];
+    final pts = <ml.LatLng>[];
+    _currentPositions.forEach((k, v) {
+      keys.add(k);
+      pts.add(ml.LatLng(v.latitude, v.longitude));
+    });
+    final seq = ++_projectionSeq;
+    try {
+      final screen = await controller.toScreenLocationBatch(pts);
+      if (!mounted || seq != _projectionSeq) return;
+      _markerScreenPositions
+        ..clear()
+        ..addEntries([
+          for (var i = 0; i < keys.length && i < screen.length; i++)
+            MapEntry(keys[i], Offset(screen[i].x.toDouble(), screen[i].y.toDouble())),
+        ]);
+      setState(() {});
+    } catch (_) {}
   }
 
   /// Compact mono-style total duration, e.g. "2H 14M" or "45M" or "4D".
@@ -729,7 +735,16 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+    final isDark = theme.brightness == Brightness.dark;
+    if (_isDarkStyle != isDark) {
+      _isDarkStyle = isDark;
+      _styleJson = buildGridMapStyle(dark: isDark);
+      if (_styleLoaded && _mapController != null) {
+        unawaited(_mapController!.setStyle(_styleJson!));
+        _styleLoaded = false;
+      }
+    }
+
     final isGroup = widget.memberIds != null;
     final headerTitle = isGroup
         ? '${widget.userName} · history'
@@ -763,7 +778,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
             child: Column(
               children: [
           // Member strip — group mode. First tile = ALL.
-          if (!_isLoading && !_isMapLoading && _groupHistories != null && _groupHistories!.isNotEmpty)
+          if (!_isLoading && _groupHistories != null && _groupHistories!.isNotEmpty)
             SizedBox(
               height: 86,
               child: ListView.builder(
@@ -809,7 +824,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                               _selectedMemberId = memberId;
                               _updateSliderRange();
                               if (_currentPositions.containsKey(memberId)) {
-                                _mapController.move(
+                                _moveCamera(
                                   _currentPositions[memberId]!,
                                   12.0,
                                 );
@@ -865,7 +880,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                if (_isLoading || _isMapLoading)
+                if (_isLoading)
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -875,7 +890,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         ),
                         const SizedBox(height: 16),
                         GridMono(
-                          _isLoading ? 'Loading history' : 'Preparing map',
+                          'Loading history',
                           color: context.gridColors.text3,
                           size: 11,
                           letterSpacing: 0.08,
@@ -905,119 +920,101 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       ],
                     ),
                   )
-                else if (_currentMapStyle == 'base' && _tileProvider == null)
-                  Center(
-                    child: CircularProgressIndicator(
-                      color: context.gridColors.mint,
-                    ),
-                  )
-                else if ((_currentMapStyle == 'base' && _tileProvider != null) ||
-                         (_currentMapStyle == 'satellite' && _satelliteMapToken != null))
+                else
                   ClipRRect(
                     borderRadius: BorderRadius.circular(GridTokens.rLg),
-                    child: FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: _currentPositions.isNotEmpty
-                            ? (_showAllMembers && _currentPositions.length > 1
-                                ? _calculateSmartZoom(_currentPositions.values.toList()).center
-                                : _currentPositions.values.first)
-                            : const LatLng(37.7749, -122.4194), // Default to SF
-                        initialZoom: _currentPositions.isNotEmpty && _showAllMembers
-                            ? _calculateSmartZoom(_currentPositions.values.toList()).zoom
-                            : 10.0,
-                        minZoom: 2.0,  // Allow zooming out to see whole continent
-                        maxZoom: 16.0, // Prevent zooming in too close (street level)
-                        onMapReady: () {
-                          setState(() {
-                            _mapReady = true;
-                          });
-                          // Now that map is ready, fit all members if in group view
-                          if (_showAllMembers && _currentPositions.isNotEmpty) {
-                            Future.delayed(const Duration(milliseconds: 100), () {
-                              _fitAllMembersInView();
-                            });
-                          }
-                        },
-                      ),
+                    child: Stack(
                       children: [
-                        // Map tiles - either base or satellite
-                        if (_currentMapStyle == 'base' && _tileProvider != null)
-                          VectorTileLayer(
-                            theme: _mapTheme,
-                            tileProviders: TileProviders({'protomaps': _tileProvider!}),
-                            fileCacheTtl: const Duration(days: 14),
-                            memoryTileDataCacheMaxSize: 80,
-                            memoryTileCacheMaxSize: 100,
-                            concurrency: 5,
-                          )
-                        else if (_currentMapStyle == 'satellite' && _satelliteMapToken != null)
-                          TileLayer(
-                            urlTemplate: '${dotenv.env['SAT_MAPS_URL'] ?? 'https://sat-maps.mygrid.app'}/tiles/alidade_satellite/{z}/{x}/{y}.png',
-                            tileProvider: NetworkTileProvider(
-                              headers: {
-                                'Authorization': 'Bearer $_satelliteMapToken',
-                              },
+                        ml.MapLibreMap(
+                          styleString: _styleJson!,
+                          initialCameraPosition: ml.CameraPosition(
+                            target: ml.LatLng(
+                              _currentPositions.isNotEmpty
+                                  ? (_showAllMembers && _currentPositions.length > 1
+                                      ? _calculateSmartZoom(_currentPositions.values.toList()).center.latitude
+                                      : _currentPositions.values.first.latitude)
+                                  : 37.7749,
+                              _currentPositions.isNotEmpty
+                                  ? (_showAllMembers && _currentPositions.length > 1
+                                      ? _calculateSmartZoom(_currentPositions.values.toList()).center.longitude
+                                      : _currentPositions.values.first.longitude)
+                                  : -122.4194,
                             ),
-                            maxZoom: 20,
-                            maxNativeZoom: 20,
-                            tileSize: 256,
+                            zoom: _currentPositions.isNotEmpty && _showAllMembers
+                                ? _calculateSmartZoom(_currentPositions.values.toList()).zoom
+                                : 10.0,
                           ),
-                        
-                        // Draw paths
-                        if (_locationHistory != null && _currentTime != null)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: _getPathForUser(_locationHistory!, _currentTime!),
-                                strokeWidth: 3.0,
-                                color: colorScheme.primary,
-                              ),
-                            ],
-                          )
-                        else if (_groupHistories != null && _currentTime != null)
-                          PolylineLayer(
-                            polylines: _getPolylinesForGroup(),
-                          ),
-                        
-                        // Draw current positions
-                        MarkerLayer(
-                          markers: _currentPositions.entries.map((entry) {
-                            return Marker(
-                              point: entry.value,
-                              width: 50,
-                              height: 50,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Container(
-                                    width: 50,
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.2),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor: colorScheme.primary.withOpacity(0.1),
-                                    child: UserAvatarBloc(
-                                      userId: entry.key,
-                                      size: 40,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
+                          myLocationEnabled: false,
+                          trackCameraPosition: true,
+                          minMaxZoomPreference:
+                              const ml.MinMaxZoomPreference(2.0, 16.0),
+                          rotateGesturesEnabled: false,
+                          tiltGesturesEnabled: false,
+                          attributionButtonPosition:
+                              ml.AttributionButtonPosition.bottomLeft,
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                            controller.addListener(_onCameraTick);
+                          },
+                          onStyleLoadedCallback: () {
+                            if (!mounted) return;
+                            setState(() {
+                              _styleLoaded = true;
+                              _mapReady = true;
+                            });
+                            _redrawPaths();
+                            if (!_initialMapSetupDone &&
+                                _currentPositions.isNotEmpty) {
+                              _setupInitialMapView();
+                            }
+                            _refreshMarkerScreenPositions();
+                          },
+                          onCameraIdle: () {
+                            _refreshMarkerScreenPositions();
+                          },
                         ),
+                        ..._currentPositions.entries.map((entry) {
+                          final pos = _markerScreenPositions[entry.key];
+                          if (pos == null) return const SizedBox.shrink();
+                          return Positioned(
+                            left: pos.dx - 25,
+                            top: pos.dy - 25,
+                            child: IgnorePointer(
+                              child: SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.2),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    CircleAvatar(
+                                      radius: 20,
+                                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                                      child: UserAvatarBloc(
+                                        userId: entry.key,
+                                        size: 40,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -1028,7 +1025,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
           ),
 
           // Timeline scrubber — surface bg, top hairline
-          if (!_isLoading && !_isMapLoading &&
+          if (!_isLoading &&
               ((_locationHistory != null && _locationHistory!.points.isNotEmpty) ||
                (_groupHistories != null && _groupHistories!.isNotEmpty)))
             Container(
@@ -1226,17 +1223,20 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       try {
         final points = _currentPositions.values.toList();
         if (points.length == 1) {
-          // Single point - fixed zoom 6
-          _mapController.move(points.first, 6.0);
+          _moveCamera(points.first, 6.0);
         } else if (points.length > 1) {
-          // Calculate smart zoom like main map
           final result = _calculateSmartZoom(points);
-          _mapController.moveAndRotate(result.center, result.zoom, 0);
+          _moveCamera(result.center, result.zoom);
         }
       } catch (e) {
         print('Error fitting all members in view: $e');
       }
     }
+  }
+
+  void _onCameraTick() {
+    if (!mounted) return;
+    _refreshMarkerScreenPositions();
   }
 
   // Smart zoom calculation matching main map logic
