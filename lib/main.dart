@@ -223,14 +223,10 @@ void main() async {
           create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
         ),
         ChangeNotifierProvider(create: (context) => AuthProvider(client, databaseService)),
-        ChangeNotifierProvider(
-          create: (context) => UserLocationProvider(context.read<LocationRepository>(), context.read<UserRepository>()),
-        ),
 
-        // Provide the LocationManager
-        ChangeNotifierProvider<LocationManager>(
-          create: (context) => LocationManager(),
-        ),
+        // Same LocationManager instance as RoomService + LocationDispatch use,
+        // so the widget tree and services share one source of truth.
+        ChangeNotifierProvider<LocationManager>.value(value: locationManager),
 
         // Tracks the user's "sharing paused" state (incognito toggle).
         // Settings writes it; the map's SHARING pill watches it; and
