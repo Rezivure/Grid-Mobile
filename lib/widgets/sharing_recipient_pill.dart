@@ -156,8 +156,6 @@ class _SharingRecipientPillState extends State<SharingRecipientPill> {
         final String label;
         if (paused) {
           label = 'SHARING PAUSED';
-        } else if (_count == 0) {
-          label = 'NO ACTIVE RECIPIENTS';
         } else {
           label = 'SHARING WITH $_count';
         }
