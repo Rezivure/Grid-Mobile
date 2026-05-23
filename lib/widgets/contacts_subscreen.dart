@@ -173,6 +173,12 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     final contactsWithTimestamp = contacts.map((contact) {
       final lastSeenTimestamp = locationProvider.getLastSeen(contact.userId);
       final formattedLastSeen = TimeAgoFormatter.format(lastSeenTimestamp);
+      DateTime? lastUpdateAt;
+      if (lastSeenTimestamp != null) {
+        try {
+          lastUpdateAt = DateTime.parse(lastSeenTimestamp).toLocal();
+        } catch (_) {}
+      }
 
       return {
         'contact': ContactDisplay(
@@ -180,6 +186,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
           displayName: contact.displayName,
           avatarUrl: contact.avatarUrl,
           lastSeen: formattedLastSeen,
+          lastUpdateAt: lastUpdateAt,
           membershipStatus: contact.membershipStatus,
         ),
         'timestamp': lastSeenTimestamp,
@@ -217,17 +224,10 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   // Invites get their own bucket so they don't masquerade as offline.
   _ContactBucket _bucketFor(ContactDisplay c) {
     if (c.membershipStatus == 'invite') return _ContactBucket.invited;
-    final time = c.lastSeen;
-    if (time == 'Just now' || time.contains('s ago')) {
-      return _ContactBucket.sharingNow;
-    }
-    if (time.contains('m ago') && !time.contains('h')) {
-      final m = RegExp(r'(\d+)m ago').firstMatch(time);
-      if (m != null) {
-        final minutes = int.tryParse(m.group(1)!) ?? 0;
-        if (minutes <= 10) return _ContactBucket.sharingNow;
-      }
-    }
+    final ts = c.lastUpdateAt;
+    if (ts == null) return _ContactBucket.offline;
+    final age = DateTime.now().difference(ts);
+    if (age <= const Duration(minutes: 10)) return _ContactBucket.sharingNow;
     return _ContactBucket.offline;
   }
 

@@ -3,6 +3,7 @@ class ContactDisplay {
   final String displayName;
   final String? avatarUrl;
   final String lastSeen;
+  final DateTime? lastUpdateAt;
   final String? membershipStatus;
 
   ContactDisplay({
@@ -10,6 +11,7 @@ class ContactDisplay {
     required this.displayName,
     this.avatarUrl,
     required this.lastSeen,
+    this.lastUpdateAt,
     this.membershipStatus,
   });
 }

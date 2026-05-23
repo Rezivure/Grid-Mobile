@@ -235,21 +235,15 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
         .watch<UserLocationProvider>()
         .getUserLocation(widget.contact.userId);
     if (loc == null) return GridAvatarStatus.offline;
-    final ago = TimeAgoFormatter.format(loc.timestamp);
-    if (_isRecentlyActive(ago)) return GridAvatarStatus.live;
-    return GridAvatarStatus.offline;
-  }
-
-  bool _isRecentlyActive(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) return true;
-    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      final m = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (m != null) {
-        final minutes = int.tryParse(m.group(1)!) ?? 0;
-        return minutes <= 10;
-      }
+    DateTime? ts;
+    try {
+      ts = DateTime.parse(loc.timestamp).toLocal();
+    } catch (_) {
+      return GridAvatarStatus.offline;
     }
-    return false;
+    final age = DateTime.now().difference(ts);
+    if (age <= const Duration(minutes: 10)) return GridAvatarStatus.live;
+    return GridAvatarStatus.offline;
   }
 
   // ────────────────────────────────────────────────────────────────────

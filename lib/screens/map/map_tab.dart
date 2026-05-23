@@ -1525,12 +1525,26 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     if (!mounted) return;
 
+    DateTime? lastUpdateAt;
+    final markerLoc = context
+        .read<MapBloc>()
+        .state
+        .userLocations
+        .cast<UserLocation?>()
+        .firstWhere((u) => u?.userId == userId, orElse: () => null);
+    if (markerLoc != null) {
+      try {
+        lastUpdateAt = DateTime.parse(markerLoc.timestamp).toLocal();
+      } catch (_) {}
+    }
+
     ContactSheetController.instance.open(
       ContactDisplay(
         userId: userId,
         displayName: displayName,
         avatarUrl: avatarUrl,
         lastSeen: lastSeen,
+        lastUpdateAt: lastUpdateAt,
       ),
     );
   }

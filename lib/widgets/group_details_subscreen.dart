@@ -145,13 +145,14 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     }
   }
 
-  void _openMemberSheet(GridUser user, String timeAgoText) {
+  void _openMemberSheet(GridUser user, String timeAgoText, DateTime? lastUpdateAt) {
     if (user.userId == _currentUserId) return;
     final contact = ContactDisplay(
       userId: user.userId,
       displayName: user.displayName ?? localpart(user.userId),
       avatarUrl: user.profileStatus,
       lastSeen: timeAgoText,
+      lastUpdateAt: lastUpdateAt,
     );
     context.read<MapBloc>().add(MapMoveToUser(user.userId));
     ContactSheetController.instance.open(contact);
@@ -595,10 +596,18 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
           .cast<UserLocation?>()
           .firstWhere((l) => l?.userId == m.userId, orElse: () => null);
       if (loc == null) continue;
-      final ago = TimeAgoFormatter.format(loc.timestamp);
-      if (_isRecentlyActive(ago)) live += 1;
+      if (_isRecentlyActive(_parseTimestamp(loc.timestamp))) live += 1;
     }
     return live;
+  }
+
+  DateTime? _parseTimestamp(String? ts) {
+    if (ts == null) return null;
+    try {
+      return DateTime.parse(ts).toLocal();
+    } catch (_) {
+      return null;
+    }
   }
 
   String? _endsInLabel() {
@@ -789,6 +798,8 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
         .firstWhere((l) => l?.userId == user.userId, orElse: () => null);
 
     final memberStatus = state.getMemberStatus(user.userId);
+    final lastUpdateAt =
+        userLocation != null ? _parseTimestamp(userLocation.timestamp) : null;
     final timeAgoText = userLocation != null
         ? TimeAgoFormatter.format(userLocation.timestamp)
         : 'Offline';
@@ -803,7 +814,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
 
     // No real "paused" signal exists for contacts. Stale data is offline.
     final isInvited = memberStatus == 'invite';
-    final isLive = !isInvited && _isRecentlyActive(timeAgoText);
+    final isLive = !isInvited && _isRecentlyActive(lastUpdateAt);
 
     final avatarStatus = isInvited
         ? GridAvatarStatus.paused
@@ -832,7 +843,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       live: isLive,
       avatarStatus: avatarStatus,
       showDivider: showDivider,
-      onTap: isInvited ? null : () => _openMemberSheet(user, timeAgoText),
+      onTap: isInvited
+          ? null
+          : () => _openMemberSheet(user, timeAgoText, lastUpdateAt),
     );
   }
 
@@ -842,18 +855,10 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     return null;
   }
 
-  bool _isRecentlyActive(String timeAgo) {
-    if (timeAgo == 'Just now' || timeAgo.contains('s ago')) {
-      return true;
-    }
-    if (timeAgo.contains('m ago') && !timeAgo.contains('h')) {
-      final minutesMatch = RegExp(r'(\d+)m ago').firstMatch(timeAgo);
-      if (minutesMatch != null) {
-        final minutes = int.parse(minutesMatch.group(1)!);
-        return minutes <= 10;
-      }
-    }
-    return false;
+  bool _isRecentlyActive(DateTime? lastUpdateAt) {
+    if (lastUpdateAt == null) return false;
+    final age = DateTime.now().difference(lastUpdateAt);
+    return age <= const Duration(minutes: 10);
   }
 
   Widget _buildEmptyState() {
