@@ -5,6 +5,7 @@ import '../../styles/grid_colors.dart';
 import 'grid_avatar.dart';
 import 'grid_mono.dart';
 import 'grid_status_pill.dart';
+import 'sharing_row_state.dart';
 
 /// 52pt min-height contact row — used in the bottom sheet's contacts list
 /// and the standalone contacts list.
@@ -24,7 +25,7 @@ class GridContactRow extends StatelessWidget {
     this.highlighted = false,
     this.onTap,
     this.showDivider = true,
-    this.sharingActive = true,
+    this.sharingState = SharingRowState.active,
   });
 
   final String name;
@@ -40,7 +41,7 @@ class GridContactRow extends StatelessWidget {
   final bool highlighted;
   final VoidCallback? onTap;
   final bool showDivider;
-  final bool sharingActive;
+  final SharingRowState sharingState;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +60,7 @@ class GridContactRow extends StatelessWidget {
                 : null,
           ),
           child: Opacity(
-            opacity: sharingActive ? 1.0 : 0.55,
+            opacity: sharingState == SharingRowState.active ? 1.0 : 0.55,
             child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -92,7 +93,15 @@ class GridContactRow extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (!sharingActive) ...[
+                        if (sharingState == SharingRowState.scheduledOut) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.schedule_rounded,
+                            size: 12,
+                            color: context.gridColors.text3,
+                          ),
+                        ],
+                        if (sharingState == SharingRowState.off) ...[
                           const SizedBox(width: 4),
                           Icon(
                             Icons.visibility_off_rounded,

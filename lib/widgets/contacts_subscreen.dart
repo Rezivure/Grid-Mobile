@@ -19,6 +19,7 @@ import 'package:grid_frontend/widgets/grid/grid_avatar.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
 import 'package:grid_frontend/widgets/grid/grid_contact_row.dart';
+import 'package:grid_frontend/widgets/grid/sharing_row_state.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'user_avatar_bloc.dart';
 import '../blocs/contacts/contacts_bloc.dart';
@@ -32,6 +33,7 @@ import 'location_history_modal.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
+import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/services/contact_sheet_controller.dart';
@@ -75,7 +77,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
   final Map<String, String?> _placeCache = {};
   final Set<String> _placeInflight = {};
 
-  final Map<String, bool> _sharingActive = {};
+  final Map<String, SharingRowState> _sharingState = {};
   bool _hasScheduledWindows = false;
   Timer? _windowTicker;
   int _sharingRecomputeSeq = 0;
@@ -175,17 +177,38 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     final state = context.read<ContactsBloc>().state;
     if (state is! ContactsLoaded) return;
     final seq = ++_sharingRecomputeSeq;
-    final next = <String, bool>{};
+    final globallyPaused =
+        context.read<SharingStateNotifier>().isPaused;
+    final next = <String, SharingRowState>{};
     bool anyScheduled = false;
-    for (final c in state.contacts) {
-      final prefs = await repo.getSharingPreferences(c.userId, 'user') ??
-          await repo.getSharingPreferences(c.userId, 'contact');
-      if (prefs != null && !prefs.activeSharing) anyScheduled = true;
-      next[c.userId] = await user.isInSharingWindow(c.userId);
+    final results = await Future.wait(state.contacts.map((c) async {
+      final inWindowF = user.isInSharingWindow(c.userId);
+      final prefsF = repo.getSharingPreferences(c.userId, 'user').then(
+            (p) async => p ?? await repo.getSharingPreferences(c.userId, 'contact'),
+          );
+      final inWindow = await inWindowF;
+      final prefs = await prefsF;
+      return _ContactSharingResult(c.userId, inWindow, prefs);
+    }));
+    for (final r in results) {
+      if (r.prefs != null && !r.prefs!.activeSharing) anyScheduled = true;
+      if (globallyPaused) {
+        next[r.userId] = SharingRowState.off;
+      } else if (r.inWindow) {
+        next[r.userId] = SharingRowState.active;
+      } else {
+        final hasScheduled = r.prefs?.shareWindows
+                    ?.any((w) => w.isActive == true) ==
+                true &&
+            r.prefs?.activeSharing == false;
+        next[r.userId] = hasScheduled
+            ? SharingRowState.scheduledOut
+            : SharingRowState.off;
+      }
     }
     if (!mounted || seq != _sharingRecomputeSeq) return;
     setState(() {
-      _sharingActive
+      _sharingState
         ..clear()
         ..addAll(next);
       _hasScheduledWindows = anyScheduled;
@@ -559,8 +582,15 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       }
     }
 
-    final activeWindow = _sharingActive[contact.userId] ?? true;
-    final sharingActive = isInvite || (!globallyPaused && activeWindow);
+    final stored = _sharingState[contact.userId] ?? SharingRowState.active;
+    SharingRowState sharingState;
+    if (isInvite) {
+      sharingState = SharingRowState.active;
+    } else if (globallyPaused) {
+      sharingState = SharingRowState.off;
+    } else {
+      sharingState = stored;
+    }
 
     return GridContactRow(
       name: contact.displayName,
@@ -572,7 +602,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
       showDivider: !isLast,
       statusKind: isInvite ? null : null,
       statusLabel: null,
-      sharingActive: sharingActive,
+      sharingState: sharingState,
       onTap: () => _openContactSheet(contact),
     );
   }
@@ -1318,4 +1348,11 @@ class _CopyChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ContactSharingResult {
+  _ContactSharingResult(this.userId, this.inWindow, this.prefs);
+  final String userId;
+  final bool inWindow;
+  final SharingPreferences? prefs;
 }

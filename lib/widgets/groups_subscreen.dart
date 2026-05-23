@@ -11,6 +11,7 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/models/room.dart' as gr;
+import 'package:grid_frontend/models/sharing_preferences.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/services/user_service.dart';
@@ -21,6 +22,7 @@ import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_status_pill.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_segmented.dart';
+import 'package:grid_frontend/widgets/grid/sharing_row_state.dart';
 
 /// Bottom-sheet body that lists the user's real groups (driven by
 /// `GroupsBloc`) using the Grid redesign card pattern.
@@ -42,7 +44,7 @@ class GroupsSubscreen extends StatefulWidget {
 }
 
 class _GroupsSubscreenState extends State<GroupsSubscreen> {
-  final Map<String, bool> _sharingActive = {};
+  final Map<String, SharingRowState> _sharingState = {};
   bool _hasScheduledWindows = false;
   Timer? _windowTicker;
   int _sharingRecomputeSeq = 0;
@@ -94,17 +96,37 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
     final state = context.read<GroupsBloc>().state;
     if (state is! GroupsLoaded) return;
     final seq = ++_sharingRecomputeSeq;
-    final next = <String, bool>{};
+    final globallyPaused =
+        context.read<SharingStateNotifier>().isPaused;
+    final next = <String, SharingRowState>{};
     bool anyScheduled = false;
-    for (final g in state.groups) {
-      if (!g.isGroup) continue;
-      final prefs = await repo.getSharingPreferences(g.roomId, 'group');
-      if (prefs != null && !prefs.activeSharing) anyScheduled = true;
-      next[g.roomId] = await user.isGroupInSharingWindow(g.roomId);
+    final targets = state.groups.where((g) => g.isGroup).toList();
+    final results = await Future.wait(targets.map((g) async {
+      final inWindowF = user.isGroupInSharingWindow(g.roomId);
+      final prefsF = repo.getSharingPreferences(g.roomId, 'group');
+      final inWindow = await inWindowF;
+      final prefs = await prefsF;
+      return _GroupSharingResult(g.roomId, inWindow, prefs);
+    }));
+    for (final r in results) {
+      if (r.prefs != null && !r.prefs!.activeSharing) anyScheduled = true;
+      if (globallyPaused) {
+        next[r.roomId] = SharingRowState.off;
+      } else if (r.inWindow) {
+        next[r.roomId] = SharingRowState.active;
+      } else {
+        final hasScheduled = r.prefs?.shareWindows
+                    ?.any((w) => w.isActive == true) ==
+                true &&
+            r.prefs?.activeSharing == false;
+        next[r.roomId] = hasScheduled
+            ? SharingRowState.scheduledOut
+            : SharingRowState.off;
+      }
     }
     if (!mounted || seq != _sharingRecomputeSeq) return;
     setState(() {
-      _sharingActive
+      _sharingState
         ..clear()
         ..addAll(next);
       _hasScheduledWindows = anyScheduled;
@@ -186,8 +208,11 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
                 }
                 final groupIndex = index - 1;
                 final room = groups[groupIndex];
-                final activeWindow = _sharingActive[room.roomId] ?? true;
-                final sharingActive = !globallyPaused && activeWindow;
+                final stored =
+                    _sharingState[room.roomId] ?? SharingRowState.active;
+                final sharingState = globallyPaused
+                    ? SharingRowState.off
+                    : stored;
                 return Padding(
                   padding: EdgeInsets.fromLTRB(
                     14,
@@ -203,7 +228,7 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
                     timerLabel: _timerFor(room),
                     isTrip: _isTripGroup(room),
                     featured: groupIndex == 0,
-                    sharingActive: sharingActive,
+                    sharingState: sharingState,
                     onTap: () => widget.onGroupSelected?.call(room),
                   ),
                 );
@@ -318,7 +343,7 @@ class _GroupCard extends StatelessWidget {
     required this.isTrip,
     required this.featured,
     required this.onTap,
-    this.sharingActive = true,
+    this.sharingState = SharingRowState.active,
   });
 
   final String name;
@@ -329,7 +354,7 @@ class _GroupCard extends StatelessWidget {
   final bool isTrip;
   final bool featured;
   final VoidCallback onTap;
-  final bool sharingActive;
+  final SharingRowState sharingState;
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +381,7 @@ class _GroupCard extends StatelessWidget {
         child: Ink(
           decoration: decoration,
           child: Opacity(
-            opacity: sharingActive ? 1.0 : 0.55,
+            opacity: sharingState == SharingRowState.active ? 1.0 : 0.55,
             child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
             child: Column(
@@ -388,7 +413,15 @@ class _GroupCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (!sharingActive) ...[
+                              if (sharingState == SharingRowState.scheduledOut) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: context.gridColors.text3,
+                                ),
+                              ],
+                              if (sharingState == SharingRowState.off) ...[
                                 const SizedBox(width: 4),
                                 Icon(
                                   Icons.visibility_off_rounded,
@@ -507,5 +540,12 @@ class _StackedAvatars extends StatelessWidget {
       ),
     );
   }
+}
+
+class _GroupSharingResult {
+  _GroupSharingResult(this.roomId, this.inWindow, this.prefs);
+  final String roomId;
+  final bool inWindow;
+  final SharingPreferences? prefs;
 }
 
