@@ -334,7 +334,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         leading: IconButton(

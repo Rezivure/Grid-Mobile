@@ -572,7 +572,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
