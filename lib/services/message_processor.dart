@@ -545,25 +545,38 @@ class MessageProcessor {
     try {
       final sender = messageData['sender'] as String?;
       final content = messageData['content'] as Map<String, dynamic>?;
-      
+
       if (sender == null || content == null) {
         print('[Avatar Request] Invalid request - missing sender or content');
         return;
       }
 
       // Don't respond to our own requests
-      if (sender == client.userID) {
+      if (sender == client.userID) return;
+
+      // Contact gate — silently ignore non-contact requesters. (UserRepo
+      // is optional during construction; if absent, fall back to legacy
+      // unconditional behaviour to avoid breaking older wiring paths.)
+      if (userRepository != null) {
+        final user = await userRepository!.getUserById(sender);
+        if (user == null) {
+          print('[Avatar Request] Sender $sender not in contacts; dropping');
+          return;
+        }
+      }
+
+      if (!await _cooldown.shouldRespondToAvatarRequest(sender)) {
+        print('[Avatar Request] Throttled response to $sender');
         return;
       }
 
       final requestedUsers = content['requested_users'] as List<dynamic>?;
-      
+
       print('[Avatar Request] Received avatar request from $sender for users: ${requestedUsers?.join(", ") ?? "all"}');
-      
-      // Use the avatar service to handle the request
+
       final avatarService = AvatarAnnouncementService(client);
       await avatarService.handleAvatarRequest(roomId, sender, requestedUsers?.cast<String>());
-      
+      await _cooldown.markAvatarResponded(sender);
     } catch (e) {
       print('[Avatar Request] Error handling avatar request: $e');
     }
