@@ -187,6 +187,8 @@ class NotificationDisplay {
       'm.group.avatar.announcement',
       'm.avatar.state',
       'm.avatar.request',
+      'm.avatar.absent',
+      'm.location.request',
       'm.map.icon.create',
       'm.map.icon.update',
       'm.map.icon.delete',
