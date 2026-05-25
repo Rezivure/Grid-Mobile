@@ -126,6 +126,8 @@ class MessageProcessor {
         await _handleAvatarState(messageData);
       } else if (msgType == 'm.avatar.request') {
         await _handleAvatarRequest(messageData, roomId);
+      } else if (msgType == 'm.avatar.absent') {
+        await _handleAvatarAbsent(messageData);
       } else if (msgType == 'm.location.request') {
         await _handleLocationRequest(messageData, roomId);
       } else if (_isMapIconEvent(msgType)) {
@@ -468,6 +470,19 @@ class MessageProcessor {
       print('[Avatar State] Finished processing ${avatarsList.length} avatars from state bundle');
     } catch (e) {
       print('[Avatar State] Error handling avatar state: $e');
+    }
+  }
+
+  /// Handle peer reply indicating they have no avatar set; record the
+  /// absence so we extend the cooldown before asking again.
+  Future<void> _handleAvatarAbsent(Map<String, dynamic> messageData) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      if (sender == null || sender == client.userID) return;
+      print('[Avatar Absent] Recording absence for $sender');
+      await _cooldown.markAvatarAbsent(sender);
+    } catch (e) {
+      print('[Avatar Absent] Error handling absence: $e');
     }
   }
 
