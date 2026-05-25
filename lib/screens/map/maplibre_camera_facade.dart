@@ -81,10 +81,14 @@ class MaplibreCameraFacade {
     ));
   }
 
-  // Backgrounded MLNMapView has a zero-size layer; MapLibre's bounds-clamp
-  // math then produces NaN and the native LatLng constructor crashes the app.
-  bool get _foregrounded =>
-      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  // Skip moves only when actually backgrounded. The cold-launch `inactive`
+  // window has a valid-size view, so it's safe — gating on `== resumed` instead
+  // dropped the first auto-recenter and left the map stuck until the next
+  // location update arrived.
+  bool get _foregrounded {
+    final s = WidgetsBinding.instance.lifecycleState;
+    return s != AppLifecycleState.paused && s != AppLifecycleState.hidden;
+  }
 
   double _safeZoom(double zoom) {
     if (zoom.isNaN || zoom.isInfinite) return 2.0;
