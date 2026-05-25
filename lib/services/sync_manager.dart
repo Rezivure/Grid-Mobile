@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
+import 'package:grid_frontend/services/request_cooldown_service.dart';
 
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/services/location_manager.dart';
@@ -98,6 +99,12 @@ class SyncManager with ChangeNotifier {
   final List<Function> _postSyncOperations = [];
   DateTime? _lastRoomUpdateTime;
   static const Duration _minRoomUpdateInterval = Duration(seconds: 5);
+
+  // Nudge pass state — see _runNudgePass().
+  final RequestCooldownService _cooldown = RequestCooldownService();
+  DateTime? _pausedTime;
+  bool _firstNudgeScheduled = false;
+  static const Duration _resumeNudgeThreshold = Duration(hours: 6);
 
 
   SyncManager(
@@ -284,6 +291,7 @@ class SyncManager with ChangeNotifier {
       _isInitialized = true;
       _setSyncState(SyncState.ready);
       await _processQueuedOperations();
+      _scheduleFirstStartupNudge();
     } catch (e) {
       print("[SyncManager] Error during initialization: $e");
       _setSyncState(SyncState.error);
@@ -400,6 +408,81 @@ class SyncManager with ChangeNotifier {
       if (client.isLogged() && (!_isSyncing || !client.syncPending)) {
         _startSyncStream();
       }
+
+      // If we were paused long enough, opportunistically nudge contacts for
+      // any missing avatars / stale locations.
+      final pausedAt = _pausedTime;
+      if (pausedAt != null &&
+          DateTime.now().difference(pausedAt) >= _resumeNudgeThreshold) {
+        unawaited(_runNudgePass());
+      }
+      _pausedTime = null;
+    } else {
+      _pausedTime = DateTime.now();
+    }
+  }
+
+  /// Defer the cold-launch nudge pass so it doesn't pile onto the hot path.
+  void _scheduleFirstStartupNudge() {
+    if (_firstNudgeScheduled) return;
+    _firstNudgeScheduled = true;
+    Future.delayed(const Duration(seconds: 5), () {
+      if (_stopped) return;
+      unawaited(_runNudgePass());
+    });
+  }
+
+  /// Walk every joined room and send targeted avatar/location requests for
+  /// members whose per-user cooldown has expired. Spreads work with a short
+  /// per-room sleep to avoid bursts.
+  Future<void> _runNudgePass() async {
+    try {
+      if (_stopped) return;
+      final myId = client.userID;
+      if (myId == null) return;
+      final avatarService = AvatarAnnouncementService(client);
+      final rooms = client.rooms
+          .where((r) => r.membership == Membership.join)
+          .toList();
+      print('[Nudge] Starting nudge pass across ${rooms.length} rooms');
+
+      for (final room in rooms) {
+        if (_stopped) return;
+        try {
+          final participants = await room.getParticipants();
+          final avatarTargets = <String>[];
+          final locationTargets = <String>[];
+          for (final p in participants) {
+            if (p.id == myId) continue;
+            if (p.membership != Membership.join) continue;
+            if (await _cooldown.shouldRequestAvatar(p.id)) {
+              avatarTargets.add(p.id);
+            }
+            if (await _cooldown.shouldRequestLocation(p.id)) {
+              locationTargets.add(p.id);
+            }
+          }
+
+          if (avatarTargets.isNotEmpty) {
+            await avatarService.requestAvatars(room.id, userIds: avatarTargets);
+            for (final uid in avatarTargets) {
+              await _cooldown.markAvatarRequested(uid);
+            }
+          }
+          if (locationTargets.isNotEmpty) {
+            await avatarService.requestLocations(room.id, userIds: locationTargets);
+            for (final uid in locationTargets) {
+              await _cooldown.markLocationRequested(uid);
+            }
+          }
+        } catch (e) {
+          print('[Nudge] Error in room ${room.id}: $e');
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      print('[Nudge] Pass complete');
+    } catch (e) {
+      print('[Nudge] Pass failed: $e');
     }
   }
 
@@ -1036,7 +1119,7 @@ class SyncManager with ChangeNotifier {
                 // For direct rooms, check sharing preferences
                 final sharingPrefs = await sharingPreferencesRepository.getSharingPreferences(event.stateKey!, 'user');
                 final isSharingEnabled = sharingPrefs?.activeSharing ?? true; // Default to true if no prefs
-                
+
                 if (isSharingEnabled) {
                   print("New member joined direct room, sending initial location");
                   // Grab fresh location and send it
@@ -1049,6 +1132,17 @@ class SyncManager with ChangeNotifier {
                   }
                 } else {
                   print("Location sharing disabled for ${event.stateKey}, not sending initial location");
+                }
+
+                // Also ask the new contact for their location so they appear
+                // on the map without waiting for their next periodic ping.
+                if (await _cooldown.shouldRequestLocation(event.stateKey!)) {
+                  try {
+                    await avatarService.requestLocations(roomId, userIds: [event.stateKey!]);
+                    await _cooldown.markLocationRequested(event.stateKey!);
+                  } catch (e) {
+                    print('Error requesting location from new contact: $e');
+                  }
                 }
               } else {
                 // For group rooms, always send location when someone joins
