@@ -290,26 +290,79 @@ class AvatarAnnouncementService {
     }
   }
 
-  /// Handle incoming avatar request and respond with our avatar
-  Future<void> handleAvatarRequest(String roomId, String requesterId, List<String>? requestedUsers) async {
+  /// Handle incoming avatar request and respond with our avatar. Returns
+  /// true if we have an avatar and announced it, false if we sent an
+  /// `m.avatar.absent` reply because no avatar is configured locally.
+  Future<bool> handleAvatarRequest(String roomId, String requesterId, List<String>? requestedUsers) async {
     try {
       final myUserId = client.userID;
-      if (myUserId == null) return;
+      if (myUserId == null) return false;
 
       // Check if we're in the requested users list (or if it's a broadcast request)
       if (requestedUsers != null && !requestedUsers.contains(myUserId)) {
-        return; // Request not for us
+        return false; // Request not for us
       }
 
       // Don't respond to our own requests
-      if (requesterId == myUserId) return;
+      if (requesterId == myUserId) return false;
+
+      // If we have no avatar configured, tell the requester so they back off
+      // their cooldown instead of asking again in 24h.
+      final avatarDataStr = await secureStorage.read(key: 'avatar_$myUserId');
+      if (avatarDataStr == null) {
+        print('[Avatar Request] No local avatar; sending m.avatar.absent to $requesterId');
+        await _announceAvatarAbsent(roomId);
+        return false;
+      }
 
       print('[Avatar Request] Responding to avatar request from $requesterId in room $roomId');
-      
-      // Send our avatar announcement
       await announceProfPicToRoom(roomId);
+      return true;
     } catch (e) {
       print('[Avatar Request] Error handling request: $e');
+      return false;
+    }
+  }
+
+  /// Notify the room that we have no avatar set so requesters can record
+  /// the absence and extend their cooldown.
+  Future<void> _announceAvatarAbsent(String roomId) async {
+    try {
+      final room = client.getRoomById(roomId);
+      if (room == null || room.membership != Membership.join) return;
+      final eventContent = {
+        'msgtype': 'm.avatar.absent',
+        'body': 'No avatar set',
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      };
+      await room.sendEvent(eventContent);
+    } catch (e) {
+      print('[Avatar Absent] Error sending absence to room $roomId: $e');
+    }
+  }
+
+  /// Request location updates from specific users (or all room members).
+  /// Mirrors [requestAvatars]; the response is a regular `m.location` ping
+  /// from the recipient(s).
+  Future<void> requestLocations(String roomId, {List<String>? userIds}) async {
+    try {
+      final room = client.getRoomById(roomId);
+      if (room == null || room.membership != Membership.join) {
+        print('[Location Request] Skipping room $roomId - not a member');
+        return;
+      }
+
+      final eventContent = {
+        'msgtype': 'm.location.request',
+        'body': 'Requesting location update',
+        'requested_users': userIds,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await room.sendEvent(eventContent);
+      print('[Location Request] Sent location request to room ${room.name} ($roomId) for users: ${userIds?.join(", ") ?? "all"}');
+    } catch (e) {
+      print('[Location Request] Error sending request to room $roomId: $e');
     }
   }
 }

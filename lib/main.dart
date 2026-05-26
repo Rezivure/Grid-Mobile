@@ -330,11 +330,16 @@ void main() async {
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
-                messageParser, 
+                messageParser,
                 client,
                 avatarBloc: context.read<AvatarBloc>(),
                 mapIconSyncService: mapIconSyncService,
                 roomLocationHistoryRepository: roomLocationHistoryRepository,
+                userRepository: userRepository,
+                sharingPreferencesRepository: sharingPreferencesRepository,
+                userService: userService,
+                locationManager: context.read<LocationManager>(),
+                roomService: roomService,
               );
               return SyncManager(
                 client,
@@ -355,7 +360,7 @@ void main() async {
             },
             update: (context, avatarBloc, mapBloc, contactsBloc, groupsBloc, invitationsBloc, previous) {
               if (previous != null) return previous;
-              
+
               // Create MapIconSyncService
               final mapIconRepository = MapIconRepository(databaseService);
               final mapIconSyncService = MapIconSyncService(
@@ -363,15 +368,20 @@ void main() async {
                 mapIconRepository: mapIconRepository,
                 mapIconsBloc: context.read<MapIconsBloc>(),
               );
-              
+
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
-                messageParser, 
+                messageParser,
                 client,
                 avatarBloc: avatarBloc,
                 mapIconSyncService: mapIconSyncService,
                 roomLocationHistoryRepository: roomLocationHistoryRepository,
+                userRepository: userRepository,
+                sharingPreferencesRepository: sharingPreferencesRepository,
+                userService: userService,
+                locationManager: context.read<LocationManager>(),
+                roomService: roomService,
               );
               return SyncManager(
                 client,

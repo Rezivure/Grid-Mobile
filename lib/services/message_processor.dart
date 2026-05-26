@@ -20,6 +20,12 @@ import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'package:grid_frontend/services/request_cooldown_service.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 
 /// Callback type for decryption errors
 typedef DecryptionErrorCallback = void Function(String senderId, String roomId);
@@ -33,6 +39,12 @@ class MessageProcessor {
   final FlutterSecureStorage secureStorage = FlutterSecureStorage();
   final AvatarBloc? avatarBloc;
   final MapIconSyncService? mapIconSyncService;
+  final UserRepository? userRepository;
+  final SharingPreferencesRepository? sharingPreferencesRepository;
+  final UserService? userService;
+  final LocationManager? locationManager;
+  final RoomService? roomService;
+  final RequestCooldownService _cooldown = RequestCooldownService();
 
   /// Callback for when decryption fails
   DecryptionErrorCallback? _onDecryptionError;
@@ -44,7 +56,12 @@ class MessageProcessor {
       this.client,
       {this.avatarBloc,
       this.mapIconSyncService,
-      this.roomLocationHistoryRepository}
+      this.roomLocationHistoryRepository,
+      this.userRepository,
+      this.sharingPreferencesRepository,
+      this.userService,
+      this.locationManager,
+      this.roomService}
       );
 
   /// Use the client's encryption instance which has the actual keys
@@ -109,6 +126,10 @@ class MessageProcessor {
         await _handleAvatarState(messageData);
       } else if (msgType == 'm.avatar.request') {
         await _handleAvatarRequest(messageData, roomId);
+      } else if (msgType == 'm.avatar.absent') {
+        await _handleAvatarAbsent(messageData);
+      } else if (msgType == 'm.location.request') {
+        await _handleLocationRequest(messageData, roomId);
       } else if (_isMapIconEvent(msgType)) {
         // Handle map icon events
         await _handleMapIconEvent(roomId, messageData);
@@ -452,30 +473,110 @@ class MessageProcessor {
     }
   }
 
+  /// Handle peer reply indicating they have no avatar set; record the
+  /// absence so we extend the cooldown before asking again.
+  Future<void> _handleAvatarAbsent(Map<String, dynamic> messageData) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      if (sender == null || sender == client.userID) return;
+      print('[Avatar Absent] Recording absence for $sender');
+      await _cooldown.markAvatarAbsent(sender);
+    } catch (e) {
+      print('[Avatar Absent] Error handling absence: $e');
+    }
+  }
+
+  /// Handle incoming location request — respond with a fresh ping if the
+  /// sender is a known contact, sharing is on, we're in the sharing window,
+  /// and we haven't already answered them recently.
+  Future<void> _handleLocationRequest(Map<String, dynamic> messageData, String roomId) async {
+    try {
+      final sender = messageData['sender'] as String?;
+      final content = messageData['content'] as Map<String, dynamic>?;
+      if (sender == null || content == null) return;
+      if (sender == client.userID) return;
+
+      final requestedUsers = (content['requested_users'] as List<dynamic>?)?.cast<String>();
+      if (requestedUsers != null && !requestedUsers.contains(client.userID)) {
+        return; // Not for us.
+      }
+
+      if (userRepository == null ||
+          sharingPreferencesRepository == null ||
+          userService == null ||
+          locationManager == null ||
+          roomService == null) {
+        print('[Location Request] Missing deps; cannot auto-respond');
+        return;
+      }
+
+      // Contact gate — drop silently if sender isn't in our contacts list.
+      final user = await userRepository!.getUserById(sender);
+      if (user == null) {
+        print('[Location Request] Sender $sender not in contacts; dropping');
+        return;
+      }
+
+      final prefs = await sharingPreferencesRepository!.getSharingPreferences(sender, 'user');
+      if (prefs == null || prefs.activeSharing != true) {
+        print('[Location Request] Sharing disabled for $sender; dropping');
+        return;
+      }
+      if (!await userService!.isInSharingWindow(sender)) {
+        print('[Location Request] Outside sharing window for $sender; dropping');
+        return;
+      }
+      if (!await _cooldown.shouldRespondToLocationRequest(sender)) {
+        print('[Location Request] Throttled response to $sender');
+        return;
+      }
+
+      print('[Location Request] Responding to $sender in room $roomId');
+      await locationManager!.grabLocationAndPing();
+      await roomService!.updateSingleRoom(roomId);
+      await _cooldown.markLocationResponded(sender);
+    } catch (e) {
+      print('[Location Request] Error handling request: $e');
+    }
+  }
+
   /// Handle avatar request messages
   Future<void> _handleAvatarRequest(Map<String, dynamic> messageData, String roomId) async {
     try {
       final sender = messageData['sender'] as String?;
       final content = messageData['content'] as Map<String, dynamic>?;
-      
+
       if (sender == null || content == null) {
         print('[Avatar Request] Invalid request - missing sender or content');
         return;
       }
 
       // Don't respond to our own requests
-      if (sender == client.userID) {
+      if (sender == client.userID) return;
+
+      // Contact gate — silently ignore non-contact requesters. (UserRepo
+      // is optional during construction; if absent, fall back to legacy
+      // unconditional behaviour to avoid breaking older wiring paths.)
+      if (userRepository != null) {
+        final user = await userRepository!.getUserById(sender);
+        if (user == null) {
+          print('[Avatar Request] Sender $sender not in contacts; dropping');
+          return;
+        }
+      }
+
+      if (!await _cooldown.shouldRespondToAvatarRequest(sender)) {
+        print('[Avatar Request] Throttled response to $sender');
         return;
       }
 
       final requestedUsers = content['requested_users'] as List<dynamic>?;
-      
+
       print('[Avatar Request] Received avatar request from $sender for users: ${requestedUsers?.join(", ") ?? "all"}');
-      
-      // Use the avatar service to handle the request
+
       final avatarService = AvatarAnnouncementService(client);
       await avatarService.handleAvatarRequest(roomId, sender, requestedUsers?.cast<String>());
-      
+      await _cooldown.markAvatarResponded(sender);
     } catch (e) {
       print('[Avatar Request] Error handling avatar request: $e');
     }

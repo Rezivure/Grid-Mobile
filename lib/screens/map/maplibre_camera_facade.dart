@@ -81,14 +81,13 @@ class MaplibreCameraFacade {
     ));
   }
 
-  // Skip moves only when actually backgrounded. The cold-launch `inactive`
-  // window has a valid-size view, so it's safe — gating on `== resumed` instead
-  // dropped the first auto-recenter and left the map stuck until the next
-  // location update arrived.
-  bool get _foregrounded {
-    final s = WidgetsBinding.instance.lifecycleState;
-    return s != AppLifecycleState.paused && s != AppLifecycleState.hidden;
-  }
+  // Only allow moves when fully resumed. The transient `inactive` / `detached`
+  // states on cold-launch and resume have a not-yet-laid-out MLNMapView; running
+  // the bounds-clamp against a zero-size layer NaNs out and throws an uncaught
+  // C++ exception in the native LatLng ctor (SIGABRT). A dropped move is ugly
+  // (no dot until the next location update) but recoverable; a crash is not.
+  bool get _foregrounded =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   double _safeZoom(double zoom) {
     if (zoom.isNaN || zoom.isInfinite) return 2.0;
