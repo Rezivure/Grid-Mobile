@@ -83,6 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
   SharingMode _sharingMode = SharingMode.balanced;
   bool _autoPauseAtHome = false;
   bool _homeLocationSet = false;
+  String _speedUnit = 'mph';
   String? _userID;
   String? _username;
   String? _localpart;
@@ -129,6 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadIncognitoState();
     _loadBatterySaverState();
     _loadAutoPauseAtHomeState();
+    _loadSpeedUnit();
     _loadCachedAvatar();
     _loadAppVersion();
   }
@@ -192,6 +194,19 @@ class _SettingsPageState extends State<SettingsPage> {
           prefs.getBool('auto_pause_at_home_enabled') ?? false;
       _homeLocationSet = saved != null && saved.trim().isNotEmpty;
     });
+  }
+
+  Future<void> _loadSpeedUnit() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _speedUnit = prefs.getString('speed_unit') ?? 'mph';
+    });
+  }
+
+  Future<void> _setSpeedUnit(String unit) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('speed_unit', unit);
+    setState(() => _speedUnit = unit);
   }
 
   void _showExpandedAvatar(BuildContext context) {
@@ -2495,6 +2510,16 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
 
+            // ── Display ─────────────────────────────────────
+            const GridSectionHeader(text: 'Display'),
+            _buildSectionCard(
+              theme: theme,
+              colorScheme: colorScheme,
+              children: [
+                _buildSpeedUnitRow(colorScheme),
+              ],
+            ),
+
             // ── Privacy & security ──────────────────────────
             const GridSectionHeader(text: 'Privacy & security'),
             _buildSectionCard(
@@ -3043,6 +3068,38 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSpeedUnitRow(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.speed_outlined, size: 20, color: context.gridColors.text2),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              'Speed unit',
+              style: GoogleFonts.getFont(
+                'Geist',
+                color: context.gridColors.text,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.01,
+              ),
+            ),
+          ),
+          GridSegmented(
+            tabs: const [
+              GridSegmentedTab(label: 'mph'),
+              GridSegmentedTab(label: 'km/h'),
+            ],
+            selected: _speedUnit == 'kmh' ? 1 : 0,
+            onChanged: (i) => _setSpeedUnit(i == 0 ? 'mph' : 'kmh'),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -83,6 +85,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
   bool _copied = false;
   bool _isLoading = true;
   bool _activeSharing = false;
+  String _speedUnit = 'mph';
 
   /// All device keys (fetched from the RoomService)
   late Map<String, Map<String, String>> _allOtherDeviceKeys;
@@ -106,6 +109,15 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     _loadDeviceKeys();
     _computeRelationship();
     _subscribeToContacts();
+    _loadSpeedUnit();
+  }
+
+  Future<void> _loadSpeedUnit() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _speedUnit = prefs.getString('speed_unit') ?? 'mph';
+    });
   }
 
   @override
@@ -855,6 +867,9 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
 
   String? _formatSpeed(double? speedMps) {
     if (speedMps == null || speedMps < 1.4) return null;
+    if (_speedUnit == 'kmh') {
+      return '${(speedMps * 3.6).round()} km/h';
+    }
     return '${(speedMps * 2.236936).round()} mph';
   }
 
