@@ -48,7 +48,7 @@ class MaplibreCameraFacade {
 
   /// Snap to a position (no animation). Mirrors `MapController.move`.
   void move(LatLng center, double zoom) {
-    if (!_foregrounded) return;
+    if (!_safeToMove) return;
     if (!isFiniteLatLng(center.latitude, center.longitude)) {
       debugPrint('[Camera] Skipping move — invalid coords: ${center.latitude},${center.longitude}');
       return;
@@ -65,7 +65,7 @@ class MaplibreCameraFacade {
   /// Animate to a position + rotation. Mirrors `MapController.moveAndRotate`.
   /// `rotation` is in degrees; flutter_map called this with 0 to clear bearing.
   void moveAndRotate(LatLng center, double zoom, double rotation) {
-    if (!_foregrounded) return;
+    if (!_safeToMove) return;
     if (!isFiniteLatLng(center.latitude, center.longitude)) {
       debugPrint('[Camera] Skipping moveAndRotate — invalid coords: ${center.latitude},${center.longitude}');
       return;
@@ -81,13 +81,28 @@ class MaplibreCameraFacade {
     ));
   }
 
-  // Only allow moves when fully resumed. The transient `inactive` / `detached`
-  // states on cold-launch and resume have a not-yet-laid-out MLNMapView; running
-  // the bounds-clamp against a zero-size layer NaNs out and throws an uncaught
-  // C++ exception in the native LatLng ctor (SIGABRT). A dropped move is ugly
-  // (no dot until the next location update) but recoverable; a crash is not.
-  bool get _foregrounded =>
-      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  // Native MLNMapView's bounds-clamp throws an uncaught C++ exception (SIGABRT
+  // through __cxa_throw, terminates the process) whenever it's driven before
+  // the underlying CALayer has a real size. We've seen this in two distinct
+  // shapes:
+  //   1. Cold launch: lifecycleState is `inactive`/`detached` while the first
+  //      auto-recenter fires.
+  //   2. Resume from background: lifecycleState flips to `resumed` immediately,
+  //      but the Flutter platform-view hasn't been re-laid-out yet — _mapSize
+  //      is still Size.zero, and the native cameraPosition reads as null.
+  // Strict resumed + non-zero map size + readable cameraPosition together
+  // cover both: any one of them being unhappy means the native view isn't safe
+  // to drive. A dropped move is ugly (no dot until the next update); a crash
+  // takes the whole app down.
+  bool get _safeToMove {
+    if (_ml == null) return false;
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return false;
+    }
+    if (_mapSize == Size.zero) return false;
+    if (_ml?.cameraPosition == null) return false;
+    return true;
+  }
 
   double _safeZoom(double zoom) {
     if (zoom.isNaN || zoom.isInfinite) return 2.0;

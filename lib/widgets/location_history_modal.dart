@@ -427,8 +427,17 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
       debugPrint('[History] Skipping moveCamera — invalid coords: ${target.latitude},${target.longitude}');
       return;
     }
+    final controller = _mapController;
+    if (controller == null) return;
+    // Native MLNMapView throws an uncaught C++ exception out of
+    // constrainCameraAndZoomToBounds whenever its layer isn't laid out yet
+    // (e.g. modal opening, resume from background). Skip the move in that case.
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    if (controller.cameraPosition == null) return;
     final z = (zoom.isNaN || zoom.isInfinite) ? 2.0 : zoom.clamp(0.0, 22.0);
-    _mapController?.moveCamera(ml.CameraUpdate.newCameraPosition(
+    controller.moveCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
         zoom: z,
