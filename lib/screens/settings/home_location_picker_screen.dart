@@ -106,6 +106,14 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
     if (!mounted || _isInteracting) return;
     final controller = _mlController;
     if (controller == null) return;
+    // Same crash-shape as MaplibreCameraFacade: native MLNMapView throws an
+    // uncaught C++ exception out of constrainCameraAndZoomToBounds whenever
+    // its layer isn't laid out yet. Skip the move if we're not in a clean
+    // foregrounded + ready-controller state.
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    if (controller.cameraPosition == null) return;
     controller.animateCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
