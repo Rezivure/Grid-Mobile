@@ -61,6 +61,13 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   String? _selectedMemberId; // For group view, which member is selected
   bool _showAllMembers = false; // Toggle for showing all members vs single
   bool _mapReady = false;
+  // First onCameraIdle after the platform view attaches. Until this fires the
+  // native MLNMapView's frame may still be zero (the modal sheet animates up
+  // from 0 height), and any setCamera call NaNs out through
+  // constrainCameraAndZoomToBounds → SIGABRT. See maplibre_camera_facade.dart
+  // for the full backstory.
+  bool _nativeReady = false;
+  _PendingHistoryMove? _pendingMove;
   Map<String, String> _userDisplayNames = {}; // Cache for display names
   late RoomLocationHistoryRepository _roomHistoryRepo;
   int _playbackSpeed = 1; // 1x / 2x / 4x — UI chrome to match design spec
@@ -429,20 +436,32 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     }
     final controller = _mapController;
     if (controller == null) return;
-    // Native MLNMapView throws an uncaught C++ exception out of
-    // constrainCameraAndZoomToBounds whenever its layer isn't laid out yet
-    // (e.g. modal opening, resume from background). Skip the move in that case.
     if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
       return;
     }
-    if (controller.cameraPosition == null) return;
     final z = (zoom.isNaN || zoom.isInfinite) ? 2.0 : zoom.clamp(0.0, 22.0);
+    if (!_nativeReady) {
+      _pendingMove = _PendingHistoryMove(target, z);
+      return;
+    }
     controller.moveCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
         zoom: z,
       ),
     ));
+  }
+
+  void _onNativeReady() {
+    if (_nativeReady) return;
+    _nativeReady = true;
+    final pending = _pendingMove;
+    _pendingMove = null;
+    if (pending != null) {
+      scheduleMicrotask(() {
+        if (mounted) _moveCamera(pending.target, pending.zoom);
+      });
+    }
   }
 
   LatLng? _getPositionAtTime(LocationHistory history, DateTime time) {
@@ -989,6 +1008,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                             _refreshMarkerScreenPositions();
                           },
                           onCameraIdle: () {
+                            _onNativeReady();
                             _refreshMarkerScreenPositions();
                           },
                         ),
@@ -1519,4 +1539,9 @@ class _ScrubberTimeLabel extends StatelessWidget {
       ],
     );
   }
+}
+class _PendingHistoryMove {
+  _PendingHistoryMove(this.target, this.zoom);
+  final LatLng target;
+  final double zoom;
 }

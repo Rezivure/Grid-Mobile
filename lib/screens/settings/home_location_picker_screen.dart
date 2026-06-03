@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -49,6 +50,12 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   bool _confirming = false;
   bool? _isDarkStyle;
   String? _styleJson;
+  // Native MLNMapView's bounds-clamp NaN's out when frame.size == .zero,
+  // which is the case during the picker screen's push transition. Wait for
+  // the first onCameraIdle to confirm the view has rendered before issuing
+  // any animateCamera. See maplibre_camera_facade.dart for the full story.
+  bool _nativeReady = false;
+  ll.LatLng? _pendingTarget;
 
   late double _radiusMeters = widget.initialRadiusMeters.clamp(_minRadius, _maxRadius);
 
@@ -106,20 +113,31 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
     if (!mounted || _isInteracting) return;
     final controller = _mlController;
     if (controller == null) return;
-    // Same crash-shape as MaplibreCameraFacade: native MLNMapView throws an
-    // uncaught C++ exception out of constrainCameraAndZoomToBounds whenever
-    // its layer isn't laid out yet. Skip the move if we're not in a clean
-    // foregrounded + ready-controller state.
     if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
       return;
     }
-    if (controller.cameraPosition == null) return;
+    if (!_nativeReady) {
+      _pendingTarget = target;
+      return;
+    }
     controller.animateCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
         zoom: 16,
       ),
     ));
+  }
+
+  void _onNativeReady() {
+    if (_nativeReady) return;
+    _nativeReady = true;
+    final pending = _pendingTarget;
+    _pendingTarget = null;
+    if (pending != null) {
+      scheduleMicrotask(() {
+        if (mounted) _moveCameraTo(pending);
+      });
+    }
   }
 
   @override
@@ -240,6 +258,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
               },
               onCameraTrackingDismissed: () {},
               onCameraIdle: () {
+                _onNativeReady();
                 if (_isInteracting && mounted) {
                   setState(() => _isInteracting = false);
                 }
