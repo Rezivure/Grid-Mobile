@@ -859,39 +859,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // Normal resume handling for short pauses
     _syncManager?.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
-    // Only reinitialize if app was paused for a significant time
-    if (state == AppLifecycleState.resumed && _pausedTime != null) {
-      final pauseDuration = DateTime.now().difference(_pausedTime!);
-
-      if (pauseDuration.inSeconds > 5) {
-        print('[MapTab] App resumed after ${pauseDuration.inSeconds}s - rebuilding map');
-
-        // Single rebuild after short delay
-        Future.delayed(const Duration(milliseconds: 400), () async {
-          if (mounted && _isMapReady) {
-            // Store current position
-            final currentCenter = _mapController.camera.center;
-            final currentZoom = _mapController.camera.zoom;
-
-            // Reload the tile provider
-            await _loadMapProvider();
-
-            // Single map rebuild
-            setState(() {
-              _mapKey = UniqueKey();
-              print('[MapTab] Map rebuilt after resume');
-            });
-
-            // Restore position after rebuild
-            Future.delayed(const Duration(milliseconds: 200), () {
-              if (mounted && _isMapReady && currentCenter != null) {
-                _mapController.move(currentCenter, currentZoom);
-              }
-            });
-          }
-        });
-      }
-    }
+    // We used to force a full MLNMapView rebuild (`_mapKey = UniqueKey()`)
+    // on resume, but recreating the platform view re-enters the native
+    // zero-frame race that throws std::domain_error out of LatLng. The
+    // existing MLNMapView survives backgrounding fine; if dark-mode flipped
+    // while we were away, the style swap is already handled elsewhere via
+    // `setStyle` on the existing controller. So: do nothing here.
   }
 
   void _backwardsCompatibilityUpdate() async {
