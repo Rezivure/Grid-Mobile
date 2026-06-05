@@ -99,6 +99,15 @@ dev_dependencies:
 dependency_overrides:
   flutter_rust_bridge:
     path: patches/flutter_rust_bridge
+  # Fork of maplibre_gl v0.26.1 with upstream PR #820 backported + the
+  # zero-frame guard extended to camera#move and camera#animate handlers.
+  # Fixes the SIGABRT out of mbgl::LatLng that no Dart-side gating could
+  # reliably catch (no Dart observable mirrors MLNMapView.bounds.size).
+  maplibre_gl:
+    git:
+      url: https://github.com/Rezivure/flutter-maplibre-gl.git
+      ref: fix/grid-defer-camera-on-zero-frame
+      path: maplibre_gl
 
 flutter:
   uses-material-design: true
