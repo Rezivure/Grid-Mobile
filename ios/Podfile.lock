@@ -83,10 +83,10 @@ PODS:
     - FlutterMacOS
   - libre_location (0.1.0):
     - Flutter
-  - MapLibre (6.25.1)
-  - maplibre_gl (0.26.0):
+  - MapLibre (6.26.0)
+  - maplibre_gl (0.26.1):
     - Flutter
-    - MapLibre (= 6.25.1)
+    - MapLibre (= 6.26.0)
   - MTBBarcodeScanner (5.0.11)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
@@ -249,8 +249,8 @@ SPEC CHECKSUMS:
   image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
   in_app_purchase_storekit: d1a48cb0f8b29dbf5f85f782f5dd79b21b90a5e6
   libre_location: 0aec994fb1b23087f5d64027d4ce717f318df622
-  MapLibre: 117b8f7f7956137697fc72f7485261f65d770091
-  maplibre_gl: 42a8a898557cf24734708e47de0a0ce4b46e2aba
+  MapLibre: b7ef5623a1a61468c4266a048e494181c10173ad
+  maplibre_gl: 11d1987a778d0a5905ba6677f81a0e7a491ed8f5
   MTBBarcodeScanner: f453b33c4b7dfe545d8c6484ed744d55671788cb
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
