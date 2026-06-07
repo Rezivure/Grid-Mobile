@@ -191,6 +191,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   
   // SharedPreferences keys
   static const String _mapStyleKey = 'selected_map_style';
+  // Persisted last-foreground epoch so we can detect long-bg resume even
+  // when iOS terminates the process and constructs a fresh _MapTabState.
+  static const String _lastForegroundPrefsKey = 'last_foreground_at_epoch_ms';
+  // Treat any gap >= this as a "long pause" (matches Fix B reconnect threshold).
+  static const int _longPauseThresholdSeconds = 60;
 
   // Saved "home" location from Settings → auto-pause feature. Null if unset.
   LatLng? _homeLocation;
@@ -225,6 +230,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       }
     });
     
+    // Cold-launch long-bg detection: iOS may have terminated us during a
+    // long background. _pausedTime is instance-scoped and would be null,
+    // so we read the persisted timestamp instead.
+    _checkColdLaunchLongPause();
+
     // Start review manager session
     AppReviewManager.startSession();
     
@@ -820,42 +830,49 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     print('[MapTab] Lifecycle: $state');
-    
+
     // Store current lifecycle state
     _currentLifecycleState = state;
-    
-    if (state == AppLifecycleState.paused) {
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       _pausedTime = DateTime.now();
-      AppReviewManager.stopSession(); // Pause usage tracking when app goes to background
-      
-      // No longer need to reset initialization flag when going to background
-      
+      // Persist for cold-launch detection if iOS terminates us.
+      unawaited(_persistLastForegroundTs(_pausedTime!));
+      if (state == AppLifecycleState.paused) {
+        AppReviewManager.stopSession();
+      }
     } else if (state == AppLifecycleState.resumed) {
-      AppReviewManager.startSession(); // Resume usage tracking when app comes back
-      
-      // No longer need special handling for background launch
+      AppReviewManager.startSession();
     }
-    
-    if (state == AppLifecycleState.resumed && _pausedTime != null) {
-      final pauseDuration = DateTime.now().difference(_pausedTime!);
-      
-      // If app was paused for more than 30 seconds, restart from splash
-      if (pauseDuration.inSeconds > 30) {
-        print('[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
-        
-        // Navigate to splash screen to ensure full initialization
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (context) => AppInitializer(client: context.read<Client>()),
-            ),
-            (route) => false,
-          );
+
+    if (state == AppLifecycleState.resumed) {
+      // Prefer in-memory ts; fall back to persisted (defense in depth).
+      DateTime? lastFg = _pausedTime;
+      if (lastFg == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final ms = prefs.getInt(_lastForegroundPrefsKey);
+        if (ms != null) lastFg = DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+      if (lastFg != null) {
+        final pauseDuration = DateTime.now().difference(lastFg);
+        if (pauseDuration.inSeconds > _longPauseThresholdSeconds) {
+          print('[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => AppInitializer(client: context.read<Client>()),
+              ),
+              (route) => false,
+            );
+          }
+          return;
         }
-        return;
       }
     }
-    
+
     // Normal resume handling for short pauses
     _syncManager?.handleAppLifecycleState(state == AppLifecycleState.resumed);
     
@@ -865,6 +882,48 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // existing MLNMapView survives backgrounding fine; if dark-mode flipped
     // while we were away, the style swap is already handled elsewhere via
     // `setStyle` on the existing controller. So: do nothing here.
+  }
+
+  Future<void> _persistLastForegroundTs(DateTime t) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastForegroundPrefsKey, t.millisecondsSinceEpoch);
+    } catch (e) {
+      print('[MapTab] Failed to persist last-foreground ts: $e');
+    }
+  }
+
+  // Cold-launch detection: if iOS terminated us during a long background
+  // and re-launched (e.g. for a location wake), _pausedTime is null but
+  // the persisted ts proves there was a gap. Kick equivalent recovery
+  // to the in-app long-pause branch without pushing AppInitializer
+  // (we're already in a fresh tree).
+  Future<void> _checkColdLaunchLongPause() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_lastForegroundPrefsKey);
+      if (ms == null) return;
+      final gap = DateTime.now().difference(
+        DateTime.fromMillisecondsSinceEpoch(ms),
+      );
+      if (gap.inSeconds <= _longPauseThresholdSeconds) return;
+      print('[MapTab] Cold-launch long pause detected (${gap.inSeconds}s) - recovering');
+      // Refresh avatar cache from disk.
+      await AvatarCacheService().reloadFromPersistent();
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          context.read<AvatarBloc>().add(RefreshAllAvatars());
+          context.read<MapBloc>().add(MapLoadUserLocations());
+          context.read<SyncManager>().handleAppLifecycleState(true);
+        } catch (e) {
+          print('[MapTab] Cold-launch recovery dispatch failed: $e');
+        }
+      });
+    } catch (e) {
+      print('[MapTab] Cold-launch long-pause check failed: $e');
+    }
   }
 
   void _backwardsCompatibilityUpdate() async {
