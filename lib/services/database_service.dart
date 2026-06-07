@@ -13,9 +13,20 @@ import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
 
+/// Thrown when the encryption key can't be found under any known
+/// accessibility level. Caller (typically main.dart) shows a recovery dialog.
+class EncryptionKeyMissingException implements Exception {
+  const EncryptionKeyMissingException();
+  @override
+  String toString() => 'Encryption key not found in keychain.';
+}
+
 class DatabaseService {
   static Database? _database;
   final FlutterSecureStorage _secureStorage = SecureStorageProvider.instance();
+  // Reads only — items written before Fix A landed under the default
+  // WhenUnlocked accessibility and are invisible to [_secureStorage].
+  final FlutterSecureStorage _legacyStorage = SecureStorageProvider.legacyInstance();
   // In-memory cache so a transient keychain error doesn't poison every
   // subsequent repo read in this process.
   String? _cachedKey;
@@ -62,7 +73,7 @@ class DatabaseService {
 
   /// Ensures an encryption key exists in secure storage
   Future<void> _initializeEncryptionKey() async {
-    String? key = await _secureStorage.read(key: 'encryptionKey');
+    String? key = await _readKeyWithFallback();
     if (key == null) {
       final keyBytes = Key.fromSecureRandom(32);
       key = keyBytes.base64;
@@ -77,12 +88,57 @@ class DatabaseService {
   /// Fetch the encryption key
   Future<String> getEncryptionKey() async {
     if (_cachedKey != null) return _cachedKey!;
-    final key = await _secureStorage.read(key: 'encryptionKey');
+    final key = await _readKeyWithFallback();
     if (key == null) {
-      throw Exception('Encryption key not found!');
+      throw const EncryptionKeyMissingException();
     }
     _cachedKey = key;
     return key;
+  }
+
+  /// Returns true iff an encryption key is reachable (under either
+  /// accessibility). Side-effect: migrates legacy items to the new
+  /// accessibility when found. Safe to call at boot for health checks.
+  Future<bool> hasEncryptionKey() async {
+    if (_cachedKey != null) return true;
+    final key = await _readKeyWithFallback();
+    if (key == null) return false;
+    _cachedKey = key;
+    return true;
+  }
+
+  /// Recovery for the worst case: keychain item is genuinely gone (data
+  /// corruption, user manually wiped keychain, etc). All encrypted on-disk
+  /// data is unreadable — wipe the Grid DB and generate a fresh key.
+  /// Matrix client state and credentials are NOT touched.
+  Future<void> resetEncryptionForRecovery() async {
+    print('Resetting encryption for recovery — Grid DB will be wiped.');
+    // Clear any stale legacy item so the next read isn't ambiguous.
+    try {
+      await _legacyStorage.delete(key: 'encryptionKey');
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: 'encryptionKey');
+    } catch (_) {}
+    _cachedKey = null;
+    await deleteAndReinitialize();
+  }
+
+  Future<String?> _readKeyWithFallback() async {
+    final primary = await _secureStorage.read(key: 'encryptionKey');
+    if (primary != null) return primary;
+    final legacy = await _legacyStorage.read(key: 'encryptionKey');
+    if (legacy == null) return null;
+    // Migrate to the new accessibility. Best effort — failure is non-fatal
+    // because the next read still finds the legacy item.
+    try {
+      await _secureStorage.write(key: 'encryptionKey', value: legacy);
+      await _legacyStorage.delete(key: 'encryptionKey');
+      print('Migrated encryption key from legacy accessibility.');
+    } catch (e) {
+      print('Encryption key migration write failed (non-fatal): $e');
+    }
+    return legacy;
   }
 
   /// Clear all data from the database
