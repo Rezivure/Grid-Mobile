@@ -106,6 +106,11 @@ class SyncManager with ChangeNotifier {
   bool _firstNudgeScheduled = false;
   static const Duration _resumeNudgeThreshold = Duration(hours: 6);
 
+  // Force-reconnect on resume after long bg — iOS reclaims long-poll sockets.
+  DateTime? _lastForceReconnectAt;
+  static const Duration _forceReconnectThreshold = Duration(seconds: 60);
+  static const Duration _forceReconnectDebounce = Duration(seconds: 10);
+
 
   SyncManager(
       this.client,
@@ -405,21 +410,54 @@ class SyncManager with ChangeNotifier {
       }
       mapBloc.add(MapLoadUserLocations());
 
-      if (client.isLogged() && (!_isSyncing || !client.syncPending)) {
+      final pausedAt = _pausedTime;
+      final bgGap =
+          pausedAt != null ? DateTime.now().difference(pausedAt) : Duration.zero;
+      final didForceReconnect = _maybeForceReconnect(bgGap);
+
+      if (!didForceReconnect &&
+          client.isLogged() &&
+          (!_isSyncing || !client.syncPending)) {
         _startSyncStream();
       }
 
       // If we were paused long enough, opportunistically nudge contacts for
       // any missing avatars / stale locations.
-      final pausedAt = _pausedTime;
-      if (pausedAt != null &&
-          DateTime.now().difference(pausedAt) >= _resumeNudgeThreshold) {
+      if (pausedAt != null && bgGap >= _resumeNudgeThreshold) {
         unawaited(_runNudgePass());
       }
       _pausedTime = null;
     } else {
       _pausedTime = DateTime.now();
     }
+  }
+
+  /// Force a fresh sync stream when the long-poll socket is likely dead after
+  /// a long bg gap. Returns true if reconnect was triggered.
+  bool _maybeForceReconnect(Duration bgGap) {
+    if (bgGap < _forceReconnectThreshold) return false;
+    if (!client.isLogged()) return false;
+    if (_syncState == SyncState.loadingToken ||
+        _syncState == SyncState.performingCatchUp) {
+      return false;
+    }
+    final last = _lastForceReconnectAt;
+    if (last != null &&
+        DateTime.now().difference(last) < _forceReconnectDebounce) {
+      print('[SyncManager] resume within debounce window, skipping');
+      return false;
+    }
+    _lastForceReconnectAt = DateTime.now();
+    print(
+        '[SyncManager] resume after ${bgGap.inSeconds}s — force reconnecting');
+    try {
+      if (client.syncPending) client.abortSync();
+    } catch (_) {}
+    _syncSubscription?.cancel();
+    _syncSubscription = null;
+    _isSyncing = false;
+    unawaited(_startSyncStream());
+    return true;
   }
 
   /// Defer the cold-launch nudge pass so it doesn't pile onto the hot path.
