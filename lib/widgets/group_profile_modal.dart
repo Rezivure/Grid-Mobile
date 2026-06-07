@@ -14,7 +14,7 @@ import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
 import 'package:grid_frontend/utilities/utils.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -224,9 +224,9 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         _isLoadingGroupAvatar = true;
       });
 
-      final secureStorage = FlutterSecureStorage();
+      final secureStorage = SecureStorageProvider.instance();
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Check if it's a Matrix avatar or encrypted avatar
       final isMatrixAvatar = prefs.getBool('group_avatar_is_matrix_$roomId') ?? false;
       
@@ -615,7 +615,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
         print('[Group Avatar Upload] Success! CDN URL: $cdnUrl');
         
         // Store in secure storage
-        final secureStorage = FlutterSecureStorage();
+        final secureStorage = SecureStorageProvider.instance();
         final avatarData = {
           'uri': cdnUrl,
           'key': key.base64,
@@ -693,7 +693,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
       print('[Group Avatar Upload Matrix] Uploaded to: $mxcUri');
       
       // Store encryption keys in secure storage
-      final secureStorage = FlutterSecureStorage();
+      final secureStorage = SecureStorageProvider.instance();
       final avatarData = {
         'uri': mxcUri,
         'key': key.base64,

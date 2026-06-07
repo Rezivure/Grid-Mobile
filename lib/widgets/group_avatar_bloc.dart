@@ -7,6 +7,7 @@ import '../blocs/avatar/avatar_bloc.dart';
 import '../blocs/avatar/avatar_event.dart';
 import '../blocs/avatar/avatar_state.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -35,7 +36,7 @@ class GroupAvatarBloc extends StatefulWidget {
 class _GroupAvatarBlocState extends State<GroupAvatarBloc> {
   static final GroupAvatarCacheService _cacheService = GroupAvatarCacheService();
   static bool _cacheInitialized = false;
-  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = SecureStorageProvider.instance();
   Uint8List? _avatarBytes;
   bool _isLoading = true;
   String? _loadedRoomId;

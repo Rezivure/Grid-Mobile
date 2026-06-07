@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 
 class SubscriptionService {
   static const String _mapTokenKey = 'satellite_map_token';
   static const String _mapTokenExpiryKey = 'satellite_map_token_expiry';
-  final _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = SecureStorageProvider.instance();
 
   Future<bool> hasActiveSubscription() async {
     try {

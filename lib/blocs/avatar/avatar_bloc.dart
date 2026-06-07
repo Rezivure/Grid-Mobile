@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:matrix/matrix.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -14,7 +15,7 @@ import '../../widgets/group_avatar.dart';
 class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
   final Client client;
   // Use iOS options that allow background access - will be accessible after first unlock
-  final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = SecureStorageProvider.instance();
   final AvatarCacheService cacheService = AvatarCacheService();
   bool _cacheInitialized = false;
 
