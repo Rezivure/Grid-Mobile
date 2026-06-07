@@ -64,6 +64,7 @@ import 'package:grid_frontend/repositories/invitations_repository.dart';
 import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:grid_frontend/widgets/in_app_notification_overlay.dart';
+import 'package:grid_frontend/widgets/key_recovery_screen.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
@@ -95,6 +96,14 @@ void main() async {
   // Initialize DatabaseService
   final databaseService = DatabaseService();
   await databaseService.initDatabase();
+
+  // Self-heal the post-Fix-A keychain accessibility regression: hasEncryptionKey
+  // returns true if either the new or legacy accessibility has the key and
+  // migrates legacy → new on hit. If both are empty (genuine loss), block
+  // boot on the recovery screen so the user can wipe + restart in-place.
+  if (!await databaseService.hasEncryptionKey()) {
+    await _runKeyRecoveryFlow(databaseService);
+  }
 
   await vod.init();
 
@@ -447,6 +456,33 @@ void main() async {
       },
     ),
   );
+}
+
+/// Blocks boot with a recovery UI when the encryption key is genuinely gone.
+/// `runApp` here replaces any prior tree; the completer holds main() until
+/// the user resets, after which the normal boot path proceeds and another
+/// `runApp` overwrites this one.
+Future<void> _runKeyRecoveryFlow(DatabaseService databaseService) async {
+  final completer = Completer<void>();
+  runApp(
+    AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'Grid App',
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(GridTokens.lightScheme()),
+        darkTheme: _buildTheme(GridTokens.darkScheme()),
+        themeMode: ThemeController.instance.mode,
+        home: KeyRecoveryScreen(
+          databaseService: databaseService,
+          onResetComplete: () {
+            if (!completer.isCompleted) completer.complete();
+          },
+        ),
+      ),
+    ),
+  );
+  await completer.future;
 }
 
 /// Build the app theme from a Grid-tokenized ColorScheme.
