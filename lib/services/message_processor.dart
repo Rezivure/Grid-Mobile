@@ -8,6 +8,7 @@ import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:matrix/encryption/encryption.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:encrypt/encrypt.dart' as encrypt;
@@ -36,7 +37,7 @@ class MessageProcessor {
   final LocationHistoryRepository locationHistoryRepository;
   final RoomLocationHistoryRepository? roomLocationHistoryRepository;
   final MessageParser messageParser;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = SecureStorageProvider.instance();
   final AvatarBloc? avatarBloc;
   final MapIconSyncService? mapIconSyncService;
   final UserRepository? userRepository;

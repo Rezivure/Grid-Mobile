@@ -1,10 +1,11 @@
 import 'package:matrix/matrix.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'dart:convert';
 
 class AvatarAnnouncementService {
   final Client client;
-  final FlutterSecureStorage secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage secureStorage = SecureStorageProvider.instance();
 
   AvatarAnnouncementService(this.client);
 

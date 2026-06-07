@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
@@ -161,7 +161,7 @@ class _UserAvatarState extends State<UserAvatar> {
     }
 
     try {
-      const secureStorage = FlutterSecureStorage();
+      final secureStorage = SecureStorageProvider.instance();
       final prefs = await SharedPreferences.getInstance();
       
       // Check if it's a Matrix avatar or encrypted avatar

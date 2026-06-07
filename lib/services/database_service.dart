@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:encrypt/encrypt.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
 import 'package:grid_frontend/repositories/location_history_repository.dart';
 import 'package:grid_frontend/repositories/room_location_history_repository.dart';
@@ -14,7 +15,10 @@ import 'package:grid_frontend/repositories/map_icon_repository.dart';
 
 class DatabaseService {
   static Database? _database;
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = SecureStorageProvider.instance();
+  // In-memory cache so a transient keychain error doesn't poison every
+  // subsequent repo read in this process.
+  String? _cachedKey;
 
   /// Get the database instance (Singleton)
   Future<Database> get database async {
@@ -67,14 +71,17 @@ class DatabaseService {
     } else {
       print('Encryption key exists.');
     }
+    _cachedKey = key;
   }
 
   /// Fetch the encryption key
   Future<String> getEncryptionKey() async {
-    String? key = await _secureStorage.read(key: 'encryptionKey');
+    if (_cachedKey != null) return _cachedKey!;
+    final key = await _secureStorage.read(key: 'encryptionKey');
     if (key == null) {
       throw Exception('Encryption key not found!');
     }
+    _cachedKey = key;
     return key;
   }
 

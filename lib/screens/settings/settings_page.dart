@@ -27,7 +27,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
 import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 import 'package:grid_frontend/services/avatar_announcement_service.dart';
@@ -1659,7 +1659,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _uploadAvatarToR2(String imagePath) async {
     final colorScheme = Theme.of(context).colorScheme;
-    final secureStorage = FlutterSecureStorage();
+    final secureStorage = SecureStorageProvider.instance();
     
     try {
       // Show subtle loading indicator
@@ -1839,7 +1839,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _uploadAvatarToMatrix(String imagePath) async {
     final colorScheme = Theme.of(context).colorScheme;
-    final secureStorage = FlutterSecureStorage();
+    final secureStorage = SecureStorageProvider.instance();
     
     try {
       // Show subtle loading indicator
@@ -2009,7 +2009,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _removeAvatar() async {
     final client = Provider.of<Client>(context, listen: false);
     final userId = client.userID ?? '';
-    final secureStorage = const FlutterSecureStorage();
+    final secureStorage = SecureStorageProvider.instance();
     final avatarBloc = context.read<AvatarBloc>();
 
     try {
@@ -2083,8 +2083,8 @@ class _SettingsPageState extends State<SettingsPage> {
         _isLoadingAvatar = true;
       });
 
-      final secureStorage = FlutterSecureStorage();
-      
+      final secureStorage = SecureStorageProvider.instance();
+
       // First check if custom server (Matrix avatar)
       final prefs = await SharedPreferences.getInstance();
       final isMatrixAvatar = prefs.getBool('avatar_is_matrix') ?? false;
