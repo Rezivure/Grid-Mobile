@@ -596,6 +596,39 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           icon: Icons.fingerprint,
         ),
 
+        const SizedBox(height: 14),
+
+        // SMS is the fallback for passkey signup — show as a small text
+        // link so users whose passkey manager rejects the request have a
+        // clear path forward.
+        TextButton(
+          onPressed: (_usernameController.text.trim().length >= 5 &&
+                  _usernameStatusMessage == 'Username is available' &&
+                  !_isPasskeyLoading)
+              ? () {
+                  setState(() {
+                    _currentStep = 1;
+                  });
+                  _animateToNextStep();
+                }
+              : null,
+          style: TextButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor:
+                Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+          ),
+          child: const Text(
+            'Sign up with SMS instead',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+
         const SizedBox(height: 40),
       ],
     );
@@ -916,7 +949,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      _showErrorDialog('Passkey signup failed. Please try SMS verification.');
+      _showPasskeySignupErrorDialog();
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
     }
@@ -958,6 +991,174 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         }
       }
     }
+  }
+
+  /// Error dialog shown when passkey signup fails.  Offers a direct "Use SMS
+  /// instead" action so the user is not left without a path forward.
+  void _showPasskeySignupErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final colorScheme = Theme.of(dialogContext).colorScheme;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(dialogContext).size.width * 0.9,
+            ),
+            decoration: BoxDecoration(
+              color: colorScheme.background,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.shadow.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.05),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: colorScheme.outline.withOpacity(0.1),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        'Passkey signup failed',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onBackground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceVariant.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: colorScheme.outline.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your passkey manager could not complete signup. You can sign up with SMS verification instead.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colorScheme.primary.withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(dialogContext).pop();
+                              if (mounted) {
+                                setState(() {
+                                  _currentStep = 1;
+                                });
+                                _animateToNextStep();
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              'Sign up with SMS',
+                              style: TextStyle(
+                                color: colorScheme.onPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: Text(
+                          'Try passkey again',
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showErrorDialog(String message) {
