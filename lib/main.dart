@@ -65,6 +65,7 @@ import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:grid_frontend/widgets/migration_modal.dart';
 import 'package:grid_frontend/widgets/in_app_notification_overlay.dart';
 import 'package:grid_frontend/widgets/key_recovery_screen.dart';
+import 'package:grid_frontend/widgets/boot_error_screen.dart';
 import 'package:libre_location/libre_location.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/push_notification_service.dart';
@@ -78,37 +79,71 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await ThemeController.instance.load();
+  // Every boot await is bounded: a wedged call must surface as a retryable
+  // error screen, never an eternal native splash (bg-resume hang).
+  while (true) {
+    try {
+      await _boot();
+      return;
+    } catch (e, s) {
+      debugPrint('[Boot] FATAL: $e\n$s');
+      await _runBootErrorFlow(e);
+    }
+  }
+}
+
+/// Non-fatal boot step: log + continue on error/timeout.
+Future<T?> _tryBootStep<T>(String step, Future<T> future, Duration limit) async {
+  try {
+    return await future.timeout(limit);
+  } catch (e) {
+    debugPrint('[Boot] $step failed (continuing): $e');
+    return null;
+  }
+}
+
+Future<void> _boot() async {
+  await _tryBootStep('theme', ThemeController.instance.load(), const Duration(seconds: 5));
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
 
   // Initialize Firebase (for push notifications)
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp().timeout(const Duration(seconds: 10));
     debugPrint('[Push] Firebase initialized');
   } catch (e) {
     debugPrint('[Push] Firebase init failed (ok if no config): $e');
   }
 
   // Load .env file
-  await dotenv.load(fileName: ".env");
+  await _tryBootStep('dotenv', dotenv.load(fileName: ".env"), const Duration(seconds: 5));
 
   // Initialize DatabaseService
   final databaseService = DatabaseService();
-  await databaseService.initDatabase();
+  await databaseService.initDatabase().timeout(const Duration(seconds: 15));
 
   // Self-heal the post-Fix-A keychain accessibility regression: hasEncryptionKey
   // returns true if either the new or legacy accessibility has the key and
   // migrates legacy → new on hit. If both are empty (genuine loss), block
   // boot on the recovery screen so the user can wipe + restart in-place.
-  if (!await databaseService.hasEncryptionKey()) {
+  bool encryptionKeyMissing = false;
+  try {
+    encryptionKeyMissing =
+        !await databaseService.hasEncryptionKey().timeout(const Duration(seconds: 5));
+  } catch (e) {
+    // Keychain unreachable (locked device, transient error) — the key is not
+    // proven missing, so boot on instead of offering destructive recovery.
+    debugPrint('[Boot] Keychain unavailable, skipping recovery check: $e');
+  }
+  if (encryptionKeyMissing) {
     await _runKeyRecoveryFlow(databaseService);
   }
 
-  await vod.init();
+  await vod.init().timeout(const Duration(seconds: 15));
 
   // Initialize Matrix Client with backwards compatible database
-  final database = await BackwardsCompatibilityService.createMatrixDatabase();
+  final database = await BackwardsCompatibilityService.createMatrixDatabase()
+      .timeout(const Duration(seconds: 15));
   final client = Client(
     'Grid App',
     database: database,
@@ -120,7 +155,7 @@ void main() async {
     // This ensures location sharing works without requiring device verification
     shareKeysWith: ShareKeysWith.all,
   );
-  await client.init();
+  await client.init().timeout(const Duration(seconds: 30));
 
   // Only forward room keys to peers who are still a Join member of the room.
   // Refuse forwards to kicked / left / never-joined devices to avoid leaking history.
@@ -141,12 +176,13 @@ void main() async {
   });
 
   // Initialize debug logging service
-  await DebugLogService.instance.init();
+  await _tryBootStep('debugLog', DebugLogService.instance.init(), const Duration(seconds: 5));
 
   // On warm start, re-register push notifications for the restored session.
   // (client.init() restored creds from the Matrix DB; we just need pushers refreshed.)
-  final prefs = await SharedPreferences.getInstance();
-  String? token = prefs.getString('token');
+  final prefs = await _tryBootStep(
+      'prefs', SharedPreferences.getInstance(), const Duration(seconds: 5));
+  String? token = prefs?.getString('token');
 
   if (token != null && token.isNotEmpty) {
     try {
@@ -154,7 +190,11 @@ void main() async {
 
       if (client.isLogged()) {
         final pushService = PushNotificationService(client: client);
-        await pushService.register();
+        // Network call — never allowed to block first frame.
+        unawaited(pushService
+            .register()
+            .timeout(const Duration(seconds: 15))
+            .catchError((e) => debugPrint('[Push] register failed: $e')));
       }
     } catch (e) {
       print('Error restoring session with token: $e');
@@ -162,7 +202,8 @@ void main() async {
   }
 
   // Initialize notification channels (Android)
-  await NotificationChannels.createAll();
+  await _tryBootStep(
+      'notifChannels', NotificationChannels.createAll(), const Duration(seconds: 5));
 
 
   // Initialize repositories
@@ -182,13 +223,15 @@ void main() async {
   // actually stop location posts.
   final sharingStateNotifier = SharingStateNotifier();
   final locationDispatch = LocationDispatch(sharingStateNotifier);
-  await locationDispatch.start();
+  await _tryBootStep(
+      'locationDispatch', locationDispatch.start(), const Duration(seconds: 5));
 
   // Watches the user's saved home geofence and flips `sharingStateNotifier`
   // on enter/exit. Reads `home_location` + `home_radius` +
   // `auto_pause_at_home_enabled` prefs (owned by SettingsPage).
   final homeGeofenceService = HomeGeofenceService(sharingStateNotifier);
-  await homeGeofenceService.start();
+  await _tryBootStep(
+      'homeGeofence', homeGeofenceService.start(), const Duration(seconds: 5));
 
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
@@ -456,6 +499,31 @@ void main() async {
       },
     ),
   );
+}
+
+/// Blocks on a retryable error UI when a fatal boot step failed or timed out.
+/// Returning hands control back to the boot retry loop in main().
+Future<void> _runBootErrorFlow(Object error) async {
+  final completer = Completer<void>();
+  runApp(
+    AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'Grid App',
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(GridTokens.lightScheme()),
+        darkTheme: _buildTheme(GridTokens.darkScheme()),
+        themeMode: ThemeController.instance.mode,
+        home: BootErrorScreen(
+          error: error,
+          onRetry: () {
+            if (!completer.isCompleted) completer.complete();
+          },
+        ),
+      ),
+    ),
+  );
+  await completer.future;
 }
 
 /// Blocks boot with a recovery UI when the encryption key is genuinely gone.

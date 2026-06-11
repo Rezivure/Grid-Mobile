@@ -860,6 +860,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         final pauseDuration = DateTime.now().difference(lastFg);
         if (pauseDuration.inSeconds > _longPauseThresholdSeconds) {
           print('[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
+          // Mark handled so the stale ts can't re-trigger another restart.
+          unawaited(_persistLastForegroundTs(DateTime.now()));
           if (mounted) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
@@ -908,6 +910,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       );
       if (gap.inSeconds <= _longPauseThresholdSeconds) return;
       print('[MapTab] Cold-launch long pause detected (${gap.inSeconds}s) - recovering');
+      // Mark handled so the resumed-path restart doesn't fire on the same gap.
+      unawaited(_persistLastForegroundTs(DateTime.now()));
       // Refresh avatar cache from disk.
       await AvatarCacheService().reloadFromPersistent();
       if (!mounted) return;

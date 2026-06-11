@@ -108,8 +108,10 @@ class SyncManager with ChangeNotifier {
 
   // Force-reconnect on resume after long bg — iOS reclaims long-poll sockets.
   DateTime? _lastForceReconnectAt;
+  DateTime? _lastSyncUpdateAt;
   static const Duration _forceReconnectThreshold = Duration(seconds: 60);
   static const Duration _forceReconnectDebounce = Duration(seconds: 10);
+  static const Duration _reconnectWatchdogDelay = Duration(seconds: 15);
 
 
   SyncManager(
@@ -349,9 +351,10 @@ class SyncManager with ChangeNotifier {
   
   Future<void> _startSyncStream() async {
     if (_syncSubscription != null) return;
-    
+
     _syncSubscription = client.onSync.stream.listen(
       (syncUpdate) async {
+        _lastSyncUpdateAt = DateTime.now();
         await _processSyncUpdate(syncUpdate);
       },
       onError: (error) {
@@ -361,17 +364,31 @@ class SyncManager with ChangeNotifier {
         }
       },
     );
-    
-    // Check if the client is already syncing before starting a new sync
-    if (!client.syncPending) {
-      _isSyncing = true;
+
+    _isSyncing = true;
+    await _kickSync();
+  }
+
+  /// Fire a sync unless one is genuinely in flight. abortSync() can settle
+  /// asynchronously, so a stale `syncPending` is given a moment to clear
+  /// instead of being trusted — trusting it left `_isSyncing = true` with no
+  /// actual sync running (the post-#275 dead-socket state).
+  Future<void> _kickSync() async {
+    for (var i = 0; i < 10 && client.syncPending; i++) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    if (_stopped || client.syncPending) return;
+    try {
       await client.sync(
         since: _sinceToken,
         timeout: 30000,
         setPresence: PresenceType.unavailable,
       );
-    } else {
-      _isSyncing = true;
+    } catch (e) {
+      print("[SyncManager] Kick sync failed: $e");
+      if (_isAuthenticationError(e)) {
+        await _handleAuthenticationFailure();
+      }
     }
   }
   
@@ -457,7 +474,31 @@ class SyncManager with ChangeNotifier {
     _syncSubscription = null;
     _isSyncing = false;
     unawaited(_startSyncStream());
+    _scheduleReconnectWatchdog();
     return true;
+  }
+
+  /// If no sync update lands within the watchdog window after a force
+  /// reconnect, the kick didn't take (socket still dead) — reset the debounce
+  /// and reconnect again rather than riding the dead socket forever.
+  void _scheduleReconnectWatchdog() {
+    final reconnectAt = _lastForceReconnectAt;
+    Future.delayed(_reconnectWatchdogDelay, () {
+      if (_stopped || reconnectAt == null) return;
+      if (_lastForceReconnectAt != reconnectAt) return;
+      final last = _lastSyncUpdateAt;
+      if (last != null && last.isAfter(reconnectAt)) return;
+      print('[SyncManager] reconnect watchdog: no sync update, retrying');
+      _lastForceReconnectAt = DateTime.now();
+      try {
+        if (client.syncPending) client.abortSync();
+      } catch (_) {}
+      _syncSubscription?.cancel();
+      _syncSubscription = null;
+      _isSyncing = false;
+      unawaited(_startSyncStream());
+      _scheduleReconnectWatchdog();
+    });
   }
 
   /// Defer the cold-launch nudge pass so it doesn't pile onto the hot path.
