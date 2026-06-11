@@ -157,21 +157,48 @@ Future<void> _boot() async {
   );
   await client.init().timeout(const Duration(seconds: 30));
 
-  // Only forward room keys to peers who are still a Join member of the room.
-  // Refuse forwards to kicked / left / never-joined devices to avoid leaking history.
+  // Forward room keys unless the requester has positively left / been banned.
+  // Fail-open: Grid rooms only carry current location (no history worth
+  // protecting), while a refused forward strands a joined peer undecryptable.
   client.onRoomKeyRequest.stream.listen((request) async {
+    final room = request.room;
+    final requestingUserId = request.requestingDevice.userId;
     try {
-      final room = request.room;
-      final requestingUserId = request.requestingDevice.userId;
-      final participants = await room.requestParticipants([Membership.join]);
-      final stillMember = participants.any((p) => p.id == requestingUserId);
-      if (!stillMember) {
-        Logs().w('[KeyForward] Refusing forward to non-member $requestingUserId in ${room.id}');
+      Membership? membership = room
+          .getState(EventTypes.RoomMember, requestingUserId)
+          ?.asUser(room)
+          .membership;
+      if (membership == null) {
+        final participants = await room.requestParticipants([
+          Membership.join,
+          Membership.invite,
+          Membership.knock,
+          Membership.leave,
+          Membership.ban,
+        ]).timeout(const Duration(seconds: 5));
+        for (final p in participants) {
+          if (p.id == requestingUserId) {
+            membership = p.membership;
+            break;
+          }
+        }
+      }
+      if (membership == Membership.leave || membership == Membership.ban) {
+        Logs().w(
+            '[KeyForward] Refusing forward to ${membership!.name} member $requestingUserId in ${room.id}');
         return;
       }
+      Logs().i(
+          '[KeyForward] Forwarding key to $requestingUserId in ${room.id} (membership: ${membership?.name ?? 'unknown'})');
       await request.forwardKey();
     } catch (e) {
-      Logs().w('[KeyForward] Failed to forward room key: $e');
+      // Stale local state or a flaky membership query must not strand a peer.
+      Logs().w('[KeyForward] Membership check failed ($e), forwarding anyway');
+      try {
+        await request.forwardKey();
+      } catch (e2) {
+        Logs().w('[KeyForward] Failed to forward room key: $e2');
+      }
     }
   });
 

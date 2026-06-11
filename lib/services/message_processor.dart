@@ -50,6 +50,10 @@ class MessageProcessor {
   /// Callback for when decryption fails
   DecryptionErrorCallback? _onDecryptionError;
 
+  // Per-session cooldown for explicit megolm key re-requests.
+  final Map<String, DateTime> _keyRequestedAt = {};
+  static const Duration _keyRequestCooldown = Duration(minutes: 5);
+
   MessageProcessor(
       this.locationRepository,
       this.locationHistoryRepository,
@@ -71,6 +75,27 @@ class MessageProcessor {
   /// Set a callback to be notified of decryption errors
   void setDecryptionErrorCallback(DecryptionErrorCallback callback) {
     _onDecryptionError = callback;
+  }
+
+  /// Explicitly ask peer devices for the missing megolm session. The SDK's
+  /// auto-request only consults online key backup (which Grid doesn't use),
+  /// so without this no m.room_key_request ever goes out on decrypt failure.
+  void _maybeRequestSessionKey(Room room, Event failedEvent) {
+    if (failedEvent.content['can_request_session'] != true) return;
+    final sessionId = failedEvent.content.tryGet<String>('session_id');
+    final senderKey = failedEvent.content.tryGet<String>('sender_key');
+    if (sessionId == null || senderKey == null) return;
+    final ident = '${room.id}|$sessionId';
+    final last = _keyRequestedAt[ident];
+    if (last != null &&
+        DateTime.now().difference(last) < _keyRequestCooldown) {
+      return;
+    }
+    _keyRequestedAt[ident] = DateTime.now();
+    print('[MessageProcessor] Requesting megolm session $sessionId for ${room.id}');
+    room.requestSessionKey(sessionId, senderKey).catchError((e) {
+      print('[MessageProcessor] Session key request failed: $e');
+    });
   }
 
   /// Process a single event from a room. Decrypt if necessary,
@@ -98,6 +123,7 @@ class MessageProcessor {
         decryptedEvent.content['msgtype'] == 'm.bad.encrypted') {
       print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}');
       _onDecryptionError?.call(finalEvent.senderId ?? 'unknown', roomId);
+      _maybeRequestSessionKey(room, decryptedEvent);
     }
 
     // Check if the decrypted event is now a message
