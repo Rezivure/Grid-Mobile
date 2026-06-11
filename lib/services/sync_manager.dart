@@ -299,6 +299,7 @@ class SyncManager with ChangeNotifier {
       _setSyncState(SyncState.ready);
       await _processQueuedOperations();
       _scheduleFirstStartupNudge();
+      unawaited(roomService.relaxLegacyRoomRotation());
     } catch (e) {
       print("[SyncManager] Error during initialization: $e");
       _setSyncState(SyncState.error);

@@ -130,6 +130,38 @@ class RoomService {
     return client.homeserver.toString();
   }
 
+  /// One-time pass: rooms created before relaxed rotation landed still run
+  /// the megolm defaults (100 msgs / 1 week), so busy location rooms mint a
+  /// fresh session every ~100 posts and every member must receive it again —
+  /// a recurring source of "unable to decrypt". Align them with new rooms.
+  /// Only rooms where we hold the power level (creator) can be updated; the
+  /// other side migrates theirs when they run this build.
+  Future<void> relaxLegacyRoomRotation() async {
+    final prefs = await SharedPreferences.getInstance();
+    const flag = 'megolm_rotation_relaxed_v1';
+    if (prefs.getBool(flag) == true) return;
+    for (final room in client.rooms) {
+      if (room.membership != Membership.join) continue;
+      if (!(room.name).startsWith('Grid:')) continue;
+      try {
+        final enc = room.getState(EventTypes.Encryption)?.content;
+        if (enc == null) continue;
+        final msgs = enc['rotation_period_msgs'];
+        if (msgs is int && msgs >= 1000000000) continue;
+        if (!room.canChangeStateEvent(EventTypes.Encryption)) continue;
+        await client.setRoomStateWithKey(room.id, EventTypes.Encryption, '', {
+          'algorithm': enc['algorithm'] ?? 'm.megolm.v1.aes-sha2',
+          'rotation_period_ms': 31536000000,
+          'rotation_period_msgs': 1000000000,
+        });
+        print('[RoomService] Relaxed megolm rotation for ${room.id}');
+      } catch (e) {
+        print('[RoomService] Rotation relax failed for ${room.id}: $e');
+      }
+    }
+    await prefs.setBool(flag, true);
+  }
+
  /// create direct grid room (contact)
   /// Caller is responsible for verifying the user exists before invoking.
   Future<bool> createRoomAndInviteContact(String matrixUserId) async {
