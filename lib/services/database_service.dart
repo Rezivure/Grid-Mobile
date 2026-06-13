@@ -23,10 +23,16 @@ class EncryptionKeyMissingException implements Exception {
 
 class DatabaseService {
   static Database? _database;
-  final FlutterSecureStorage _secureStorage = SecureStorageProvider.instance();
+  final FlutterSecureStorage _secureStorage;
   // Reads only — items written before Fix A landed under the default
   // WhenUnlocked accessibility and are invisible to [_secureStorage].
-  final FlutterSecureStorage _legacyStorage = SecureStorageProvider.legacyInstance();
+  final FlutterSecureStorage _legacyStorage;
+
+  DatabaseService({
+    FlutterSecureStorage? secureStorage,
+    FlutterSecureStorage? legacyStorage,
+  })  : _secureStorage = secureStorage ?? SecureStorageProvider.instance(),
+        _legacyStorage = legacyStorage ?? SecureStorageProvider.legacyInstance();
   // In-memory cache so a transient keychain error doesn't poison every
   // subsequent repo read in this process.
   String? _cachedKey;
@@ -125,10 +131,28 @@ class DatabaseService {
   }
 
   Future<String?> _readKeyWithFallback() async {
-    final primary = await _secureStorage.read(key: 'encryptionKey');
+    // A read error (e.g. -25308 while the device is locked) is NOT proof of
+    // absence — rethrow it so callers never confuse "can't read" with "gone".
+    Object? readError;
+    String? primary;
+    try {
+      primary = await _secureStorage.read(key: 'encryptionKey');
+    } catch (e) {
+      print('Keychain primary read failed: $e');
+      readError = e;
+    }
     if (primary != null) return primary;
-    final legacy = await _legacyStorage.read(key: 'encryptionKey');
-    if (legacy == null) return null;
+    String? legacy;
+    try {
+      legacy = await _legacyStorage.read(key: 'encryptionKey');
+    } catch (e) {
+      print('Keychain legacy read failed: $e');
+      readError ??= e;
+    }
+    if (legacy == null) {
+      if (readError != null) throw readError;
+      return null;
+    }
     // Migrate to the new accessibility. Best effort — failure is non-fatal
     // because the next read still finds the legacy item.
     try {
