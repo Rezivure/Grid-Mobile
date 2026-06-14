@@ -1083,10 +1083,10 @@ packages:
     dependency: "direct main"
     description:
       name: libre_location
-      sha256: "5e052dee026d034c3fae56e96231c9ae4b820989a053a75dd7355369028071d2"
+      sha256: c95b01f59678c49f9242ce662e31939d24345f9a80f27de402f1e5ab0a4bb2e0
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.4.0"
   lints:
     dependency: transitive
     description:
