@@ -99,7 +99,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   void _shareGroupInvite() async {
     try {
       final groupName = widget.groupName ?? 'our group';
-      final message = 'Join me on Grid! Download it at https://get.grid.lat and share your username to get invited to the $groupName group!';
+      final message = 'Join me on Grid! Download it at https://mygrid.app and share your username to get invited to the $groupName group!';
 
       await Share.share(
         message,
