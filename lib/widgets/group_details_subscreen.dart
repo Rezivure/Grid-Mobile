@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/local_geocoder.dart';
 import 'package:grid_frontend/widgets/custom_search_bar.dart';
 import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
@@ -76,6 +77,9 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
   String? _currentUserId;
   Timer? _refreshTimer;
   Timer? _expiryTicker;
+
+  final Map<String, String?> _placeCache = {};
+  final Set<String> _placeInflight = {};
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -831,6 +835,16 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     final name = user.displayName ?? localpart(user.userId);
 
     final isInvited = memberStatus == 'invite';
+
+    String? place;
+    if (!isInvited && userLocation != null) {
+      place = _cachedPlace(userLocation.latitude, userLocation.longitude);
+      if (place == null &&
+          !_placeCache.containsKey(
+              _placeKey(userLocation.latitude, userLocation.longitude))) {
+        _ensurePlaceFor(userLocation.latitude, userLocation.longitude);
+      }
+    }
     // Dot is freshness-only; invited members get idle (the INVITED pill
     // carries the membership semantic).
     final avatarStatus =
@@ -847,7 +861,7 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
       name: name,
       handle: handle,
       userId: user.userId,
-      placeLine: _placeLine(timeAgoText, isInvited),
+      placeLine: _placeLine(timeAgoText, isInvited, place: place),
       timeText: isInvited ? null : timeAgoText,
       distanceText: null,
       statusKind: statusKind,
@@ -860,10 +874,38 @@ class _GroupDetailsSubscreenState extends State<GroupDetailsSubscreen>
     );
   }
 
-  String? _placeLine(String timeAgoText, bool isInvited) {
+  String? _placeLine(String timeAgoText, bool isInvited, {String? place}) {
     if (isInvited) return 'Invite pending';
+    if (place != null && place.isNotEmpty) return place;
     if (timeAgoText == 'Offline') return "Hasn't shared yet";
     return 'Sharing location';
+  }
+
+  String _placeKey(double lat, double lng) {
+    final a = (lat * 1000).round();
+    final b = (lng * 1000).round();
+    return '$a,$b';
+  }
+
+  void _ensurePlaceFor(double lat, double lng) {
+    final key = _placeKey(lat, lng);
+    if (_placeCache.containsKey(key) || _placeInflight.contains(key)) return;
+    _placeInflight.add(key);
+    LocalGeocoder.instance.lookup(lat, lng).then((name) {
+      if (!mounted) return;
+      setState(() {
+        _placeCache[key] = name;
+        _placeInflight.remove(key);
+      });
+    }).catchError((_) {
+      if (!mounted) return;
+      _placeCache[key] = null;
+      _placeInflight.remove(key);
+    });
+  }
+
+  String? _cachedPlace(double lat, double lng) {
+    return _placeCache[_placeKey(lat, lng)];
   }
 
   bool _isRecentlyActive(DateTime? lastUpdateAt) =>
