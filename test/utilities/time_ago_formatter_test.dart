@@ -114,4 +114,39 @@ void main() {
       expect(color, Colors.red);
     });
   });
+
+  group('TimeAgoFormatter.bandFor', () {
+    test('null is offline', () {
+      expect(TimeAgoFormatter.bandFor(null), FreshnessBand.offline);
+    });
+
+    test('invalid string is offline', () {
+      expect(TimeAgoFormatter.bandFor('nope'), FreshnessBand.offline);
+    });
+
+    test('< 15m is fresh', () {
+      final ts = DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String();
+      expect(TimeAgoFormatter.bandFor(ts), FreshnessBand.fresh);
+    });
+
+    test('15m-1h is recent', () {
+      final ts = DateTime.now().subtract(const Duration(minutes: 40)).toIso8601String();
+      expect(TimeAgoFormatter.bandFor(ts), FreshnessBand.recent);
+    });
+
+    test('1h-24h is stale', () {
+      final ts = DateTime.now().subtract(const Duration(hours: 5)).toIso8601String();
+      expect(TimeAgoFormatter.bandFor(ts), FreshnessBand.stale);
+    });
+
+    test('>= 24h is offline', () {
+      final ts = DateTime.now().subtract(const Duration(hours: 30)).toIso8601String();
+      expect(TimeAgoFormatter.bandFor(ts), FreshnessBand.offline);
+    });
+
+    test('future timestamp is offline', () {
+      final ts = DateTime.now().add(const Duration(hours: 1)).toIso8601String();
+      expect(TimeAgoFormatter.bandFor(ts), FreshnessBand.offline);
+    });
+  });
 }

@@ -813,6 +813,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     final loc = Provider.of<UserLocationProvider>(context, listen: false)
         .getUserLocation(widget.contact.userId);
     final updatedLabel = _formatFreshness(loc?.timestamp);
+    final freshness = TimeAgoFormatter.bandFor(loc?.timestamp);
 
     // gridv 2: pull live device-status (motion / speed / battery) from
     // the cache for the contact (not the local user). Subscribe so the
@@ -833,7 +834,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           level: status?.batteryLevel,
           charging: status?.isCharging ?? false,
         ),
-        _MonoPill(label: updatedLabel),
+        _FreshnessPill(label: updatedLabel, band: freshness),
       ],
     );
   }
@@ -2123,23 +2124,40 @@ class _BatteryStatusPill extends StatelessWidget {
   }
 }
 
-/// Small mono pill (matches the "updated 12s" / "0.4 mi · NE" surface pills
-/// in the design — text3 on surface2 with a hairline outline).
-class _MonoPill extends StatelessWidget {
-  const _MonoPill({required this.label});
+/// Last-seen pill colored by freshness: mint (fresh) → amber (recent) →
+/// danger (stale) → muted text3 (offline / never). Grey only when truly stale.
+class _FreshnessPill extends StatelessWidget {
+  const _FreshnessPill({required this.label, required this.band});
 
   final String label;
+  final FreshnessBand band;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.gridColors;
+    final Color color;
+    switch (band) {
+      case FreshnessBand.fresh:
+        color = c.mint;
+        break;
+      case FreshnessBand.recent:
+        color = c.amber;
+        break;
+      case FreshnessBand.stale:
+        color = c.danger;
+        break;
+      case FreshnessBand.offline:
+        color = c.text3;
+        break;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: context.gridColors.surface2,
+        color: color.withOpacity(0.14),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: context.gridColors.hairline, width: 1),
+        border: Border.all(color: color.withOpacity(0.25), width: 1),
       ),
-      child: GridMono(label, size: 10, color: context.gridColors.text2, letterSpacing: 0.08),
+      child: GridMono(label, size: 10, color: color, letterSpacing: 0.08),
     );
   }
 }
