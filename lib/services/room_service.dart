@@ -479,12 +479,17 @@ class RoomService {
             
             // Get joined members only
             final joinedMembers = participants.where((p) => p.membership == Membership.join).toList();
-            
-            // For direct rooms, if you're alone, leave
+            // Pending peer (outgoing/incoming request not yet accepted) — must not be reaped.
+            final hasPendingPeer = participants.any(
+                (p) => p.id != myUserId && p.membership == Membership.invite);
+
+            // For direct rooms, if you're alone, leave — but keep rooms with a pending invite.
             if (joinedMembers.length == 1 && joinedMembers.first.id == myUserId) {
-              shouldLeave = true;
-              leaveReason = 'alone in direct room - other user left';
-            } else if (joinedMembers.isEmpty) {
+              if (!hasPendingPeer) {
+                shouldLeave = true;
+                leaveReason = 'alone in direct room - other user left';
+              }
+            } else if (joinedMembers.isEmpty && !hasPendingPeer) {
               // No one has join status
               shouldLeave = true;
               leaveReason = 'no active participants in direct room';
