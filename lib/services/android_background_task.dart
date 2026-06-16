@@ -28,16 +28,35 @@ void onHeadlessLocation(Map<String, dynamic> data) async {
   final double? latitude = data['latitude']?.toDouble();
   final double? longitude = data['longitude']?.toDouble();
   final double? accuracy = data['accuracy']?.toDouble();
+  final double? speed = data['speed']?.toDouble();
+  final double? heading = data['heading']?.toDouble();
   final int? timestamp = data['timestamp']?.toInt();
   final bool? isMoving = data['isMoving'] as bool?;
-  
+
+  // Battery arrives either nested ('battery': {level 0-1, charging}) or as
+  // top-level native keys ('batteryLevel' 0-100 int, 'isCharging').
+  double? batteryLevel;
+  bool? isCharging;
+  final battery = data['battery'];
+  if (battery is Map) {
+    batteryLevel = (battery['level'] as num?)?.toDouble();
+    isCharging = battery['charging'] as bool?;
+  } else if (data['batteryLevel'] != null) {
+    batteryLevel = (data['batteryLevel'] as num).toDouble() / 100.0;
+    isCharging = data['isCharging'] as bool?;
+  }
+
   if (latitude != null && longitude != null) {
     await processBackgroundLocation(
-      latitude, 
-      longitude, 
+      latitude,
+      longitude,
       accuracy ?? 0.0,
       DateTime.fromMillisecondsSinceEpoch(timestamp ?? DateTime.now().millisecondsSinceEpoch),
       isMoving ?? false,
+      speed: speed,
+      heading: heading,
+      batteryLevel: batteryLevel,
+      isCharging: isCharging,
     );
   } else {
     print('[HeadlessTask] ⚠️  Invalid location data received');
@@ -45,12 +64,16 @@ void onHeadlessLocation(Map<String, dynamic> data) async {
 }
 
 Future<void> processBackgroundLocation(
-  double latitude, 
-  double longitude, 
+  double latitude,
+  double longitude,
   double accuracy,
   DateTime timestamp,
-  bool isMoving,
-) async {
+  bool isMoving, {
+  double? speed,
+  double? heading,
+  double? batteryLevel,
+  bool? isCharging,
+}) async {
   try {
     // Reuse cached instances if available
     if (_cachedClient == null) {
@@ -113,7 +136,16 @@ Future<void> processBackgroundLocation(
         if (joinedMembers.length > 1) {
           if (!await _checkSharingWindow(room, joinedMembers, _cachedClient!, userService)) continue;
 
-          await _sendLocationUpdate(room, latitude, longitude, accuracy);
+          await _sendLocationUpdate(
+            room,
+            latitude,
+            longitude,
+            accuracy,
+            speed: speed,
+            heading: heading,
+            batteryLevel: batteryLevel,
+            isCharging: isCharging,
+          );
         } else {
           print("Grid: Skipping room ${room.id} - insufficient members");
         }
@@ -190,20 +222,40 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
   return true;
 }
 
-Future<void> _sendLocationUpdate(Room room, double latitude, double longitude, double accuracy) async {
+Future<void> _sendLocationUpdate(
+  Room room,
+  double latitude,
+  double longitude,
+  double accuracy, {
+  double? speed,
+  double? heading,
+  double? batteryLevel,
+  bool? isCharging,
+}) async {
   // Filter out low-accuracy locations to save battery and improve quality
   if (accuracy > 100) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
     return;
   }
 
-  final eventContent = {
+  // gridv 2 payload so background updates carry battery/speed too.
+  final eventContent = <String, dynamic>{
     'msgtype': 'm.location',
     'body': 'Current location',
     'geo_uri': 'geo:$latitude,$longitude',
     'description': 'Current location',
     'timestamp': DateTime.now().toUtc().toIso8601String(),
+    'gridv': 2,
+    'accuracy': accuracy,
+    if (speed != null) 'speed': speed,
+    if (heading != null) 'heading': heading,
   };
+  if (batteryLevel != null) {
+    eventContent['battery'] = <String, dynamic>{
+      'level': batteryLevel,
+      if (isCharging != null) 'charging': isCharging,
+    };
+  }
 
   await room.sendEvent(eventContent);
   print("Grid: Location event sent to room ${room.id} / ${room.name} (accuracy: ${accuracy.toStringAsFixed(1)}m)");

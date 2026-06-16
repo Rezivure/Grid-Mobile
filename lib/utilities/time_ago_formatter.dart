@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+/// Freshness band for a last-seen timestamp, palette-agnostic so callers
+/// can map it onto their own theme tokens (and so it's unit-testable).
+enum FreshnessBand { fresh, recent, stale, offline }
+
 class TimeAgoFormatter {
   static String format(String? timestamp) {
     if (timestamp == null || timestamp == 'Offline') {
@@ -33,6 +37,24 @@ class TimeAgoFormatter {
     } catch (e) {
       print("Error parsing timestamp: $e");
       return 'Offline';
+    }
+  }
+
+  /// Pure freshness classifier used to color the last-seen pill. Mirrors
+  /// [format]'s thresholds: < 15m fresh, < 1h recent, < 24h stale, else offline.
+  static FreshnessBand bandFor(String? timestamp) {
+    if (timestamp == null || timestamp == 'Offline') return FreshnessBand.offline;
+    try {
+      final lastSeen = DateTime.parse(timestamp).toLocal();
+      final now = DateTime.now();
+      if (lastSeen.isAfter(now)) return FreshnessBand.offline;
+      final diff = now.difference(lastSeen);
+      if (diff.inMinutes < 15) return FreshnessBand.fresh;
+      if (diff.inHours < 1) return FreshnessBand.recent;
+      if (diff.inHours < 24) return FreshnessBand.stale;
+      return FreshnessBand.offline;
+    } catch (_) {
+      return FreshnessBand.offline;
     }
   }
 
