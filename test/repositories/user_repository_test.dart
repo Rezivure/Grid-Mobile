@@ -252,6 +252,38 @@ void main() {
       )).called(1);
     });
 
+    test('insertUserRelationship direct room coexists with existing group relationship', () async {
+      // A user already in a shared group gets a direct relationship in a
+      // DIFFERENT room. The (userId, roomId) lookup must not match the group
+      // row, so the direct relationship is inserted (not overwritten).
+      when(() => mockDatabase.query(
+        any(),
+        where: any(named: 'where'),
+        whereArgs: ['user1', 'directRoom'],
+      )).thenAnswer((_) async => []); // No existing row for the direct room
+
+      when(() => mockDatabase.insert(any(), any())).thenAnswer((_) async => 1);
+
+      // Act
+      await repository.insertUserRelationship('user1', 'directRoom', true);
+
+      // Assert: a new direct row is inserted, scoped to the direct room only.
+      verify(() => mockDatabase.query(
+        'UserRelationships',
+        where: 'userId = ? AND roomId = ?',
+        whereArgs: ['user1', 'directRoom'],
+      )).called(1);
+      verify(() => mockDatabase.insert(
+        'UserRelationships',
+        {
+          'userId': 'user1',
+          'roomId': 'directRoom',
+          'isDirect': 1,
+          'membershipStatus': null,
+        },
+      )).called(1);
+    });
+
     test('updateMembershipStatus updates correct row', () async {
       // Arrange
       when(() => mockDatabase.update(
