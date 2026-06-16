@@ -4,6 +4,8 @@ import 'package:matrix/matrix.dart';
 import '../screens/onboarding/welcome_screen.dart';
 import '../screens/onboarding/splash_screen.dart';
 import '../screens/map/map_tab.dart';
+import '../services/theme_controller.dart';
+import '../styles/tokens.dart';
 
 class AppInitializer extends StatefulWidget {
   final Client client;
@@ -86,13 +88,15 @@ class _AppInitializerState extends State<AppInitializer>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    // Honor the in-app theme, not system brightness, for the splash background.
+    final mode = ThemeController.instance.mode;
+    final isDark = mode == ThemeMode.dark ||
+        (mode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+    final scheme = isDark ? GridTokens.darkScheme() : GridTokens.lightScheme();
 
-    // Show nothing - just an empty container while we check auth
-    // The native splash will still be showing
     return Container(
-      color: colorScheme.surface,
+      color: scheme.surface,
     );
   }
 }
