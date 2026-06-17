@@ -40,6 +40,7 @@ class AddGroupMemberModal extends StatefulWidget {
 class _AddGroupMemberModalState extends State<AddGroupMemberModal>
     with TickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _handleFocus = FocusNode();
   bool _isProcessing = false;
 
   // QR code scanning variables
@@ -80,6 +81,10 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
       if (mounted) setState(() {});
     });
 
+    _handleFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     _fadeController.forward();
   }
 
@@ -87,6 +92,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   void dispose() {
     _fadeController.dispose();
     _controller.dispose();
+    _handleFocus.dispose();
     _qrController?.dispose();
     super.dispose();
   }
@@ -298,7 +304,12 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: Container(
+      child: AnimatedPadding(
+        // Track the keyboard so the action buttons stay pinned above it.
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        child: Container(
         decoration: BoxDecoration(
           color: context.gridColors.surface,
           borderRadius: BorderRadius.only(
@@ -324,11 +335,11 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
             ),
             Expanded(
               child: SingleChildScrollView(
-                padding: EdgeInsets.only(
+                padding: const EdgeInsets.only(
                   left: 24,
                   right: 24,
                   top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                  bottom: 24,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,6 +373,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
             if (!_isScanning) _buildActionButtons(),
           ],
         ),
+      ),
       ),
     );
   }
@@ -461,24 +473,30 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
 
   Widget _buildHandleInput() {
     final hasContent = _handle.isNotEmpty;
-    return Container(
+    final hasError = _contactError != null;
+    final isFocused = _handleFocus.hasFocus;
+    // Exactly one border: error = danger, focused/valid = mint, else hairline.
+    final borderColor = hasError
+        ? context.gridColors.danger
+        : (isFocused ? context.gridColors.mint : context.gridColors.hairlineStrong);
+    final showGlow = !hasError && isFocused;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: context.gridColors.surface2,
         borderRadius: BorderRadius.circular(GridTokens.rMd),
-        border: Border.all(
-          color: _contactError != null ? context.gridColors.danger : context.gridColors.mint,
-          width: 1.5,
-        ),
-        boxShadow: _contactError != null
-            ? null
-            : [
+        border: Border.all(color: borderColor, width: 1.5),
+        boxShadow: showGlow
+            ? [
                 BoxShadow(
                   color: context.gridColors.mint.withOpacity(0.18),
                   blurRadius: 14,
                   spreadRadius: 1,
                 ),
-              ],
+              ]
+            : null,
       ),
       child: Row(
         children: [
@@ -496,6 +514,7 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _handleFocus,
               autocorrect: false,
               enableSuggestions: false,
               textCapitalization: TextCapitalization.none,
@@ -704,12 +723,15 @@ class _AddGroupMemberModalState extends State<AddGroupMemberModal>
   // ── Bottom action bar ───────────────────────────────────────────────────
 
   Widget _buildActionButtons() {
+    // AnimatedPadding lifts the sheet above the keyboard; drop safe-area
+    // padding while it's open so buttons sit just above the keys.
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Container(
       padding: EdgeInsets.fromLTRB(
         24,
         12,
         24,
-        MediaQuery.of(context).padding.bottom + 16,
+        (keyboardOpen ? 0 : MediaQuery.of(context).padding.bottom) + 16,
       ),
       decoration: BoxDecoration(
         color: context.gridColors.surface,
