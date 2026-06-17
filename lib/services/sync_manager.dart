@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/services/database_service.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/message_processor.dart';
 import 'package:grid_frontend/services/room_service.dart';
@@ -423,10 +423,9 @@ class SyncManager with ChangeNotifier {
   void handleAppLifecycleState(bool isActive) {
     _isActive = isActive;
     if (isActive) {
-      if (_pendingMessages.isNotEmpty) {
-        _processPendingMessages();
-      }
-      mapBloc.add(MapLoadUserLocations());
+      // Device may now be unlocked — re-read the key, complete any pending
+      // legacy migration, then reprocess queued events and reload locations.
+      unawaited(_recoverKeychainThenRefresh());
 
       final pausedAt = _pausedTime;
       final bgGap =
@@ -448,6 +447,27 @@ class SyncManager with ChangeNotifier {
     } else {
       _pausedTime = DateTime.now();
     }
+  }
+
+  /// On resume the device is usually unlocked again: re-read + cache the DB
+  /// key (completing the legacy migration), then reprocess queued events and
+  /// reload locations so anything dropped while locked is recovered.
+  Future<void> _recoverKeychainThenRefresh() async {
+    final db = locationRepository.databaseService;
+    if (!db.hasCachedKey) {
+      final recovered = await db.tryRecoverEncryptionKey();
+      if (!recovered) {
+        // Still locked — leave pending queue intact for a later resume.
+        print('[SyncManager] Keychain still locked on resume; deferring refresh');
+        return;
+      }
+      // Key just became readable — reload locations that failed at launch.
+      await userLocationProvider.reloadLocations();
+    }
+    if (_pendingMessages.isNotEmpty) {
+      await _processPendingMessages();
+    }
+    mapBloc.add(MapLoadUserLocations());
   }
 
   /// Force a fresh sync stream when the long-poll socket is likely dead after
@@ -952,8 +972,11 @@ class SyncManager with ChangeNotifier {
           notifyListeners();
         }
       } catch (e) {
-        if (e is PlatformException && e.code == '-25308') {
-          // Queue message if we get keychain access error
+        if (e is KeychainTemporarilyUnavailableException ||
+            DatabaseService.isKeychainLocked(e)) {
+          // Keychain locked (cold launch on a locked device) — queue for
+          // retry instead of dropping the location.
+          print('[Sync] Keychain locked, queuing event ${event.eventId} for retry');
           _pendingMessages.add(PendingMessage(
             roomId: roomId,
             eventId: event.eventId ?? '',
@@ -984,7 +1007,13 @@ class SyncManager with ChangeNotifier {
           notifyListeners();
         }
       }).catchError((e) {
-        print("Error processing pending event ${pendingMessage.eventId}: $e");
+        if (e is KeychainTemporarilyUnavailableException ||
+            DatabaseService.isKeychainLocked(e)) {
+          // Still locked — re-queue so we don't lose it on the next resume.
+          _pendingMessages.add(pendingMessage);
+        } else {
+          print("Error processing pending event ${pendingMessage.eventId}: $e");
+        }
       });
     }
   }
@@ -1932,6 +1961,12 @@ class SyncManager with ChangeNotifier {
       
       print("[SyncManager] Orphaned location cleanup complete");
     } catch (e) {
+      if (e is KeychainTemporarilyUnavailableException ||
+          DatabaseService.isKeychainLocked(e)) {
+        // Keychain locked — skip destructive cleanup, retry when unlocked.
+        print("[SyncManager] Skipping orphaned cleanup: keychain locked");
+        return;
+      }
       print("[SyncManager] Error during manual location cleanup: $e");
     }
   }

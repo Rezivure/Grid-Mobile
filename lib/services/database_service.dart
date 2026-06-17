@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,16 @@ class EncryptionKeyMissingException implements Exception {
   String toString() => 'Encryption key not found in keychain.';
 }
 
+/// Thrown when the keychain is temporarily unreadable (device locked / not yet
+/// unlocked since reboot, -25308). Distinct from [EncryptionKeyMissingException]
+/// so callers retry later instead of triggering destructive recovery.
+class KeychainTemporarilyUnavailableException implements Exception {
+  final Object cause;
+  const KeychainTemporarilyUnavailableException(this.cause);
+  @override
+  String toString() => 'Keychain temporarily unavailable: $cause';
+}
+
 class DatabaseService {
   static Database? _database;
   final FlutterSecureStorage _secureStorage;
@@ -36,6 +47,16 @@ class DatabaseService {
   // In-memory cache so a transient keychain error doesn't poison every
   // subsequent repo read in this process.
   String? _cachedKey;
+
+  /// True if [e] is the iOS "keychain locked / interaction not allowed" error
+  /// (-25308). The code may be the string '-25308' OR the literal SecurityError
+  /// name, with -25308 only in message/details — match all forms.
+  static bool isKeychainLocked(Object e) {
+    if (e is! PlatformException) return false;
+    if (e.code == '-25308') return true;
+    final blob = '${e.code} ${e.message ?? ''} ${e.details ?? ''}'.toLowerCase();
+    return blob.contains('-25308') || blob.contains('interaction is not allowed');
+  }
 
   /// Get the database instance (Singleton)
   Future<Database> get database async {
@@ -94,7 +115,16 @@ class DatabaseService {
   /// Fetch the encryption key
   Future<String> getEncryptionKey() async {
     if (_cachedKey != null) return _cachedKey!;
-    final key = await _readKeyWithFallback();
+    String? key;
+    try {
+      key = await _readKeyWithFallback();
+    } catch (e) {
+      // A locked keychain is retryable, NOT "key missing".
+      if (isKeychainLocked(e)) {
+        throw KeychainTemporarilyUnavailableException(e);
+      }
+      rethrow;
+    }
     if (key == null) {
       throw const EncryptionKeyMissingException();
     }
@@ -111,6 +141,25 @@ class DatabaseService {
     if (key == null) return false;
     _cachedKey = key;
     return true;
+  }
+
+  /// True if the key is currently cached in memory (already readable).
+  bool get hasCachedKey => _cachedKey != null;
+
+  /// Attempt to read + cache the key and complete any pending legacy migration.
+  /// Returns true if the key is now available. Call on resume / first unlock.
+  /// Never throws — a still-locked keychain just returns false.
+  Future<bool> tryRecoverEncryptionKey() async {
+    if (_cachedKey != null) return true;
+    try {
+      final key = await _readKeyWithFallback();
+      if (key == null) return false;
+      _cachedKey = key;
+      return true;
+    } catch (e) {
+      print('Encryption key recovery read failed (will retry later): $e');
+      return false;
+    }
   }
 
   /// Recovery for the worst case: keychain item is genuinely gone (data
@@ -157,10 +206,23 @@ class DatabaseService {
     // because the next read still finds the legacy item.
     try {
       await _secureStorage.write(key: 'encryptionKey', value: legacy);
+    } catch (e) {
+      // -25299 ("item already exists") means the key is already under the new
+      // accessibility; the legacy delete below must still run so the legacy
+      // item stops throwing -25308 on locked launches.
+      final alreadyExists = e is PlatformException &&
+          ('${e.code} ${e.message ?? ''} ${e.details ?? ''}').contains('-25299');
+      if (!alreadyExists) {
+        print('Encryption key migration write failed (non-fatal): $e');
+        return legacy;
+      }
+      print('Encryption key already in new accessibility; completing migration.');
+    }
+    try {
       await _legacyStorage.delete(key: 'encryptionKey');
       print('Migrated encryption key from legacy accessibility.');
     } catch (e) {
-      print('Encryption key migration write failed (non-fatal): $e');
+      print('Legacy encryption key delete failed (non-fatal): $e');
     }
     return legacy;
   }

@@ -91,6 +91,74 @@ void main() {
     });
   });
 
+  group('isKeychainLocked', () {
+    test('matches code == -25308', () {
+      expect(
+        DatabaseService.isKeychainLocked(
+            PlatformException(code: '-25308', message: 'whatever')),
+        isTrue,
+      );
+    });
+
+    test('matches -25308 hidden in message/details', () {
+      expect(
+        DatabaseService.isKeychainLocked(PlatformException(
+          code: 'Unexpected security result code',
+          message: 'Code: -25308',
+        )),
+        isTrue,
+      );
+      expect(
+        DatabaseService.isKeychainLocked(PlatformException(
+          code: 'Unexpected security result code',
+          message: 'OSStatus',
+          details: 'value: -25308',
+        )),
+        isTrue,
+      );
+    });
+
+    test('matches "interaction is not allowed" text', () {
+      expect(
+        DatabaseService.isKeychainLocked(PlatformException(
+          code: 'Unexpected security result code',
+          message: 'User interaction is not allowed.',
+        )),
+        isTrue,
+      );
+    });
+
+    test('does not match unrelated errors', () {
+      expect(
+        DatabaseService.isKeychainLocked(
+            PlatformException(code: '-25300', message: 'item not found')),
+        isFalse,
+      );
+      expect(DatabaseService.isKeychainLocked(Exception('boom')), isFalse);
+    });
+  });
+
+  group('migration completion', () {
+    test('-25299 on migration write still deletes the legacy item', () async {
+      when(() => primary.read(key: 'encryptionKey'))
+          .thenAnswer((_) async => null);
+      when(() => legacy.read(key: 'encryptionKey'))
+          .thenAnswer((_) async => 'legacy-key');
+      // "already exists" — key is already under the new accessibility.
+      when(() => primary.write(key: 'encryptionKey', value: 'legacy-key'))
+          .thenThrow(PlatformException(
+        code: 'Unexpected security result code',
+        message: 'The specified item already exists. -25299',
+      ));
+      when(() => legacy.delete(key: 'encryptionKey'))
+          .thenAnswer((_) async {});
+
+      expect(await service.hasEncryptionKey(), isTrue);
+      // Legacy item MUST be deleted so it stops throwing -25308 when locked.
+      verify(() => legacy.delete(key: 'encryptionKey')).called(1);
+    });
+  });
+
   group('getEncryptionKey', () {
     test('throws EncryptionKeyMissingException on clean absence', () async {
       when(() => primary.read(key: 'encryptionKey'))
@@ -104,13 +172,19 @@ void main() {
       );
     });
 
-    test('rethrows keychain errors so -25308 queueing still works', () async {
+    test('throws retryable KeychainTemporarilyUnavailableException when locked',
+        () async {
       when(() => primary.read(key: 'encryptionKey'))
           .thenThrow(lockedKeychain());
       when(() => legacy.read(key: 'encryptionKey'))
           .thenThrow(lockedKeychain());
 
-      expect(service.getEncryptionKey(), throwsA(isA<PlatformException>()));
+      // A locked keychain is retryable, NOT "key missing" — callers must be
+      // able to distinguish it so they don't wipe / drop data.
+      expect(
+        service.getEncryptionKey(),
+        throwsA(isA<KeychainTemporarilyUnavailableException>()),
+      );
     });
 
     test('caches the key after first successful read', () async {
