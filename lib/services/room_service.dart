@@ -209,9 +209,15 @@ class RoomService {
       _resharedAt[ident] = DateTime.now();
 
       try {
-        // prepareOutboundGroupSession -> clearOrUseOutboundGroupSession(use:false)
-        // reconciles devices and sends the session to any new ones (no event).
-        await client.encryption!.keyManager.prepareOutboundGroupSession(room.id);
+        // Wipe + recreate: prepareOutboundGroupSession alone uses
+        // clearOrUseOutboundGroupSession(use:false), which returns before the
+        // new-device send block, so it never re-shares to an added device.
+        // Wiping forces createOutboundGroupSession, which sends the fresh
+        // session to ALL current devices (incl. the new one). Grid tolerates
+        // rotation — no history to protect.
+        final km = client.encryption!.keyManager;
+        await km.clearOrUseOutboundGroupSession(room.id, wipe: true);
+        await km.prepareOutboundGroupSession(room.id);
         print('[KeyShare] Reshared session for ${room.id} to devices of $userId');
       } catch (e) {
         Logs().w('[KeyShare] reshare failed for ${room.id} -> $userId: $e');
