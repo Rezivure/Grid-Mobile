@@ -60,7 +60,12 @@ class _SharingRecipientPillState extends State<SharingRecipientPill>
   @override
   void initState() {
     super.initState();
-    _cue = AnimationController(vsync: this, duration: _cueDuration);
+    _cue = AnimationController(vsync: this, duration: _cueDuration)
+      // Reset to idle when the cue finishes so the border doesn't stay drawn;
+      // the next broadcast replays from zero.
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed) _cue.reset();
+      });
     _sweep = CurvedAnimation(
       parent: _cue,
       curve: const Interval(0.0, _sweepEnd, curve: Curves.easeInOut),
