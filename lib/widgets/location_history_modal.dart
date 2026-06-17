@@ -70,8 +70,13 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
   _PendingHistoryMove? _pendingMove;
   Map<String, String> _userDisplayNames = {}; // Cache for display names
   late RoomLocationHistoryRepository _roomHistoryRepo;
-  int _playbackSpeed = 1; // 1x / 2x / 4x — UI chrome to match design spec
+  int _playbackSpeed = 1; // 1x / 2x / 4x playback multiplier
   static const List<int> _speedOptions = [1, 2, 4];
+  Timer? _playbackTimer; // drives scrubber animation when playing
+  bool _isPlaying = false;
+  // One full 1x playback sweeps the whole range over this base duration.
+  static const Duration _playbackBaseDuration = Duration(seconds: 12);
+  static const Duration _playbackTick = Duration(milliseconds: 50);
 
   @override
   void initState() {
@@ -84,6 +89,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
 
   @override
   void dispose() {
+    _playbackTimer?.cancel();
     _mapController = null;
     super.dispose();
   }
@@ -642,23 +648,6 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     } catch (_) {}
   }
 
-  /// Compact mono-style total duration, e.g. "2H 14M" or "45M" or "4D".
-  String _formatMonoDuration(DateTime? start, DateTime? end) {
-    if (start == null || end == null) return '--';
-    final d = end.difference(start);
-    if (d.inMinutes < 60) return '${d.inMinutes}M';
-    if (d.inHours < 24) {
-      final h = d.inHours;
-      final m = d.inMinutes % 60;
-      if (m == 0) return '${h}H';
-      return '${h}H ${m}M';
-    }
-    final days = d.inDays;
-    final hours = d.inHours % 24;
-    if (hours == 0) return '${days}D';
-    return '${days}D ${hours}H';
-  }
-
   /// Format the subtitle next to the title — e.g. "Today · 2h 14m".
   String _formatHeaderSubtitle() {
     if (_earliestTime == null || _latestTime == null) return '';
@@ -690,43 +679,47 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     return '$dayLabel  ·  $durLabel';
   }
 
-  /// Approximate "stops" — clusters of consecutive points within a small
-  /// radius. Used only for the mono status pill ("2H 14M · 8 STOPS").
-  int _countStops() {
-    Iterable<LocationHistory> sources;
-    if (_locationHistory != null) {
-      sources = [_locationHistory!];
-    } else if (_groupHistories != null) {
-      sources = _groupHistories!.values;
-    } else {
-      return 0;
-    }
-    var total = 0;
-    for (final h in sources) {
-      if (h.points.length < 2) continue;
-      var stops = 0;
-      var inStop = false;
-      for (var i = 1; i < h.points.length; i++) {
-        final a = h.points[i - 1];
-        final b = h.points[i];
-        final dLat = (a.latitude - b.latitude).abs();
-        final dLng = (a.longitude - b.longitude).abs();
-        final isStill = dLat < 0.0003 && dLng < 0.0003;
-        if (isStill && !inStop) {
-          stops++;
-          inStop = true;
-        } else if (!isStill) {
-          inStop = false;
-        }
-      }
-      total += stops;
-    }
-    return total;
+  /// Whether the loaded history spans more than one calendar day.
+  bool get _spansMultipleDays {
+    if (_earliestTime == null || _latestTime == null) return false;
+    final a = _earliestTime!;
+    final b = _latestTime!;
+    return a.year != b.year || a.month != b.month || a.day != b.day;
   }
 
-  String _formatMonoClock(DateTime t) => DateFormat('h:mm').format(t);
-  String _formatMonoMeridiem(DateTime t) =>
-      DateFormat('a').format(t);
+  /// Short absolute day context for [t] — "Today", "Yesterday", a weekday,
+  /// or a calendar date. Used so multi-day history reads clearly.
+  String _dayContextLabel(DateTime t) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(t.year, t.month, t.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff > 1 && diff < 7) return DateFormat('EEE').format(t);
+    return DateFormat('MMM d').format(t);
+  }
+
+  /// Absolute date + time for the current handle, e.g. "Today 3:40 PM".
+  String _absoluteHandleLabel(DateTime t) =>
+      '${_dayContextLabel(t)} ${DateFormat('h:mm a').format(t)}';
+
+  /// Midnight day-boundary positions (0..1) across the loaded range, used to
+  /// draw day tick marks along the scrubber track.
+  List<double> _dayTickPositions() {
+    if (_earliestTime == null || _latestTime == null) return const [];
+    final total = _latestTime!.difference(_earliestTime!).inMilliseconds;
+    if (total <= 0) return const [];
+    final ticks = <double>[];
+    var cursor = DateTime(
+        _earliestTime!.year, _earliestTime!.month, _earliestTime!.day + 1);
+    while (cursor.isBefore(_latestTime!)) {
+      final frac = cursor.difference(_earliestTime!).inMilliseconds / total;
+      if (frac > 0.02 && frac < 0.98) ticks.add(frac);
+      cursor = DateTime(cursor.year, cursor.month, cursor.day + 1);
+    }
+    return ticks;
+  }
 
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
@@ -832,6 +825,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                       label: 'All',
                       labelColor: active ? context.gridColors.mint : context.gridColors.text2,
                       onTap: () {
+                        _pausePlayback();
                         setState(() {
                           _showAllMembers = true;
                           _selectedMemberId = null;
@@ -857,6 +851,7 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                     labelColor: active ? context.gridColors.text : context.gridColors.text2,
                     onTap: hasHistory
                         ? () {
+                            _pausePlayback();
                             setState(() {
                               _showAllMembers = false;
                               _selectedMemberId = memberId;
@@ -1080,35 +1075,45 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                   padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
                   child: Column(
                     children: [
-                      // Status row: mono pill (duration + stops) · speed pills
+                      // Status row: play/pause + absolute handle time · speed pills
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: context.gridColors.surface2,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: context.gridColors.hairline),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.access_time_rounded,
-                                  size: 12,
-                                  color: context.gridColors.mint,
-                                ),
-                                const SizedBox(width: 6),
-                                GridMono(
-                                  '${_formatMonoDuration(_earliestTime, _latestTime)} · ${_countStops()} STOPS',
-                                  color: context.gridColors.text2,
-                                  size: 10.5,
-                                  letterSpacing: 0.08,
-                                ),
-                              ],
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
+                              decoration: BoxDecoration(
+                                color: context.gridColors.surface2,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: context.gridColors.hairline),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _PlayButton(
+                                    playing: _isPlaying,
+                                    onTap: _togglePlayback,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: GridMono(
+                                      _currentTime != null
+                                          ? _absoluteHandleLabel(_currentTime!)
+                                          : '--',
+                                      color: context.gridColors.mint,
+                                      size: 11,
+                                      letterSpacing: 0.06,
+                                      uppercase: false,
+                                      weight: FontWeight.w600,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 10),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1126,65 +1131,75 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      // Slider — mint track + white thumb with mint-soft halo
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          activeTrackColor: context.gridColors.mint,
-                          inactiveTrackColor: context.gridColors.surface3,
-                          thumbColor: Colors.white,
-                          overlayColor: context.gridColors.mintSoft,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 8,
-                            elevation: 0,
+                      // Slider — mint track + white thumb, day ticks for multi-day
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (_spansMultipleDays)
+                            Positioned.fill(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: CustomPaint(
+                                  painter: _DayTickPainter(
+                                    positions: _dayTickPositions(),
+                                    color: context.gridColors.text3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              activeTrackColor: context.gridColors.mint,
+                              inactiveTrackColor: context.gridColors.surface3,
+                              thumbColor: Colors.white,
+                              overlayColor: context.gridColors.mintSoft,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 8,
+                                elevation: 0,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 16,
+                              ),
+                            ),
+                            child: Slider(
+                              value: _sliderValue,
+                              onChanged: (value) {
+                                if (_isPlaying) _pausePlayback();
+                                setState(() {
+                                  _sliderValue = value;
+                                  _updateTimeFromSlider();
+                                });
+                              },
+                            ),
                           ),
-                          overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: 16,
-                          ),
-                        ),
-                        child: Slider(
-                          value: _sliderValue,
-                          onChanged: (value) {
-                            setState(() {
-                              _sliderValue = value;
-                              _updateTimeFromSlider();
-                            });
-                          },
-                        ),
+                        ],
                       ),
                       const SizedBox(height: 4),
-                      // Mono start · current (mint, 600) · end
+                      // Absolute endpoints: day context + clock at each end
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ScrubberTimeLabel(
-                            top: _earliestTime != null
-                                ? _formatMonoClock(_earliestTime!)
-                                : '--:--',
-                            bottom: _earliestTime != null
-                                ? _formatMonoMeridiem(_earliestTime!)
+                          _ScrubberEndLabel(
+                            day: _earliestTime != null
+                                ? _dayContextLabel(_earliestTime!)
                                 : '',
+                            time: _earliestTime != null
+                                ? DateFormat('h:mm a').format(_earliestTime!)
+                                : '--:--',
                             color: context.gridColors.text3,
+                            align: CrossAxisAlignment.start,
                           ),
-                          _ScrubberTimeLabel(
-                            top: _currentTime != null
-                                ? _formatMonoClock(_currentTime!)
-                                : '--:--',
-                            bottom: _currentTime != null
-                                ? _formatMonoMeridiem(_currentTime!)
+                          _ScrubberEndLabel(
+                            day: _latestTime != null
+                                ? _dayContextLabel(_latestTime!)
                                 : '',
-                            color: context.gridColors.mint,
-                            bold: true,
-                          ),
-                          _ScrubberTimeLabel(
-                            top: _latestTime != null
-                                ? _formatMonoClock(_latestTime!)
+                            time: _latestTime != null
+                                ? DateFormat('h:mm a').format(_latestTime!)
                                 : '--:--',
-                            bottom: _latestTime != null
-                                ? _formatMonoMeridiem(_latestTime!)
-                                : '',
                             color: context.gridColors.text3,
+                            align: CrossAxisAlignment.end,
                           ),
                         ],
                       ),
@@ -1248,6 +1263,53 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     } catch (e) {
       print('Error updating time from slider: $e');
     }
+  }
+
+  void _togglePlayback() {
+    if (_isPlaying) {
+      _pausePlayback();
+    } else {
+      _startPlayback();
+    }
+  }
+
+  void _startPlayback() {
+    if (_earliestTime == null || _latestTime == null) return;
+    if (_latestTime!.difference(_earliestTime!).inMilliseconds <= 0) return;
+    // Restart from the beginning if parked at the end.
+    if (_sliderValue >= 0.999) {
+      _sliderValue = 0.0;
+      _updateTimeFromSlider();
+    }
+    _playbackTimer?.cancel();
+    setState(() => _isPlaying = true);
+    _playbackTimer = Timer.periodic(_playbackTick, (_) => _advancePlayback());
+  }
+
+  void _pausePlayback() {
+    _playbackTimer?.cancel();
+    _playbackTimer = null;
+    if (mounted) setState(() => _isPlaying = false);
+  }
+
+  void _advancePlayback() {
+    if (!mounted) return;
+    final step = (_playbackTick.inMilliseconds * _playbackSpeed) /
+        _playbackBaseDuration.inMilliseconds;
+    var next = _sliderValue + step;
+    if (next >= 1.0) {
+      next = 1.0;
+      setState(() {
+        _sliderValue = next;
+        _updateTimeFromSlider();
+      });
+      _pausePlayback();
+      return;
+    }
+    setState(() {
+      _sliderValue = next;
+      _updateTimeFromSlider();
+    });
   }
 
   Color _getUserColor(String userId) {
@@ -1501,45 +1563,102 @@ class _SpeedPill extends StatelessWidget {
   }
 }
 
-/// Two-line mono time label (e.g. "6:42" over "AM") below the scrubber.
-class _ScrubberTimeLabel extends StatelessWidget {
-  const _ScrubberTimeLabel({
-    required this.top,
-    required this.bottom,
+/// Circular play/pause toggle for scrubber playback.
+class _PlayButton extends StatelessWidget {
+  const _PlayButton({required this.playing, required this.onTap});
+
+  final bool playing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: context.gridColors.mint,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            size: 17,
+            color: context.gridColors.surface,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Two-line mono endpoint label: day context (e.g. "Mon") over a clock time.
+class _ScrubberEndLabel extends StatelessWidget {
+  const _ScrubberEndLabel({
+    required this.day,
+    required this.time,
     required this.color,
-    this.bold = false,
+    required this.align,
   });
 
-  final String top;
-  final String bottom;
+  final String day;
+  final String time;
   final Color color;
-  final bool bold;
+  final CrossAxisAlignment align;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: align,
       children: [
         GridMono(
-          top,
+          day,
           color: color,
-          size: 13,
-          letterSpacing: 0.02,
-          uppercase: false,
-          weight: bold ? FontWeight.w600 : FontWeight.w500,
+          size: 9.5,
+          letterSpacing: 0.08,
         ),
         const SizedBox(height: 2),
         GridMono(
-          bottom,
-          color: color.withOpacity(0.8),
-          size: 9,
-          letterSpacing: 0.08,
+          time,
+          color: color,
+          size: 11,
+          letterSpacing: 0.02,
+          uppercase: false,
         ),
       ],
     );
   }
 }
+
+/// Paints faint vertical day-boundary ticks along the scrubber track.
+class _DayTickPainter extends CustomPainter {
+  _DayTickPainter({required this.positions, required this.color});
+
+  final List<double> positions;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withOpacity(0.5)
+      ..strokeWidth = 1.0;
+    final cy = size.height / 2;
+    for (final p in positions) {
+      final x = p * size.width;
+      canvas.drawLine(Offset(x, cy - 5), Offset(x, cy + 5), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DayTickPainter old) =>
+      old.positions != positions || old.color != color;
+}
+
 class _PendingHistoryMove {
   _PendingHistoryMove(this.target, this.zoom);
   final LatLng target;
