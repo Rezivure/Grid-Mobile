@@ -715,11 +715,11 @@ class RoomService {
     }
   }
 
-  void sendLocationEvent(String roomId, LocationUpdate location) async {
+  Future<bool> sendLocationEvent(String roomId, LocationUpdate location) async {
     final room = client.getRoomById(roomId);
     if (room == null || room.membership != Membership.join) {
       print("Skipping location update for room $roomId - no longer a member");
-      return;
+      return false;
     }
     if (room != null) {
       final latitude = location.latitude;
@@ -729,7 +729,7 @@ class RoomService {
       // Filter out low-accuracy locations to save battery and improve quality
       if (accuracy > 100) {
         print("⚠️  Skipping low-accuracy location for $roomId: ${accuracy.toStringAsFixed(1)}m error (threshold: 100m)");
-        return;
+        return false;
       }
 
       // Distance-based duplicate prevention
@@ -744,7 +744,7 @@ class RoomService {
 
         if (distance < 10) {
           print("⚠️  Skipping - only moved ${distance.toStringAsFixed(1)}m (threshold: 10m)");
-          return;
+          return false;
         }
         print("📍 Moved ${distance.toStringAsFixed(1)}m since last update");
       }
@@ -756,7 +756,7 @@ class RoomService {
         // Check if the message is already sent (legacy check)
         if (_recentlySentMessages[roomId]?.contains(messageHash) == true) {
           print("Duplicate location event skipped for room $roomId");
-          return;
+          return false;
         }
 
         // Build the event content. `gridv: 2` flags the additive payload:
@@ -814,6 +814,7 @@ class RoomService {
             // Also save to legacy global history (can be deprecated later)
             await locationHistoryRepository.addLocationPoint(myUserId, latitude, longitude);
           }
+          return true;
         } catch (e) {
           print("✗ Failed to send location event: $e");
 
@@ -836,8 +837,10 @@ class RoomService {
               'timestamp': DateTime.now(),
             });
           }
+          return false;
         }
     }
+    return false;
   }
 
   Future<int> getRoomMemberCount(String roomId) async {
@@ -960,13 +963,18 @@ class RoomService {
       print("📤 Sending location to ${roomsToUpdate.length} rooms in parallel...");
       final startTime = DateTime.now();
 
-      await Future.wait(
-        roomsToUpdate.map((roomId) => Future(() => sendLocationEvent(roomId, location))),
+      final results = await Future.wait(
+        roomsToUpdate.map((roomId) => sendLocationEvent(roomId, location)),
         eagerError: false, // Continue even if some sends fail
       );
 
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
       print("✓ Batch update complete in ${elapsed}ms");
+
+      // Pulse the sharing pill when at least one room actually received it.
+      if (results.any((sent) => sent)) {
+        locationDispatch?.notifyBroadcast();
+      }
     } else {
       print("No rooms to update");
     }
@@ -1018,7 +1026,7 @@ class RoomService {
           .toList();
 
       if (joinedMembers.length >= 2) {  // Valid room with at least 2 members
-        sendLocationEvent(roomId, currentLocation!);
+        await sendLocationEvent(roomId, currentLocation!);
       }
     }
   }
