@@ -25,12 +25,22 @@ class UserLocationProvider with ChangeNotifier {
 
 
   Future<void> _initializeLocations() async {
-    final locations = await locationRepository.getAllLatestLocations(); // Use getAllLatestLocations instead
-    for (var location in locations) {
-      _userLocations[location.userId] = location;
+    // A locked keychain on a cold background launch makes the DB unreadable;
+    // degrade to empty/cached instead of throwing, and recover on resume.
+    try {
+      final locations = await locationRepository.getAllLatestLocations();
+      for (var location in locations) {
+        _userLocations[location.userId] = location;
+      }
+      notifyListeners();
+    } catch (e) {
+      print("UserLocationProvider: failed to load locations (will retry on resume): $e");
     }
-    notifyListeners();
   }
+
+  /// Re-read locations from the DB. Safe to call on resume / once the keychain
+  /// is readable again. Keeps existing cache on failure.
+  Future<void> reloadLocations() => _initializeLocations();
 
   // Modify getLastSeen to return the most recent timestamp
   String? getLastSeen(String userId) {

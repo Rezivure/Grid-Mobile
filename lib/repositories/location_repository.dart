@@ -9,6 +9,8 @@ class LocationRepository {
 
   LocationRepository(this._databaseService);
 
+  DatabaseService get databaseService => _databaseService;
+
   static Future<void> createTable(Database db) async {
     await db.execute('''
     CREATE TABLE UserLocations (
