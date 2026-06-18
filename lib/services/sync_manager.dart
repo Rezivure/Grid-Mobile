@@ -414,6 +414,18 @@ class SyncManager with ChangeNotifier {
     }
     
     syncUpdate.rooms?.leave?.forEach(_processRoomLeaveOrKick);
+
+    // A changed device list (e.g. a contact reinstalled) means our existing
+    // outbound megolm sessions don't yet cover their new device. Proactively
+    // reshare so their fresh install can decrypt without us sending an event.
+    final changed = syncUpdate.deviceLists?.changed;
+    if (changed != null && changed.isNotEmpty) {
+      for (final userId in changed) {
+        if (userId == client.userID) continue;
+        print('[KeyShare] Device list changed for $userId — resharing sessions');
+        unawaited(roomService.reshareSessionsForUser(userId));
+      }
+    }
   }
   
   Future<void> startSync() async {

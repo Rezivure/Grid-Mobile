@@ -148,6 +148,9 @@ class RoomService {
         if (enc == null) continue;
         final msgs = enc['rotation_period_msgs'];
         if (msgs is int && msgs >= 1000000000) continue;
+        // Without loaded power_levels the canChange guard defaults to 0 and
+        // passes, then the server returns M_FORBIDDEN. Skip until it's known.
+        if (room.getState(EventTypes.RoomPowerLevels) == null) continue;
         if (!room.canChangeStateEvent(EventTypes.Encryption)) continue;
         await client.setRoomStateWithKey(room.id, EventTypes.Encryption, '', {
           'algorithm': enc['algorithm'] ?? 'm.megolm.v1.aes-sha2',
@@ -155,11 +158,71 @@ class RoomService {
           'rotation_period_msgs': 1000000000,
         });
         print('[RoomService] Relaxed megolm rotation for ${room.id}');
+      } on MatrixException catch (e) {
+        if (e.errcode == 'M_FORBIDDEN') {
+          Logs().w('[RoomService] Rotation relax skipped (forbidden) for ${room.id}');
+        } else {
+          print('[RoomService] Rotation relax failed for ${room.id}: $e');
+        }
       } catch (e) {
         print('[RoomService] Rotation relax failed for ${room.id}: $e');
       }
     }
     await prefs.setBool(flag, true);
+  }
+
+  // Throttle re-share per (room|user) so a burst of device-list changes
+  // doesn't spam to-device sends.
+  final Map<String, DateTime> _resharedAt = {};
+  static const Duration _reshareCooldown = Duration(seconds: 30);
+
+  /// Proactively (re)share each Grid room's current outbound megolm session to
+  /// [userId]'s current devices, without sending a user-visible event. Needed
+  /// because the SDK only reconciles room devices when it SENDS an event, so a
+  /// peer's new device (reinstall) otherwise never receives the live session.
+  Future<void> reshareSessionsForUser(String userId) async {
+    final keyManager = client.encryption?.keyManager;
+    if (keyManager == null) return;
+    if (userId == client.userID) return;
+
+    // Pull the peer's fresh device list into the cache first; getUserDeviceKeys
+    // (used by the reconciliation below) only reads the in-memory cache.
+    try {
+      await client.updateUserDeviceKeys(additionalUsers: {userId});
+    } catch (e) {
+      Logs().w('[KeyShare] device key refresh failed for $userId: $e');
+    }
+
+    for (final room in client.rooms) {
+      if (room.membership != Membership.join) continue;
+      if (!room.name.startsWith('Grid:')) continue;
+      final isMember = room
+          .getParticipants()
+          .any((m) => m.id == userId && m.membership == Membership.join);
+      if (!isMember) continue;
+
+      final ident = '${room.id}|$userId';
+      final last = _resharedAt[ident];
+      if (last != null && DateTime.now().difference(last) < _reshareCooldown) {
+        continue;
+      }
+      _resharedAt[ident] = DateTime.now();
+
+      try {
+        // Wipe + recreate: prepareOutboundGroupSession alone uses
+        // clearOrUseOutboundGroupSession(use:false), which returns before the
+        // new-device send block, so it never re-shares to an added device.
+        // Wiping forces createOutboundGroupSession, which sends the fresh
+        // session to ALL current devices (incl. the new one). Grid tolerates
+        // rotation — no history to protect.
+        final km = client.encryption!.keyManager;
+        await km.clearOrUseOutboundGroupSession(room.id, wipe: true);
+        await km.prepareOutboundGroupSession(room.id);
+        print('[KeyShare] Reshared session for ${room.id} to devices of $userId');
+      } catch (e) {
+        Logs().w('[KeyShare] reshare failed for ${room.id} -> $userId: $e');
+      }
+    }
   }
 
  /// create direct grid room (contact)

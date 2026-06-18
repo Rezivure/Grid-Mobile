@@ -54,6 +54,10 @@ class MessageProcessor {
   final Map<String, DateTime> _keyRequestedAt = {};
   static const Duration _keyRequestCooldown = Duration(minutes: 5);
 
+  // Per-sender cooldown for device-key refreshes on decrypt failure.
+  final Map<String, DateTime> _keysRefreshedAt = {};
+  static const Duration _keyRefreshCooldown = Duration(minutes: 5);
+
   MessageProcessor(
       this.locationRepository,
       this.locationHistoryRepository,
@@ -98,6 +102,22 @@ class MessageProcessor {
     });
   }
 
+  /// Refresh a sender's device keys so a stale device list (e.g. after their
+  /// reinstall) doesn't make our key request/reshare miss their new device.
+  void _refreshSenderDeviceKeys(String? senderId) {
+    if (senderId == null || senderId == client.userID) return;
+    final last = _keysRefreshedAt[senderId];
+    if (last != null &&
+        DateTime.now().difference(last) < _keyRefreshCooldown) {
+      return;
+    }
+    _keysRefreshedAt[senderId] = DateTime.now();
+    print('[KeyShare] Refreshing device keys for sender $senderId after decrypt failure');
+    client.updateUserDeviceKeys(additionalUsers: {senderId}).catchError((e) {
+      print('[KeyShare] Device key refresh failed for $senderId: $e');
+    });
+  }
+
   /// Process a single event from a room. Decrypt if necessary,
   /// then parse and store location messages if found.
   /// Returns a Map<String, dynamic> representing the message if it's a `m.room.message`,
@@ -121,8 +141,17 @@ class MessageProcessor {
     // Check for decryption failure
     if (decryptedEvent.type == 'm.room.encrypted' &&
         decryptedEvent.content['msgtype'] == 'm.bad.encrypted') {
+      // Noise gate: old events from prior installs flood catch-up sync and can
+      // never recover (Grid keeps no history). Only act on recent failures.
+      final age = DateTime.now().difference(finalEvent.originServerTs);
+      if (age > const Duration(minutes: 10)) {
+        return null;
+      }
       print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}');
       _onDecryptionError?.call(finalEvent.senderId ?? 'unknown', roomId);
+      // Refresh the sender's device keys so the key request + any reshare
+      // target their current device set, then request the session.
+      _refreshSenderDeviceKeys(finalEvent.senderId);
       _maybeRequestSessionKey(room, decryptedEvent);
     }
 
