@@ -286,12 +286,18 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final sharingState = context.read<SharingStateNotifier>();
+    final homeGeofence = context.read<HomeGeofenceService>();
 
     setState(() {
       _incognitoMode = value;
     });
 
     await sharingState.setUserIncognito(value);
+
+    // Re-sync the home geofence: removed while sharing is off (region
+    // monitoring otherwise keeps the OS location indicator on), restored
+    // when sharing resumes.
+    await homeGeofence.syncFromPrefs();
 
     if (value) {
       locationManager.stopTracking();

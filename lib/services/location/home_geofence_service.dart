@@ -61,6 +61,13 @@ class HomeGeofenceService {
   /// the same id and we explicitly remove first to refresh radius
   /// changes cleanly.
   Future<void> syncFromPrefs() async {
+    // When sharing is fully off, monitor nothing — a live geofence keeps the
+    // OS location indicator lit even with tracking stopped.
+    if (_sharingState.userIncognito) {
+      await _unregister();
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final enabled = prefs.getBool('auto_pause_at_home_enabled') ?? false;
     final raw = prefs.getString('home_location');
