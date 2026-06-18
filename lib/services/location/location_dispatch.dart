@@ -71,6 +71,25 @@ class LocationDispatch {
 
   bool _started = false;
 
+  // Fires once per successful post to rooms. UI (the sharing pill) listens
+  // to animate a "just broadcast" cue. Never emits while sharing is paused.
+  final _broadcastController = StreamController<void>.broadcast();
+
+  /// Broadcast tick — one event per successful location post to rooms.
+  Stream<void> get onBroadcast => _broadcastController.stream;
+
+  /// Mirrors [SharingStateNotifier.isPaused] for callers that only hold a
+  /// dispatch reference (e.g. the sharing pill cue).
+  bool get isPaused => _sharingState.isPaused;
+
+  /// Called by [RoomService] after a successful post. Suppressed while
+  /// paused/incognito so the cue never fires when we aren't really sharing.
+  void notifyBroadcast() {
+    if (_sharingState.isPaused) return;
+    if (_broadcastController.isClosed) return;
+    _broadcastController.add(null);
+  }
+
   Future<void> start() async {
     if (_started) return;
     _started = true;
@@ -95,6 +114,10 @@ class LocationDispatch {
     await _activitySub?.cancel();
     _activitySub = null;
     _started = false;
+  }
+
+  void dispose() {
+    _broadcastController.close();
   }
 
   SharingMode get mode => _mode;
