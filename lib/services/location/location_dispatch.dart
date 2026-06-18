@@ -283,11 +283,28 @@ class LocationDispatch {
                 heartbeat: Duration(minutes: 10),
               );
       case LocationActivity.still:
-        return const _Thresholds(
-          distanceM: 999999, // effectively never on distance alone
-          interval: Duration(minutes: 30),
-          heartbeat: Duration(minutes: 15),
-        );
+        // Stationary heartbeat is mode-aware: Live keeps contacts fresh even
+        // when not moving (the point of live sharing); Light sips battery.
+        switch (mode) {
+          case SharingMode.live:
+            return const _Thresholds(
+              distanceM: 999999,
+              interval: Duration(minutes: 5),
+              heartbeat: Duration(seconds: 45),
+            );
+          case SharingMode.balanced:
+            return const _Thresholds(
+              distanceM: 999999,
+              interval: Duration(minutes: 10),
+              heartbeat: Duration(minutes: 5),
+            );
+          case SharingMode.light:
+            return const _Thresholds(
+              distanceM: 999999, // effectively never on distance alone
+              interval: Duration(minutes: 30),
+              heartbeat: Duration(minutes: 15),
+            );
+        }
       case LocationActivity.unknown:
         // Before the activity classifier has weighed in. Be conservative —
         // every 60s or 100m. This is the bootup state.
