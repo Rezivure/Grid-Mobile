@@ -1679,8 +1679,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   Listener(
                     behavior: HitTestBehavior.translucent,
                     onPointerDown: (_) {
-                      if (_followedContactId != null) {
-                        setState(() => _unlockContactFollow());
+                      // Touching the map disengages auto-follow so the camera
+                      // doesn't snap back mid-pan; locate button re-enables it.
+                      if (_followUser || _followedContactId != null) {
+                        setState(() {
+                          _followUser = false;
+                          _unlockContactFollow();
+                        });
                       }
                     },
                     child: ml.MapLibreMap(
