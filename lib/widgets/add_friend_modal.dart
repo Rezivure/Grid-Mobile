@@ -534,6 +534,16 @@ class _AddFriendModalState extends State<AddFriendModal>
         final syncManager = Provider.of<SyncManager>(context, listen: false);
         await syncManager.handleNewGroupCreation(roomId);
 
+        // Seed each invited member immediately so the new group lists them as
+        // pending right away, instead of showing 0 members until sync arrives.
+        // handleNewMemberInvited needs full Matrix IDs.
+        for (final member in normalizedMembers) {
+          await widget.groupsBloc.handleNewMemberInvited(
+            roomId,
+            widget.roomService.normalizeToMatrixId(member),
+          );
+        }
+
         widget.onGroupCreated?.call();
         widget.groupsBloc.add(RefreshGroups());
 

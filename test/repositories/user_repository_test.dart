@@ -203,7 +203,8 @@ void main() {
       // Act
       await repository.insertUserRelationship('user1', 'room1', true);
 
-      // Assert
+      // Assert: direct invites now persist 'invite' (was null) so an outgoing
+      // invite survives reload and shows as "Invite pending".
       verify(() => mockDatabase.query(
         'UserRelationships',
         where: 'userId = ? AND roomId = ?',
@@ -215,7 +216,7 @@ void main() {
           'userId': 'user1',
           'roomId': 'room1',
           'isDirect': 1,
-          'membershipStatus': null,
+          'membershipStatus': 'invite',
         },
       )).called(1);
     });
@@ -279,7 +280,7 @@ void main() {
           'userId': 'user1',
           'roomId': 'directRoom',
           'isDirect': 1,
-          'membershipStatus': null,
+          'membershipStatus': 'invite',
         },
       )).called(1);
     });

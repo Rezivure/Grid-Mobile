@@ -221,7 +221,7 @@ Widget _buildInvitesList({
       if (parts.length > 3) {
         expiration = int.tryParse(parts[2]) ?? -1;
       }
-      if (expiration != -1 && expiration <= nowEpoch) {
+      if (isInviteExpired(expiration, nowEpoch)) {
         expiredGroupInvites.add(invite);
       } else {
         groupInvites.add(invite);
@@ -555,9 +555,7 @@ class _InvitesModalState extends State<InvitesModal> {
         if (parts.length > 3) {
           expiration = int.tryParse(parts[2]) ?? -1;
         }
-        // expiration of -1 means "permanent"; anything else that's already
-        // <= now is dead and belongs in the EXPIRED bucket.
-        if (expiration != -1 && expiration <= nowEpoch) {
+        if (isInviteExpired(expiration, nowEpoch)) {
           expiredGroupInvites.add(invite);
         } else {
           groupInvites.add(invite);
@@ -866,7 +864,7 @@ class _GroupInviteCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               GridMono(
-                expiration == -1 ? 'permanent invite' : 'auto-ends in $expiry',
+                expiration <= 0 ? 'permanent invite' : 'auto-ends in $expiry',
                 uppercase: false,
                 size: 11,
                 letterSpacing: 0.04,
@@ -902,7 +900,8 @@ class _GroupInviteCard extends StatelessWidget {
   }
 
   static String _formatExpiry(int expiration) {
-    if (expiration == -1) return 'permanent';
+    if (expiration <= 0) return 'permanent'; // 0 = never (groups), -1 = legacy
+
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final diff = expiration - now;
     if (diff <= 0) return 'expired';

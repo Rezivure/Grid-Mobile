@@ -99,6 +99,13 @@ int extractExpirationTimestamp(String roomName) {
   return 0;
 }
 
+/// Whether a group invite/room with [expiration] (epoch seconds) is expired.
+/// `<= 0` means "never expires" (groups encode 0; legacy used -1) and is
+/// NEVER expired. Otherwise expired once [expiration] is at/before now.
+bool isInviteExpired(int expiration, int nowEpochSeconds) {
+  return expiration > 0 && expiration <= nowEpochSeconds;
+}
+
 String formatUserId(String userId) {
   // Default homeserver fallback in case dotenv fails
   const FALLBACK_DEFAULT_HOMESERVER = 'matrix.mygrid.app';

@@ -1133,11 +1133,23 @@ class SyncManager with ChangeNotifier {
       final membershipStatus = event.content['membership'] as String? ?? 'invite';
 
       if (event.stateKey != null) {
-        await userRepository.updateMembershipStatus(
+        // Upsert the relationship — updateMembershipStatus is UPDATE-only, so a
+        // freshly-invited member (no row yet) was silently dropped, leaving the
+        // group showing 0 members. insertUserRelationship creates or updates.
+        await userRepository.insertUserRelationship(
             event.stateKey!,
             roomId,
-            membershipStatus
+            false, // group
+            membershipStatus: membershipStatus,
         );
+
+        // Ensure the invited member is in the room's member list so the group
+        // view lists them as pending immediately (not just on next full sync).
+        if (!room.members.contains(event.stateKey!)) {
+          await roomRepository.updateRoom(
+            room.copyWith(members: [...room.members, event.stateKey!]),
+          );
+        }
 
         groupsBloc.add(UpdateGroup(roomId));
 
@@ -1181,8 +1193,9 @@ class SyncManager with ChangeNotifier {
             event.stateKey!,
             roomId,
             true, // isDirect
+            membershipStatus: 'invite',
           );
-          
+
           print("SyncManager: Direct contact invite processed, refreshing contacts");
           contactsBloc.add(RefreshContacts());
           
@@ -1303,11 +1316,13 @@ class SyncManager with ChangeNotifier {
           );
           await userRepository.insertUser(gridUser);
 
-          // Update relationship
+          // Update relationship — this is the join handler, so mark joined
+          // (repo now defaults to 'invite', which would be wrong here).
           await userRepository.insertUserRelationship(
             event.stateKey!,
             roomId,
             !room.isGroup, // isDirect
+            membershipStatus: 'join',
           );
 
           // Update UI based on room type
@@ -1541,16 +1556,16 @@ class SyncManager with ChangeNotifier {
 
         await userRepository.insertUser(gridUser);
 
-        String? membershipStatus;
-        if (!isDirect) {
-          membershipStatus = await roomService.getUserRoomMembership(room.id, participantId) ?? 'invite';
-        }
+        // Compute real membership for direct rooms too — the repo now defaults
+        // to 'invite', so a joined contact must be written as 'join' here.
+        final membershipStatus =
+            await roomService.getUserRoomMembership(room.id, participantId) ?? 'invite';
 
         await userRepository.insertUserRelationship(
             participantId,
             room.id,
             isDirect,
-            membershipStatus: !isDirect ? membershipStatus : null
+            membershipStatus: membershipStatus,
         );
 
         // Also insert into RoomParticipants table for proper tracking

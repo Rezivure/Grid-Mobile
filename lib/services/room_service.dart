@@ -767,6 +767,15 @@ class RoomService {
     return utils.isCustomHomeserver(homeserver);
   }
 
+  /// Normalize a username to a full Matrix ID, matching createGroup's logic.
+  /// Custom homeserver: caller passes "user:domain"; default: bare local part.
+  String normalizeToMatrixId(String user) {
+    if (user.startsWith('@')) return user;
+    if (isCustomHomeserver()) return '@$user';
+    final homeserver = getMyHomeserver().replaceFirst('https://', '');
+    return '@$user:$homeserver';
+  }
+
   void getAndUpdateDisplayName() async {
 
     final prefs = await SharedPreferences.getInstance();
