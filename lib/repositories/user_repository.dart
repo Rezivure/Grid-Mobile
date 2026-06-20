@@ -59,6 +59,10 @@ class UserRepository {
       whereArgs: [userId, roomId],
     );
 
+    // Persist membershipStatus for direct rooms too (default 'invite') so a
+    // just-sent outgoing invite survives reload and shows as "Invite pending".
+    final status = membershipStatus ?? 'invite';
+
     if (existing.isEmpty) {
       // Insert new relationship
       await db.insert(
@@ -67,7 +71,7 @@ class UserRepository {
           'userId': userId,
           'roomId': roomId,
           'isDirect': isDirect ? 1 : 0,
-          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invite'),
+          'membershipStatus': status,
         },
       );
     } else {
@@ -76,7 +80,7 @@ class UserRepository {
         'UserRelationships',
         {
           'isDirect': isDirect ? 1 : 0,
-          'membershipStatus': isDirect ? null : (membershipStatus ?? 'invite'),
+          'membershipStatus': status,
         },
         where: 'userId = ? AND roomId = ?',
         whereArgs: [userId, roomId],

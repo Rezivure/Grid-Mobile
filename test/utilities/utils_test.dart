@@ -277,4 +277,23 @@ void main() {
       expect(color3, isA<Color>());
     });
   });
+
+  group('isInviteExpired', () {
+    const now = 1000000;
+    test('0 (group never-expires) is never expired', () {
+      expect(isInviteExpired(0, now), isFalse);
+    });
+    test('-1 (legacy permanent) is never expired', () {
+      expect(isInviteExpired(-1, now), isFalse);
+    });
+    test('past timestamp is expired', () {
+      expect(isInviteExpired(now - 1, now), isTrue);
+    });
+    test('future timestamp is not expired', () {
+      expect(isInviteExpired(now + 1, now), isFalse);
+    });
+    test('exactly now is expired', () {
+      expect(isInviteExpired(now, now), isTrue);
+    });
+  });
 }
