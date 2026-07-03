@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
 import 'package:matrix/matrix.dart';
+import 'package:grid_frontend/services/debug_log_service.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
@@ -47,6 +50,13 @@ void onHeadlessLocation(Map<String, dynamic> data) async {
   }
 
   if (latitude != null && longitude != null) {
+    DebugLogService.instance.log('bg_headless_fire', {
+      'lat': latitude,
+      'lng': longitude,
+      'accuracy': accuracy,
+      'isMoving': isMoving,
+      'source': 'headless_isolate',
+    });
     await processBackgroundLocation(
       latitude,
       longitude,
@@ -79,6 +89,8 @@ Future<void> processBackgroundLocation(
     if (_cachedClient == null) {
       print('[HeadlessTask] 🔄 Initializing Matrix client (first run)');
 
+      await vod.init();
+
       _cachedDatabaseService = DatabaseService();
       await _cachedDatabaseService!.initDatabase();
 
@@ -86,11 +98,26 @@ Future<void> processBackgroundLocation(
       _cachedClient = Client(
         'Grid App',
         database: _cachedDatabase!,
+        nativeImplementations: NativeImplementationsIsolate(
+          compute,
+          vodozemacInit: () => vod.init(),
+        ),
+        shareKeysWith: ShareKeysWith.all,
       );
       await _cachedClient!.init();
       _cachedClient!.backgroundSync = false;
 
-      print('[HeadlessTask] ✓ Matrix client initialized and cached');
+      if (!_cachedClient!.encryptionEnabled) {
+        DebugLogService.instance.log('error', {
+          'message': 'Headless client init failed',
+        });
+        _cachedClient = null;
+        _cachedDatabase = null;
+        _cachedDatabaseService = null;
+        return;
+      }
+
+      print('[HeadlessTask] ✓ Matrix client initialized and cached (encryption on)');
     } else {
       print('[HeadlessTask] ⚡ Reusing cached Matrix client (fast path)');
     }
@@ -257,6 +284,19 @@ Future<void> _sendLocationUpdate(
     };
   }
 
+  if (room.encrypted && room.client.encryptionEnabled != true) {
+    DebugLogService.instance.log('error', {
+      'message': 'Skipped send to ${room.id}',
+    });
+    return;
+  }
+
   await room.sendEvent(eventContent);
+  DebugLogService.instance.log('bg_location_sent', {
+    'roomId': room.id,
+    'encrypted': room.encrypted,
+    'accuracy': accuracy,
+    'source': 'headless_isolate',
+  });
   print("Grid: Location event sent to room ${room.id} / ${room.name} (accuracy: ${accuracy.toStringAsFixed(1)}m)");
 }
