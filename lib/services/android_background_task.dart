@@ -1,4 +1,7 @@
+import 'dart:ui' show DartPluginRegistrant;
 import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
@@ -17,14 +20,63 @@ Client? _cachedClient;
 DatabaseService? _cachedDatabaseService;
 DatabaseApi? _cachedDatabase;
 
+// Channel the native HeadlessCallbackDispatcher (libre_location) uses to talk
+// to this isolate. Name MUST match Kotlin's CHANNEL_NAME exactly.
+const MethodChannel _headlessChannel = MethodChannel('libre_location/headless');
+
+/// Headless isolate entry point. Invoked by libre_location's native
+/// HeadlessCallbackDispatcher when the app process has been terminated
+/// (swiped away / after reboot) but the foreground service keeps producing
+/// location fixes.
+///
+/// The native side spins up a fresh FlutterEngine, runs this callback, then
+/// WAITS for us to invoke `initialized` on [_headlessChannel] before it will
+/// dispatch any `onLocationUpdate` / `onHeartbeat` calls. If we never complete
+/// that handshake, native times out after 5s and drops every fix — which is
+/// exactly why Android background sharing silently died. This wires the channel
+/// and completes the handshake so fixes flow into the E2EE Matrix send path.
 @pragma('vm:entry-point')
-void headlessDispatcher() async {
-  print('[LibreLocation HeadlessDispatcher]: Initializing headless isolate');
-  // Initialize the headless isolate if needed
+void headlessDispatcher() {
+  // A headless engine has no widgets tree, but binding + plugin registration
+  // are required so platform channels and plugins work in this isolate.
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
+  print('[LibreLocation HeadlessDispatcher]: isolate started, wiring channel');
+
+  // Route native callbacks BEFORE signalling ready, so a fix that arrives the
+  // instant native sees `initialized` has a handler waiting.
+  _headlessChannel.setMethodCallHandler((call) async {
+    try {
+      switch (call.method) {
+        case 'onLocationUpdate':
+          // Flat position map — matches onHeadlessLocation's expected shape.
+          final data = Map<String, dynamic>.from(call.arguments as Map);
+          await onHeadlessLocation(data);
+          break;
+        case 'onHeartbeat':
+          // Heartbeat nests the fix under 'position' and omits isMoving.
+          final raw = Map<String, dynamic>.from(call.arguments as Map);
+          final pos = raw['position'];
+          if (pos is Map) {
+            await onHeadlessLocation(Map<String, dynamic>.from(pos));
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      print('[LibreLocation HeadlessDispatcher] handler error: $e');
+    }
+    return null;
+  });
+
+  // Complete the handshake — native holds all dispatches until this fires.
+  _headlessChannel.invokeMethod('initialized');
 }
 
 @pragma('vm:entry-point')
-void onHeadlessLocation(Map<String, dynamic> data) async {
+Future<void> onHeadlessLocation(Map<String, dynamic> data) async {
   print('[LibreLocation HeadlessTask]: $data');
   
   // Parse the location data from libre_location

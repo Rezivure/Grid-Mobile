@@ -1082,11 +1082,12 @@ packages:
   libre_location:
     dependency: "direct main"
     description:
-      name: libre_location
-      sha256: "5069c57d2e3b413ea3d547634317a844d187a9f8d7080db3b4f19dac5d0dbb4a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.4.1"
+      path: "."
+      ref: "v0.4.3"
+      resolved-ref: "4d296a2d4f90aa85daeb94df7be10d52299b2646"
+      url: "https://github.com/Rezivure/libre-location.git"
+    source: git
+    version: "0.4.3"
   lints:
     dependency: transitive
     description:

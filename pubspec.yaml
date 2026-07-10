@@ -1,7 +1,7 @@
 name: grid_frontend
 description: "Grid: Private Location Sharing"
 publish_to: 'none'
-version: 2.0.0+738
+version: 2.0.1+835
 environment:
   sdk: '>=3.3.3 <4.0.0'
 
@@ -108,6 +108,10 @@ dependency_overrides:
       url: https://github.com/Rezivure/flutter-maplibre-gl.git
       ref: fix/grid-defer-camera-on-zero-frame
       path: maplibre_gl
+  libre_location:
+    git:
+      url: https://github.com/Rezivure/libre-location.git
+      ref: v0.4.3
 
 flutter:
   uses-material-design: true
