@@ -646,11 +646,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       }
     });
 
-    // Check if user has completed onboarding v2 before starting location tracking
-    // This ensures we show the permission disclosure BEFORE requesting permissions
-    // Using v2 flag to force all users to see the new mandatory permission disclosure
+    // Check if user has completed onboarding before starting location tracking.
+    // This ensures we show the permission disclosure BEFORE requesting permissions.
+    // MUST match the key OnboardingModal reads/writes (has_seen_onboarding_v3) —
+    // otherwise existing users who onboarded under v3 fall through with a false
+    // default and location tracking never starts on cold launch.
     final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding_v2') ?? false;
+    final hasSeenOnboarding = prefs.getBool('has_seen_onboarding_v3') ?? false;
 
     setState(() {
       _hasCompletedOnboarding = hasSeenOnboarding;
