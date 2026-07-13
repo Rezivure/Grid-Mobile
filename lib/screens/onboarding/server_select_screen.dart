@@ -13,6 +13,7 @@ import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
+import 'package:grid_frontend/utilities/passkey_error_guidance.dart';
 import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
 import 'package:grid_frontend/widgets/turnstile_widget.dart';
 
@@ -892,7 +893,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      _showErrorDialog('Passkey login failed. Please try again or use SMS.');
+      _showErrorDialog(passkeyLoginErrorMessage());
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
     }
@@ -916,7 +917,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      _showErrorDialog('Passkey signup failed. Please try SMS verification.');
+      _showErrorDialog(passkeySignupErrorMessage());
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
     }
