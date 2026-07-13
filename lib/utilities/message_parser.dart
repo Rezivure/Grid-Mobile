@@ -75,10 +75,21 @@ class MessageParser {
   }
 
   List<double>? _parseGeoUri(String geoUri) {
-    final parts = geoUri.substring(4).split(',');
+    // Strip anything after the coordinate list so cross-client senders don't
+    // get dropped: RFC 5870 allows a `;`-delimited param list (e.g. `;u=35`
+    // uncertainty, `;crs=...`) and some clients (iOS Maps share sheet) append
+    // a `?q=` query. Without this, `double.tryParse` fails on the trailing
+    // token and the whole fix is discarded — the contact never appears.
+    var coords = geoUri.substring(4);
+    final semi = coords.indexOf(';');
+    if (semi != -1) coords = coords.substring(0, semi);
+    final query = coords.indexOf('?');
+    if (query != -1) coords = coords.substring(0, query);
+
+    final parts = coords.split(',');
     if (parts.length < 2) return null;
-    final lat = double.tryParse(parts[0]);
-    final lng = double.tryParse(parts[1]);
+    final lat = double.tryParse(parts[0].trim());
+    final lng = double.tryParse(parts[1].trim());
     if (lat == null || lng == null) return null;
     return [lat, lng];
   }
