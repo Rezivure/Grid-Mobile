@@ -20,6 +20,8 @@ import 'package:grid_frontend/blocs/groups/groups_state.dart';
 import 'package:grid_frontend/services/sync_manager.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:grid_frontend/utilities/utils.dart';
+import 'package:grid_frontend/utilities/sheet_coordination.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'contacts_subscreen.dart';
 import 'groups_subscreen.dart';
 import 'invites_modal.dart';
@@ -114,6 +116,11 @@ class _MapScrollWindowState extends State<MapScrollWindow>
 
     _groupsBloc.add(LoadGroups());
 
+    // #305: when a contact profile sheet opens on top of us, collapse this
+    // background list sheet to its minimum so the two menus don't stack and
+    // hide the map.
+    ContactSheetController.instance.addListener(_onContactSheetChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SelectedSubscreenProvider>(context, listen: false)
           .setSelectedSubscreen('contacts');
@@ -142,9 +149,27 @@ class _MapScrollWindowState extends State<MapScrollWindow>
 
   @override
   void dispose() {
+    ContactSheetController.instance.removeListener(_onContactSheetChanged);
     _expandController.dispose();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // #305: collapse the background list sheet out of the way when a contact
+  // profile sheet is presented over it.
+  void _onContactSheetChanged() {
+    if (!mounted || !_scrollableController.isAttached) return;
+    final target = backgroundSheetTargetExtent(
+      overlayOpen: ContactSheetController.instance.isOpen,
+      minExtent: 0.3,
+      currentExtent: _scrollableController.size,
+    );
+    if (target == null) return;
+    _scrollableController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<List<GridRoom.Room>> _fetchGroupRooms() async {
