@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/services/debug_log_service.dart';
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:grid_frontend/services/backwards_compatibility_service.dart';
 import 'package:grid_frontend/repositories/location_repository.dart';
@@ -314,6 +315,14 @@ Future<void> _sendLocationUpdate(
   // Filter out low-accuracy locations to save battery and improve quality
   if (accuracy > 100) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
+    return;
+  }
+
+  // Never broadcast a platform no-fix sentinel (exact-zero axis) — it strands
+  // the contact at Null Island (Indian Ocean) on every peer's map.
+  if (!isFiniteLatLng(latitude, longitude) ||
+      isNoFixSentinel(latitude, longitude)) {
+    print("Grid: ⚠️  Skipping no-fix/invalid location for ${room.name}: $latitude, $longitude");
     return;
   }
 

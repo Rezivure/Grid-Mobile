@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:matrix/matrix_api_lite/generated/model.dart' as matrix_model;
 import 'package:grid_frontend/repositories/user_repository.dart';
@@ -801,6 +802,14 @@ class RoomService {
       // Filter out low-accuracy locations to save battery and improve quality
       if (accuracy > 100) {
         print("⚠️  Skipping low-accuracy location for $roomId: ${accuracy.toStringAsFixed(1)}m error (threshold: 100m)");
+        return false;
+      }
+
+      // Never broadcast a platform no-fix sentinel (exact-zero axis) — it
+      // strands the contact at Null Island (Indian Ocean) on peers' maps.
+      if (!isFiniteLatLng(latitude, longitude) ||
+          isNoFixSentinel(latitude, longitude)) {
+        print("⚠️  Skipping no-fix/invalid location for $roomId: $latitude, $longitude");
         return false;
       }
 

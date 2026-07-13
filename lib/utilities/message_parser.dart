@@ -43,6 +43,9 @@ class MessageParser {
       final coords = _parseGeoUri(geoUri);
       if (coords == null) return null;
       if (!isFiniteLatLng(coords[0], coords[1])) return null;
+      // Drop platform no-fix sentinels (exact-zero axis) so a stale/absent
+      // reading never strands the contact at Null Island (Indian Ocean).
+      if (isNoFixSentinel(coords[0], coords[1])) return null;
 
       // Extras live at the top level of the event content. Each is
       // independently optional; absence = "sender didn't tell us".
