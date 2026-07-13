@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/utilities/account_deletion_route.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
@@ -2243,10 +2244,31 @@ class _SettingsPageState extends State<SettingsPage> {
     final sharedPreferences = await SharedPreferences.getInstance();
     final serverType = sharedPreferences.getString('serverType');
     final homeserver = await client.homeserver;
-    final defaultHomeserver = await dotenv.env['MATRIX_SERVER_URL'];
-    if (serverType == 'default' || (homeserver?.toString().trim() == defaultHomeserver?.trim())) {
-      _deactivateSMSAccount();
-      return;
+    final defaultHomeserver = dotenv.env['MATRIX_SERVER_URL'];
+    final route = resolveAccountDeletionRoute(
+      serverType: serverType,
+      homeserver: homeserver?.toString(),
+      defaultHomeserver: defaultHomeserver,
+      phoneNumber: sharedPreferences.getString('phone_number'),
+    );
+
+    switch (route) {
+      case AccountDeletionRoute.sms:
+        _deactivateSMSAccount();
+        return;
+      case AccountDeletionRoute.passkeyManualSupport:
+        // Passkey-only accounts have no phone number and GAUTH has no passkey
+        // self-deactivation endpoint yet — don't send them down the SMS path
+        // (which reports a misleading "Phone number not found" error).
+        InAppNotifier.instance.show(
+          title: 'Contact support to delete',
+          message: 'Passkey accounts can\'t be deleted in-app yet. '
+              'Please DM Chandler to have your account removed.',
+          variant: InAppNotificationVariant.warning,
+        );
+        return;
+      case AccountDeletionRoute.customServerPassword:
+        break;
     }
 
 
