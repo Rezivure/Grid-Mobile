@@ -123,6 +123,46 @@ String formatUserId(String userId) {
   return (domain == homeserver || domain == FALLBACK_DEFAULT_HOMESERVER) ? parts[0] : userId;
 }
 
+/// Canonicalizes raw contact input (manual entry) into a full Matrix ID
+/// `@localpart:domain`.
+///
+/// Fixes the common "can't add contact" footguns:
+///  - a stray leading `@` the user typed themselves,
+///  - pasting a full handle (`@alice:matrix.mygrid.app`) on the default
+///    homeserver, which previously got double-wrapped into
+///    `@@alice:matrix.mygrid.app:matrix.mygrid.app` and failed lookup.
+///
+/// On the default homeserver everyone is re-homed to [defaultHomeserver], so a
+/// bare localpart or a pasted full handle both resolve. On a custom homeserver
+/// the domain must be supplied inline (`user:domain`); missing domains return
+/// `null` so the caller can show guidance.
+String? normalizeContactId(
+  String rawInput, {
+  required bool isCustomServer,
+  required String defaultHomeserver,
+}) {
+  var input = rawInput.trim().toLowerCase();
+  while (input.startsWith('@')) {
+    input = input.substring(1);
+  }
+  if (input.isEmpty) return null;
+
+  if (!isCustomServer) {
+    // Default homeserver: keep everyone on it. Accept a bare localpart or a
+    // pasted `@user:hs` handle and always rebuild as `@localpart:default`.
+    final cleanDefault = defaultHomeserver
+        .replaceFirst('https://', '')
+        .replaceFirst('http://', '');
+    final localpart = input.split(':').first;
+    if (localpart.isEmpty) return null;
+    return '@$localpart:$cleanDefault';
+  }
+
+  // Custom homeserver: the domain must be supplied inline.
+  if (!input.contains(':')) return null;
+  return '@$input';
+}
+
 /// Formats a Matrix user id for display next to a handle.
 /// Returns `@localpart` on the default homeserver; otherwise `@localpart · server`.
 String formatHandleWithServer(String userId) {
