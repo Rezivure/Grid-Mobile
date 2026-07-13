@@ -50,6 +50,22 @@ class MessageProcessor {
   /// Callback for when decryption fails
   DecryptionErrorCallback? _onDecryptionError;
 
+  /// How stale a failed-decryption event may be and still warrant an active
+  /// megolm key re-request. Prior-install events flood catch-up sync and can
+  /// never recover (Grid keeps no message history), so we do need an upper
+  /// bound — but a peer's *most recent* location is routinely tens of minutes
+  /// old, and a tight 10-minute gate stranded those sessions undecryptable,
+  /// surfacing as "everyone offline" after the v2 upgrade. 6h still filters
+  /// ancient spam while recovering recent-but-stale sessions.
+  static const Duration keyRecoveryMaxAge = Duration(hours: 6);
+
+  /// Pure, testable gate: should we actively try to recover the megolm key
+  /// for a decrypt failure whose event was sent at [eventTs]? [now] is
+  /// injectable so this can be exercised without a Client. Future-dated
+  /// events (clock skew) are treated as recent, as before.
+  static bool shouldAttemptKeyRecovery(DateTime eventTs, DateTime now) =>
+      now.difference(eventTs) <= keyRecoveryMaxAge;
+
   // Per-session cooldown for explicit megolm key re-requests.
   final Map<String, DateTime> _keyRequestedAt = {};
   static const Duration _keyRequestCooldown = Duration(minutes: 5);
@@ -142,9 +158,10 @@ class MessageProcessor {
     if (decryptedEvent.type == 'm.room.encrypted' &&
         decryptedEvent.content['msgtype'] == 'm.bad.encrypted') {
       // Noise gate: old events from prior installs flood catch-up sync and can
-      // never recover (Grid keeps no history). Only act on recent failures.
-      final age = DateTime.now().difference(finalEvent.originServerTs);
-      if (age > const Duration(minutes: 10)) {
+      // never recover (Grid keeps no history). Bound recovery to recent-enough
+      // events, but not so tight that a peer's last (stale) location is
+      // stranded — see [shouldAttemptKeyRecovery].
+      if (!shouldAttemptKeyRecovery(finalEvent.originServerTs, DateTime.now())) {
         return null;
       }
       print('[MessageProcessor] ⚠️ DECRYPTION FAILED for event from ${finalEvent.senderId}');
