@@ -51,6 +51,7 @@ import 'package:grid_frontend/widgets/user_avatar.dart';
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/app_lifecycle_channel.dart';
 import 'package:grid_frontend/services/sharing_state_notifier.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/widgets/onboarding_modal.dart';
@@ -96,6 +97,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   bool _servicesInitialized = false;
   AppLifecycleState? _currentLifecycleState;
   final MaplibreCameraFacade _mapController = MaplibreCameraFacade();
+  final AppLifecycleChannel _lifecycleChannel = AppLifecycleChannel();
   LocationManager? _locationManager;
   RoomService? _roomService;
   UserService? _userService;
@@ -1670,7 +1672,23 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         } else if (!_initialZoomCalculated) {
         }
       },
-      child: Scaffold(
+      child: PopScope(
+        // On Android, MapTab is the root route: a system-back here would
+        // finish the Activity and stop the location foreground service
+        // (GH #302). Intercept it and send the task to the background instead,
+        // matching Home-button behaviour so sharing keeps running. iOS has no
+        // root back gesture, so canPop stays true there.
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (!AppLifecycleChannel.shouldMoveToBackground(
+            didPop: didPop,
+            platform: defaultTargetPlatform,
+          )) {
+            return;
+          }
+          await _lifecycleChannel.moveTaskToBack();
+        },
+        child: Scaffold(
             body: Stack(
               children: [
                 SizedBox(
@@ -2518,6 +2536,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               ),
           ],
         ),
+      ),
       ),
     );
   }
