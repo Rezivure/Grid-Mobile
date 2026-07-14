@@ -15,6 +15,7 @@ import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
 import 'package:grid_frontend/widgets/turnstile_widget.dart';
+import 'package:grid_frontend/utilities/utils.dart';
 
 class ServerSelectScreen extends StatefulWidget {
   @override
@@ -130,11 +131,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   }
 
   void _validateUsernameInput() {
-    String username = _usernameController.text;
+    final error = usernameValidationError(_usernameController.text);
 
-    if (username.length < 5) {
+    if (error != null) {
       setState(() {
-        _usernameStatusMessage = 'Username must be at least 5 characters and no special characters or spaces.';
+        _usernameStatusMessage = error;
         _usernameStatusColor = Colors.red;
       });
       return;
@@ -144,22 +145,22 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   }
 
   Future<void> _checkUsernameAvailability() async {
-    String username = _usernameController.text;
+    final username = _usernameController.text.trim();
 
-    if (username.isNotEmpty && username.length >= 5) {
-      bool isAvailable = await Provider.of<AuthProvider>(context, listen: false)
-          .checkUsernameAvailability(username);
+    if (usernameValidationError(username) != null) return;
 
-      setState(() {
-        if (isAvailable) {
-          _usernameStatusMessage = 'Username is available';
-          _usernameStatusColor = Colors.green;
-        } else {
-          _usernameStatusMessage = 'Username is not available';
-          _usernameStatusColor = Colors.red;
-        }
-      });
-    }
+    bool isAvailable = await Provider.of<AuthProvider>(context, listen: false)
+        .checkUsernameAvailability(username);
+
+    setState(() {
+      if (isAvailable) {
+        _usernameStatusMessage = 'Username is available';
+        _usernameStatusColor = Colors.green;
+      } else {
+        _usernameStatusMessage = 'Username is not available';
+        _usernameStatusColor = Colors.red;
+      }
+    });
   }
 
   void _animateToNextStep() {
