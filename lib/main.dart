@@ -252,6 +252,9 @@ Future<void> _boot() async {
   final locationDispatch = LocationDispatch(sharingStateNotifier);
   await _tryBootStep(
       'locationDispatch', locationDispatch.start(), const Duration(seconds: 5));
+  // Give LocationManager the same dispatch so a manual "Ping" can force
+  // its fix past the throttle (otherwise stationary pings are dropped).
+  locationManager.locationDispatch = locationDispatch;
 
   // Watches the user's saved home geofence and flips `sharingStateNotifier`
   // on enter/exit. Reads `home_location` + `home_radius` +

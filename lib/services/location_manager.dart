@@ -6,6 +6,7 @@ import 'location/location_service.dart';
 import 'location/location_update.dart';
 import 'location/location_service_config.dart';
 import 'location/libre_location_service.dart';
+import 'location/location_dispatch.dart';
 
 /// A simpler location manager relying on the plugin's own stop-detection.
 /// Battery Saver Mode slightly changes the config, otherwise we let
@@ -14,6 +15,12 @@ import 'location/libre_location_service.dart';
 class LocationManager with ChangeNotifier {
   final StreamController<LocationUpdate> _locationStreamController = StreamController.broadcast();
   final LocationService _locationService = LibreLocationService();
+
+  /// Post-throttle that gates which fixes reach Matrix. Settable so
+  /// `main.dart` (which constructs `LocationManager` before
+  /// `LocationDispatch`) can wire it once at boot without a constructor
+  /// refactor. Used to force a manual "Ping" past the throttle.
+  LocationDispatch? locationDispatch;
 
   LocationUpdate? _lastPosition;
   bool _isTracking = false;
@@ -176,13 +183,18 @@ class LocationManager with ChangeNotifier {
   Future<void> grabLocationAndPing() async {
     try {
       final currentPos = await _locationService.getCurrentPosition();
-      
+
       // Always update position and timestamp for manual requests
       _lastPosition = currentPos;
       _lastLocationUpdate = DateTime.now();
+      // A manual ping is an explicit user action: force this fix past the
+      // dispatch throttle so a stationary/recently-posted device still
+      // broadcasts. Without this the fix is emitted but silently dropped
+      // by LocationDispatch.shouldPost(), so contacts never see the ping.
+      locationDispatch?.forceNextPost();
       _locationStreamController.add(currentPos);
       notifyListeners();
-      
+
       print("Manual location ping completed: ${currentPos.latitude}, ${currentPos.longitude}");
     } catch (e) {
       print("Error getting current position: $e");
