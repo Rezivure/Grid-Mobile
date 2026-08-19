@@ -5,7 +5,7 @@
     <img src=".github/readme/grid-logo-light.png" alt="Grid" width="55%" />
   </picture>
 
-  <h3>Encrypted Location Sharing &middot; Be Hard to Track.</h3>
+  <h3>Be Hard to Track.</h3>
 
   <a href="https://www.mygrid.app">mygrid.app</a>
 </div>
