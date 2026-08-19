@@ -1,11 +1,12 @@
 <div align="center">
-  <h1 align="center">Grid - Encrypted Location Sharing</h1>
-  <h3>Be Hard to Track.</h3>
-<div align="center">
-  <img src="https://unicorn-cdn.b-cdn.net/bbdb9366-4fba-4f6f-bcb0-b6bb733736d1/-/preview/999x443/logo-grid-v2.png" alt="Logo Grid" width="50%" />
-</div>
-</div>
-<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/grid-logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/readme/grid-logo-light.png">
+    <img src=".github/readme/grid-logo-light.png" alt="Grid" width="55%" />
+  </picture>
+
+  <h3>Encrypted Location Sharing &middot; Be Hard to Track.</h3>
+
   <a href="https://www.mygrid.app">mygrid.app</a>
 </div>
 
@@ -13,9 +14,16 @@
 
 <div align="center">
   <a href="https://github.com/rezivure/grid-frontend/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/rezivure/grid-frontend"></a>
-  <a href="https://discord.gg/cJrQXMn6Hk"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white"></a>
   <a href="https://github.com/rezivure/grid-frontend/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPLv3-purple"></a>
 </div>
+
+<div align="center">
+  <br/>
+  <a href="https://discord.gg/cJrQXMn6Hk"><img alt="Join our Discord" src="https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=5865F2" height="45"></a>
+  &nbsp;
+  <a href="https://www.buymeacoffee.com/rezivure"><img alt="Buy me a coffee" src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=rezivure&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" height="45"></a>
+</div>
+
 <br/>
 
 ***Grid*** is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
@@ -23,7 +31,7 @@
 
 
 <div align="center">
-  <img src="https://i.imgur.com/8c2dlnE.png" alt="appstore" width="75%" />
+  <img src=".github/readme/grid-screens.png" alt="Grid app screens: welcome, choose a username, sign in with passkey, and SMS code fallback" width="100%" />
 </div>
 
 
@@ -39,6 +47,12 @@
 ## Community
 
 Join our [Discord](https://discord.gg/cJrQXMn6Hk) to submit feature requests, vote on new features, report bugs, get help, and connect with the community & developers!
+
+## Support Grid
+
+Grid is free, open source, and funded by the people who use it. If it is useful to you, you can help keep the servers running:
+
+<a href="https://www.buymeacoffee.com/rezivure"><img alt="Buy me a coffee" src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=rezivure&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" height="45"></a>
 
 ## Self Hosting
 This repository is for the Grid: Private Location Sharing mobile application (iOS/Android). If you are looking to self host a server for the app, check out our [docs](https://docs.mygrid.app/) or join our Discord!
