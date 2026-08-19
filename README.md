@@ -19,20 +19,21 @@
 
 <div align="center">
   <br/>
-  <a href="https://discord.gg/cJrQXMn6Hk"><img alt="Join our Discord" src="https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=5865F2" height="45"></a>
-  &nbsp;
-  <a href="https://www.buymeacoffee.com/rezivure"><img alt="Buy me a coffee" src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=rezivure&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" height="45"></a>
+  <a href="https://discord.gg/cJrQXMn6Hk"><img alt="Join our Discord" src="https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=flat&logo=discord&logoColor=white" height="44"></a>
 </div>
 
 <br/>
 
 ***Grid*** is a secure, end-to-end encrypted (E2EE) location sharing application integrated with the Matrix Protocol. Built using Flutter, Grid provides a privacy-focused solution for sharing your location with trusted contacts.
 
-
-
 <div align="center">
-  <img src=".github/readme/grid-screens.png" alt="Grid app screens: welcome, choose a username, sign in with passkey, and SMS code fallback" width="100%" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/grid-screens-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/readme/grid-screens-light.png">
+    <img src=".github/readme/grid-screens-light.png" alt="Grid on iOS and Android: be hard to track, share with who you choose, no phone or email required" width="100%" />
+  </picture>
 </div>
+
 
 
 ## Features
