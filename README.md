@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/grid-logo-dark.png">
     <source media="(prefers-color-scheme: light)" srcset=".github/readme/grid-logo-light.png">
-    <img src=".github/readme/grid-logo-light.png" alt="Grid" width="55%" />
+    <img src=".github/readme/grid-logo-light.png" alt="Grid" width="38%" />
   </picture>
 
   <h3>Be Hard to Track.</h3>
