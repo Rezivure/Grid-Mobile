@@ -53,21 +53,6 @@
 | 📱 **iOS and Android** | One Flutter codebase, native builds for both platforms. |
 | 🏠 **Self-hostable** | Run your own backend server and map tile provider for complete control. |
 
-## How It Works
-
-```mermaid
-flowchart LR
-    A["📱 Your device<br/>encrypts location"] -->|ciphertext| S["☁️ Matrix homeserver<br/>stores, cannot read"]
-    S -->|ciphertext| B["📱 Their device<br/>decrypts location"]
-
-    classDef device fill:#2FE0A0,stroke:#0E1116,stroke-width:2px,color:#0E1116;
-    classDef server fill:#8A8F98,stroke:#0E1116,stroke-width:2px,color:#0E1116;
-    class A,B device;
-    class S server;
-```
-
-Encryption keys are generated on your device and never leave it, so no one in the middle — including whoever runs the server — can read where you are.
-
 ## Community
 
 Join our [Discord](https://discord.gg/cJrQXMn6Hk) to submit feature requests, vote on new features, report bugs, get help, and connect with the community & developers!
