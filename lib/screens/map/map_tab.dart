@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
@@ -18,6 +19,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 
 import 'grid_map_style.dart';
+import 'marker_projection.dart';
 import 'maplibre_camera_facade.dart';
 
 import 'package:grid_frontend/styles/tokens.dart';
@@ -1398,10 +1400,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       final screenPoints = await controller.toScreenLocationBatch(mlPoints);
       // Ignore stale responses — camera may have moved past us.
       if (!mounted || seq != _projectionSeq) return;
+      // maplibre-native reports Android screen points in PHYSICAL pixels but
+      // Flutter's overlay Positioned() works in LOGICAL pixels, so on high-DPR
+      // devices markers drift at ~devicePixelRatio× the pan speed and only
+      // align at (0,0). Normalise to logical pixels. (#303, #301)
+      final divisor = markerProjectionDivisor(
+        defaultTargetPlatform,
+        MediaQuery.of(context).devicePixelRatio,
+      );
       for (var idx = 0; idx < keys.length && idx < screenPoints.length; idx++) {
         final p = screenPoints[idx];
         _markerScreenPositions[keys[idx]] =
-            Offset(p.x.toDouble(), p.y.toDouble());
+            logicalMarkerOffset(p.x.toDouble(), p.y.toDouble(), divisor);
       }
       setState(() {});
     } catch (_) {
