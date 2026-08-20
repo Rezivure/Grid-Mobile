@@ -697,7 +697,7 @@ class _AddFriendModalState extends State<AddFriendModal>
           ? myUserId
           : '@${utils.localpart(myUserId)}';
       final message =
-          'Join me on Grid! Download it at https://get.grid.lat and send $handle a friend request!';
+          'Join me on Grid! Download it at https://mygrid.app and send $handle a friend request!';
 
       final box = context.findRenderObject() as RenderBox?;
       await Share.share(
