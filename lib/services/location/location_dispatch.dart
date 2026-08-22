@@ -59,6 +59,12 @@ class LocationDispatch {
   /// resting position immediately.
   bool _justEnteredStill = false;
 
+  /// One-shot override armed by an explicit user action (the manual "Ping"
+  /// button). The next fix posts regardless of distance/interval throttling
+  /// — but pause/incognito still wins, so a ping can never leak a location
+  /// the user has chosen to hide. Drains on the next `shouldPost` call.
+  bool _forceNextPost = false;
+
   // Cruise-mode detection (sustained high-speed driving). Lets the
   // throttle relax once we're confident the user is on the highway —
   // posting every 250m/30s on I-95 for 2 hours is the case that wrecks
@@ -122,6 +128,14 @@ class LocationDispatch {
 
   SharingMode get mode => _mode;
 
+  /// Arms a one-shot bypass of the distance/interval throttle for the next
+  /// fix. Called when the user taps "Ping" — they've explicitly asked to
+  /// broadcast now, so a stationary/recently-posted throttle shouldn't
+  /// silently swallow it. Pause/incognito is still honoured in `shouldPost`.
+  void forceNextPost() {
+    _forceNextPost = true;
+  }
+
   /// Switches the user-facing mode. Persists the choice, swaps the
   /// underlying `libre_location` preset, and rewires the throttle on
   /// the next fix.
@@ -143,11 +157,26 @@ class LocationDispatch {
   /// Returns true if [fix] should be posted to Matrix. Records the post
   /// for distance/interval bookkeeping when true.
   bool shouldPost(LocationUpdate fix) {
-    if (_sharingState.isPaused) return false;
+    if (_sharingState.isPaused) {
+      // Drain any armed ping so it can't fire later when we unpause — a
+      // ping tapped while incognito is discarded, not deferred.
+      _forceNextPost = false;
+      return false;
+    }
 
     final now = DateTime.now();
     final last = _lastPostAt;
     final prev = _lastPostedLocation;
+
+    // Explicit user "Ping" — bypass the throttle exactly once. Drain the
+    // flag first so a queued ping can't stick around and force a second
+    // post. Pause/incognito already short-circuited above, so this can
+    // never override the user's privacy choice.
+    if (_forceNextPost) {
+      _forceNextPost = false;
+      _record(fix, now);
+      return true;
+    }
 
     // First fix in this session → always send.
     if (last == null || prev == null) {
