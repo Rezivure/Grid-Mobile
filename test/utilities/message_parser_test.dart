@@ -86,16 +86,35 @@ void main() {
       expect(result.longitude, closeTo(-151.2093, 0.0001));
     });
 
-    test('parses zero coordinates', () {
+    test('returns null for Null Island no-fix sentinel (0.0, 0.0)', () {
       final result = parser.parseLocationMessage({
         'content': {
           'msgtype': 'm.location',
           'geo_uri': 'geo:0.0,0.0',
         },
       });
-      expect(result, isNotNull);
-      expect(result!.latitude, 0.0);
-      expect(result.longitude, 0.0);
+      expect(result, isNull);
+    });
+
+    test('returns null when latitude axis is a zeroed no-fix sentinel', () {
+      // Real longitude (India) with a dropped latitude => Indian Ocean pin.
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo:0.0,77.5946',
+        },
+      });
+      expect(result, isNull);
+    });
+
+    test('returns null when longitude axis is a zeroed no-fix sentinel', () {
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo:51.5074,0.0',
+        },
+      });
+      expect(result, isNull);
     });
 
     test('handles geo_uri with altitude (third component)', () {
