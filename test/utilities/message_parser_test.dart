@@ -130,5 +130,55 @@ void main() {
       });
       expect(result, isNull);
     });
+
+    test('parses geo_uri with RFC 5870 uncertainty param (;u=)', () {
+      // iOS Maps / several Matrix clients append `;u=<meters>`. The longitude
+      // token must not swallow the param or the whole fix gets dropped.
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo:40.7128,-74.0060;u=35',
+        },
+      });
+      expect(result, isNotNull);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, closeTo(-74.0060, 0.0001));
+    });
+
+    test('parses geo_uri with altitude and uncertainty param', () {
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo:40.7128,-74.0060,100;u=35',
+        },
+      });
+      expect(result, isNotNull);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, closeTo(-74.0060, 0.0001));
+    });
+
+    test('parses geo_uri with ?q= query suffix', () {
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo:40.7128,-74.0060?q=40.7128,-74.0060',
+        },
+      });
+      expect(result, isNotNull);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, closeTo(-74.0060, 0.0001));
+    });
+
+    test('parses geo_uri with surrounding whitespace', () {
+      final result = parser.parseLocationMessage({
+        'content': {
+          'msgtype': 'm.location',
+          'geo_uri': 'geo: 40.7128 , -74.0060 ',
+        },
+      });
+      expect(result, isNotNull);
+      expect(result!.latitude, 40.7128);
+      expect(result.longitude, closeTo(-74.0060, 0.0001));
+    });
   });
 }
