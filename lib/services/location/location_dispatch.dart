@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:libre_location/libre_location.dart' as libre;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../utilities/lat_lng_validation.dart';
 import '../sharing_state_notifier.dart';
 import 'location_update.dart';
 
@@ -144,6 +145,14 @@ class LocationDispatch {
   /// for distance/interval bookkeeping when true.
   bool shouldPost(LocationUpdate fix) {
     if (_sharingState.isPaused) return false;
+
+    // Reject a NaN/Inf/out-of-range fix at the throttle chokepoint. Left
+    // through, an invalid fix gets recorded as `_lastPostedLocation`, and the
+    // next haversine distance against it is NaN — which never clears the
+    // distance threshold, silently wedging distance-based posting until a
+    // timed heartbeat bails us out. Dropping it here keeps the bookkeeping
+    // anchored to the last *real* position (complements the send-path guard).
+    if (!isFiniteLatLng(fix.latitude, fix.longitude)) return false;
 
     final now = DateTime.now();
     final last = _lastPostAt;
