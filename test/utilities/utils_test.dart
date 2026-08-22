@@ -49,6 +49,53 @@ void main() {
     });
   });
 
+  group('usernameValidationError', () {
+    test('accepts a valid alphanumeric username', () {
+      expect(usernameValidationError('alice123'), isNull);
+    });
+
+    test('accepts exactly 5 chars', () {
+      expect(usernameValidationError('abcde'), isNull);
+    });
+
+    test('rejects too short', () {
+      expect(usernameValidationError('abcd'),
+          'Username must be at least 5 characters and no special characters or spaces.');
+    });
+
+    test('trims leading/trailing whitespace before length check', () {
+      // Padded to well over 5 raw chars but only 4 real chars -> too short.
+      expect(usernameValidationError('  abcd  '),
+          'Username must be at least 5 characters and no special characters or spaces.');
+    });
+
+    test('accepts a valid username surrounded by whitespace (autofill case)', () {
+      // Core GH #196 bug: keyboard/autofill whitespace must not block signup.
+      expect(usernameValidationError('  alice  '), isNull);
+    });
+
+    test('rejects internal spaces', () {
+      expect(usernameValidationError('al ice'),
+          'Username can only contain letters and numbers (no special characters or spaces).');
+    });
+
+    test('rejects special characters', () {
+      expect(usernameValidationError('alice!'),
+          'Username can only contain letters and numbers (no special characters or spaces).');
+      expect(usernameValidationError('al_ice'), isNotNull);
+      expect(usernameValidationError('al.ice'), isNotNull);
+    });
+
+    test('rejects over 50 chars', () {
+      expect(usernameValidationError('a' * 51),
+          'Username must be 50 characters or fewer.');
+    });
+
+    test('accepts exactly 50 chars', () {
+      expect(usernameValidationError('a' * 50), isNull);
+    });
+  });
+
   group('parseGroupName', () {
     test('extracts group name from standard format', () {
       expect(parseGroupName('Grid Group MyTrip with @alice'), 'MyTrip');

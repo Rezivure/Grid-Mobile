@@ -43,6 +43,28 @@ String localpart(String userId) {
   return userId.split(":").first.replaceFirst('@', '');
 }
 
+/// Mirrors the auth server's authoritative rule
+/// (Grid-Auth-Middleware `USERNAME_REGEX = ^[a-zA-Z0-9]{5,}$`, max 50):
+/// letters/digits only, 5-50 chars. Returns a user-facing error message for
+/// [raw], or null when the (trimmed) username is acceptable.
+///
+/// The UI must validate the SAME trimmed value it submits — otherwise a handle
+/// with autofilled/keyboard whitespace can read "available" (green) while the
+/// signup button stays disabled, leaving the user stuck (GH #196).
+String? usernameValidationError(String raw) {
+  final username = raw.trim();
+  if (username.length < 5) {
+    return 'Username must be at least 5 characters and no special characters or spaces.';
+  }
+  if (username.length > 50) {
+    return 'Username must be 50 characters or fewer.';
+  }
+  if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(username)) {
+    return 'Username can only contain letters and numbers (no special characters or spaces).';
+  }
+  return null;
+}
+
 /// Converts a `DateTime` into a human-readable "time ago" string.
 String timeAgo(DateTime lastSeen) {
   final now = DateTime.now();
