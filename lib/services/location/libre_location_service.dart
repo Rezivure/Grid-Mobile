@@ -17,6 +17,7 @@ class LibreLocationService implements LocationService {
 
   StreamSubscription<libre.Position>? _positionSubscription;
   StreamSubscription<libre.Position>? _motionSubscription;
+  StreamSubscription<libre.HeartbeatEvent>? _heartbeatSubscription;
   StreamSubscription<libre.ActivityEvent>? _activitySubscription;
   StreamSubscription<libre.ProviderEvent>? _providerSubscription;
   StreamSubscription<bool>? _powerSaveSubscription;
@@ -89,6 +90,29 @@ class LibreLocationService implements LocationService {
         });
       });
 
+      // Listen for heartbeat pings. When the device is stationary the plugin
+      // pauses GPS and only emits heartbeats, so without this a running-but-
+      // still app never re-broadcasts its location and contacts see it as
+      // frozen until the user reopens the app (#282). The terminated-app path
+      // already handles heartbeats in the headless isolate; this covers the
+      // live Dart stream path.
+      _heartbeatSubscription = libre.LibreLocation.heartbeatStream.listen((event) {
+        final locationUpdate = _mapPositionToLocationUpdate(event.position);
+        _locationStreamController.add(locationUpdate);
+        DebugLogService.instance.log('location', {
+          'latitude': event.position.latitude,
+          'longitude': event.position.longitude,
+          'accuracy': event.position.accuracy,
+          'speed': event.position.speed,
+          'heading': event.position.heading,
+          'altitude': event.position.altitude,
+          'isMoving': event.position.isMoving,
+          'batteryLevel': event.position.battery != null ? (event.position.battery!.level * 100).round() : null,
+          'isCharging': event.position.battery?.isCharging,
+          'source': 'heartbeat',
+        });
+      });
+
       // Listen for activity changes (still/walking/driving/cycling)
       _activitySubscription = libre.LibreLocation.onActivityChange.listen((event) {
         DebugLogService.instance.log('activity_change', {
@@ -150,11 +174,13 @@ class LibreLocationService implements LocationService {
       
       await _positionSubscription?.cancel();
       await _motionSubscription?.cancel();
+      await _heartbeatSubscription?.cancel();
       await _activitySubscription?.cancel();
       await _providerSubscription?.cancel();
       await _powerSaveSubscription?.cancel();
       _positionSubscription = null;
       _motionSubscription = null;
+      _heartbeatSubscription = null;
       _activitySubscription = null;
       _providerSubscription = null;
       _powerSaveSubscription = null;
@@ -283,21 +309,8 @@ class LibreLocationService implements LocationService {
   /// Maps libre_location Position to our platform-agnostic LocationUpdate.
   /// Surfaces battery + charging from `position.battery` so the location
   /// post path can include them in the `m.location` payload.
-  LocationUpdate _mapPositionToLocationUpdate(libre.Position position) {
-    final battery = position.battery;
-    return LocationUpdate(
-      latitude: position.latitude,
-      longitude: position.longitude,
-      accuracy: position.accuracy,
-      speed: position.speed,
-      heading: position.heading,
-      altitude: position.altitude,
-      timestamp: position.timestamp,
-      isMoving: position.isMoving,
-      batteryLevel: battery?.level,
-      isCharging: battery?.isCharging,
-    );
-  }
+  LocationUpdate _mapPositionToLocationUpdate(libre.Position position) =>
+      mapPositionToLocationUpdate(position);
 
   void dispose() {
     if (_isTracking) {
@@ -306,4 +319,24 @@ class LibreLocationService implements LocationService {
     _locationStreamController.close();
     _motionChangeStreamController.close();
   }
+}
+
+/// Maps a libre_location [libre.Position] to a platform-agnostic
+/// [LocationUpdate]. Kept as a top-level pure function so both the position
+/// and heartbeat stream paths share one mapping and it can be unit-tested
+/// without a plugin/platform channel.
+LocationUpdate mapPositionToLocationUpdate(libre.Position position) {
+  final battery = position.battery;
+  return LocationUpdate(
+    latitude: position.latitude,
+    longitude: position.longitude,
+    accuracy: position.accuracy,
+    speed: position.speed,
+    heading: position.heading,
+    altitude: position.altitude,
+    timestamp: position.timestamp,
+    isMoving: position.isMoving,
+    batteryLevel: battery?.level,
+    isCharging: battery?.isCharging,
+  );
 }
