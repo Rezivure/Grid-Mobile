@@ -4,6 +4,7 @@ import 'dart:ui' show ImageFilter;
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
@@ -25,7 +26,7 @@ import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
 ///
 /// Positioning is owned by the parent (MapTab); this widget keeps the
 /// existing `Positioned` envelope so the call-site doesn't change.
-class UserInfoBubble extends StatelessWidget {
+class UserInfoBubble extends StatefulWidget {
   final String userId;
   final String userName;
   final LatLng position;
@@ -40,6 +41,27 @@ class UserInfoBubble extends StatelessWidget {
     this.lastUpdate,
     this.onClose,
   });
+
+  @override
+  State<UserInfoBubble> createState() => _UserInfoBubbleState();
+}
+
+class _UserInfoBubbleState extends State<UserInfoBubble> {
+  String _speedUnit = 'mph';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpeedUnit();
+  }
+
+  Future<void> _loadSpeedUnit() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _speedUnit = prefs.getString('speed_unit') ?? 'mph';
+    });
+  }
 
   /// `null` when we don't know the user's own location yet (so the cell is
   /// hidden rather than showing a fake number).
@@ -351,12 +373,14 @@ class UserInfoBubble extends StatelessWidget {
     return 'DRIVING';
   }
 
-  /// Speed as "12 mph". Null when no useful motion or speed isn't
-  /// known.
+  /// Speed as "12 mph" or "19 km/h". Null when no useful motion or speed
+  /// isn't known.
   String? _formatSpeed(double? speedMps) {
     if (speedMps == null || speedMps < 1.4) return null;
-    final mph = speedMps * 2.236936;
-    return '${mph.round()} mph';
+    if (_speedUnit == 'kmh') {
+      return '${(speedMps * 3.6).round()} km/h';
+    }
+    return '${(speedMps * 2.236936).round()} mph';
   }
 
   String _formatCoordinates(LatLng p) {
@@ -379,17 +403,17 @@ class UserInfoBubble extends StatelessWidget {
     final topOffset = media.padding.top + 96;
     final myLocation =
         Provider.of<LocationManager>(context, listen: false).currentLatLng;
-    final distanceLabel = _formatDistance(myLocation, position);
-    final bearingLabel = _formatBearing(myLocation, position);
-    final updatedLabel = lastUpdate == null
+    final distanceLabel = _formatDistance(myLocation, widget.position);
+    final bearingLabel = _formatBearing(myLocation, widget.position);
+    final updatedLabel = widget.lastUpdate == null
         ? null
-        : TimeAgoFormatter.format(lastUpdate);
+        : TimeAgoFormatter.format(widget.lastUpdate);
 
     // gridv 2: opportunistic speed + battery from the sender's last
     // m.location. context.watch so the bubble rebuilds as new fixes
     // arrive while it's open.
     final status =
-        context.watch<UserDeviceStatusCache>().statusFor(userId);
+        context.watch<UserDeviceStatusCache>().statusFor(widget.userId);
     final motionLabel = _formatMotion(status?.speed);
     final speedLabel = _formatSpeed(status?.speed);
 
@@ -430,12 +454,12 @@ class UserInfoBubble extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _IdentityRow(
-                          userId: userId,
-                          userName: userName,
-                          coordinatesLabel: _formatCoordinates(position),
+                          userId: widget.userId,
+                          userName: widget.userName,
+                          coordinatesLabel: _formatCoordinates(widget.position),
                           onCopyCoordinates: () =>
-                              _copyCoordinates(context, position),
-                          onClose: onClose,
+                              _copyCoordinates(context, widget.position),
+                          onClose: widget.onClose,
                           batteryLevel: status?.batteryLevel,
                           isCharging: status?.isCharging,
                         ),
@@ -463,7 +487,7 @@ class UserInfoBubble extends StatelessWidget {
                               child: _MiniBtn(
                                 icon: Icons.near_me_rounded,
                                 label: 'Route',
-                                onTap: () => _openInMaps(context, position),
+                                onTap: () => _openInMaps(context, widget.position),
                               ),
                             ),
                           ],
