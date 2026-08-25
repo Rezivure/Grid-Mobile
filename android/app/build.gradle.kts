@@ -37,6 +37,10 @@ kotlin {
     }
 }
 
+// configurations.configureEach {
+//     exclude(group = "com.google.crypto.tink", module = "tink")
+// }
+
 android {
     namespace = "app.mygrid.grid"
     compileSdk = flutter.compileSdkVersion
@@ -102,6 +106,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+configurations.configureEach {
+    val tinkAndroid = "com.google.crypto.tink:tink-android:1.9.0"
+    resolutionStrategy {
+        force(tinkAndroid)
+        dependencySubstitution {
+            substitute(module("com.google.crypto.tink:tink"))
+                .using(module(tinkAndroid))
+        }
+    }
 }
 
 // TODO(Yuki): when firebase services are used for Flutter and not required in Android, this should be removed and generated with the 'flutterfire' tool

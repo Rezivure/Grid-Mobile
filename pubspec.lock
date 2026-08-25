@@ -718,10 +718,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_vodozemac
-      sha256: "16d4b44dd338689441fe42a80d0184e5c864e9563823de9e7e6371620d2c0590"
+      sha256: "4503bc4a33a5126539fe68eecbf736eafe412474874a2ebbfc94aef0b0d2e304"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.1"
+    version: "0.6.0"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -1213,10 +1213,10 @@ packages:
     dependency: "direct main"
     description:
       name: matrix
-      sha256: "0660c8f662f53b56eb2c0d7a7019517b735f20218ce35bc20f44de43bc3a9466"
+      sha256: "5bb38e98212bc4c3244c762a1af787f7239a38d2cfdf44488258283ff899f77c"
       url: "https://pub.dev"
     source: hosted
-    version: "4.0.0"
+    version: "6.2.0"
   meta:
     dependency: transitive
     description:
@@ -2026,10 +2026,10 @@ packages:
     dependency: transitive
     description:
       name: unifiedpush_android
-      sha256: "2e6684e0a1a39ad8d6c7bc0d197954d50686acb1b1a7614b18ab0e0126f5492a"
+      sha256: a902e505e91c8e28b54b379bb27f255f66df409274a97af24d6719f12f0d13dc
       url: "https://pub.dev"
     source: hosted
-    version: "3.4.1"
+    version: "3.5.0"
   unifiedpush_linux:
     dependency: transitive
     description:
@@ -2218,10 +2218,10 @@ packages:
     dependency: transitive
     description:
       name: vodozemac
-      sha256: "39144e20740807731871c9248d811ed5a037b21d0aa9ffcfa630954de74139d9"
+      sha256: bbe7dd31d7f623e2aeedb92e4b71a8b519e6109ce1e2911b5a220f6752b65cda
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.5.0"
   watcher:
     dependency: transitive
     description:
