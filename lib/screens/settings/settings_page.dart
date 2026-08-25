@@ -2583,7 +2583,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: FontAwesomeIcons.discord,
+                  icon: FontAwesomeIcons.discord.data,
                   title: 'Join our Discord',
                   onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
                   colorScheme: colorScheme,
