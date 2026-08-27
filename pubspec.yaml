@@ -67,6 +67,7 @@ dependencies:
   flutter_local_notifications: ^18.0.0
   unifiedpush: ^6.0.1
   google_api_availability: ^5.0.1
+  flutter_user_certificates_android: ^0.1.0
 
 
 flutter_launcher_icons:

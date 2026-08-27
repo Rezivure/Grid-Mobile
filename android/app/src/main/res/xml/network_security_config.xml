@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <!-- Trust pre-installed system CAs -->
+            <certificates src="system" />
+            <!-- Trust user-installed CA certificates -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

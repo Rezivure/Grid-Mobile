@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_user_certificates_android/flutter_user_certificates_android.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/services/certificates/certificate_service.dart';
 
 import 'styles/tokens.dart';
 import 'styles/grid_colors.dart';
@@ -118,6 +122,8 @@ Future<T?> _tryBootStep<T>(String step, Future<T> future, Duration limit) async 
 }
 
 Future<void> _boot() async {
+  await CertificateService.init();
+
   await _tryBootStep('theme', ThemeController.instance.load(), const Duration(seconds: 5));
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
