@@ -116,7 +116,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       await prefs.setString('custom_homeserver', homeserver);
       await prefs.setString('maps_url_type', _useDefaultMapsUrl ? 'default' : 'custom');
       Navigator.pushReplacementNamed(context, '/main');
-    } catch (e) {
+    } catch (e, s) {
+
+      debugPrint(e.toString());
+      debugPrintStack(stackTrace: s);
+
       setState(() {
         _isLoading = false;
         _errorMessage = 'Login failed: ${e.toString()}';

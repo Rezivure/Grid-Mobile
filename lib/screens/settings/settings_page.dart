@@ -1771,7 +1771,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final filename = responseData['filename'];
         
         // Construct CDN URL using the filename
-        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';;
+        final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';
         final cdnUrl = '$cdnBaseUrl/$filename';
 
         // Store encryption metadata in secure storage
@@ -2583,7 +2583,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 _buildSettingsDivider(),
                 _buildMenuOption(
-                  icon: FontAwesomeIcons.discord,
+                  icon: FontAwesomeIcons.discord.data,
                   title: 'Join our Discord',
                   onTap: () => _launchURL('https://discord.gg/cJrQXMn6Hk'),
                   colorScheme: colorScheme,

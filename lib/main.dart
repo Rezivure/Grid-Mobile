@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_user_certificates_android/flutter_user_certificates_android.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/services/certificates/certificate_service.dart';
 
 import 'styles/tokens.dart';
 import 'styles/grid_colors.dart';
@@ -73,23 +77,38 @@ import 'package:grid_frontend/services/push/notification_channels.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-
-
-
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Start the in-app log stream so Developer Tools → Synapse Logs can
+  // tail matrix-sdk events. Matrix logs are pulled via a ticker; raw
+  // `print()` calls land in here via the Zone hook below.
+  LogStreamService.instance.start();
 
-  // Every boot await is bounded: a wedged call must surface as a retryable
-  // error screen, never an eternal native splash (bg-resume hang).
-  while (true) {
-    try {
-      await _boot();
-      return;
-    } catch (e, s) {
-      debugPrint('[Boot] FATAL: $e\n$s');
-      await _runBootErrorFlow(e);
-    }
-  }
+  return runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      // Every boot await is bounded: a wedged call must surface as a retryable
+      // error screen, never an eternal native splash (bg-resume hang).
+      while (true) {
+        try {
+          await _boot();
+          return;
+        } catch (e, s) {
+          debugPrint('[Boot] FATAL: $e\n$s');
+          await _runBootErrorFlow(e);
+        }
+      }
+    },
+    (error, stack) {
+      LogStreamService.instance.capturePrint('UNCAUGHT: $error\n$stack');
+    },
+    zoneSpecification: ZoneSpecification(
+      print: (self, parent, zone, line) {
+        LogStreamService.instance.capturePrint(line);
+        parent.print(zone, line);
+      },
+    ),
+  );
 }
 
 /// Non-fatal boot step: log + continue on error/timeout.
@@ -103,6 +122,8 @@ Future<T?> _tryBootStep<T>(String step, Future<T> future, Duration limit) async 
 }
 
 Future<void> _boot() async {
+  await CertificateService.init();
+
   await _tryBootStep('theme', ThemeController.instance.load(), const Duration(seconds: 5));
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
@@ -128,8 +149,7 @@ Future<void> _boot() async {
   // boot on the recovery screen so the user can wipe + restart in-place.
   bool encryptionKeyMissing = false;
   try {
-    encryptionKeyMissing =
-        !await databaseService.hasEncryptionKey().timeout(const Duration(seconds: 5));
+    encryptionKeyMissing = !await databaseService.hasEncryptionKey().timeout(const Duration(seconds: 5));
   } catch (e) {
     // Keychain unreachable (locked device, transient error) — the key is not
     // proven missing, so boot on instead of offering destructive recovery.
@@ -142,8 +162,7 @@ Future<void> _boot() async {
   await vod.init().timeout(const Duration(seconds: 15));
 
   // Initialize Matrix Client with backwards compatible database
-  final database = await BackwardsCompatibilityService.createMatrixDatabase()
-      .timeout(const Duration(seconds: 15));
+  final database = await BackwardsCompatibilityService.createMatrixDatabase().timeout(const Duration(seconds: 15));
   final client = Client(
     'Grid App',
     database: database,
@@ -164,10 +183,7 @@ Future<void> _boot() async {
     final room = request.room;
     final requestingUserId = request.requestingDevice.userId;
     try {
-      Membership? membership = room
-          .getState(EventTypes.RoomMember, requestingUserId)
-          ?.asUser(room)
-          .membership;
+      Membership? membership = room.getState(EventTypes.RoomMember, requestingUserId)?.asUser(room).membership;
       if (membership == null) {
         final participants = await room.requestParticipants([
           Membership.join,
@@ -184,8 +200,7 @@ Future<void> _boot() async {
         }
       }
       if (membership == Membership.leave || membership == Membership.ban) {
-        Logs().w(
-            '[KeyForward] Refusing forward to ${membership!.name} member $requestingUserId in ${room.id}');
+        Logs().w('[KeyForward] Refusing forward to ${membership!.name} member $requestingUserId in ${room.id}');
         return;
       }
       Logs().i(
@@ -207,8 +222,7 @@ Future<void> _boot() async {
 
   // On warm start, re-register push notifications for the restored session.
   // (client.init() restored creds from the Matrix DB; we just need pushers refreshed.)
-  final prefs = await _tryBootStep(
-      'prefs', SharedPreferences.getInstance(), const Duration(seconds: 5));
+  final prefs = await _tryBootStep('prefs', SharedPreferences.getInstance(), const Duration(seconds: 5));
   String? token = prefs?.getString('token');
 
   if (token != null && token.isNotEmpty) {
@@ -229,9 +243,7 @@ Future<void> _boot() async {
   }
 
   // Initialize notification channels (Android)
-  await _tryBootStep(
-      'notifChannels', NotificationChannels.createAll(), const Duration(seconds: 5));
-
+  await _tryBootStep('notifChannels', NotificationChannels.createAll(), const Duration(seconds: 5));
 
   // Initialize repositories
   final userRepository = UserRepository(databaseService);
@@ -250,15 +262,13 @@ Future<void> _boot() async {
   // actually stop location posts.
   final sharingStateNotifier = SharingStateNotifier();
   final locationDispatch = LocationDispatch(sharingStateNotifier);
-  await _tryBootStep(
-      'locationDispatch', locationDispatch.start(), const Duration(seconds: 5));
+  await _tryBootStep('locationDispatch', locationDispatch.start(), const Duration(seconds: 5));
 
   // Watches the user's saved home geofence and flips `sharingStateNotifier`
   // on enter/exit. Reads `home_location` + `home_radius` +
   // `auto_pause_at_home_enabled` prefs (owned by SettingsPage).
   final homeGeofenceService = HomeGeofenceService(sharingStateNotifier);
-  await _tryBootStep(
-      'homeGeofence', homeGeofenceService.start(), const Duration(seconds: 5));
+  await _tryBootStep('homeGeofence', homeGeofenceService.start(), const Duration(seconds: 5));
 
   // Initialize services
   final userService = UserService(client, locationRepository, sharingPreferencesRepository);
@@ -277,13 +287,7 @@ Future<void> _boot() async {
 
   final messageParser = MessageParser();
 
-  // Start the in-app log stream so Developer Tools → Synapse Logs can
-  // tail matrix-sdk events. Matrix logs are pulled via a ticker; raw
-  // `print()` calls land in here via the Zone hook below.
-  LogStreamService.instance.start();
-
-  runZonedGuarded(
-    () => runApp(
+  runApp(
     MultiProvider(
       providers: [
         Provider<Client>.value(value: client),
@@ -336,18 +340,19 @@ Future<void> _boot() async {
         // Provide the RoomService
         ProxyProvider<LocationManager, RoomService>(
           update: (context, locationManager, previousRoomService) {
-            final rs = previousRoomService ?? RoomService(
-              client,
-              context.read<UserService>(),
-              userRepository,
-              userKeysRepository,
-              roomRepository,
-              locationRepository,
-              locationHistoryRepository,
-              sharingPreferencesRepository,
-              locationManager,
-              roomLocationHistoryRepository: roomLocationHistoryRepository,
-            );
+            final rs = previousRoomService ??
+                RoomService(
+                  client,
+                  context.read<UserService>(),
+                  userRepository,
+                  userKeysRepository,
+                  roomRepository,
+                  locationRepository,
+                  locationHistoryRepository,
+                  sharingPreferencesRepository,
+                  locationManager,
+                  roomLocationHistoryRepository: roomLocationHistoryRepository,
+                );
             rs.locationDispatch = locationDispatch;
             return rs;
           },
@@ -405,7 +410,7 @@ Future<void> _boot() async {
                 mapIconRepository: mapIconRepository,
                 mapIconsBloc: context.read<MapIconsBloc>(),
               );
-              
+
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
@@ -505,25 +510,14 @@ Future<void> _boot() async {
               '/signup': (context) => SignUpScreen(),
               '/main': (context) => const MapTab(),
               '/migration': (context) => Scaffold(
-                body: Center(
-                  child: MigrationModal(),
-                ),
-              ),
+                    body: Center(
+                      child: MigrationModal(),
+                    ),
+                  ),
             },
           ),
         ),
       ),
-    ),
-  ),
-    (error, stack) {
-      LogStreamService.instance
-          .capturePrint('UNCAUGHT: $error\n$stack');
-    },
-    zoneSpecification: ZoneSpecification(
-      print: (self, parent, zone, line) {
-        LogStreamService.instance.capturePrint(line);
-        parent.print(zone, line);
-      },
     ),
   );
 }
@@ -586,13 +580,10 @@ Future<void> _runKeyRecoveryFlow(DatabaseService databaseService) async {
 ///   (apply mono ad-hoc per widget via `GoogleFonts.geistMono`).
 /// - Surfaces, shadows and rounded radii match the design tokens.
 ThemeData _buildTheme(ColorScheme scheme) {
-  final base = scheme.brightness == Brightness.dark
-      ? ThemeData.dark(useMaterial3: true)
-      : ThemeData.light(useMaterial3: true);
+  final base =
+      scheme.brightness == Brightness.dark ? ThemeData.dark(useMaterial3: true) : ThemeData.light(useMaterial3: true);
 
-  final gridColors = scheme.brightness == Brightness.dark
-      ? GridColors.dark()
-      : GridColors.light();
+  final gridColors = scheme.brightness == Brightness.dark ? GridColors.dark() : GridColors.light();
 
   final textTheme = GoogleFonts.getTextTheme('Geist', base.textTheme).apply(
     bodyColor: scheme.onSurface,
@@ -612,7 +603,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.getFont('Geist',
+      titleTextStyle: GoogleFonts.getFont(
+        'Geist',
         color: scheme.onSurface,
         fontSize: 17,
         fontWeight: FontWeight.w600,
@@ -641,7 +633,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont(
+          'Geist',
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
@@ -655,7 +648,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont(
+          'Geist',
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
@@ -664,7 +658,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: scheme.primary,
-        textStyle: GoogleFonts.getFont('Geist',
+        textStyle: GoogleFonts.getFont(
+          'Geist',
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
@@ -673,8 +668,8 @@ ThemeData _buildTheme(ColorScheme scheme) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: scheme.surfaceVariant,
-      hintStyle: GoogleFonts.getFont('Geist',color: gridColors.text3, fontSize: 15),
-      labelStyle: GoogleFonts.getFont('Geist',color: gridColors.text2, fontSize: 13),
+      hintStyle: GoogleFonts.getFont('Geist', color: gridColors.text3, fontSize: 15),
+      labelStyle: GoogleFonts.getFont('Geist', color: gridColors.text2, fontSize: 13),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
         borderSide: BorderSide(color: scheme.outlineVariant),
@@ -690,7 +685,7 @@ ThemeData _buildTheme(ColorScheme scheme) {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: scheme.inverseSurface,
-      contentTextStyle: GoogleFonts.getFont('Geist',color: scheme.onInverseSurface),
+      contentTextStyle: GoogleFonts.getFont('Geist', color: scheme.onInverseSurface),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GridTokens.rMd),
@@ -714,14 +709,10 @@ ThemeData _buildTheme(ColorScheme scheme) {
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? Colors.white
-            : scheme.onSurface.withOpacity(0.5),
+        (states) => states.contains(WidgetState.selected) ? Colors.white : scheme.onSurface.withOpacity(0.5),
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? scheme.primary
-            : scheme.surfaceContainerHighest,
+        (states) => states.contains(WidgetState.selected) ? scheme.primary : scheme.surfaceContainerHighest,
       ),
     ),
   );
