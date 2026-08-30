@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:grid_frontend/screens/map/compass_geometry.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_repository.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
@@ -2584,7 +2585,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
             alignment: Alignment.center,
             children: [
               Transform.rotate(
-                angle: _currentMapRotation * (math.pi / 180),
+                angle: compassRoseAngleRadians(_currentMapRotation),
                 child: CustomPaint(
                   size: const Size(26, 26),
                   painter: CompassPainter(
