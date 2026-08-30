@@ -44,6 +44,8 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/screens/settings/password_setup_screen.dart';
+import 'package:grid_frontend/services/password_auth_service.dart';
 import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
@@ -84,6 +86,12 @@ class _SettingsPageState extends State<SettingsPage> {
   SharingMode _sharingMode = SharingMode.balanced;
   bool _autoPauseAtHome = false;
   bool _homeLocationSet = false;
+
+  /// Whether this account already has a password, so the tile can read
+  /// "Change password" instead of "Set a password". Defaults to false so the
+  /// first paint is the honest one for a passkey-only user; it is corrected as
+  /// soon as /auth/password/status answers.
+  bool _hasPassword = false;
   String? _userID;
   String? _username;
   String? _localpart;
@@ -127,6 +135,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _getDeviceAndIdentityKey();
     _loadUser();
+    _loadPasswordStatus();
     _loadIncognitoState();
     _loadBatterySaverState();
     _loadAutoPauseAtHomeState();
@@ -134,6 +143,21 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadAppVersion();
   }
   
+  /// Best-effort: if GAUTH is unreachable the tile just keeps saying
+  /// "Set a password", which the setup screen re-checks anyway.
+  Future<void> _loadPasswordStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwt = prefs.getString('loginToken');
+      if (jwt == null) return;
+      final status = await PasswordAuthService().status(jwt);
+      if (!mounted) return;
+      setState(() => _hasPassword = status.hasPassword);
+    } catch (e) {
+      debugPrint('Could not load password status: $e');
+    }
+  }
+
   Future<void> _loadAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     setState(() {
@@ -2418,6 +2442,22 @@ class _SettingsPageState extends State<SettingsPage> {
                               const PasskeyManagementScreen(),
                         ),
                       );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildSettingsDivider(),
+                  _buildMenuOption(
+                    icon: Icons.password_outlined,
+                    title: _hasPassword ? 'Change password' : 'Set a password',
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PasswordSetupScreen(),
+                        ),
+                      );
+                      // The screen may have just created the first password.
+                      await _loadPasswordStatus();
                     },
                     colorScheme: colorScheme,
                   ),
