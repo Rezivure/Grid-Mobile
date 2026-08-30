@@ -870,7 +870,7 @@ class ContactsSubscreenState extends State<ContactsSubscreen> with TickerProvide
     try {
       final box = context.findRenderObject() as RenderBox?;
       await Share.share(
-        'Join me on Grid! Download it at https://get.grid.lat and send $handle a friend request!',
+        'Join me on Grid! Download it at https://mygrid.app and send $handle a friend request!',
         subject: 'Join me on Grid: Private Location Sharing!',
         sharePositionOrigin:
             box != null ? box.localToGlobal(Offset.zero) & box.size : null,
