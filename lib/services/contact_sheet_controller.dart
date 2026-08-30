@@ -18,6 +18,10 @@ class ContactSheetController extends ChangeNotifier {
   ContactDisplay? _contact;
   ContactDisplay? get contact => _contact;
 
+  /// Whether a contact profile sheet is currently presented. Used by the
+  /// background list sheet to collapse itself out of the way (#305).
+  bool get isOpen => _contact != null;
+
   void open(ContactDisplay contact) {
     _contact = contact;
     notifyListeners();
