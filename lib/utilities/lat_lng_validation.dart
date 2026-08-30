@@ -8,15 +8,21 @@ bool isFiniteLatLng(num lat, num lng) {
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
-/// True when a coordinate looks like a platform "no-fix" sentinel rather than
-/// a real GPS reading. Android's `getLastKnownLocation` (heartbeat / last-known
-/// paths) can hand back a partially-populated fix where one axis is left at an
-/// exact `0.0`. A genuine sub-degree GPS fix is never exactly `0.0` on an axis,
-/// so an exact zero on *either* latitude or longitude means "unset". Left
-/// through, a real longitude with a zeroed latitude (e.g. a user in India at
-/// `0.0, 77.x`) renders the contact stranded in the Indian Ocean.
+/// True for exact Null Island — `(0.0, 0.0)` on both axes.
 ///
-/// Deliberately an exact `== 0.0` test: it only ever matches the sentinel, so
-/// there are no false positives to worry about (the equator / prime meridian
-/// to six decimals is open ocean, not a place any user is reporting from).
-bool isNoFixSentinel(num lat, num lng) => lat == 0.0 || lng == 0.0;
+/// A zero-initialised location struct that never received a fix serialises as
+/// exactly `(0, 0)`, so this is the conventional "unset coordinate" check. It
+/// is defence in depth: nothing in Grid is known to emit it today, but a
+/// no-fix reading that slipped through would render a contact in the Gulf of
+/// Guinea and be re-broadcast to peers.
+///
+/// **Both** axes must be zero. An earlier revision of this guard rejected a
+/// zero on *either* axis, which would also discard genuine fixes on the
+/// equator or the prime meridian — real places, including populated parts of
+/// Ecuador, Kenya, Indonesia, Ghana and the UK. That trade was not worth
+/// making for a sentinel that is only ever emitted with both axes zeroed.
+///
+/// Note this deliberately does not chase pins that *drift as the map pans* —
+/// that symptom is a screen-space projection error, not a bad coordinate.
+/// See PR #316.
+bool isNoFixSentinel(num lat, num lng) => lat == 0.0 && lng == 0.0;

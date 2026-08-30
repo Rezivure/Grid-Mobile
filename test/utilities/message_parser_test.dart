@@ -96,25 +96,32 @@ void main() {
       expect(result, isNull);
     });
 
-    test('returns null when latitude axis is a zeroed no-fix sentinel', () {
-      // Real longitude (India) with a dropped latitude => Indian Ocean pin.
+    test('keeps a genuine equatorial fix (zero latitude only)', () {
+      // Only exact (0,0) is a sentinel. A zero on one axis is a real place —
+      // this is a point in the Indian Ocean off India, but equally it could be
+      // Quito or Nairobi, and dropping it would hide a contact who is there.
       final result = parser.parseLocationMessage({
         'content': {
           'msgtype': 'm.location',
           'geo_uri': 'geo:0.0,77.5946',
         },
       });
-      expect(result, isNull);
+      expect(result, isNotNull);
+      expect(result!.latitude, 0.0);
+      expect(result.longitude, closeTo(77.5946, 0.0001));
     });
 
-    test('returns null when longitude axis is a zeroed no-fix sentinel', () {
+    test('keeps a genuine prime-meridian fix (zero longitude only)', () {
+      // Greenwich. Real place, real users.
       final result = parser.parseLocationMessage({
         'content': {
           'msgtype': 'm.location',
           'geo_uri': 'geo:51.5074,0.0',
         },
       });
-      expect(result, isNull);
+      expect(result, isNotNull);
+      expect(result!.latitude, closeTo(51.5074, 0.0001));
+      expect(result.longitude, 0.0);
     });
 
     test('handles geo_uri with altitude (third component)', () {
