@@ -226,26 +226,25 @@ class _AddFriendModalState extends State<AddFriendModal>
       }
       // For custom homeserver, use as-is
     } else {
-      // Manual input from text field
-      if (isCustomServer) {
-        // For custom homeservers, expect full matrix ID without @ prefix
-        // (since @ is already shown as prefix in the input field)
-        if (!normalizedUserId.contains(':')) {
-          setState(() {
-            _contactError =
-                'Please enter full Matrix ID (e.g., user:domain.com)';
-            _isProcessing = false;
-          });
-          return;
-        }
-        normalizedUserId = '@$normalizedUserId';
-      } else {
-        // For default homeserver, just add local part
-        final homeserver = widget.roomService
+      // Manual input from text field. Canonicalize into a full Matrix ID,
+      // tolerating a stray leading '@' or a pasted full handle.
+      final normalized = utils.normalizeContactId(
+        normalizedUserId,
+        isCustomServer: isCustomServer,
+        defaultHomeserver: widget.roomService
             .getMyHomeserver()
-            .replaceFirst('https://', '');
-        normalizedUserId = '@$normalizedUserId:$homeserver';
+            .replaceFirst('https://', ''),
+      );
+      if (normalized == null) {
+        setState(() {
+          _contactError = isCustomServer
+              ? 'Please enter full Matrix ID (e.g., user:domain.com)'
+              : 'Please enter a username.';
+          _isProcessing = false;
+        });
+        return;
       }
+      normalizedUserId = normalized;
     }
 
     if (normalizedUserId.isNotEmpty) {

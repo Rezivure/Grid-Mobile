@@ -296,4 +296,96 @@ void main() {
       expect(isInviteExpired(now, now), isTrue);
     });
   });
+
+  group('normalizeContactId', () {
+    const hs = 'matrix.mygrid.app';
+
+    test('default: bare localpart is homed to default server', () {
+      expect(
+        normalizeContactId('anya.beech',
+            isCustomServer: false, defaultHomeserver: hs),
+        '@anya.beech:matrix.mygrid.app',
+      );
+    });
+
+    test('default: stray leading @ is stripped (no @@)', () {
+      expect(
+        normalizeContactId('@anya.beech',
+            isCustomServer: false, defaultHomeserver: hs),
+        '@anya.beech:matrix.mygrid.app',
+      );
+    });
+
+    test('default: pasted full handle is not double-wrapped', () {
+      // Regression for GH #182 style "can\'t add contact" — previously became
+      // @@anya.beech:matrix.mygrid.app:matrix.mygrid.app and failed lookup.
+      expect(
+        normalizeContactId('@anya.beech:matrix.mygrid.app',
+            isCustomServer: false, defaultHomeserver: hs),
+        '@anya.beech:matrix.mygrid.app',
+      );
+    });
+
+    test('default: full handle without @ is not double-wrapped', () {
+      expect(
+        normalizeContactId('anya.beech:matrix.mygrid.app',
+            isCustomServer: false, defaultHomeserver: hs),
+        '@anya.beech:matrix.mygrid.app',
+      );
+    });
+
+    test('default: input is lowercased', () {
+      expect(
+        normalizeContactId('Anya.Beech',
+            isCustomServer: false, defaultHomeserver: hs),
+        '@anya.beech:matrix.mygrid.app',
+      );
+    });
+
+    test('default: scheme is stripped from default homeserver', () {
+      expect(
+        normalizeContactId('anya',
+            isCustomServer: false,
+            defaultHomeserver: 'https://matrix.mygrid.app'),
+        '@anya:matrix.mygrid.app',
+      );
+    });
+
+    test('default: empty / @-only input returns null', () {
+      expect(
+        normalizeContactId('  ', isCustomServer: false, defaultHomeserver: hs),
+        isNull,
+      );
+      expect(
+        normalizeContactId('@', isCustomServer: false, defaultHomeserver: hs),
+        isNull,
+      );
+    });
+
+    test('custom: full id with long subdomain is accepted (GH #182)', () {
+      expect(
+        normalizeContactId(
+            'user:matrix-grid.homeserver-familyname.dedyn.io',
+            isCustomServer: true,
+            defaultHomeserver: 'matrix-grid.homeserver-familyname.dedyn.io'),
+        '@user:matrix-grid.homeserver-familyname.dedyn.io',
+      );
+    });
+
+    test('custom: leading @ tolerated on full id', () {
+      expect(
+        normalizeContactId('@user:example.dedyn.io',
+            isCustomServer: true, defaultHomeserver: 'example.dedyn.io'),
+        '@user:example.dedyn.io',
+      );
+    });
+
+    test('custom: missing domain returns null', () {
+      expect(
+        normalizeContactId('user',
+            isCustomServer: true, defaultHomeserver: 'example.dedyn.io'),
+        isNull,
+      );
+    });
+  });
 }
