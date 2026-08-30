@@ -6,14 +6,12 @@ import 'package:lottie/lottie.dart';
 
 import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
-import 'package:grid_frontend/widgets/grid/grid_mono.dart';
-import 'package:flutter_intl_phone_field/flutter_intl_phone_field.dart';
 import 'package:provider/provider.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
-import 'package:grid_frontend/widgets/passkey_prompt_dialog.dart';
+import 'package:grid_frontend/utilities/error_report.dart';
+import 'package:grid_frontend/widgets/error_report_dialog.dart';
 import 'package:grid_frontend/widgets/turnstile_widget.dart';
 
 class ServerSelectScreen extends StatefulWidget {
@@ -22,9 +20,10 @@ class ServerSelectScreen extends StatefulWidget {
 }
 
 class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProviderStateMixin {
-  int _currentStep = 0; // 0: Enter Username, 1: Enter Phone Number, 2: Verify SMS Code
+  // Signup is a single step (choose a username, create a passkey) and login is
+  // a single step (use your passkey). SMS registration/login was removed, so
+  // there are no phone-number or verification-code steps any more.
   bool _isLoginFlow = false;
-  bool _isLoading = false;
 
   // Animation controllers
   late AnimationController _fadeController;
@@ -34,15 +33,12 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
   // Controllers
   final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _codeController = TextEditingController();
 
   // Variables for username availability
   String _usernameStatusMessage = '';
   Color _usernameStatusColor = Colors.transparent;
 
   Timer? _debounce;
-  String _fullPhoneNumber = '';
-  bool _hasAttemptedAutoSubmit = false;
 
   // Passkey state
   final PasskeyService _passkeyService = PasskeyService();
@@ -80,7 +76,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _slideController.forward();
 
     _usernameController.addListener(_onUsernameChanged);
-    _codeController.addListener(_onCodeChanged);
   }
 
   bool _didReadRouteArgs = false;
@@ -95,10 +90,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _didReadRouteArgs = true;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map && args['isLoginFlow'] == true) {
-      setState(() {
-        _isLoginFlow = true;
-        _currentStep = 1; // land on passkey login, not username
-      });
+      setState(() => _isLoginFlow = true);
     }
   }
 
@@ -107,7 +99,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _fadeController.dispose();
     _slideController.dispose();
     _usernameController.dispose();
-    _codeController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -119,15 +110,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     });
   }
 
-  void _onCodeChanged() {
-    setState(() {}); // Trigger rebuild when code changes
-    
-    // Auto-submit when 6 digits are entered (only if not already attempted)
-    if (_codeController.text.trim().length == 6 && !_hasAttemptedAutoSubmit && !_isLoading) {
-      _hasAttemptedAutoSubmit = true;
-      _submitVerificationCode();
-    }
-  }
 
   void _validateUsernameInput() {
     String username = _usernameController.text;
@@ -162,86 +144,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     }
   }
 
-  void _animateToNextStep() {
-    _slideController.reset();
-    _fadeController.reset();
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _fadeController.forward();
-      _slideController.forward();
-    });
-  }
-
-  Widget _buildProgressIndicator() {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: List.generate(3, (index) {
-          final isActive = index <= _currentStep;
-          final isCompleted = index < _currentStep;
-          
-          return Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                children: [
-                  if (index > 0)
-                    Expanded(
-                      child: Container(
-                        height: 2,
-                        decoration: BoxDecoration(
-                          color: isCompleted 
-                              ? colorScheme.primary 
-                              : colorScheme.outline.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(1),
-                        ),
-                      ),
-                    ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: isActive ? colorScheme.primary : colorScheme.outline.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child: isCompleted
-                        ? Icon(
-                            Icons.check,
-                            size: 16,
-                            color: colorScheme.onPrimary,
-                          )
-                        : Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(
-                                color: isActive ? colorScheme.onPrimary : colorScheme.onSurface.withOpacity(0.6),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                  ),
-                  if (index < 2)
-                    Expanded(
-                      child: Container(
-                        height: 2,
-                        decoration: BoxDecoration(
-                          color: isCompleted 
-                              ? colorScheme.primary 
-                              : colorScheme.outline.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(1),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
 
   Widget _buildModernButton({
     required String text,
@@ -293,14 +195,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           illustration,
           const SizedBox(height: 28),
         ],
-        // Step counter — mono uppercase
-        GridMono(
-          'STEP ${_isLoginFlow ? _currentStep : _currentStep + 1} / ${_isLoginFlow ? 3 : 1}',
-          color: context.gridColors.mint,
-          size: 10.5,
-          letterSpacing: 0.12,
-        ),
-        const SizedBox(height: 12),
         Text(
           title,
           style: GoogleFonts.getFont(
@@ -359,9 +253,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
-                const SizedBox(height: 20),
-                _buildProgressIndicator(),
-                const SizedBox(height: 40),
+                const SizedBox(height: 60),
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: SlideTransition(
@@ -378,28 +270,9 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   }
 
   Widget _buildCurrentStep() {
-    if (_isLoginFlow) {
-      switch (_currentStep) {
-        case 1:
-          return _buildPasskeyLoginStep();
-        case 2:
-          return _buildPhoneNumberStep();
-        case 3:
-          return _buildVerifySmsStep();
-        default:
-          return _buildUsernameStep();
-      }
-    }
-    switch (_currentStep) {
-      case 0:
-        return _buildUsernameStep();
-      case 1:
-        return _buildPhoneNumberStep();
-      case 2:
-        return _buildVerifySmsStep();
-      default:
-        return Container();
-    }
+    // Both flows are a single step now: sign in with an existing passkey, or
+    // pick a username and create one.
+    return _isLoginFlow ? _buildPasskeyLoginStep() : _buildUsernameStep();
   }
 
   Widget _buildPasskeyLoginStep() {
@@ -430,33 +303,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
           isPrimary: true,
           isLoading: _isPasskeyLoading,
           icon: Icons.fingerprint,
-        ),
-
-        const SizedBox(height: 14),
-
-        // SMS is the fallback — demote it to a small text link instead
-        // of a full secondary button so passkey is clearly the default.
-        TextButton(
-          onPressed: () {
-            setState(() {
-              _currentStep = 2;
-            });
-            _animateToNextStep();
-          },
-          style: TextButton.styleFrom(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: colorScheme.onSurface.withOpacity(0.55),
-          ),
-          child: const Text(
-            'Sign in with SMS instead',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
         ),
 
         const SizedBox(height: 40),
@@ -601,284 +447,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     );
   }
 
-  Widget _buildPhoneNumberStep() {
-    final colorScheme = Theme.of(context).colorScheme;
 
-    return Column(
-      children: [
-        _buildStepHeader(
-          title: _isLoginFlow ? 'Welcome Back!' : 'Verify Your Identity',
-          subtitle: 'Enter your phone number to ${_isLoginFlow ? 'sign in' : 'continue registration'}',
-          illustration: Container(
-            width: 100,
-            height: 100,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.phone_android,
-              size: 48,
-              color: colorScheme.primary,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 40),
-        
-        Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: IntlPhoneField(
-            decoration: InputDecoration(
-              labelText: 'Phone Number',
-              hintText: 'Enter your phone number',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.all(20),
-            ),
-            initialCountryCode: 'US',
-            onChanged: (phone) {
-              setState(() {
-                _fullPhoneNumber = phone.completeNumber;
-              });
-            },
-          ),
-        ),
-        
-        const SizedBox(height: 40),
-        
-        _buildModernButton(
-          text: 'Send Verification Code',
-          onPressed: !_isLoading && _fullPhoneNumber.isNotEmpty
-              ? () async {
-                  setState(() {
-                    _isLoading = true;
-                  });
-                  try {
-                    if (_isLoginFlow) {
-                      await Provider.of<AuthProvider>(context, listen: false)
-                          .sendSmsCode(_fullPhoneNumber, isLogin: true);
-                    } else {
-                      String username = _usernameController.text;
-                      await Provider.of<AuthProvider>(context, listen: false)
-                          .sendSmsCode(
-                        _fullPhoneNumber,
-                        isLogin: false,
-                        username: username,
-                      );
-                    }
-                    setState(() {
-                      _currentStep = _isLoginFlow ? 3 : 2;
-                    });
-                    _animateToNextStep();
-                  } catch (e) {
-                    _showErrorDialog('Phone number invalid or does not have an active account.');
-                  } finally {
-                    setState(() {
-                      _isLoading = false;
-                    });
-                  }
-                }
-              : null,
-          isPrimary: true,
-          isLoading: _isLoading,
-          icon: Icons.send,
-        ),
-        
-        const SizedBox(height: 40),
-      ],
-    );
-  }
 
-  Widget _buildVerifySmsStep() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        _buildStepHeader(
-          title: 'Enter Verification Code',
-          subtitle: 'We sent a 6-digit code to $_fullPhoneNumber',
-          illustration: Container(
-            width: 100,
-            height: 100,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.verified_user,
-              size: 48,
-              color: colorScheme.primary,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 40),
-        
-        Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: TextField(
-            controller: _codeController,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              labelText: 'Verification Code',
-              hintText: '000000',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.all(20),
-              prefixIcon: Icon(
-                Icons.lock_outline,
-                color: colorScheme.primary,
-              ),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 12),
-        
-        // Debug info - can be removed later
-        if (_codeController.text.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Code length: ${_codeController.text.trim().length}/6',
-              style: TextStyle(
-                fontSize: 12,
-                color: colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-          ),
-        
-        const SizedBox(height: 12),
-        
-        TextButton(
-          onPressed: () async {
-            try {
-              if (_isLoginFlow) {
-                await Provider.of<AuthProvider>(context, listen: false)
-                    .sendSmsCode(_fullPhoneNumber, isLogin: true);
-              } else {
-                String username = _usernameController.text;
-                await Provider.of<AuthProvider>(context, listen: false)
-                    .sendSmsCode(
-                  _fullPhoneNumber,
-                  isLogin: false,
-                  username: username,
-                );
-              }
-              InAppNotifier.instance.show(
-                title: 'Verification code resent',
-                message: 'Check your messages for the new code.',
-                variant: InAppNotificationVariant.success,
-                duration: const Duration(seconds: 2),
-              );
-            } catch (e) {
-              _showErrorDialog('Failed to resend SMS code');
-            }
-          },
-          child: Text(
-            'Didn\'t receive a code? Resend',
-            style: TextStyle(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 40),
-        
-        _buildModernButton(
-          text: _isLoginFlow ? 'Sign In' : 'Complete Registration',
-          onPressed: !_isLoading && _codeController.text.trim().length == 6
-              ? _submitVerificationCode
-              : null,
-          isPrimary: true,
-          isLoading: _isLoading,
-          icon: _isLoginFlow ? Icons.login : Icons.check_circle,
-        ),
-        
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  Future<void> _submitVerificationCode() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      if (_isLoginFlow) {
-        await Provider.of<AuthProvider>(context, listen: false)
-            .verifyLoginCode(
-          _fullPhoneNumber,
-          _codeController.text,
-        );
-        FocusScope.of(context).unfocus();
-        // Navigate to main app
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/main',
-          (Route<dynamic> route) => false,
-        );
-      } else {
-        String username = _usernameController.text;
-        await Provider.of<AuthProvider>(context, listen: false)
-            .verifyRegistrationCode(
-          username,
-          _fullPhoneNumber,
-          _codeController.text,
-        );
-        FocusScope.of(context).unfocus();
-        // Navigate to main app
-        Navigator.pushNamed(context, '/main');
-      }
-    } catch (e) {
-      // Reset auto-submit flag on error so user can try again
-      _hasAttemptedAutoSubmit = false;
-      _showErrorDialog(_isLoginFlow ? 'Login failed' : 'Registration failed');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
 
   Future<void> _loginWithPasskey() async {
     setState(() => _isPasskeyLoading = true);
@@ -892,7 +462,13 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      _showErrorDialog('Passkey login failed. Please try again or use SMS.');
+      if (mounted) {
+        await showErrorReportDialog(
+          context,
+          action: 'Passkey login',
+          error: e,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
     }
@@ -916,189 +492,16 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      _showErrorDialog('Passkey signup failed. Please try SMS verification.');
+      if (mounted) {
+        await showErrorReportDialog(
+          context,
+          action: 'Passkey signup',
+          error: e,
+          username: username,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
     }
-  }
-
-  /// Show passkey setup prompt after SMS login, only once
-  Future<void> _maybeShowPasskeyPrompt() async {
-    if (await PasskeyService.hasShownPasskeyPrompt()) return;
-    await PasskeyService.markPasskeyPromptShown();
-
-    if (!mounted) return;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => const PasskeyPromptDialog(),
-    );
-
-    if (result == true && mounted) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final jwt = prefs.getString('loginToken');
-        if (jwt != null) {
-          await _passkeyService.registerPasskey(jwt);
-          if (mounted) {
-            InAppNotifier.instance.show(
-              title: 'Passkey set up',
-              message: 'You can use it to sign in next time.',
-              variant: InAppNotificationVariant.success,
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          InAppNotifier.instance.show(
-            title: 'Could not set up passkey',
-            message: 'You can add one later in Settings.',
-            variant: InAppNotificationVariant.warning,
-          );
-        }
-      }
-    }
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.9,
-            ),
-            decoration: BoxDecoration(
-              color: colorScheme.background,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.shadow.withOpacity(0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.05),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: colorScheme.outline.withOpacity(0.1),
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Something went wrong',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onBackground,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceVariant.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: colorScheme.outline.withOpacity(0.2),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            message,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorScheme.primary.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'OK',
-                          style: TextStyle(
-                            color: colorScheme.onPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 }

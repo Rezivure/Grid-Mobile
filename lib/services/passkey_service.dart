@@ -35,13 +35,12 @@ class PasskeyService {
   }
 
   /// Login with passkey. Returns JWT on success.
-  Future<String> loginWithPasskey({String? phoneNumber}) async {
+  Future<String> loginWithPasskey() async {
     try {
-      // Step 1: Get authentication options from our server
+      // Step 1: Get authentication options from our server. The server
+      // discovers the account from the passkey itself — there is no phone
+      // number to disambiguate with any more.
       final body = <String, dynamic>{};
-      if (phoneNumber != null && phoneNumber.isNotEmpty) {
-        body['phone_number'] = phoneNumber;
-      }
 
       final optionsResponse = await http.post(
         Uri.parse('$_baseUrl/auth/passkey/login/options'),

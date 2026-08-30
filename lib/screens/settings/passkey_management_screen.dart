@@ -689,7 +689,7 @@ class _PasskeyManagementScreenState extends State<PasskeyManagementScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Sign in with Face ID, Touch ID, or device PIN instead of SMS codes — phishing-proof and faster.',
+              'Sign in with Face ID, Touch ID, or your device PIN — phishing-proof and faster.',
               style: GoogleFonts.getFont(
                 'Geist',
                 fontSize: 13,

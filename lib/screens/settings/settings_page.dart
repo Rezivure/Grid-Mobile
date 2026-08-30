@@ -13,11 +13,12 @@ import 'package:grid_frontend/services/theme_controller.dart';
 import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/location/location_dispatch.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
+import 'package:grid_frontend/utilities/error_report.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:async';
 import 'dart:convert';
-import 'package:grid_frontend/providers/auth_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart' as utils;
 import 'package:image_picker/image_picker.dart';
@@ -920,112 +921,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _deactivateSMSAccount() async {
-    final sharedPreferences = await SharedPreferences.getInstance();
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final locationManager = Provider.of<LocationManager>(context, listen: false);
-    final client = Provider.of<Client>(context, listen: false);
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    final syncManager = Provider.of<SyncManager>(context, listen: false);
-
-    // Confirm deletion with modern styled dialog
-    final shouldDelete = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _buildDeleteConfirmationDialog(),
-    );
-
-    // If user canceled or chose "No," just return
-    if (shouldDelete != true) {
-      return;
-    }
-
-    // Grab the phone number from shared prefs
-    final phoneNumber = sharedPreferences.getString('phone_number');
-    if (phoneNumber == null || phoneNumber.isEmpty) {
-      InAppNotifier.instance.show(
-        title: 'Phone number not found',
-        message: 'Is this a beta/test account?',
-        variant: InAppNotificationVariant.warning,
-      );
-      return;
-    }
-
-    try {
-      // Attempt to request deactivation
-      final requestSuccess = await authProvider.requestDeactivateAccount(phoneNumber);
-      if (!requestSuccess) {
-        InAppNotifier.instance.show(
-          title: 'Failed to request account deactivation',
-          message: 'Please try again or contact support.',
-          variant: InAppNotificationVariant.error,
-        );
-        return;
-      }
-
-      // Prompt user for the confirmation code that was just sent
-      final codeController = TextEditingController();
-      final smsCode = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _buildSMSConfirmationDialog(codeController),
-      );
-
-      // If user canceled or code is empty, abort
-      if (smsCode == null || smsCode.isEmpty) {
-        InAppNotifier.instance.show(
-          title: 'Confirmation code was not entered',
-          message: 'Account deactivation was canceled.',
-          variant: InAppNotificationVariant.warning,
-        );
-        return;
-      }
-
-      // Try confirming account deactivation
-      final confirmSuccess = await authProvider.confirmDeactivateAccount(phoneNumber, smsCode);
-      if (!confirmSuccess) {
-        InAppNotifier.instance.show(
-          title: 'Failed to confirm account deactivation',
-          message: 'Please try again.',
-          variant: InAppNotificationVariant.error,
-        );
-        return;
-      }
-
-      // If successful, stop location tracking, syncing, etc.
-      locationManager.stopTracking();
-      await syncManager.clearAllState();
-      await syncManager.stopSync();
-
-      // Clear your local database
-      await databaseService.deleteAndReinitialize();
-
-      // Clear all shared preferences
-      await sharedPreferences.clear();
-
-      try {
-        if (client.isLogged()) {
-          await client.logout();
-          print("Logout successful");
-        } else {
-          print("Client already logged out");
-        }
-      } catch (e) {
-        print("Error during logout: $e");
-      }
-
-      // Navigate the user back to the welcome screen
-      Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
-
-    } catch (e) {
-      print('Error during deactivation request: $e');
-      InAppNotifier.instance.show(
-        title: 'Failed to start account deactivation',
-        message: 'Please try again or contact support.',
-        variant: InAppNotificationVariant.error,
-      );
-    }
-  }
 
   Future<void> _editDisplayName() async {
     final TextEditingController controller = TextEditingController(text: _displayName ?? _username);
@@ -2245,7 +2140,11 @@ class _SettingsPageState extends State<SettingsPage> {
     final homeserver = await client.homeserver;
     final defaultHomeserver = await dotenv.env['MATRIX_SERVER_URL'];
     if (serverType == 'default' || (homeserver?.toString().trim() == defaultHomeserver?.trim())) {
-      _deactivateSMSAccount();
+      // Accounts on the default homeserver are passkey-only now that SMS
+      // registration is gone, and GAUTH has no passkey self-deactivation
+      // endpoint — so there is no in-app path. Send them to a human rather
+      // than failing with a misleading error.
+      await _showDeletionSupportDialog();
       return;
     }
 
@@ -3154,6 +3053,26 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// Deleting a default-homeserver account needs a human.
+  ///
+  /// Those accounts are passkey-only since SMS registration was removed, and
+  /// GAUTH exposes no passkey self-deactivation endpoint, so there is nothing
+  /// the app can call. Rather than dead-ending the user, hand them their
+  /// account details on the clipboard and point them at Discord.
+  Future<void> _showDeletionSupportDialog() async {
+    final client = Provider.of<Client>(context, listen: false);
+    final userId = client.userID ?? 'unknown';
+    final details = 'Grid account deletion request\n'
+        'User ID: $userId\n'
+        'Requested: ${DateTime.now().toUtc().toIso8601String()}';
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _AccountDeletionSupportDialog(details: details),
+    );
+  }
+
   // Modern Delete Account Dialog Methods
   Widget _buildDeleteConfirmationDialog({bool isCustomServer = false}) {
     final bullets = <_DangerBullet>[
@@ -3338,207 +3257,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSMSConfirmationDialog(TextEditingController codeController) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.9,
-        ),
-        decoration: BoxDecoration(
-          color: context.gridColors.surface,
-          borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: context.gridColors.hairline),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: context.gridColors.dangerSoft,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(GridTokens.rXl),
-                  topRight: Radius.circular(GridTokens.rXl),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.gridColors.danger.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(GridTokens.rMd),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.sms_outlined,
-                      color: context.gridColors.danger,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Confirm deletion',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.015,
-                            color: context.gridColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Enter SMS verification code',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: context.gridColors.text2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Body
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: context.gridColors.surface2,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: context.gridColors.hairline),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: context.gridColors.text2,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Enter the confirmation code sent to your phone.',
-                            style: GoogleFonts.getFont(
-                              'Geist',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: context.gridColors.text2,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: codeController,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 4,
-                      color: context.gridColors.text,
-                    ),
-                    cursorColor: context.gridColors.mint,
-                    decoration: InputDecoration(
-                      hintText: 'Enter code',
-                      hintStyle: GoogleFonts.getFont(
-                        'Geist',
-                        color: context.gridColors.text3,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0,
-                      ),
-                      filled: true,
-                      fillColor: context.gridColors.surface2,
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(GridTokens.rMd),
-                        borderSide:
-                            BorderSide(color: context.gridColors.hairline),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(GridTokens.rMd),
-                        borderSide:
-                            BorderSide(color: context.gridColors.hairline),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(GridTokens.rMd),
-                        borderSide: BorderSide(
-                          color: context.gridColors.mint,
-                          width: 1.5,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GridButton(
-                      label: 'Cancel',
-                      style: GridButtonStyle.secondary,
-                      onPressed: () => Navigator.pop(context, null),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GridButton(
-                      label: 'Delete',
-                      style: GridButtonStyle.danger,
-                      onPressed: () =>
-                          Navigator.pop(context, codeController.text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildPasswordConfirmationDialog(TextEditingController passwordController) {
     return Dialog(
@@ -3928,3 +3646,171 @@ class _DangerBullet {
   final String text;
 }
 
+
+/// Dialog shown when a default-homeserver (passkey) account asks to be deleted.
+///
+/// There is no in-app deletion endpoint for these accounts, so the useful thing
+/// the app can do is hand the user everything the team needs and a way to reach
+/// them. Copying is the primary action; opening Discord is secondary.
+class _AccountDeletionSupportDialog extends StatefulWidget {
+  final String details;
+
+  const _AccountDeletionSupportDialog({required this.details});
+
+  @override
+  State<_AccountDeletionSupportDialog> createState() =>
+      _AccountDeletionSupportDialogState();
+}
+
+class _AccountDeletionSupportDialogState
+    extends State<_AccountDeletionSupportDialog> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.details));
+    if (!mounted) return;
+    setState(() => _copied = true);
+  }
+
+  Future<void> _openDiscord() async {
+    final uri = Uri.parse(gridDiscordInvite);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+        ),
+        decoration: BoxDecoration(
+          color: context.gridColors.surface,
+          borderRadius: BorderRadius.circular(GridTokens.rXl),
+          border: Border.all(color: context.gridColors.hairline),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: context.gridColors.dangerSoft,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(GridTokens.rXl),
+                  topRight: Radius.circular(GridTokens.rXl),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: context.gridColors.danger.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.support_agent,
+                      color: context.gridColors.danger,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      'We\'ll delete it for you',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: context.gridColors.text,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Passkey accounts can\'t be deleted in the app yet. Copy '
+                    'the details below and send them to us on Discord — we\'ll '
+                    'remove your account and confirm when it\'s done.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: context.gridColors.text2,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.gridColors.surface2,
+                      borderRadius: BorderRadius.circular(GridTokens.rMd),
+                      border:
+                          Border.all(color: context.gridColors.hairline),
+                    ),
+                    child: SelectableText(
+                      widget.details,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        fontFamily: 'monospace',
+                        color: context.gridColors.text2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                children: [
+                  GridButton(
+                    label: _copied ? 'Copied' : 'Copy account details',
+                    onPressed: _copy,
+                    style: GridButtonStyle.primary,
+                    icon: _copied ? Icons.check : Icons.copy,
+                  ),
+                  const SizedBox(height: 10),
+                  GridButton(
+                    label: 'Open Discord',
+                    onPressed: _openDiscord,
+                    style: GridButtonStyle.secondary,
+                    icon: Icons.open_in_new,
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: context.gridColors.text2,
+                    ),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

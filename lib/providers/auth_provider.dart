@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'package:uuid/uuid.dart';
 import 'package:grid_frontend/services/database_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:grid_frontend/utilities/utils.dart';
@@ -36,7 +35,6 @@ class AuthProvider with ChangeNotifier {
   Future<void> loginWithJWT(String jwt) async {
     _isLoggedIn = true;
 
-
     final prefs = await SharedPreferences.getInstance();
     //await prefs.setBool('isLoggedIn', _isLoggedIn);
     await prefs.setString('loginToken', jwt);
@@ -49,7 +47,6 @@ class AuthProvider with ChangeNotifier {
 
       // Check if we can communicate with the Matrix server
       await client.checkHomeserver(Uri.parse(dotenv.env['MATRIX_SERVER_URL']!));
-
 
       await client.login(
         'org.matrix.login.jwt',
@@ -112,132 +109,6 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> requestDeactivateAccount(String phoneNumber) async {
-    var clientID = client.userID;
-    if (clientID == null) {
-      print("Error");
-      return false;
-    }
-    var curUser = localpart(clientID);
-    try {
-      final response = await http.post(
-        Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/request'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone_number': phoneNumber,
-          'username': curUser,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        print("Deactivation request sent successfully");
-        return true;
-      } else {
-        print("Failed to send deactivation request: ${response.body}");
-        return false;
-      }
-    } catch (e) {
-      print('Error requesting deactivation: $e');
-      return false;
-    }
-  }
-
-
-  String localpart(String userId) {
-    return userId.split(":").first.replaceFirst('@', '');
-  }
-
-
-  Future<bool> confirmDeactivateAccount(String phoneNumber, String code) async {
-    var clientID = client.userID;
-    if (clientID == null) {
-      print("Error");
-      return false;
-    }
-    var username = localpart(clientID);
-    try {
-      final response = await http.post(
-        Uri.parse('${dotenv.env['GAUTH_URL']!}/deactivate/verify'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'phone_number': phoneNumber,
-          'code': code,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        print("Deactivation confirmed successfully");
-        return true;
-      } else {
-        print("Failed to confirm deactivation code: ${response.body}");
-        return false;
-      }
-    } catch (e) {
-      print('Error verifying deactivation code: $e');
-      return false;
-    }
-  }
-
-
-
-  Future<void> verifyLoginCode(String phoneNumber, String code) async {
-    try {
-      String deviceUuid = Uuid().v4();
-      var response = await http.post(
-        Uri.parse('${dotenv.env['GAUTH_URL']!}/login/verify'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone_number': phoneNumber,
-          'code': code,
-          'device_uuid': deviceUuid,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        String jwt = data['jwt'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('phone_number', phoneNumber);
-        await authenticateWithJWT(jwt);
-      } else {
-        throw Exception('Login verification failed');
-      }
-    } catch (e) {
-      print('Error verifying login code: $e');
-      throw e;
-    }
-  }
-
-  Future<void> verifyRegistrationCode(String username, String phoneNumber, String code) async {
-    try {
-      String deviceUuid = Uuid().v4();
-      var response = await http.post(
-        Uri.parse('${dotenv.env['GAUTH_URL']!}/verify'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'phone_number': phoneNumber,
-          'code': code,
-          'device_uuid': deviceUuid,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        var data = jsonDecode(response.body);
-        String jwt = data['jwt'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('phone_number', phoneNumber);
-        await authenticateWithJWT(jwt);
-      } else {
-        throw Exception('Verification failed');
-      }
-    } catch (e) {
-      print('Error verifying registration code: $e');
-      throw e;
-    }
-  }
-
   Future<bool> checkUsernameAvailability(String username) async {
     try {
       var response = await http.post(
@@ -245,6 +116,9 @@ class AuthProvider with ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': username,
+          // GAUTH's /username endpoint still requires the field even though
+          // SMS registration is gone; the value is ignored for availability
+          // checks. Sending a placeholder keeps the contract satisfied.
           'phone_number': '+10000000000',
         }),
       );
@@ -256,39 +130,4 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendSmsCode(String phoneNumber, {bool isLogin = false, String? username}) async {
-    try {
-      print("Sending SMS for ${isLogin ? 'Login' : 'Registration'}");
-
-      String endpoint = isLogin ? '/login' : '/register';
-      Map<String, dynamic> requestBody;
-
-      if (isLogin) {
-        requestBody = {'phone_number': phoneNumber};
-      } else {
-        if (username == null || username.isEmpty) {
-          throw Exception('Username is required for registration');
-        }
-        requestBody = {'username': username, 'phone_number': phoneNumber};
-      }
-
-      final gauthUrl = dotenv.env['GAUTH_URL'];
-      if (gauthUrl == null || gauthUrl.isEmpty) {
-        throw Exception('GAUTH_URL is not configured in .env file');
-      }
-
-      var response = await http.post(
-        Uri.parse('$gauthUrl$endpoint'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(requestBody),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to send SMS code');
-      }
-    } catch (e) {
-      print('Error sending SMS code: $e');
-      throw e;
-    }
-  }
 }

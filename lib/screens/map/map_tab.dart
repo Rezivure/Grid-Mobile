@@ -353,7 +353,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'SMS Login Ending Soon',
+                                'Add a Passkey',
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
@@ -362,7 +362,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Action required before June 2026',
+                                'Action required to keep access',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: colorScheme.onBackground
@@ -397,7 +397,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'We are phasing out SMS login by the end of May 2026. Please add a passkey to your account to keep access.',
+                              'SMS login has been removed. Your account has no passkey yet, so add one now — otherwise you won\'t be able to sign in again on a new device.',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: colorScheme.onSurfaceVariant,
