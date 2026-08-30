@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
@@ -20,6 +21,7 @@ import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/grid/grid_sheet.dart';
 import 'package:matrix/matrix.dart';
 import 'package:grid_frontend/utilities/lat_lng_validation.dart';
+import 'package:grid_frontend/screens/map/marker_projection.dart';
 
 class LocationHistoryModal extends StatefulWidget {
   final String userId;  // For individual history, this is userId. For groups, this is roomId
@@ -638,11 +640,26 @@ class _LocationHistoryModalState extends State<LocationHistoryModal> {
     try {
       final screen = await controller.toScreenLocationBatch(pts);
       if (!mounted || seq != _projectionSeq) return;
+      // Same physical-vs-logical pixel correction as the live map: on Android
+      // maplibre-native reports these points in PHYSICAL pixels while the
+      // Positioned() overlay below works in LOGICAL ones, so history markers
+      // drift at ~devicePixelRatio× the pan speed without it. (#303, #301)
+      final divisor = markerProjectionDivisor(
+        defaultTargetPlatform,
+        MediaQuery.of(context).devicePixelRatio,
+      );
       _markerScreenPositions
         ..clear()
         ..addEntries([
           for (var i = 0; i < keys.length && i < screen.length; i++)
-            MapEntry(keys[i], Offset(screen[i].x.toDouble(), screen[i].y.toDouble())),
+            MapEntry(
+              keys[i],
+              logicalMarkerOffset(
+                screen[i].x.toDouble(),
+                screen[i].y.toDouble(),
+                divisor,
+              ),
+            ),
         ]);
       setState(() {});
     } catch (_) {}
