@@ -99,10 +99,7 @@ class UserService {
       var response = await http.post(
         Uri.parse('${dotenv.env['GAUTH_URL']}/username'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'phone_number': '+10000000000',
-        }),
+        body: jsonEncode({'username': username}),
       );
 
       return response.statusCode == 200;

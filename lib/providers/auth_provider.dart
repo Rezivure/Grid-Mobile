@@ -132,13 +132,7 @@ class AuthProvider with ChangeNotifier {
       var response = await http.post(
         Uri.parse('${dotenv.env['GAUTH_URL']!}/username'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          // GAUTH's /username endpoint still requires the field even though
-          // SMS registration is gone; the value is ignored for availability
-          // checks. Sending a placeholder keeps the contract satisfied.
-          'phone_number': '+10000000000',
-        }),
+        body: jsonEncode({'username': username}),
       );
 
       return response.statusCode == 200;
