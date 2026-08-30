@@ -165,14 +165,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Housekeeping only. build-release-notes.sh scopes notes to files added
+      # since the previous release tag, so notes stay correct even if this
+      # never lands. Historically it never did — the push below is rejected by
+      # branch protection and the failure was swallowed by a plain `echo`,
+      # which is how changes/ grew to 50 stale files. Now it surfaces as a
+      # warning on the run instead of passing silently.
       - name: Clean up change files
         run: |
           rm -f changes/pr-*.md
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add changes/
-          git diff --cached --quiet || git commit -m "chore: clear release notes after v${{ steps.version.outputs.version }} [skip ci]"
-          git push origin HEAD:main || echo "⚠️ Could not push cleanup (branch protection). Clean up manually."
+          if git diff --cached --quiet; then
+            echo "No change files to clear."
+            exit 0
+          fi
+          git commit -m "chore: clear release notes after v${{ steps.version.outputs.version }} [skip ci]"
+          if git push origin HEAD:main; then
+            echo "✅ Cleared change files."
+          else
+            echo "::warning title=Release notes not cleared::Could not push the cleanup commit to main (branch protection). Release notes are still correct — they are scoped to the previous release tag — but changes/ will keep stale files until this is pushed manually or the workflow is given a token that can write to main."
+          fi
 
       - name: Clean up keychain
         if: always()
