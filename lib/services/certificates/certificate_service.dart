@@ -20,8 +20,6 @@ class AndroidCertificateService {
   final FlutterUserCertificatesAndroid _userCerts = FlutterUserCertificatesAndroid();
 
   Future<void> load() async {
-    await _userCerts.getUserCertificates();
-
     try {
       Map<String, DERCertificate> certs = await _userCerts.getUserCertificates() ?? {};
 
