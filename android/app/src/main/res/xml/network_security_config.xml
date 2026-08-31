@@ -5,7 +5,7 @@
             <!-- Trust pre-installed system CAs -->
             <certificates src="system" />
             <!-- Trust user-installed CA certificates -->
-            <certificates src="user" />
+            <!-- <certificates src="user" /> -->
         </trust-anchors>
     </base-config>
 </network-security-config>

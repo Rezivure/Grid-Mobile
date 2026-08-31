@@ -1,81 +1,69 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_user_certificates_android/flutter_user_certificates_android.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:grid_frontend/services/certificates/certificate_service.dart';
-
-import 'styles/tokens.dart';
-import 'styles/grid_colors.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:matrix/matrix.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_vodozemac/flutter_vodozemac.dart' as vod;
-
-import 'package:grid_frontend/services/database_service.dart';
-import 'package:grid_frontend/services/backwards_compatibility_service.dart';
-import 'package:grid_frontend/services/android_background_task.dart';
-import 'package:grid_frontend/repositories/location_repository.dart';
-import 'package:grid_frontend/repositories/location_history_repository.dart';
-import 'package:grid_frontend/repositories/room_location_history_repository.dart';
-import 'package:grid_frontend/repositories/user_keys_repository.dart';
-import 'package:grid_frontend/repositories/user_repository.dart';
-import 'package:grid_frontend/repositories/room_repository.dart';
-import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
-import 'package:grid_frontend/repositories/map_icon_repository.dart';
-import 'package:grid_frontend/services/map_icon_sync_service.dart';
-
-import 'package:grid_frontend/utilities/message_parser.dart';
-import 'package:grid_frontend/services/message_processor.dart';
-import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:grid_frontend/providers/auth_provider.dart';
-import 'package:grid_frontend/services/location_manager.dart';
-import 'package:grid_frontend/providers/user_location_provider.dart';
-import 'package:grid_frontend/providers/selected_user_provider.dart';
-import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
-import 'package:grid_frontend/services/user_service.dart';
-import 'package:grid_frontend/services/room_service.dart';
-import 'package:grid_frontend/services/sharing_state_notifier.dart';
-import 'package:grid_frontend/services/location/location_dispatch.dart';
-import 'package:grid_frontend/services/location/home_geofence_service.dart';
-import 'package:grid_frontend/services/user_device_status_cache.dart';
-import 'package:grid_frontend/services/log_stream_service.dart';
-import 'package:grid_frontend/services/theme_controller.dart';
-
-import 'screens/onboarding/splash_screen.dart';
-import 'screens/onboarding/welcome_screen.dart';
-import 'screens/onboarding/server_select_screen.dart';
-import 'widgets/app_initializer.dart';
-import 'screens/onboarding/login_screen.dart';
-import 'screens/onboarding/signup_screen.dart';
-import 'screens/map/map_tab.dart';
-
-import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
-import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
-import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
+import 'package:grid_frontend/blocs/map/map_bloc.dart';
+import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
+import 'package:grid_frontend/providers/auth_provider.dart';
+import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
+import 'package:grid_frontend/providers/selected_user_provider.dart';
+import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/repositories/invitations_repository.dart';
-
-import 'package:grid_frontend/widgets/version_wrapper.dart';
-import 'package:grid_frontend/widgets/migration_modal.dart';
+import 'package:grid_frontend/repositories/location_history_repository.dart';
+import 'package:grid_frontend/repositories/location_repository.dart';
+import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/repositories/room_location_history_repository.dart';
+import 'package:grid_frontend/repositories/room_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/user_keys_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/services/android_background_task.dart';
+import 'package:grid_frontend/services/backwards_compatibility_service.dart';
+import 'package:grid_frontend/services/database_service.dart';
+import 'package:grid_frontend/services/debug_log_service.dart';
+import 'package:grid_frontend/services/location/home_geofence_service.dart';
+import 'package:grid_frontend/services/location/location_dispatch.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/log_stream_service.dart';
+import 'package:grid_frontend/services/map_icon_sync_service.dart';
+import 'package:grid_frontend/services/message_processor.dart';
+import 'package:grid_frontend/services/push/notification_channels.dart';
+import 'package:grid_frontend/services/push_notification_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/services/theme_controller.dart';
+import 'package:grid_frontend/services/user_device_status_cache.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/utilities/message_parser.dart';
+import 'package:grid_frontend/widgets/boot_error_screen.dart';
 import 'package:grid_frontend/widgets/in_app_notification_overlay.dart';
 import 'package:grid_frontend/widgets/key_recovery_screen.dart';
-import 'package:grid_frontend/widgets/boot_error_screen.dart';
+import 'package:grid_frontend/widgets/migration_modal.dart';
+import 'package:grid_frontend/widgets/version_wrapper.dart';
 import 'package:libre_location/libre_location.dart';
-import 'package:grid_frontend/services/debug_log_service.dart';
-import 'package:grid_frontend/services/push_notification_service.dart';
-import 'package:grid_frontend/services/push/notification_channels.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:matrix/matrix.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'screens/map/map_tab.dart';
+import 'screens/onboarding/login_screen.dart';
+import 'screens/onboarding/server_select_screen.dart';
+import 'screens/onboarding/signup_screen.dart';
+import 'screens/onboarding/welcome_screen.dart';
+import 'styles/grid_colors.dart';
+import 'styles/tokens.dart';
+import 'widgets/app_initializer.dart';
 
 void main() async {
   // Start the in-app log stream so Developer Tools → Synapse Logs can
@@ -122,8 +110,6 @@ Future<T?> _tryBootStep<T>(String step, Future<T> future, Duration limit) async 
 }
 
 Future<void> _boot() async {
-  await CertificateService.init();
-
   await _tryBootStep('theme', ThemeController.instance.load(), const Duration(seconds: 5));
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);

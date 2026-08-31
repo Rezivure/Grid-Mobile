@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_user_certificates_android/flutter_user_certificates_android.dart';
 
+// Removed the usage of this service, but let the code remain to implement it in another PR.
 class CertificateService {
   static Future<void> init() {
     if (!kIsWeb) {
