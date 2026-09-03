@@ -27,6 +27,7 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Run Flutter unit tests
@@ -51,6 +52,7 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Start test infrastructure
@@ -105,6 +107,7 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Set up Android signing
