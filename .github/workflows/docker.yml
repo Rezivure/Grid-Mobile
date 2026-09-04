@@ -33,10 +33,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
+      - id: toLowerCase
+        run: INPUT=${{ github.repository_owner }} echo "::set-output name=repo_owner::${INPUT,,}"
+
       - uses: docker/build-push-action@v7
         with:
           push: true
-          tags: ghcr.io/rezivure/grid-builder:android
+          tags: ghcr.io/${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:android
           target: android-builder
+          cache-from: type=registry,ref=${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:buildcache
+          cache-to: type=registry,ref=${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:buildcache,mode=max
           secrets: |
             GIT_AUTH_TOKEN=${{ github.token }}
