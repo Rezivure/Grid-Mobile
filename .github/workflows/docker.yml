@@ -34,14 +34,14 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - id: toLowerCase
-        run: INPUT=${{ github.repository_owner }} echo "::set-output name=repo_owner::${INPUT,,}"
+        run: echo "repo_owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v7
         with:
           push: true
-          tags: ghcr.io/${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:android
+          tags: ghcr.io/${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:android
           target: android-builder
-          cache-from: type=registry,ref=${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:buildcache
-          cache-to: type=registry,ref=${{ steps.toLowerCase.outputs.lowerCaseValue }}/grid-builder:buildcache,mode=max
+          cache-from: type=registry,ref=${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:buildcache
+          cache-to: type=registry,ref=${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:buildcache,mode=max
           secrets: |
             GIT_AUTH_TOKEN=${{ github.token }}
