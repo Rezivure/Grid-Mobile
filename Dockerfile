@@ -169,8 +169,8 @@ FROM setup-jdk AS android-builder
     COPY --chown=$UID:$GID --from=setup-android $ANDROID_SDK_ROOT $ANDROID_SDK_ROOT
     RUN sdkmanager "platform-tools" "build-tools;35.0.0"
     RUN sdkmanager "build-tools;36.0.0" "platforms;android-33" "platforms;android-31" "platforms;android-34" "cmake;3.22.1"
-    COPY --from=setup-rust $CARGO_HOME $CARGO_HOME
-    COPY --from=setup-rust $RUSTUP_HOME $RUSTUP_HOME
+    COPY --chown=$UID:$GID --from=setup-rust $CARGO_HOME $CARGO_HOME
+    COPY --chown=$UID:$GID --from=setup-rust $RUSTUP_HOME $RUSTUP_HOME
     COPY --chown=$UID:$GID --from=setup-flutter-dependencies $HOME/.pub-cache $HOME/.pub-cache
     COPY --chown=$UID:$GID --from=setup-gradle-dependencies $HOME/.gradle $HOME/.gradle
     COPY --chown=$UID:$GID --from=setup-gradle-dependencies $HOME/android $HOME/android
