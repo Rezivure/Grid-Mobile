@@ -157,6 +157,8 @@ FROM setup-jdk AS android-builder
     ENV JAVA_HOME=/usr/lib/jvm/temurin-$JDK-jdk-amd64
     ENV PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/$ANDROID_CMDLINE_TOOLS_SHORT/bin:$JAVA_HOME/bin:/opt/flutter/bin
 
+    RUN apt install -y --no-install-recommends build-essential
+
     COPY --chown=$UID:$GID --from=setup-flutter /opt/flutter /opt/flutter
     RUN mkdir -p /workspace
     RUN mkdir -p /workspace/.dart-tool
