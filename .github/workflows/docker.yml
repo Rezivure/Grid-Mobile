@@ -36,7 +36,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           push: true
-          tags: ghcr.io/rezivure/grid-builder:android
+          tags: ghcr.io/enbyace/grid-builder:android
           target: android-builder
           secrets: |
             GIT_AUTH_TOKEN=${{ github.token }}
