@@ -14,9 +14,6 @@ on:
       - pubspec.yaml
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
     name: Build Docker image and push to ghcr.io
@@ -41,7 +38,7 @@ jobs:
           push: true
           tags: ghcr.io/${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:android
           target: android-builder
-          cache-from: type=registry,ref=${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:buildcache
-          cache-to: type=registry,ref=${{ steps.toLowerCase.outputs.repo_owner }}/grid-builder:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           secrets: |
             GIT_AUTH_TOKEN=${{ github.token }}
