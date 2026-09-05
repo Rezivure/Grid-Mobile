@@ -31,13 +31,15 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Adjusted login to use JWT
+  /// Exchanges a GAUTH JWT for a Matrix session.
+  ///
+  /// Throws if the exchange fails. `_isLoggedIn` and the stored `loginToken`
+  /// are only written *after* `client.login` succeeds: previously they were
+  /// written up front and the catch block only printed, so a failed Matrix
+  /// login left the app looking signed in with a dead session and the caller
+  /// navigated happily on to /main.
   Future<void> loginWithJWT(String jwt) async {
-    _isLoggedIn = true;
-
     final prefs = await SharedPreferences.getInstance();
-    //await prefs.setBool('isLoggedIn', _isLoggedIn);
-    await prefs.setString('loginToken', jwt);
 
     // Clear any stored custom homeserver since this is default server login
     await prefs.remove('custom_homeserver');
@@ -60,10 +62,17 @@ class AuthProvider with ChangeNotifier {
         await prefs.setString('token', client.accessToken!);
       }
 
+      // Only now is the session real. Storing `loginToken` before this point
+      // meant a dead session still looked authenticated to every feature that
+      // reads it.
+      _isLoggedIn = true;
+      await prefs.setString('loginToken', jwt);
+
       final homeserver = await client.homeserver;
       print("Logged in to: $homeserver");
 
-      // Register push notifications
+      // Register push notifications. Best-effort: a push failure is not a
+      // sign-in failure, so it stays swallowed.
       try {
         final pushService = PushNotificationService(client: client);
         await pushService.register();
@@ -72,6 +81,9 @@ class AuthProvider with ChangeNotifier {
       }
     } catch (e) {
       print('Error initializing Matrix client with JWT: $e');
+      _isLoggedIn = false;
+      notifyListeners();
+      rethrow;
     }
 
     notifyListeners();
@@ -99,6 +111,11 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Signs in to the default homeserver with a GAUTH JWT (from a passkey or a
+  /// password).
+  ///
+  /// Rethrows on failure. It used to swallow the error, which meant callers
+  /// could not tell success from failure and pushed on to /main regardless.
   Future<void> authenticateWithJWT(String jwt) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -106,6 +123,7 @@ class AuthProvider with ChangeNotifier {
       await loginWithJWT(jwt);
     } catch (e) {
       print('Failed to authenticate with JWT: $e');
+      rethrow;
     }
   }
 
@@ -114,13 +132,7 @@ class AuthProvider with ChangeNotifier {
       var response = await http.post(
         Uri.parse('${dotenv.env['GAUTH_URL']!}/username'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          // GAUTH's /username endpoint still requires the field even though
-          // SMS registration is gone; the value is ignored for availability
-          // checks. Sending a placeholder keeps the contract satisfied.
-          'phone_number': '+10000000000',
-        }),
+        body: jsonEncode({'username': username}),
       );
 
       return response.statusCode == 200;
