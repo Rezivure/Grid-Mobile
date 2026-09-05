@@ -62,6 +62,9 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Full history and tags: the sweep below needs the release tags to
+          # tell a released note from a pending one.
+          fetch-depth: 0
 
       - name: Write and commit change file
         env:
@@ -76,6 +79,27 @@ jobs:
             rm -f "$CHANGE_FILE"
           else
             echo "[${TYPE}] ${NOTE}" > "$CHANGE_FILE"
+          fi
+
+          # Sweep out notes that a release has already shipped. A note is
+          # pending if its file was added after the newest release tag;
+          # anything older was consumed by that release and is dead weight.
+          # The release job cannot do this itself — it would have to push to
+          # main, which requires a reviewed pull request.
+          LAST_TAG=$(git tag --list 'v*' --sort=-creatordate | head -1)
+          if [ -n "$LAST_TAG" ]; then
+            PENDING=$(git diff --name-only --diff-filter=A "${LAST_TAG}..HEAD" -- changes 2>/dev/null \
+              | grep -E '^changes/pr-[0-9]+\.md$' || true)
+            for f in changes/pr-*.md; do
+              [ -e "$f" ] || continue
+              # Never touch this PR's own entry - it is not committed yet, so
+              # it cannot show up in the pending list.
+              [ "$f" = "$CHANGE_FILE" ] && continue
+              if ! printf '%s\n' "$PENDING" | grep -qxF "$f"; then
+                echo "🧹 clearing released note $f (shipped in ${LAST_TAG})"
+                rm -f "$f"
+              fi
+            done
           fi
 
           git config user.name "github-actions[bot]"
