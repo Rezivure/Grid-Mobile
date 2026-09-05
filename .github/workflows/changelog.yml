@@ -5,29 +5,24 @@ on:
     types: [opened, edited, synchronize]
 
 jobs:
-  changelog:
+  validate:
     name: Changelog Entry
-    runs-on: [self-hosted, macOS, ARM64]
-    permissions:
-      contents: write
-      pull-requests: read
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.parse.outputs.skip }}
+      type: ${{ steps.parse.outputs.type }}
+      note: ${{ steps.parse.outputs.note }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Parse PR body and create changelog
+      # No checkout needed - everything comes from the PR body in the event
+      # payload, so this works for PRs opened from a fork too.
+      - name: Parse PR body
+        id: parse
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          # Parse which checkbox is checked
-          TYPE=""
           if echo "$PR_BODY" | grep -q '\[x\] `skip`'; then
             echo "✅ Changelog skipped"
-            # Remove any existing change file for this PR
-            rm -f "changes/pr-${PR_NUMBER}.md"
+            echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           elif echo "$PR_BODY" | grep -q '\[x\] `feature`'; then
             TYPE="feature"
@@ -40,7 +35,6 @@ jobs:
             exit 1
           fi
 
-          # Extract release note line
           NOTE=$(echo "$PR_BODY" | sed -n '/\*\*Release note:\*\*/,/^$/p' | grep -v '^\*\*Release note' | grep -v '^<!--' | grep -v '^$' | head -1 | xargs)
 
           if [ -z "$NOTE" ]; then
@@ -48,14 +42,44 @@ jobs:
             exit 1
           fi
 
-          # Create the change file
-          CHANGE_FILE="changes/pr-${PR_NUMBER}.md"
-          echo "[${TYPE}] ${NOTE}" > "$CHANGE_FILE"
-          echo "📝 Created ${CHANGE_FILE}: [${TYPE}] ${NOTE}"
+          echo "📝 [${TYPE}] ${NOTE}"
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "type=${TYPE}" >> $GITHUB_OUTPUT
+          echo "note=${NOTE}" >> $GITHUB_OUTPUT
 
-          # Commit if changed
+  commit:
+    name: Commit Changelog Entry
+    needs: validate
+    # Only for PRs from a branch in this repo. The repo token has no write
+    # access to a contributor's fork, so for fork PRs the entry is added by
+    # the maintainer at merge time instead.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write and commit change file
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SKIP: ${{ needs.validate.outputs.skip }}
+          TYPE: ${{ needs.validate.outputs.type }}
+          NOTE: ${{ needs.validate.outputs.note }}
+        run: |
+          CHANGE_FILE="changes/pr-${PR_NUMBER}.md"
+
+          if [ "$SKIP" = "true" ]; then
+            rm -f "$CHANGE_FILE"
+          else
+            echo "[${TYPE}] ${NOTE}" > "$CHANGE_FILE"
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$CHANGE_FILE"
+          git add "changes/"
           git diff --cached --quiet || git commit -m "changelog: add entry for PR #${PR_NUMBER} [skip ci]"
           git push
