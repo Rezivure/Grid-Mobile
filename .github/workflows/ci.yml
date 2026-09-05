@@ -14,10 +14,18 @@ concurrency:
 jobs:
   unit-tests:
     name: Unit Tests
-    runs-on: [self-hosted, macOS, ARM64]
+    # Pure Dart tests - no Mac needed. GitHub-hosted runners are free for
+    # public repos and keep the self-hosted host free for builds.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.5'
+          channel: stable
+          cache: true
 
       - name: Create CI .env
         run: |
@@ -31,13 +39,16 @@ jobs:
           EOF
 
       - name: Run Flutter unit tests
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          flutter test --reporter expanded 2>&1
+        run: flutter test --reporter expanded
 
   core-e2e-tests:
     name: Core E2E Tests (Fast)
-    if: false
+    # Currently disabled. The `false &&` keeps it off; the second clause is
+    # the real condition for when it comes back - the simulator host is only
+    # wired up for branches in this repo.
+    if: >-
+      false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 10
     needs: unit-tests
@@ -181,6 +192,20 @@ jobs:
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane android beta
+
+      - name: Build release APK for contributors
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          flutter build apk --release
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-${{ env.VERSION_NAME }}-${{ env.BUILD_NUMBER }}-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          # Kept short so artifact storage stays bounded.
+          retention-days: 14
 
       - name: Clean up keychain
         if: always()
