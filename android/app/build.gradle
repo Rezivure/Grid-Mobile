@@ -73,10 +73,10 @@ android {
 
     signingConfigs {
         release {
-            keyAlias localProperties.getProperty('keyAlias')
-            keyPassword localProperties.getProperty('keyPassword')
-            storeFile file(localProperties.getProperty('storeFile'))
-            storePassword localProperties.getProperty('storePassword')
+            keyAlias keyProperties.getProperty('keyAlias')
+            keyPassword keyProperties.getProperty('keyPassword')
+            storeFile file(keyProperties.getProperty('storeFile'))
+            storePassword keyProperties.getProperty('storePassword')
         }
     }
 

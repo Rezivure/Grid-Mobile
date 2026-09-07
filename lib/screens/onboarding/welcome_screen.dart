@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:grid_frontend/widgets/assets/grid_image.dart';
+import 'package:grid_frontend/widgets/assets/grid_word_image.dart';
+import 'package:grid_frontend/widgets/buttons/account_exist_button.dart';
+import 'package:grid_frontend/widgets/buttons/get_started_button.dart';
+import 'package:grid_frontend/widgets/buttons/terms_and_privacy_button.dart';
+import 'package:grid_frontend/widgets/buttons/use_custom_server_button.dart';
+import 'package:grid_frontend/widgets/layout/gap.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'dart:math';
@@ -10,8 +17,10 @@ import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
+
   @override
-  _WelcomeScreenState createState() => _WelcomeScreenState();
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateMixin {
@@ -19,7 +28,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   late AnimationController _scaleController;
   late AnimationController _slideController;
   late AnimationController _floatController;
-  
+
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
@@ -31,7 +40,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    
+
     // Multiple animation controllers for staggered animations
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 1500),
@@ -49,7 +58,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       duration: const Duration(milliseconds: 4000),
       vsync: this,
     );
-    
+
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
       curve: Curves.easeInOut,
@@ -81,7 +90,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     Future.delayed(const Duration(milliseconds: 1000), () {
       if (mounted) _floatController.repeat(reverse: true);
     });
-    
+
     // Avatar animation timer
     _avatarTimer = Timer.periodic(const Duration(seconds: 3), (Timer timer) {
       if (mounted) {
@@ -102,7 +111,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     super.dispose();
   }
 
+  // TODO(Yuki): Move into separate file and add proper error handling and message dispatching
   Future<void> _launchUrl(String url) async {
+    // canLaunch should not be used at all, it only checks for configured permissions.
+    // The docs state, that the url should be launched even when 'canLaunch' returns false
     if (await canLaunch(url)) {
       await launch(url);
     } else {
@@ -110,6 +122,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     }
   }
 
+  // TODO(Chandler): Remove if it isn't used
   Widget _buildModernLogo() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -133,6 +146,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     );
   }
 
+  // TODO(Chandler): Remove if it isn't used
   Widget _buildModernButton({
     required String text,
     required VoidCallback onPressed,
@@ -145,13 +159,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        boxShadow: isPrimary ? [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
+        boxShadow: isPrimary
+            ? [
+                BoxShadow(
+                  color: colorScheme.primary.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: ElevatedButton(
         onPressed: onPressed,
@@ -161,10 +177,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: isPrimary ? BorderSide.none : BorderSide(
-              color: colorScheme.outline.withOpacity(0.2),
-              width: 1,
-            ),
+            side: isPrimary
+                ? BorderSide.none
+                : BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
           ),
         ),
         child: Row(
@@ -209,19 +227,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Image.asset(
-                        theme.brightness == Brightness.dark
-                            ? 'assets/brand/01-logos/grid-symbol-color-dark-1024.png'
-                            : 'assets/brand/01-logos/grid-symbol-color-1024.png',
+                      Image(
+                        image: theme.brightness == Brightness.dark ? GridImage.darkMode : GridImage.lightMode,
                         width: 132,
                         height: 132,
                         fit: BoxFit.contain,
                       ),
-                      const SizedBox(height: 20),
-                      Image.asset(
-                        theme.brightness == Brightness.dark
-                            ? 'assets/brand/02-wordmark/grid-wordmark-white-1800.png'
-                            : 'assets/brand/02-wordmark/grid-wordmark-ink-1800.png',
+                      Gap.bigger,
+                      Image(
+                        image: theme.brightness == Brightness.dark ? GridWordImage.darkMode : GridWordImage.lightMode,
                         height: 52,
                         fit: BoxFit.contain,
                       ),
@@ -250,13 +264,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: context.gridColors.mint.withOpacity(0.6),
+                              color: context.gridColors.mint.withValues(alpha: 0.6),
                               blurRadius: 6,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      Gap.smaller,
                       GridMono(
                         'E2E ENCRYPTED · OPEN SOURCE',
                         color: context.gridColors.mint,
@@ -267,7 +281,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              Gap.big,
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Text(
@@ -283,7 +297,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                   textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(height: 12),
+              Gap.normal,
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: SizedBox(
@@ -307,94 +321,75 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                 child: SlideTransition(
                   position: _slideAnimation,
                   child: Column(
+                    spacing: 8,
                     children: [
-                      GridButton(
-                        label: 'Get started',
-                        onPressed: () =>
-                            Navigator.pushNamed(context, '/server_select'),
+                      GetStartedButton(
+                        onPressed: _onGetStart,
                       ),
-                      const SizedBox(height: 8),
-                      GridButton(
-                        label: 'I already have an account',
-                        style: GridButtonStyle.ghost,
-                        onPressed: () {
-                          // The same multi-step screen handles both flows;
-                          // the login-flow flag is set inside.
-                          Navigator.pushNamed(
-                            context,
-                            '/server_select',
-                            arguments: {'isLoginFlow': true},
-                          );
-                        },
-                      ),
+                      AccountExistButton(
+                        onPressed: _onAccountExist,
+                      )
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              Gap.big,
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Column(
                   children: [
-                    Text.rich(
-                      TextSpan(
-                        text: 'By continuing you agree to our ',
-                        style: GoogleFonts.getFont(
-                          'Geist',
-                          fontSize: 11.5,
-                          color: context.gridColors.text3,
+                    DefaultTextStyle.merge(
+                      style: GoogleFonts.getFont(
+                        'Geist',
+                        fontSize: 11.5,
+                        color: context.gridColors.text3,
+                      ),
+                      child: Text.rich(
+                        TextSpan(
+                          text: 'By continuing you agree to our ',
+                          children: [
+                            WidgetSpan(
+                              child: TermsAndPrivacyButton(
+                                onPressed: () => _launchUrl('https://mygrid.app/privacy'),
+                              ),
+                            ),
+                            const TextSpan(text: '.'),
+                          ],
                         ),
-                        children: [
-                          TextSpan(
-                            text: 'Terms & Privacy',
-                            style: TextStyle(
-                              color: context.gridColors.text2,
-                              decoration: TextDecoration.underline,
-                            ),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap =
-                                  () => _launchUrl('https://mygrid.app/privacy'),
-                          ),
-                          const TextSpan(text: '.'),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 6),
-                    TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/login'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: context.gridColors.mint,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.link_rounded, size: 14, color: context.gridColors.mint),
-                          SizedBox(width: 4),
-                          Text(
-                            'Use a custom server',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: context.gridColors.mint,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                        textAlign: TextAlign.center,
                       ),
                     ),
+                    Gap.smaller,
+                    UseCustomServerButton(
+                      onPressed: _onUseCustomServer,
+                    )
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
+              Gap.normal,
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _onGetStart() {
+    return Navigator.pushNamed(context, '/server_select');
+  }
+
+  Future<void> _onAccountExist() {
+    // The same multi-step screen handles both flows;
+    // the login-flow flag is set inside.
+    return Navigator.pushNamed(
+      context,
+      '/server_select',
+      arguments: {'isLoginFlow': true},
+    );
+  }
+
+  Future<void> _onUseCustomServer() {
+    return Navigator.pushNamed(context, '/login');
   }
 }
 
@@ -575,7 +570,5 @@ class _ConstellationLines extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ConstellationLines old) =>
-      old.positions != positions;
+  bool shouldRepaint(_ConstellationLines old) => old.positions != positions;
 }
-
