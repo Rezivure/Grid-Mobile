@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utilities/lat_lng_validation.dart';
 import '../sharing_state_notifier.dart';
+import 'location_service_config.dart';
 import 'location_update.dart';
 
 /// User-facing "Sharing mode" — maps to a `libre_location` preset plus a
@@ -23,6 +24,14 @@ extension SharingModePref on SharingMode {
         SharingMode.light => libre.TrackingPreset.low,
         SharingMode.balanced => libre.TrackingPreset.balanced,
         SharingMode.live => libre.TrackingPreset.high,
+      };
+
+  /// The service-layer tier LocationManager pushes for this mode. Kept
+  /// beside [preset] so the two mappings cannot drift apart.
+  TrackingMode get trackingMode => switch (this) {
+        SharingMode.light => TrackingMode.batterySaver,
+        SharingMode.balanced => TrackingMode.normal,
+        SharingMode.live => TrackingMode.live,
       };
 
   static SharingMode fromPrefValue(String? raw) => switch (raw) {

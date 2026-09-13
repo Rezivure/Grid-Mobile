@@ -62,7 +62,6 @@ import '../../widgets/grid/grid_avatar.dart';
 import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../../widgets/grid/grid_segmented.dart';
-import '../../services/location/location_service_config.dart';
 
 
 
@@ -83,7 +82,6 @@ class _SettingsPageState extends State<SettingsPage> {
   String _appVersion = '';
   String _buildNumber = '';
   bool _incognitoMode = false;
-  bool _batterySaver = false;
   SharingMode _sharingMode = SharingMode.balanced;
   bool _autoPauseAtHome = false;
   bool _homeLocationSet = false;
@@ -108,8 +106,6 @@ class _SettingsPageState extends State<SettingsPage> {
   // window opens the Developer Tools screen.
   int _devTapCount = 0;
   DateTime? _lastDevTapAt;
-
-  TrackingMode _trackingMode = TrackingMode.normal;
 
   void _onFooterTapped() {
     final now = DateTime.now();
@@ -140,8 +136,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUser();
     _loadPasswordStatus();
     _loadIncognitoState();
-    _loadTrackingMode();
-    // _loadBatterySaverState();
+    _loadSharingMode();
     _loadAutoPauseAtHomeState();
     _loadCachedAvatar();
     _loadAppVersion();
@@ -204,23 +199,14 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<void> _loadTrackingMode() async {
+  Future<void> _loadSharingMode() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
-      int? trackingModeIndex = prefs.getInt("trackingModeIndex");
-      _trackingMode = trackingModeIndex == 0 ? TrackingMode.batterySaver : (trackingModeIndex == 2 ? TrackingMode.live : TrackingMode.normal);
-      _sharingMode = SharingModePref.fromPrefValue(prefs.getString("sharing_mode"));
+      _sharingMode =
+          SharingModePref.fromPrefValue(prefs.getString('sharing_mode'));
     });
   }
-
-  // Future<void> _loadBatterySaverState() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   setState(() {
-  //     _batterySaver = prefs.getBool('battery_saver') ?? false;
-  //     _sharingMode =
-  //         SharingModePref.fromPrefValue(prefs.getString('sharing_mode'));
-  //   });
-  // }
 
   Future<void> _loadAutoPauseAtHomeState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -271,57 +257,21 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  int _sharingModeToIndex(SharingMode mode) {
-    return mode == SharingMode.light ? 0 : (mode == SharingMode.live ? 2 : 1); // light = 0, balanced = 1, live = 2
-  }
-
-  /// Drives the user-facing 'Sharing mode' slider. Persists the choice,
-  /// swaps the underlying `libre_location` preset at runtime via
-  /// LocationDispatch, and keeps the legacy `battery_saver` pref in sync
-  /// for any consumer that still reads it.
+  /// Drives the user-facing 'Sharing mode' slider. [LocationDispatch.setMode]
+  /// persists the choice to `sharing_mode` and swaps the `libre_location`
+  /// preset; LocationManager is then told to re-apply its tracking config so
+  /// the two do not push conflicting presets (#341).
   Future<void> _setSharingMode(SharingMode mode) async {
     if (_sharingMode == mode) return;
-    // setState(() => _sharingMode = mode);
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
     try {
       await context.read<LocationDispatch>().setMode(mode);
     } catch (_) {}
-    final prefs = await SharedPreferences.getInstance();
-    int trackingModeIndex = _sharingModeToIndex(mode);
-    await prefs.setInt("trackingModeIndex", trackingModeIndex);
-    if (mounted) setState(() => _sharingMode = mode);
     try {
-      Provider.of<LocationManager>(context, listen: false)
-        .setTrackingMode(trackingModeIndex);
+      locationManager.setTrackingMode(mode.trackingMode);
     } catch (_) {}
+    if (mounted) setState(() => _sharingMode = mode);
   }
-
-  // Future<void> _toggleBatterySaver(bool value) async {
-  //   final locationManager = Provider.of<LocationManager>(context, listen: false);
-  //   final prefs = await SharedPreferences.getInstance();
-
-  //   setState(() {
-  //     _batterySaver = value;
-  //   });
-
-  //   await prefs.setBool('battery_saver', value);
-
-  //   if (value) {
-  //     // enable incognito
-  //     locationManager.toggleBatterySaverMode(value);
-  //     InAppNotifier.instance.show(
-  //       title: 'Battery Saver Mode enabled',
-  //       message: 'Location updates less frequently to save power.',
-  //       variant: InAppNotificationVariant.success,
-  //     );
-  //   } else {
-  //     locationManager.toggleBatterySaverMode(value);
-  //     InAppNotifier.instance.show(
-  //       title: 'Battery Saver Mode disabled',
-  //       message: 'Location now updates at full frequency.',
-  //       variant: InAppNotificationVariant.info,
-  //     );
-  //   }
-  // }
 
   Future<void> _toggleIncognitoMode(bool value) async {
     final locationManager = Provider.of<LocationManager>(context, listen: false);
