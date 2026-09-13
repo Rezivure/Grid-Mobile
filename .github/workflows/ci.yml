@@ -93,16 +93,27 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the build number is derived from the commit count.
+          fetch-depth: 0
 
       - name: Set dynamic build number
         run: |
           export PATH="/opt/homebrew/bin:$PATH"
-          # Derive build number from CI run number (no git push needed).
-          # Offset 600 keeps us above the highest versionCode already on
-          # any Play Store track (production was manually bumped to 509
-          # while CI deploys were broken). The bump is one-way — never
-          # lower the offset or Play Store will reject the upload.
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 600 ))
+          # Derive the build number from the commit count on main, shared
+          # with the release workflow (.github/workflows/release.yml) so the
+          # two never interleave. github.run_number cannot be used: it is
+          # per-workflow, so CI (many runs/day) and Release (weekly) drifted
+          # apart and shipped out-of-order builds to TestFlight.
+          #
+          # Offset 319 put the first build of this scheme at 1000. It is
+          # one-way — never lower it, or Play Store rejects the upload.
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -lt 600 ]; then
+            echo "::error::Commit count $COMMIT_COUNT is implausibly low - is this a shallow checkout? Refusing to build a number that would go backwards."
+            exit 1
+          fi
+          BUILD_NUMBER=$(( COMMIT_COUNT + 319 ))
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
           # Update pubspec.yaml for this build only (not committed)
           sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
