@@ -61,7 +61,15 @@ jobs:
         run: |
           export PATH="/opt/homebrew/bin:$PATH"
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 784 ))
+          # Same commit-count formula as .github/workflows/ci.yml - the two
+          # workflows must share one counter or their builds interleave out
+          # of order on TestFlight. Keep the offset in sync across both.
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -lt 600 ]; then
+            echo "::error::Commit count $COMMIT_COUNT is implausibly low - is this a shallow checkout? Refusing to build a number that would go backwards."
+            exit 1
+          fi
+          BUILD_NUMBER=$(( COMMIT_COUNT + 319 ))
           sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
           echo "📦 Release version: ${VERSION_NAME}+${BUILD_NUMBER}"
           echo "version=${VERSION_NAME}+${BUILD_NUMBER}" >> $GITHUB_OUTPUT
