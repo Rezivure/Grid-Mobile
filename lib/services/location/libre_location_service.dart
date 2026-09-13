@@ -250,6 +250,8 @@ class LibreLocationService implements LocationService {
     switch (mode) {
       case TrackingMode.batterySaver:
         return libre.TrackingPreset.low;
+      case TrackingMode.live:
+        return libre.TrackingPreset.high;
       default:
         return libre.TrackingPreset.balanced;
     }
