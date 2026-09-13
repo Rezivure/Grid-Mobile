@@ -5,7 +5,7 @@ import 'package:grid_frontend/widgets/assets/grid_image.dart';
 import 'package:grid_frontend/widgets/assets/grid_word_image.dart';
 import 'package:grid_frontend/widgets/buttons/account_exist_button.dart';
 import 'package:grid_frontend/widgets/buttons/get_started_button.dart';
-import 'package:grid_frontend/widgets/buttons/terms_and_privacy_button.dart';
+import 'package:grid_frontend/widgets/buttons/terms_and_privacy_link.dart';
 import 'package:grid_frontend/widgets/buttons/use_custom_server_button.dart';
 import 'package:grid_frontend/widgets/layout/gap.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -13,7 +13,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:grid_frontend/styles/grid_colors.dart';
-import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 
 class WelcomeScreen extends StatefulWidget {
@@ -37,9 +36,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   Timer? _avatarTimer;
   int _avatarUpdateIndex = 0;
 
+  // Owned here so it can be disposed; see TermsAndPrivacyLink.
+  late final TapGestureRecognizer _termsRecognizer;
+
   @override
   void initState() {
     super.initState();
+
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () => _launchUrl('https://mygrid.app/privacy');
 
     // Multiple animation controllers for staggered animations
     _fadeController = AnimationController(
@@ -108,6 +113,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
     _slideController.dispose();
     _floatController.dispose();
     _avatarTimer?.cancel();
+    _termsRecognizer.dispose();
     super.dispose();
   }
 
@@ -348,10 +354,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         TextSpan(
                           text: 'By continuing you agree to our ',
                           children: [
-                            WidgetSpan(
-                              child: TermsAndPrivacyButton(
-                                onPressed: () => _launchUrl('https://mygrid.app/privacy'),
-                              ),
+                            TermsAndPrivacyLink.span(
+                              context: context,
+                              recognizer: _termsRecognizer,
                             ),
                             const TextSpan(text: '.'),
                           ],
