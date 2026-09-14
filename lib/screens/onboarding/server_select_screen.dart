@@ -1,28 +1,146 @@
 import 'dart:async';
-import 'dart:math';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:lottie/lottie.dart';
 
-import 'package:grid_frontend/styles/grid_colors.dart';
-import 'package:grid_frontend/widgets/grid/grid_button.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/providers/auth_provider.dart';
+import 'package:grid_frontend/screens/onboarding/sever_select_views/passkey_view.dart';
+import 'package:grid_frontend/screens/onboarding/sever_select_views/password_login_view.dart';
+import 'package:grid_frontend/screens/onboarding/sever_select_views/password_signup_view.dart';
+import 'package:grid_frontend/screens/onboarding/sever_select_views/username_view.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
 import 'package:grid_frontend/services/password_auth_service.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/styles/tokens.dart';
-import 'package:grid_frontend/utilities/error_report.dart';
-import 'package:grid_frontend/widgets/error_report_dialog.dart';
-import 'package:grid_frontend/widgets/turnstile_widget.dart';
 import 'package:grid_frontend/utilities/utils.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:grid_frontend/widgets/buttons/use_password_button.dart';
+import 'package:grid_frontend/widgets/error_report_dialog.dart';
+import 'package:grid_frontend/widgets/grid/grid_button.dart';
+import 'package:grid_frontend/widgets/grid/grid_circular_progress_indicator.dart';
+import 'package:grid_frontend/widgets/info_boxes/inline_message.dart';
+import 'package:grid_frontend/widgets/info_boxes/status_message.dart';
+import 'package:grid_frontend/widgets/layout/gap.dart';
+import 'package:grid_frontend/widgets/password_recovery_unavailable_warning.dart';
+import 'package:grid_frontend/widgets/text_fields/user_handle_text_field.dart';
+import 'package:grid_frontend/widgets/turnstile_widget.dart';
+import 'package:provider/provider.dart';
+
+class UsernameState {
+  static const UsernameState empty = UsernameState._("", Colors.transparent);
+  static const UsernameState unavailable = UsernameState.error("Username is not available");
+  static const UsernameState available =
+      UsernameState._("Username is available", Colors.green, icon: Icons.check_circle_outline);
+
+  const UsernameState._(this.message, this.color, {this.icon});
+  const UsernameState.error(String message) : this._(message, Colors.red, icon: Icons.error_outline);
+
+  final String message;
+  final Color color;
+  final IconData? icon;
+}
 
 class ServerSelectScreen extends StatefulWidget {
+  const ServerSelectScreen({super.key});
+
   @override
-  _ServerSelectScreenState createState() => _ServerSelectScreenState();
+  State<ServerSelectScreen> createState() => _ServerSelectScreenState();
+
+  static Widget buildModernButton({
+    required String text,
+    required VoidCallback? onPressed,
+    required bool isPrimary,
+    bool isLoading = false,
+    IconData? icon,
+  }) {
+    if (isLoading) return _LoadingButton(isPrimary: isPrimary);
+
+    return GridButton(
+      label: text,
+      onPressed: onPressed,
+      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
+      icon: icon,
+    );
+  }
+
+  /// A text field styled for this screen.
+  ///
+  /// Deliberately private, and deliberately duplicated.
+  /// `login_screen.dart` has a near-identical `_buildModernTextField`, but it
+  /// stays there. `test/screens/onboarding/login_screen_test.dart` asserts
+  /// `findsOneWidget` on `Icons.lock_outline`, `Icons.visibility_off`,
+  /// `Icons.person_outline` and others, so extracting a shared widget - or even
+  /// adding one more icon to that screen - flips those assertions to
+  /// `findsNWidgets(2)`. A shared `GridPasswordField` is worth having, but it
+  /// belongs in its own refactor PR that also rewrites those assertions to
+  /// `find.byType(...)`.
+  static Widget buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool obscureText = false,
+    VoidCallback? onToggleObscure,
+    TextInputAction textInputAction = TextInputAction.next,
+    ValueChanged<String>? onChanged,
+    ValueChanged<String>? onSubmitted,
+    bool autofocus = false,
+  }) {
+    return Builder(
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outline.withValues(alpha: 0.1),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            autofocus: autofocus,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: textInputAction,
+            onChanged: onChanged,
+            onSubmitted: onSubmitted,
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Colors.transparent,
+              contentPadding: const EdgeInsets.all(20),
+              prefixIcon: Icon(icon, color: colorScheme.primary),
+              suffixIcon: onToggleObscure == null
+                  ? null
+                  : IconButton(
+                      icon: Icon(
+                        obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: context.gridColors.text3,
+                      ),
+                      onPressed: onToggleObscure,
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProviderStateMixin {
@@ -55,8 +173,9 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   final TextEditingController _confirmPasswordController = TextEditingController();
 
   // Variables for username availability
-  String _usernameStatusMessage = '';
-  Color _usernameStatusColor = Colors.transparent;
+  UsernameState _usernameState = UsernameState.empty;
+  String get _usernameStatusMessage => _usernameState.message;
+  Color get _usernameStatusColor => _usernameState.color;
 
   Timer? _debounce;
 
@@ -100,10 +219,15 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     return (key == null || key.isEmpty) ? _fallbackTurnstileSiteKey : key;
   }
 
+  bool get _isUsernameValid => (_usernameController.text.trim().length >= 5 &&
+      _usernameState == UsernameState.available &&
+      _turnstileToken != null &&
+      !_isPasskeyLoading);
+
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize animations
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -113,7 +237,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
       curve: Curves.easeInOut,
@@ -131,6 +255,16 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     _slideController.forward();
 
     _usernameController.addListener(_onUsernameChanged);
+
+    _loginUsernameController.addListener(_resetAuthError);
+    _passwordController.addListener(_resetAuthError);
+    _confirmPasswordController.addListener(_resetAuthError);
+  }
+
+  void _resetAuthError() {
+    if (mounted && _authError != null) {
+      setState(() => _authError = null);
+    }
   }
 
   bool _didReadRouteArgs = false;
@@ -168,15 +302,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     });
   }
 
-
   void _validateUsernameInput() {
     final error = usernameValidationError(_usernameController.text);
 
     if (error != null) {
-      setState(() {
-        _usernameStatusMessage = error;
-        _usernameStatusColor = Colors.red;
-      });
+      setState(() => _usernameState == UsernameState.error(error));
       return;
     }
 
@@ -188,97 +318,11 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
     if (usernameValidationError(username) != null) return;
 
-    bool isAvailable = await Provider.of<AuthProvider>(context, listen: false)
-        .checkUsernameAvailability(username);
+    bool isAvailable = await Provider.of<AuthProvider>(context, listen: false).checkUsernameAvailability(username);
 
     setState(() {
-      if (isAvailable) {
-        _usernameStatusMessage = 'Username is available';
-        _usernameStatusColor = Colors.green;
-      } else {
-        _usernameStatusMessage = 'Username is not available';
-        _usernameStatusColor = Colors.red;
-      }
+      _usernameState = isAvailable ? UsernameState.available : UsernameState.unavailable;
     });
-  }
-
-
-  Widget _buildModernButton({
-    required String text,
-    required VoidCallback? onPressed,
-    required bool isPrimary,
-    bool isLoading = false,
-    IconData? icon,
-  }) {
-    if (isLoading) {
-      return Container(
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          color: isPrimary
-              ? context.gridColors.mint.withOpacity(0.55)
-              : context.gridColors.surface2,
-          borderRadius: BorderRadius.circular(14),
-          border: isPrimary
-              ? null
-              : Border.all(color: context.gridColors.hairlineStrong),
-        ),
-        alignment: Alignment.center,
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            color: isPrimary ? Colors.black : context.gridColors.mint,
-            strokeWidth: 2,
-          ),
-        ),
-      );
-    }
-    return GridButton(
-      label: text,
-      onPressed: onPressed,
-      style: isPrimary ? GridButtonStyle.primary : GridButtonStyle.secondary,
-      icon: icon,
-    );
-  }
-
-  Widget _buildStepHeader({
-    required String title,
-    required String subtitle,
-    Widget? illustration,
-  }) {
-    return Column(
-      children: [
-        if (illustration != null) ...[
-          illustration,
-          const SizedBox(height: 28),
-        ],
-        Text(
-          title,
-          style: GoogleFonts.getFont(
-            'Geist',
-            fontSize: 28,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.025,
-            color: context.gridColors.text,
-            height: 1.1,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          style: GoogleFonts.getFont(
-            'Geist',
-            fontSize: 15,
-            fontWeight: FontWeight.w400,
-            color: context.gridColors.text2,
-            height: 1.45,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
   }
 
   @override
@@ -331,11 +375,62 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
 
   Widget _buildCurrentStep() {
     if (_isLoginFlow) {
-      return _isPasswordLoginStep
-          ? _buildPasswordLoginStep()
-          : _buildPasskeyLoginStep();
+      if (_isPasswordLoginStep) {
+        return PasswordLoginView(
+          loginUsernameController: _loginUsernameController,
+          passwordController: _passwordController,
+          authError: _authError,
+          canLogin: _loginUsernameController.text.trim().isNotEmpty &&
+              _passwordController.text.isNotEmpty &&
+              _turnstileToken != null &&
+              !_isPasswordLoading,
+          isPasswordLoading: _isPasswordLoading,
+          buildTurnstileWidget: _buildTurnstile,
+          onUsePasskey: _showPasskeyLoginStep,
+          onLoginWithPassword: _loginWithPassword,
+        );
+      } else {
+        return PasskeyView(
+          isPasskeyLoading: _isPasskeyLoading,
+          onLoginWithPasskey: _loginWithPasskey,
+          onUsePassword: _showPasswordLoginStep,
+        );
+      }
     }
-    return _usePassword ? _buildPasswordSignupStep() : _buildUsernameStep();
+
+    if (_usePassword) {
+      return PasswordSignupView(
+        usernameController: _loginUsernameController,
+        passwordController: _passwordController,
+        confirmPasswordController: _confirmPasswordController,
+        authError: _authError,
+        hasNoRecoveryAcknowledged: _acknowledgedNoRecovery,
+        onAcknowledgeChanged: (value) {
+          if (mounted) setState(() => _acknowledgedNoRecovery = value);
+        },
+        isPasswordLoading: _isPasswordLoading,
+        buildTurnstileWidget: () {
+          if (_turnstileToken == null) return _buildTurnstile();
+        },
+        onShowUsername: _showUsernameStep,
+        onSignupWithPassword: _signupWithPassword,
+      );
+    } else {
+      return UsernameView(
+        usernameController: _usernameController,
+        usernameState: _usernameState,
+        isPasskeyLoading: _isPasskeyLoading,
+        buildTurnstileWidget: () {
+          if (_usernameState == UsernameState.available && _turnstileToken == null) {
+            return _buildTurnstile();
+          } else {
+            return null;
+          }
+        },
+        onSignupWithPasskey: _isUsernameValid ? _signupWithPasskey : null,
+        onUsePassword: _isUsernameValid ? _showPasswordSignupStep : null,
+      );
+    }
   }
 
   void _onBackPressed() {
@@ -349,209 +444,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     }
     Navigator.pop(context);
   }
-
-  Widget _buildPasskeyLoginStep() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        _buildStepHeader(
-          title: 'Welcome Back!',
-          subtitle: 'Sign in with your passkey',
-          illustration: Container(
-            width: 100,
-            height: 100,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.fingerprint,
-              size: 48,
-              color: colorScheme.primary,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 40),
-
-        _buildModernButton(
-          text: 'Sign in with Passkey',
-          onPressed: _isPasskeyLoading ? null : _loginWithPasskey,
-          isPrimary: true,
-          isLoading: _isPasskeyLoading,
-          icon: Icons.fingerprint,
-        ),
-
-        const SizedBox(height: 8),
-
-        TextButton(
-          onPressed: _isPasskeyLoading ? null : _showPasswordLoginStep,
-          child: Text(
-            'Use username and password instead',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: context.gridColors.mint,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  Widget _buildUsernameStep() {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        _buildStepHeader(
-          title: 'Choose Your Handle',
-          subtitle: 'This is how others can find and add you on Grid',
-          illustration: Container(
-            width: 96,
-            height: 96,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.alternate_email_rounded,
-              size: 40,
-              color: colorScheme.primary,
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 40),
-        
-        Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: TextField(
-            controller: _usernameController,
-            decoration: InputDecoration(
-              labelText: 'Handle',
-              hintText: 'Enter your unique handle',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.all(20),
-              prefixIcon: Icon(
-                Icons.person_outline,
-                color: colorScheme.primary,
-              ),
-            ),
-          ),
-        ),
-        
-        if (_usernameStatusMessage.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: (_usernameStatusColor == Colors.green 
-                  ? Colors.green 
-                  : Colors.red).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _usernameStatusColor == Colors.green 
-                      ? Icons.check_circle_outline 
-                      : Icons.error_outline,
-                  size: 16,
-                  color: _usernameStatusColor,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _usernameStatusMessage,
-                    style: TextStyle(
-                      color: _usernameStatusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        
-        const SizedBox(height: 40),
-
-        // Show Turnstile when username is available
-        if (_usernameStatusMessage == 'Username is available' &&
-            _turnstileToken == null) ...[
-          _buildTurnstile(),
-          const SizedBox(height: 16),
-        ],
-
-        _buildModernButton(
-          text: 'Sign up with Passkey',
-          // Stays disabled (grey) until the user has typed at least 5
-          // characters, has a confirmed-available username, and has
-          // cleared turnstile. The 5-char floor blocks anyone hitting the
-          // button on a clearly-too-short handle before the availability
-          // check has even fired.
-          onPressed: (_usernameController.text.trim().length >= 5 &&
-                  _usernameStatusMessage == 'Username is available' &&
-                  _turnstileToken != null &&
-                  !_isPasskeyLoading)
-              ? _signupWithPasskey
-              : null,
-          isPrimary: true,
-          isLoading: _isPasskeyLoading,
-          icon: Icons.fingerprint,
-        ),
-
-        const SizedBox(height: 8),
-
-        // The second door. Passkeys are the recommended path, but too many
-        // people were getting stuck on a device or provider that would not
-        // create one and had no way to finish signing up at all (GH #285).
-        TextButton(
-          onPressed: (_usernameController.text.trim().length >= 5 &&
-                  _usernameStatusMessage == 'Username is available' &&
-                  !_isPasskeyLoading)
-              ? _showPasswordSignupStep
-              : null,
-          child: Text(
-            'Use a password instead',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: (_usernameController.text.trim().length >= 5 &&
-                      _usernameStatusMessage == 'Username is available')
-                  ? context.gridColors.mint
-                  : context.gridColors.text3,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-
-
 
   /// The Cloudflare Turnstile challenge.
   ///
@@ -580,479 +472,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
   void _resetTurnstile() {
     _turnstileToken = null;
     _turnstileAttempt++;
-  }
-
-  /// A text field styled for this screen.
-  ///
-  /// Deliberately private, and deliberately duplicated.
-  /// `login_screen.dart` has a near-identical `_buildModernTextField`, but it
-  /// stays there. `test/screens/onboarding/login_screen_test.dart` asserts
-  /// `findsOneWidget` on `Icons.lock_outline`, `Icons.visibility_off`,
-  /// `Icons.person_outline` and others, so extracting a shared widget - or even
-  /// adding one more icon to that screen - flips those assertions to
-  /// `findsNWidgets(2)`. A shared `GridPasswordField` is worth having, but it
-  /// belongs in its own refactor PR that also rewrites those assertions to
-  /// `find.byType(...)`.
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    bool obscureText = false,
-    VoidCallback? onToggleObscure,
-    TextInputAction textInputAction = TextInputAction.next,
-    ValueChanged<String>? onChanged,
-    ValueChanged<String>? onSubmitted,
-    bool autofocus = false,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colorScheme.outline.withValues(alpha: 0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: obscureText,
-        autofocus: autofocus,
-        autocorrect: false,
-        enableSuggestions: false,
-        textInputAction: textInputAction,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.all(20),
-          prefixIcon: Icon(icon, color: colorScheme.primary),
-          suffixIcon: onToggleObscure == null
-              ? null
-              : IconButton(
-                  icon: Icon(
-                    obscureText
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    color: context.gridColors.text3,
-                  ),
-                  onPressed: onToggleObscure,
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInlineMessage(String message, {bool isError = true}) {
-    final color = isError ? context.gridColors.danger : context.gridColors.text2;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isError
-            ? context.gridColors.dangerSoft
-            : context.gridColors.surface2,
-        borderRadius: BorderRadius.circular(GridTokens.rSm),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.error_outline, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: GoogleFonts.getFont(
-                'Geist',
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The one thing a user must read before choosing a password on Grid: we
-  /// collect no email and no phone number, so there is genuinely nobody who
-  /// can let them back in.
-  Widget _buildNoRecoveryWarning() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.gridColors.dangerSoft,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                size: 20,
-                color: context.gridColors.danger,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'There is no password reset.',
-                  style: GoogleFonts.getFont(
-                    'Geist',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: context.gridColors.text,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "Grid never collects your email or phone number, so we have no way "
-            "to verify it's you — and no way to reset this password. If you "
-            "forget it and you don't have a passkey, your account and "
-            "everything in it is gone for good.",
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13,
-              color: context.gridColors.text2,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Save it in your password manager before you continue.',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.gridColors.text,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Support line for the login form.
-  ///
-  /// "We can't reset your password" comes FIRST, deliberately. Leading with
-  /// "ask us on Discord" implies the account is recoverable, which generates
-  /// support requests nobody can discharge.
-  Widget _buildDiscordHelp() {
-    return Text.rich(
-      TextSpan(
-        style: GoogleFonts.getFont(
-          'Geist',
-          fontSize: 13,
-          color: context.gridColors.text3,
-          height: 1.45,
-        ),
-        children: [
-          const TextSpan(text: "Can't sign in? "),
-          TextSpan(
-            text: "We can't reset your password",
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.gridColors.text2,
-              height: 1.45,
-            ),
-          ),
-          const TextSpan(text: ' — but if something else is wrong, '),
-          TextSpan(
-            text: 'ask us on Discord',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.gridColors.mint,
-              height: 1.45,
-            ),
-            recognizer: TapGestureRecognizer()..onTap = _openDiscord,
-          ),
-          const TextSpan(text: '.'),
-        ],
-      ),
-      textAlign: TextAlign.center,
-    );
-  }
-
-  Widget _buildPasswordSignupStep() {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text;
-    final confirmation = _confirmPasswordController.text;
-
-    final policyError =
-        password.isEmpty ? null : passwordValidationError(password, username: username);
-    final matchError = confirmation.isEmpty
-        ? null
-        : passwordConfirmationError(password, confirmation);
-
-    final isValid = passwordValidationError(password, username: username) == null &&
-        passwordConfirmationError(password, confirmation) == null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildStepHeader(
-          title: 'Create a Password',
-          subtitle: 'Signing up as @$username',
-          illustration: Container(
-            width: 96,
-            height: 96,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.password_rounded,
-              size: 40,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
-        _buildTextField(
-          controller: _passwordController,
-          label: 'Password',
-          hint: 'At least $kPasswordMinLength characters',
-          icon: Icons.lock_outline,
-          obscureText: _obscurePassword,
-          autofocus: true,
-          onToggleObscure: () =>
-              setState(() => _obscurePassword = !_obscurePassword),
-          onChanged: (_) => setState(() => _authError = null),
-        ),
-
-        if (policyError != null) ...[
-          const SizedBox(height: 10),
-          _buildInlineMessage(policyError),
-        ],
-
-        const SizedBox(height: 16),
-
-        _buildTextField(
-          controller: _confirmPasswordController,
-          label: 'Confirm password',
-          hint: 'Re-enter your password',
-          icon: Icons.lock_outline,
-          obscureText: _obscureConfirmPassword,
-          textInputAction: TextInputAction.done,
-          onToggleObscure: () => setState(
-              () => _obscureConfirmPassword = !_obscureConfirmPassword),
-          onChanged: (_) => setState(() => _authError = null),
-        ),
-
-        if (matchError != null) ...[
-          const SizedBox(height: 10),
-          _buildInlineMessage(matchError),
-        ],
-
-        const SizedBox(height: 24),
-
-        _buildNoRecoveryWarning(),
-
-        const SizedBox(height: 12),
-
-        // Required, not advisory. The account is unrecoverable and the user
-        // has to have seen that before it exists.
-        InkWell(
-          onTap: () => setState(
-              () => _acknowledgedNoRecovery = !_acknowledgedNoRecovery),
-          borderRadius: BorderRadius.circular(GridTokens.rSm),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Checkbox(
-                  value: _acknowledgedNoRecovery,
-                  activeColor: context.gridColors.mint,
-                  checkColor: Colors.black,
-                  onChanged: (value) =>
-                      setState(() => _acknowledgedNoRecovery = value ?? false),
-                ),
-                Expanded(
-                  child: Text(
-                    "I understand my password can't be recovered",
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 14,
-                      color: context.gridColors.text,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        if (_authError != null) ...[
-          const SizedBox(height: 16),
-          _buildInlineMessage(_authError!),
-        ],
-
-        const SizedBox(height: 24),
-
-        // Normally already solved on the handle step and carried forward. It
-        // reappears here only when that token was spent or rejected.
-        if (_turnstileToken == null) ...[
-          _buildTurnstile(),
-          const SizedBox(height: 16),
-        ],
-
-        _buildModernButton(
-          text: 'Create Account',
-          onPressed: (isValid &&
-                  _acknowledgedNoRecovery &&
-                  _turnstileToken != null &&
-                  !_isPasswordLoading)
-              ? _signupWithPassword
-              : null,
-          isPrimary: true,
-          isLoading: _isPasswordLoading,
-          icon: Icons.person_add_alt_1_rounded,
-        ),
-
-        const SizedBox(height: 8),
-
-        TextButton(
-          onPressed: _isPasswordLoading ? null : _showUsernameStep,
-          child: Text(
-            'Use a passkey instead',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: context.gridColors.mint,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 40),
-      ],
-    );
-  }
-
-  Widget _buildPasswordLoginStep() {
-    final canSubmit = _loginUsernameController.text.trim().isNotEmpty &&
-        _passwordController.text.isNotEmpty &&
-        _turnstileToken != null &&
-        !_isPasswordLoading;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildStepHeader(
-          title: 'Welcome Back!',
-          subtitle: 'Sign in with your handle and password',
-          illustration: Container(
-            width: 100,
-            height: 100,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.lock_outline,
-              size: 44,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
-        _buildTextField(
-          controller: _loginUsernameController,
-          label: 'Handle',
-          hint: 'Your unique handle',
-          icon: Icons.person_outline,
-          autofocus: true,
-          onChanged: (_) => setState(() => _authError = null),
-        ),
-
-        const SizedBox(height: 16),
-
-        _buildTextField(
-          controller: _passwordController,
-          label: 'Password',
-          hint: 'Enter your password',
-          icon: Icons.lock_outline,
-          obscureText: _obscurePassword,
-          textInputAction: TextInputAction.done,
-          onToggleObscure: () =>
-              setState(() => _obscurePassword = !_obscurePassword),
-          onChanged: (_) => setState(() => _authError = null),
-          onSubmitted: (_) {
-            if (canSubmit) _loginWithPassword();
-          },
-        ),
-
-        if (_authError != null) ...[
-          const SizedBox(height: 16),
-          _buildInlineMessage(_authError!),
-        ],
-
-        const SizedBox(height: 24),
-
-        // Always mounted. Turnstile is required on every password login - it
-        // is the only brute-force control, since there is no account lockout.
-        _buildTurnstile(),
-
-        const SizedBox(height: 16),
-
-        _buildModernButton(
-          text: 'Sign In',
-          onPressed: canSubmit ? _loginWithPassword : null,
-          isPrimary: true,
-          isLoading: _isPasswordLoading,
-          icon: Icons.login,
-        ),
-
-        const SizedBox(height: 8),
-
-        TextButton(
-          onPressed: _isPasswordLoading ? null : _showPasskeyLoginStep,
-          child: Text(
-            'Use a passkey instead',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: context.gridColors.mint,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        _buildDiscordHelp(),
-
-        const SizedBox(height: 40),
-      ],
-    );
   }
 
   // --- Step transitions -----------------------------------------------------
@@ -1104,18 +523,6 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     });
   }
 
-  Future<void> _openDiscord() async {
-    final uri = Uri.parse(gridDiscordInvite);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (!mounted) return;
-      InAppNotifier.instance.show(
-        title: 'Could not open Discord',
-        message: gridDiscordInvite,
-        variant: InAppNotificationVariant.error,
-      );
-    }
-  }
-
   /// Turns a password-auth failure into either inline text or the error report
   /// dialog. A wrong password is a user event, not a fault, and must never
   /// open a dialog that tells the user to go and post logs in Discord.
@@ -1128,9 +535,7 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     // consumed it or it rejected it. Force a fresh challenge before the retry.
     setState(_resetTurnstile);
 
-    if (error is InvalidCredentialsException ||
-        error is WeakPasswordException ||
-        error is TurnstileFailedException) {
+    if (error is InvalidCredentialsException || error is WeakPasswordException || error is TurnstileFailedException) {
       setState(() => _authError = error.toString());
       return;
     }
@@ -1148,8 +553,9 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     setState(() => _isPasskeyLoading = true);
     try {
       final jwt = await _passkeyService.loginWithPasskey();
-      await Provider.of<AuthProvider>(context, listen: false)
-          .authenticateWithJWT(jwt);
+      if (!mounted) return;
+      await Provider.of<AuthProvider>(context, listen: false).authenticateWithJWT(jwt);
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/main',
@@ -1178,8 +584,9 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         username: username,
         turnstileToken: _turnstileToken!,
       );
-      await Provider.of<AuthProvider>(context, listen: false)
-          .authenticateWithJWT(jwt);
+      if (!mounted) return;
+      await Provider.of<AuthProvider>(context, listen: false).authenticateWithJWT(jwt);
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/main',
@@ -1218,8 +625,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         password: password,
         turnstileToken: token,
       );
-      await Provider.of<AuthProvider>(context, listen: false)
-          .authenticateWithJWT(jwt);
+      if (!mounted) return;
+      await Provider.of<AuthProvider>(context, listen: false).authenticateWithJWT(jwt);
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -1255,8 +662,8 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
         password: password,
         turnstileToken: token,
       );
-      await Provider.of<AuthProvider>(context, listen: false)
-          .authenticateWithJWT(jwt);
+      if (!mounted) return;
+      await Provider.of<AuthProvider>(context, listen: false).authenticateWithJWT(jwt);
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -1274,5 +681,79 @@ class _ServerSelectScreenState extends State<ServerSelectScreen> with TickerProv
     } finally {
       if (mounted) setState(() => _isPasswordLoading = false);
     }
+  }
+}
+
+// TODO(Yuki): replace with GridButton once GridButtonStyle is a ThemeExtension
+class _LoadingButton extends StatelessWidget {
+  final bool isPrimary;
+
+  const _LoadingButton({super.key, required this.isPrimary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 52,
+      decoration: BoxDecoration(
+        color: isPrimary ? context.gridColors.mint.withOpacity(0.55) : context.gridColors.surface2,
+        borderRadius: BorderRadius.circular(14),
+        border: isPrimary ? null : Border.all(color: context.gridColors.hairlineStrong),
+      ),
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: 22,
+        height: 22,
+        child: GridCircularProgressIndicator(
+          loading: true,
+          isPrimary: isPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class StepHeader extends StatelessWidget {
+  final Widget? illustration;
+  final Widget title;
+  final Widget subtitle;
+
+  const StepHeader({super.key, this.illustration, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        if (illustration != null) ...[
+          illustration!,
+          Gap.bigger,
+          Gap.small,
+        ],
+        DefaultTextStyle.merge(
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 28,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.025,
+            color: context.gridColors.text,
+            height: 1.1,
+          ),
+          textAlign: TextAlign.center,
+          child: title,
+        ),
+        Gap.small,
+        DefaultTextStyle.merge(
+          style: GoogleFonts.getFont(
+            'Geist',
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: context.gridColors.text2,
+            height: 1.45,
+          ),
+          textAlign: TextAlign.center,
+          child: subtitle,
+        ),
+      ],
+    );
   }
 }
