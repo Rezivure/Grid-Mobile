@@ -203,125 +203,127 @@ class _SynapseLogsScreenState extends State<SynapseLogsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _LevelFilterBar(
-            enabled: _enabledLevels,
-            onToggle: (level) {
-              setState(() {
-                if (_enabledLevels.contains(level)) {
-                  _enabledLevels.remove(level);
-                } else {
-                  _enabledLevels.add(level);
-                }
-              });
-            },
-          ),
-          Expanded(
-            child: Container(
-              color: context.gridColors.bg,
-              child: entries.isEmpty
-                  ? _emptyState(paused)
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                      itemCount: entries.length,
-                      itemBuilder: (context, i) {
-                        final e = entries[i];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: SelectableText.rich(
-                            TextSpan(
-                              style: GoogleFonts.getFont(
-                                'Geist Mono',
-                                fontSize: 11,
-                                height: 1.35,
-                                color: context.gridColors.text2,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: '${_timeStamp(e.time)} ',
-                                  style: TextStyle(
-                                    color: context.gridColors.text4,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: '${_levelTag(e.level)} ',
-                                  style: TextStyle(
-                                    color: _levelColor(e.level),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: '${e.source}: ',
-                                  style: TextStyle(
-                                    color: context.gridColors.text3,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: e.message,
-                                  style: TextStyle(
-                                    color: e.level == LogStreamLevel.error
-                                        ? context.gridColors.danger
-                                        : context.gridColors.text,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _LevelFilterBar(
+              enabled: _enabledLevels,
+              onToggle: (level) {
+                setState(() {
+                  if (_enabledLevels.contains(level)) {
+                    _enabledLevels.remove(level);
+                  } else {
+                    _enabledLevels.add(level);
+                  }
+                });
+              },
             ),
-          ),
-          if (!_autoScroll && entries.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 12, 12),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Material(
-                  color: context.gridColors.mint,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(99),
-                    onTap: () {
-                      _scrollController.jumpTo(
-                        _scrollController.position.maxScrollExtent,
-                      );
-                      setState(() => _autoScroll = true);
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.arrow_downward_rounded,
-                            size: 14,
-                            color: Color(0xFF04201A),
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Jump to latest',
-                            style: TextStyle(
-                              color: Color(0xFF04201A),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
+            Expanded(
+              child: Container(
+                color: context.gridColors.bg,
+                child: entries.isEmpty
+                    ? _emptyState(paused)
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                        itemCount: entries.length,
+                        itemBuilder: (context, i) {
+                          final e = entries[i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: SelectableText.rich(
+                              TextSpan(
+                                style: GoogleFonts.getFont(
+                                  'Geist Mono',
+                                  fontSize: 11,
+                                  height: 1.35,
+                                  color: context.gridColors.text2,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '${_timeStamp(e.time)} ',
+                                    style: TextStyle(
+                                      color: context.gridColors.text4,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '${_levelTag(e.level)} ',
+                                    style: TextStyle(
+                                      color: _levelColor(e.level),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: '${e.source}: ',
+                                    style: TextStyle(
+                                      color: context.gridColors.text3,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: e.message,
+                                    style: TextStyle(
+                                      color: e.level == LogStreamLevel.error
+                                          ? context.gridColors.danger
+                                          : context.gridColors.text,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          );
+                        },
+                      ),
+              ),
+            ),
+            if (!_autoScroll && entries.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 12, 12),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Material(
+                    color: context.gridColors.mint,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(99),
+                      onTap: () {
+                        _scrollController.jumpTo(
+                          _scrollController.position.maxScrollExtent,
+                        );
+                        setState(() => _autoScroll = true);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.arrow_downward_rounded,
+                              size: 14,
+                              color: Color(0xFF04201A),
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Jump to latest',
+                              style: TextStyle(
+                                color: Color(0xFF04201A),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

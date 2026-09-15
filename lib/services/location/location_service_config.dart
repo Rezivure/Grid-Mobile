@@ -1,11 +1,16 @@
 /// Simple configuration for location tracking.
 /// Exposes only what the app needs without leaking plugin-specific details.
+/// Service-layer tiers behind the user-facing `Sharing mode` setting.
+/// Names are historical; see [SharingMode] for the labels users see.
 enum TrackingMode {
-  /// High accuracy, frequent updates, higher battery usage.
+  /// "Balanced" — moderate accuracy and battery usage. The default.
   normal,
 
-  /// Balanced accuracy and battery usage.
+  /// "Light" — lowest accuracy, longest intervals, least battery.
   batterySaver,
+
+  /// "Live" — highest accuracy and update rate, heaviest battery.
+  live,
 }
 
 class LocationServiceConfig {

@@ -14,10 +14,18 @@ concurrency:
 jobs:
   unit-tests:
     name: Unit Tests
-    runs-on: [self-hosted, macOS, ARM64]
+    # Pure Dart tests - no Mac needed. GitHub-hosted runners are free for
+    # public repos and keep the self-hosted host free for builds.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.5'
+          channel: stable
+          cache: true
 
       - name: Create CI .env
         run: |
@@ -27,16 +35,20 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Run Flutter unit tests
-        run: |
-          export PATH="/opt/homebrew/bin:$HOME/.maestro/bin:$PATH"
-          flutter test --reporter expanded 2>&1
+        run: flutter test --reporter expanded
 
   core-e2e-tests:
     name: Core E2E Tests (Fast)
-    if: false
+    # Currently disabled. The `false &&` keeps it off; the second clause is
+    # the real condition for when it comes back - the simulator host is only
+    # wired up for branches in this repo.
+    if: >-
+      false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 10
     needs: unit-tests
@@ -51,6 +63,7 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Start test infrastructure
@@ -80,16 +93,27 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the build number is derived from the commit count.
+          fetch-depth: 0
 
       - name: Set dynamic build number
         run: |
           export PATH="/opt/homebrew/bin:$PATH"
-          # Derive build number from CI run number (no git push needed).
-          # Offset 600 keeps us above the highest versionCode already on
-          # any Play Store track (production was manually bumped to 509
-          # while CI deploys were broken). The bump is one-way — never
-          # lower the offset or Play Store will reject the upload.
-          BUILD_NUMBER=$(( ${{ github.run_number }} + 600 ))
+          # Derive the build number from the commit count on main, shared
+          # with the release workflow (.github/workflows/release.yml) so the
+          # two never interleave. github.run_number cannot be used: it is
+          # per-workflow, so CI (many runs/day) and Release (weekly) drifted
+          # apart and shipped out-of-order builds to TestFlight.
+          #
+          # Offset 319 put the first build of this scheme at 1000. It is
+          # one-way — never lower it, or Play Store rejects the upload.
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -lt 600 ]; then
+            echo "::error::Commit count $COMMIT_COUNT is implausibly low - is this a shallow checkout? Refusing to build a number that would go backwards."
+            exit 1
+          fi
+          BUILD_NUMBER=$(( COMMIT_COUNT + 319 ))
           VERSION_NAME=$(grep '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//')
           # Update pubspec.yaml for this build only (not committed)
           sed -i '' "s/^version: .*/version: ${VERSION_NAME}+${BUILD_NUMBER}/" pubspec.yaml
@@ -105,6 +129,7 @@ jobs:
           HOMESERVER=matrix.mygrid.app
           MAPS_URL=https://map.mygrid.app/v1/protomaps.pmtiles
           VERSION_CHECK_URL=https://version.mygrid.app
+          TURNSTILE_SITE_KEY=0x4AAAAAACuoM-Fe6MODnKzk
           EOF
 
       - name: Set up Android signing
@@ -178,6 +203,20 @@ jobs:
           export LANG=en_US.UTF-8
           export PATH="/opt/homebrew/lib/ruby/gems/3.3.0/bin:/opt/homebrew/opt/ruby@3.3/bin:/opt/homebrew/bin:$PATH"
           fastlane android beta
+
+      - name: Build release APK for contributors
+        run: |
+          export PATH="/opt/homebrew/bin:$PATH"
+          flutter build apk --release
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-${{ env.VERSION_NAME }}-${{ env.BUILD_NUMBER }}-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          # Kept short so artifact storage stays bounded.
+          retention-days: 14
 
       - name: Clean up keychain
         if: always()

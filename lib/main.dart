@@ -242,6 +242,7 @@ Future<void> _boot() async {
   final roomLocationHistoryRepository = RoomLocationHistoryRepository(databaseService);
   final userKeysRepository = UserKeysRepository(databaseService);
   final locationManager = LocationManager();
+  await locationManager.initialize();
 
   // Shared SharingStateNotifier instance — the same notifier is provided
   // to the widget tree (so settings can flip it) and given to

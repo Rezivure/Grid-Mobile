@@ -44,6 +44,8 @@ import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grid_frontend/screens/settings/subscription_screen.dart';
 import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/screens/settings/password_setup_screen.dart';
+import 'package:grid_frontend/services/password_auth_service.dart';
 import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
@@ -80,10 +82,15 @@ class _SettingsPageState extends State<SettingsPage> {
   String _appVersion = '';
   String _buildNumber = '';
   bool _incognitoMode = false;
-  bool _batterySaver = false;
   SharingMode _sharingMode = SharingMode.balanced;
   bool _autoPauseAtHome = false;
   bool _homeLocationSet = false;
+
+  /// Whether this account already has a password, so the tile can read
+  /// "Change password" instead of "Set a password". Defaults to false so the
+  /// first paint is the honest one for a passkey-only user; it is corrected as
+  /// soon as /auth/password/status answers.
+  bool _hasPassword = false;
   String? _userID;
   String? _username;
   String? _localpart;
@@ -127,13 +134,29 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _getDeviceAndIdentityKey();
     _loadUser();
+    _loadPasswordStatus();
     _loadIncognitoState();
-    _loadBatterySaverState();
+    _loadSharingMode();
     _loadAutoPauseAtHomeState();
     _loadCachedAvatar();
     _loadAppVersion();
   }
   
+  /// Best-effort: if GAUTH is unreachable the tile just keeps saying
+  /// "Set a password", which the setup screen re-checks anyway.
+  Future<void> _loadPasswordStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jwt = prefs.getString('loginToken');
+      if (jwt == null) return;
+      final status = await PasswordAuthService().status(jwt);
+      if (!mounted) return;
+      setState(() => _hasPassword = status.hasPassword);
+    } catch (e) {
+      debugPrint('Could not load password status: $e');
+    }
+  }
+
   Future<void> _loadAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
     setState(() {
@@ -176,10 +199,10 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<void> _loadBatterySaverState() async {
+  Future<void> _loadSharingMode() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
-      _batterySaver = prefs.getBool('battery_saver') ?? false;
       _sharingMode =
           SharingModePref.fromPrefValue(prefs.getString('sharing_mode'));
     });
@@ -234,54 +257,20 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// Drives the user-facing 'Sharing mode' slider. Persists the choice,
-  /// swaps the underlying `libre_location` preset at runtime via
-  /// LocationDispatch, and keeps the legacy `battery_saver` pref in sync
-  /// for any consumer that still reads it.
+  /// Drives the user-facing 'Sharing mode' slider. [LocationDispatch.setMode]
+  /// persists the choice to `sharing_mode` and swaps the `libre_location`
+  /// preset; LocationManager is then told to re-apply its tracking config so
+  /// the two do not push conflicting presets (#341).
   Future<void> _setSharingMode(SharingMode mode) async {
     if (_sharingMode == mode) return;
-    setState(() => _sharingMode = mode);
+    final locationManager = Provider.of<LocationManager>(context, listen: false);
     try {
       await context.read<LocationDispatch>().setMode(mode);
     } catch (_) {}
-    final prefs = await SharedPreferences.getInstance();
-    final wantBatterySaver = mode == SharingMode.light;
-    if (_batterySaver != wantBatterySaver) {
-      await prefs.setBool('battery_saver', wantBatterySaver);
-      if (mounted) setState(() => _batterySaver = wantBatterySaver);
-      try {
-        Provider.of<LocationManager>(context, listen: false)
-            .toggleBatterySaverMode(wantBatterySaver);
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _toggleBatterySaver(bool value) async {
-    final locationManager = Provider.of<LocationManager>(context, listen: false);
-    final prefs = await SharedPreferences.getInstance();
-
-    setState(() {
-      _batterySaver = value;
-    });
-
-    await prefs.setBool('battery_saver', value);
-
-    if (value) {
-      // enable incognito
-      locationManager.toggleBatterySaverMode(value);
-      InAppNotifier.instance.show(
-        title: 'Battery Saver Mode enabled',
-        message: 'Location updates less frequently to save power.',
-        variant: InAppNotificationVariant.success,
-      );
-    } else {
-      locationManager.toggleBatterySaverMode(value);
-      InAppNotifier.instance.show(
-        title: 'Battery Saver Mode disabled',
-        message: 'Location now updates at full frequency.',
-        variant: InAppNotificationVariant.info,
-      );
-    }
+    try {
+      locationManager.setTrackingMode(mode.trackingMode);
+    } catch (_) {}
+    if (mounted) setState(() => _sharingMode = mode);
   }
 
   Future<void> _toggleIncognitoMode(bool value) async {
@@ -2418,6 +2407,22 @@ class _SettingsPageState extends State<SettingsPage> {
                               const PasskeyManagementScreen(),
                         ),
                       );
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildSettingsDivider(),
+                  _buildMenuOption(
+                    icon: Icons.password_outlined,
+                    title: _hasPassword ? 'Change password' : 'Set a password',
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PasswordSetupScreen(),
+                        ),
+                      );
+                      // The screen may have just created the first password.
+                      await _loadPasswordStatus();
                     },
                     colorScheme: colorScheme,
                   ),

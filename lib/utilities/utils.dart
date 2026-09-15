@@ -65,6 +65,59 @@ String? usernameValidationError(String raw) {
   return null;
 }
 
+/// Minimum password length. Mirrors the auth server's `PASSWORD_MIN_LENGTH`.
+///
+/// 10, not 8: Grid has **no password reset** (no email, no phone), no 2FA, and
+/// handles are public and enumerable, so an online guess is the whole threat
+/// model and the only other control is Turnstile.
+const int kPasswordMinLength = 10;
+
+/// Maximum password length. Mirrors the auth server's `PASSWORD_MAX_LENGTH`.
+const int kPasswordMaxLength = 128;
+
+/// Mirrors the auth server's `_password_policy_error`: 10-128 characters, not
+/// equal to the username (case-insensitively), not entirely whitespace.
+/// Returns a user-facing error message, or null when [password] is acceptable.
+///
+/// **This deliberately does NOT trim.** [usernameValidationError] above *does*
+/// trim, and that asymmetry is intentional on both client and server: leading
+/// and trailing spaces are legal password characters, and a password manager
+/// can legitimately generate one. Trimming on one side only — client but not
+/// server, or signup but not login — creates an account that nobody can ever
+/// sign in to, and with no password reset that account is gone for good.
+/// Validate and submit the exact same string the user typed.
+String? passwordValidationError(String password, {String? username}) {
+  if (password.length < kPasswordMinLength) {
+    return 'Password must be at least $kPasswordMinLength characters.';
+  }
+  if (password.length > kPasswordMaxLength) {
+    return 'Password must be $kPasswordMaxLength characters or fewer.';
+  }
+  if (password.trim().isEmpty) {
+    return 'Password cannot be only spaces.';
+  }
+  if (username != null &&
+      username.trim().isNotEmpty &&
+      password.toLowerCase() == username.trim().toLowerCase()) {
+    return 'Password cannot be the same as your username.';
+  }
+  return null;
+}
+
+/// Returns a user-facing error when the two password fields disagree, else
+/// null. Compares verbatim for the same no-trim reason as
+/// [passwordValidationError] — a confirmation that only matches after trimming
+/// is not a match.
+String? passwordConfirmationError(String password, String confirmation) {
+  if (confirmation.isEmpty) {
+    return 'Please re-enter your password.';
+  }
+  if (password != confirmation) {
+    return 'Passwords do not match.';
+  }
+  return null;
+}
+
 /// Converts a `DateTime` into a human-readable "time ago" string.
 String timeAgo(DateTime lastSeen) {
   final now = DateTime.now();

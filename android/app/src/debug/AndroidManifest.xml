@@ -4,4 +4,11 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Debug builds only. Android blocks plain HTTP by default from API 28
+         on, which stops a debug build from reaching a homeserver running on
+         a LAN address or localhost. This source set is not merged into
+         release or profile builds, so shipped builds stay HTTPS-only.
+    -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

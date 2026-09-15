@@ -6,6 +6,7 @@ import 'location/location_service.dart';
 import 'location/location_update.dart';
 import 'location/location_service_config.dart';
 import 'location/libre_location_service.dart';
+import 'location/location_dispatch.dart';
 
 /// A simpler location manager relying on the plugin's own stop-detection.
 /// Battery Saver Mode slightly changes the config, otherwise we let
@@ -18,17 +19,21 @@ class LocationManager with ChangeNotifier {
   LocationUpdate? _lastPosition;
   bool _isTracking = false;
   bool _isInForeground = true;
-  bool _batterySaverEnabled = false;
   bool _isMoving = false;
   DateTime? _lastLocationUpdate;
+
+  TrackingMode _trackingMode = TrackingMode.normal;
 
   late final AppLifecycleListener _lifecycleListener;
   StreamSubscription<LocationUpdate>? _locationSubscription;
   StreamSubscription<bool>? _motionSubscription;
 
-  LocationManager() {
+  /// Must be awaited once at boot, before [startTracking]. Hydrates the
+  /// persisted sharing mode so the first config push uses the user's choice
+  /// rather than the default.
+  Future<void> initialize() async {
+    await _loadTrackingMode();
     _initializeLifecycleListener();
-    _loadBatterySaverState();
     _setupLocationService();
   }
 
@@ -54,17 +59,22 @@ class LocationManager with ChangeNotifier {
     );
   }
 
-  // Restore battery-saver setting from SharedPreferences
-  Future<void> _loadBatterySaverState() async {
+  /// Reads the same `sharing_mode` pref that [LocationDispatch] owns and
+  /// writes. Deliberately not a second pref: LocationManager and
+  /// LocationDispatch both push a preset to the plugin, and when they
+  /// disagreed the UI showed one mode while tracking ran another (#341).
+  Future<void> _loadTrackingMode() async {
     final prefs = await SharedPreferences.getInstance();
-    _batterySaverEnabled = prefs.getBool('battery_saver') ?? false;
+    _trackingMode =
+        SharingModePref.fromPrefValue(prefs.getString('sharing_mode'))
+            .trackingMode;
   }
 
-  // Toggle battery-saver mode
-  Future<void> toggleBatterySaverMode(bool enabled) async {
-    _batterySaverEnabled = enabled;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('battery_saver', enabled);
+  /// Applies [mode] to the running tracker. Persisting it is
+  /// [LocationDispatch.setMode]'s job — call that first.
+  void setTrackingMode(TrackingMode mode) {
+    if (_trackingMode == mode) return;
+    _trackingMode = mode;
     _updateTrackingConfig();
     notifyListeners();
   }
@@ -83,7 +93,7 @@ class LocationManager with ChangeNotifier {
         final timeSinceLastUpdate = now.difference(_lastLocationUpdate!);
 
         // Reduced throttling intervals for more frequent updates
-        final throttleInterval = _batterySaverEnabled
+        final throttleInterval = _trackingMode == TrackingMode.batterySaver
             ? const Duration(minutes: 3) // Reduced from 5 to 3 minutes
             : const Duration(seconds: 30); // Reduced from 1 minute to 30 seconds
 
@@ -111,9 +121,8 @@ class LocationManager with ChangeNotifier {
   void _updateTrackingConfig() {
     if (!_isTracking) return;
 
-    final mode = _batterySaverEnabled ? TrackingMode.batterySaver : TrackingMode.normal;
     final config = LocationServiceConfig(
-      mode: mode,
+      mode: _trackingMode,
       enableHeadless: true,
       startOnBoot: true,
     );
@@ -131,7 +140,7 @@ class LocationManager with ChangeNotifier {
   }
 
   bool get isTracking => _isTracking;
-  bool get batterySaverEnabled => _batterySaverEnabled;
+  TrackingMode get trackingMode => _trackingMode;
   bool get isMoving => _isMoving;
   DateTime? get lastLocationUpdate => _lastLocationUpdate;
   
