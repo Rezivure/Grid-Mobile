@@ -3,6 +3,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../dialogs/sign_out_dialog.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -141,7 +142,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadCachedAvatar();
     _loadAppVersion();
   }
-  
+
   /// Best-effort: if GAUTH is unreachable the tile just keeps saying
   /// "Set a password", which the setup screen re-checks anyway.
   Future<void> _loadPasswordStatus() async {
@@ -537,7 +538,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showInfoModal(String title, String content) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -588,8 +589,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          title.toLowerCase().contains('device') 
-                              ? Icons.device_hub 
+                          title.toLowerCase().contains('device')
+                              ? Icons.device_hub
                               : Icons.key,
                           color: colorScheme.primary,
                           size: 24,
@@ -635,7 +636,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
-                
+
                 // Content Section
                 Flexible(
                   child: Container(
@@ -675,7 +676,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ),
                         SizedBox(height: 20),
-                        
+
                         // Info Section
                         Container(
                           padding: EdgeInsets.all(16),
@@ -714,7 +715,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                 ),
-                
+
                 // Actions Section
                 Container(
                   padding: EdgeInsets.all(24),
@@ -825,9 +826,12 @@ class _SettingsPageState extends State<SettingsPage> {
   // In SettingsPage, update the _logout method:
 
   Future<void> _logout() async {
+    NavigatorState navigator = Navigator.of(context);
+
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final syncManager = Provider.of<SyncManager>(context, listen: false);
     final avatarBloc = context.read<AvatarBloc>();
@@ -835,14 +839,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final groupsBloc = context.read<GroupsBloc>();
     final invitationsBloc = context.read<InvitationsBloc>();
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => _buildSignOutDialog(),
-    );
+    final confirmed = await showSignOutDialog(context);
 
-    if (confirmed ?? false) {
+    if (confirmed) {
+      // TODO(Yuki): Implement declarative handling of sign out to prevent service failing on logout or user escaping
       try {
+
         print("[Logout] Starting logout process...");
 
         // 1. Stop all active services immediately
@@ -899,7 +901,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         print("[Logout] Logout complete, navigating to welcome screen");
         // Navigate to welcome screen
-        Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+        navigator.pushNamedAndRemoveUntil('/welcome', (route) => false);
       } catch (e) {
         InAppNotifier.instance.show(
           title: 'Failed to sign out',
@@ -922,7 +924,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final trimmedName = name.trim();
       if (trimmedName.isEmpty) return false;
       if (trimmedName.length < 3 || trimmedName.length > 14) return false;
-      
+
       // Allow letters, numbers, spaces, emojis, and basic punctuation
       // This regex allows Unicode characters (including emojis)
       final invalidChars = RegExp(r'[<>"/\\|?*]'); // Only block truly problematic characters
@@ -1249,7 +1251,7 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (BuildContext context) {
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
-        
+
         return Dialog(
           backgroundColor: Colors.transparent,
           child: Container(
@@ -1285,7 +1287,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   SizedBox(height: 16),
-                  
+
                   // Title
                   Text(
                     'Update Profile Photo',
@@ -1295,7 +1297,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   SizedBox(height: 24),
-                  
+
                   // Options
                   InkWell(
                     onTap: () => Navigator.pop(context, ImageSource.camera),
@@ -1407,7 +1409,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   SizedBox(height: 24),
-                  
+
                   // End-to-end encryption notice
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1435,7 +1437,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   SizedBox(height: 16),
-                  
+
                   // Cancel button
                   TextButton(
                     onPressed: () => Navigator.pop(context),
@@ -1468,7 +1470,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (Platform.isAndroid) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
-      
+
       // Pick image
       print('[Avatar] Starting image picker...');
       final XFile? image = await picker.pickImage(
@@ -1482,12 +1484,12 @@ class _SettingsPageState extends State<SettingsPage> {
         print('[Avatar] Image picker cancelled');
         return;
       }
-      
+
       print('[Avatar] Image picked successfully: ${image.path}');
 
       // Step 2: Apply circular cropping (skip on Android due to v8.0.2 crash)
       String finalImagePath;
-      
+
       if (Platform.isIOS) {
         // iOS - use the cropper as normal
         CroppedFile? croppedFile;
@@ -1513,7 +1515,7 @@ class _SettingsPageState extends State<SettingsPage> {
           print('Image cropper error: $e');
           return;
         }
-        
+
         if (croppedFile == null) return;
         finalImagePath = croppedFile.path;
       } else {
@@ -1550,7 +1552,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _uploadAvatarToR2(String imagePath) async {
     final colorScheme = Theme.of(context).colorScheme;
     final secureStorage = SecureStorageProvider.instance();
-    
+
     try {
       // Show subtle loading indicator
       showDialog(
@@ -1608,7 +1610,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // Generate encryption key and IV
       final key = encrypt.Key.fromSecureRandom(32); // 256-bit key
       final iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV
-      
+
       // Encrypt the image
       final encrypter = encrypt.Encrypter(encrypt.AES(key));
       final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
@@ -1616,23 +1618,23 @@ class _SettingsPageState extends State<SettingsPage> {
       // Get JWT token
       final prefs = await SharedPreferences.getInstance();
       final jwt = prefs.getString('loginToken');
-      
+
       if (jwt == null) {
         throw Exception('No authentication token found');
       }
 
       // Get middleware URL (GAUTH_URL)
       final middlewareUrl = dotenv.env['GAUTH_URL'];
-      
+
       // Create multipart request to middleware
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('$middlewareUrl/upload-profile-pic'),
       );
-      
+
       // Add JWT token
       request.headers['Authorization'] = 'Bearer $jwt';
-      
+
       // Add encrypted file
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -1653,7 +1655,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         final filename = responseData['filename'];
-        
+
         // Construct CDN URL using the filename
         final cdnBaseUrl = dotenv.env['PROFILE_PIC_CDN_URL'] ?? 'https://profile-store.mygrid.app';;
         final cdnUrl = '$cdnBaseUrl/$filename';
@@ -1661,14 +1663,14 @@ class _SettingsPageState extends State<SettingsPage> {
         // Store encryption metadata in secure storage
         final client = Provider.of<Client>(context, listen: false);
         final userId = client.userID ?? '';
-        
+
         final avatarData = {
           'uri': cdnUrl,
           'key': key.base64,
           'iv': iv.base64,
           'filename': filename,
         };
-        
+
         await secureStorage.write(
           key: 'avatar_$userId',
           value: json.encode(avatarData),
@@ -1688,11 +1690,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarBytes = null;
         _cachedAvatarUri = null;
         _hasLoadedAvatar = false; // Reset flag to allow reload
-        
+
         // Clear static cache for this user
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
-        
+
         // Notify AvatarBloc about the update
         final avatarBloc = context.read<AvatarBloc>();
         avatarBloc.add(AvatarUpdateReceived(
@@ -1702,10 +1704,10 @@ class _SettingsPageState extends State<SettingsPage> {
           encryptionIv: iv.base64,
           isMatrixUrl: false,
         ));
-        
+
         // Force rebuild to show the new avatar
         setState(() {});
-        
+
         // Step 5: Broadcast avatar announcement to all rooms
         print('[Avatar Upload] Broadcasting avatar announcement to all rooms');
         final avatarService = AvatarAnnouncementService(client);
@@ -1718,7 +1720,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
-      
+
       InAppNotifier.instance.show(
         title: 'Failed to upload avatar',
         message: '$e',
@@ -1730,7 +1732,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _uploadAvatarToMatrix(String imagePath) async {
     final colorScheme = Theme.of(context).colorScheme;
     final secureStorage = SecureStorageProvider.instance();
-    
+
     try {
       // Show subtle loading indicator
       showDialog(
@@ -1783,19 +1785,19 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // Get Matrix client
       final client = Provider.of<Client>(context, listen: false);
-      
+
       // Read image file
       final imageFile = File(imagePath);
       final imageBytes = await imageFile.readAsBytes();
-      
+
       // Generate encryption key and IV (same as R2)
       final key = encrypt.Key.fromSecureRandom(32); // 256-bit key
       final iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV
-      
+
       // Encrypt the image
       final encrypter = encrypt.Encrypter(encrypt.AES(key));
       final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
-      
+
       // Upload encrypted file to Matrix media store
       print('[Matrix Avatar] Starting upload of encrypted file to Matrix media store');
       final uploadResp = await client.uploadContent(
@@ -1827,7 +1829,7 @@ class _SettingsPageState extends State<SettingsPage> {
           'iv': iv.base64,
           'isMatrix': true, // Flag to indicate this is a Matrix URL
         };
-        
+
         await secureStorage.write(
           key: 'avatar_$userId',
           value: json.encode(avatarData),
@@ -1851,11 +1853,11 @@ class _SettingsPageState extends State<SettingsPage> {
         _avatarBytes = null;
         _cachedAvatarUri = null;
         _hasLoadedAvatar = false; // Reset flag to allow reload
-        
+
         // Clear static cache for this user
         _avatarCache.remove(userId);
         _avatarUriCache.remove(userId);
-        
+
         // Notify AvatarBloc about the update
         final avatarBloc = context.read<AvatarBloc>();
         avatarBloc.add(AvatarUpdateReceived(
@@ -1865,10 +1867,10 @@ class _SettingsPageState extends State<SettingsPage> {
           encryptionIv: iv.base64,
           isMatrixUrl: true,
         ));
-        
+
         // Force rebuild to show the new avatar
         setState(() {});
-        
+
         print('[Matrix Avatar] Reload complete');
 
         // Step 5: Broadcast avatar announcement to all rooms
@@ -1883,7 +1885,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
-      
+
       InAppNotifier.instance.show(
         title: 'Failed to upload avatar',
         message: '$e',
@@ -1947,7 +1949,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadCachedAvatar() async {
     final client = Provider.of<Client>(context, listen: false);
     final userId = client.userID ?? '';
-    
+
     // Check static cache first
     if (_avatarCache.containsKey(userId)) {
       print('[Avatar Load] Using avatar from static cache');
@@ -1958,16 +1960,16 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       return;
     }
-    
+
     // Only load once per widget lifecycle
     if (_hasLoadedAvatar) {
       print('[Avatar Load] Already attempted load, skipping');
       return;
     }
-    
+
     print('[Avatar Load] Starting avatar load - not in cache');
     _hasLoadedAvatar = true;
-    
+
     try {
       setState(() {
         _isLoadingAvatar = true;
@@ -1978,24 +1980,24 @@ class _SettingsPageState extends State<SettingsPage> {
       // First check if custom server (Matrix avatar)
       final prefs = await SharedPreferences.getInstance();
       final isMatrixAvatar = prefs.getBool('avatar_is_matrix') ?? false;
-      
+
       if (isMatrixAvatar) {
         // For custom servers, check secure storage for encrypted avatar
         print('[Matrix Avatar Load] Loading avatar for Matrix user: $userId');
-        
+
         final avatarDataStr = await secureStorage.read(key: 'avatar_$userId');
         if (avatarDataStr != null) {
           final avatarData = json.decode(avatarDataStr);
           final uri = avatarData['uri'];
           final keyBase64 = avatarData['key'];
           final ivBase64 = avatarData['iv'];
-          
+
           if (uri != null && keyBase64 != null && ivBase64 != null) {
             // Parse mxc:// URL to get server name and media ID
             final mxcUri = Uri.parse(uri);
             final serverName = mxcUri.host;
             final mediaId = mxcUri.path.substring(1); // Remove leading /
-            
+
             print('[Matrix Avatar Load] Downloading encrypted file from Matrix: server=$serverName, mediaId=$mediaId');
             print('[Matrix Avatar Load] Client logged in: ${client.isLogged()}');
             print('[Matrix Avatar Load] Access token present: ${client.accessToken != null}');
@@ -2021,13 +2023,13 @@ class _SettingsPageState extends State<SettingsPage> {
             // Convert to Encrypted object and decrypt
             final encrypted = encrypt.Encrypted(fileData);
             final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
-            
+
             final avatarBytes = Uint8List.fromList(decrypted);
-            
+
             // Update static cache
             _avatarCache[userId] = avatarBytes;
             _avatarUriCache[userId] = uri;
-            
+
             setState(() {
               _avatarBytes = avatarBytes;
               _cachedAvatarUri = uri; // Cache the Matrix URI
@@ -2054,14 +2056,14 @@ class _SettingsPageState extends State<SettingsPage> {
           final uri = avatarData['uri'];
           final keyBase64 = avatarData['key'];
           final ivBase64 = avatarData['iv'];
-          
+
           if (uri != null && keyBase64 != null && ivBase64 != null) {
             // Download encrypted file
             // print('Downloading avatar from: $uri');
             final response = await http.get(Uri.parse(uri));
             // print('Response status: ${response.statusCode}');
             // print('Response content-type: ${response.headers['content-type']}');
-            
+
             if (response.statusCode == 200) {
               // Check if response is HTML (error page)
               final contentType = response.headers['content-type'] ?? '';
@@ -2073,22 +2075,22 @@ class _SettingsPageState extends State<SettingsPage> {
                 });
                 return;
               }
-              
+
               // Decrypt
               final key = encrypt.Key.fromBase64(keyBase64);
               final iv = encrypt.IV.fromBase64(ivBase64);
               final encrypter = encrypt.Encrypter(encrypt.AES(key));
-              
+
               // Convert response bytes to Encrypted object
               final encrypted = encrypt.Encrypted(response.bodyBytes);
               final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
-              
+
               final avatarBytes = Uint8List.fromList(decrypted);
-              
+
               // Update static cache
               _avatarCache[userId] = avatarBytes;
               _avatarUriCache[userId] = uri;
-              
+
               setState(() {
                 _avatarBytes = avatarBytes;
                 _cachedAvatarUri = uri; // Cache the URI
@@ -3024,6 +3026,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // TODO(Chandler): remove if not used
   Widget _buildSettingsOption({
     required IconData icon,
     required String title,
@@ -3454,185 +3457,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: GridButtonStyle.danger,
                       onPressed: () => Navigator.pop(
                           context, passwordController.text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignOutDialog() {
-    final bullets = <_DangerBullet>[
-      const _DangerBullet(
-          Icons.location_off, 'Location sharing will be stopped'),
-      const _DangerBullet(Icons.sync_disabled,
-          "You'll need to sign in again to access your account"),
-    ];
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.9,
-        ),
-        decoration: BoxDecoration(
-          color: context.gridColors.surface,
-          borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: context.gridColors.hairline),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: context.gridColors.mintFaint,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(GridTokens.rXl),
-                  topRight: Radius.circular(GridTokens.rXl),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.gridColors.mintSoft,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.logout,
-                      color: context.gridColors.mint,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sign out',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.015,
-                            color: context.gridColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'You can always sign back in',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: context.gridColors.text2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Body
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Are you sure you want to sign out?',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: context.gridColors.text2,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: context.gridColors.surface2,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: context.gridColors.hairline),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (int i = 0; i < bullets.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                bullets[i].icon,
-                                color: context.gridColors.text2,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  bullets[i].text,
-                                  style: GoogleFonts.getFont(
-                                    'Geist',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                    color: context.gridColors.text2,
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GridButton(
-                      label: 'Cancel',
-                      style: GridButtonStyle.secondary,
-                      onPressed: () => Navigator.pop(context, false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GridButton(
-                      label: 'Sign out',
-                      icon: Icons.logout,
-                      style: GridButtonStyle.danger,
-                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
