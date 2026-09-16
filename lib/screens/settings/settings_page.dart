@@ -3,6 +3,7 @@ import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../dialogs/sign_out_dialog.dart';
 import '../../services/sync_manager.dart';
 import '/services/database_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -825,9 +826,12 @@ class _SettingsPageState extends State<SettingsPage> {
   // In SettingsPage, update the _logout method:
 
   Future<void> _logout() async {
+    NavigatorState navigator = Navigator.of(context);
+
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final syncManager = Provider.of<SyncManager>(context, listen: false);
     final avatarBloc = context.read<AvatarBloc>();
@@ -835,14 +839,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final groupsBloc = context.read<GroupsBloc>();
     final invitationsBloc = context.read<InvitationsBloc>();
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => _buildSignOutDialog(),
-    );
+    final confirmed = await showSignOutDialog(context);
 
-    if (confirmed ?? false) {
+    if (confirmed) {
+      // TODO(Yuki): Implement declarative handling of sign out to prevent service failing on logout or user escaping
       try {
+
         print("[Logout] Starting logout process...");
 
         // 1. Stop all active services immediately
@@ -899,7 +901,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         print("[Logout] Logout complete, navigating to welcome screen");
         // Navigate to welcome screen
-        Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+        navigator.pushNamedAndRemoveUntil('/welcome', (route) => false);
       } catch (e) {
         InAppNotifier.instance.show(
           title: 'Failed to sign out',
@@ -3454,185 +3456,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: GridButtonStyle.danger,
                       onPressed: () => Navigator.pop(
                           context, passwordController.text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignOutDialog() {
-    final bullets = <_DangerBullet>[
-      const _DangerBullet(
-          Icons.location_off, 'Location sharing will be stopped'),
-      const _DangerBullet(Icons.sync_disabled,
-          "You'll need to sign in again to access your account"),
-    ];
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.9,
-        ),
-        decoration: BoxDecoration(
-          color: context.gridColors.surface,
-          borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: context.gridColors.hairline),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: context.gridColors.mintFaint,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(GridTokens.rXl),
-                  topRight: Radius.circular(GridTokens.rXl),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.gridColors.mintSoft,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.logout,
-                      color: context.gridColors.mint,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sign out',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.015,
-                            color: context.gridColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'You can always sign back in',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: context.gridColors.text2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Body
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Are you sure you want to sign out?',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: context.gridColors.text2,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: context.gridColors.surface2,
-                      borderRadius:
-                          BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: context.gridColors.hairline),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (int i = 0; i < bullets.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                bullets[i].icon,
-                                color: context.gridColors.text2,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  bullets[i].text,
-                                  style: GoogleFonts.getFont(
-                                    'Geist',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                    color: context.gridColors.text2,
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GridButton(
-                      label: 'Cancel',
-                      style: GridButtonStyle.secondary,
-                      onPressed: () => Navigator.pop(context, false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GridButton(
-                      label: 'Sign out',
-                      icon: Icons.logout,
-                      style: GridButtonStyle.danger,
-                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
