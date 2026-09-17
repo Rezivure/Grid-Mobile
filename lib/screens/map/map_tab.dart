@@ -1,85 +1,71 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:grid_frontend/dialogs/delete_icon_dialog.dart';
-import 'package:grid_frontend/widgets/buttons/compass_button.dart';
-import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:grid_frontend/screens/map/compass_geometry.dart';
-import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
-import 'package:grid_frontend/repositories/user_repository.dart';
-import 'package:grid_frontend/services/in_app_notifier.dart';
-import 'package:grid_frontend/services/sync_manager.dart';
-import 'package:latlong2/latlong.dart';
-import 'package:maplibre_gl/maplibre_gl.dart' as ml;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
-import 'package:google_fonts/google_fonts.dart';
-
-import '../../widgets/layout/gap.dart';
-import 'grid_map_style.dart';
-import 'marker_projection.dart';
-import 'maplibre_camera_facade.dart';
-
-import 'package:grid_frontend/styles/tokens.dart';
-import 'package:grid_frontend/styles/grid_colors.dart';
-import 'package:grid_frontend/widgets/grid/grid_button.dart';
-import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
+import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_state.dart';
-
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
 import 'package:grid_frontend/blocs/map/map_event.dart';
 import 'package:grid_frontend/blocs/map/map_state.dart';
-import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
-import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
-import 'package:grid_frontend/services/avatar_cache_service.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_bloc.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_event.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_state.dart';
-import 'package:grid_frontend/models/user_location.dart';
-import 'package:grid_frontend/utilities/lat_lng_validation.dart';
-import 'package:grid_frontend/widgets/user_map_marker.dart';
-import 'package:grid_frontend/widgets/map_scroll_window.dart';
-import 'package:grid_frontend/widgets/user_info_bubble.dart';
-import 'package:grid_frontend/widgets/contact_profile_modal.dart';
-import 'package:grid_frontend/widgets/sharing_recipient_pill.dart';
+import 'package:grid_frontend/dialogs/delete_icon_dialog.dart';
+import 'package:grid_frontend/dialogs/map_error_dialog.dart';
 import 'package:grid_frontend/models/contact_display.dart';
-import 'package:grid_frontend/services/home_location_signals.dart';
-import 'package:grid_frontend/services/map_camera_signals.dart';
-import 'package:grid_frontend/services/contact_sheet_controller.dart';
-import 'package:grid_frontend/widgets/user_avatar.dart';
-import 'package:grid_frontend/services/room_service.dart';
-import 'package:grid_frontend/services/user_service.dart';
-import 'package:grid_frontend/services/location_manager.dart';
-import 'package:grid_frontend/services/app_lifecycle_channel.dart';
-import 'package:grid_frontend/services/sharing_state_notifier.dart';
-import 'package:grid_frontend/providers/user_location_provider.dart';
-import 'package:grid_frontend/widgets/onboarding_modal.dart';
-import 'package:grid_frontend/services/subscription_service.dart';
-import 'package:grid_frontend/screens/settings/subscription_screen.dart';
-import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'package:grid_frontend/widgets/app_initializer.dart';
-import 'package:grid_frontend/widgets/icon_selection_wheel.dart';
-import 'package:grid_frontend/widgets/icon_action_wheel.dart';
-import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
-import 'package:grid_frontend/providers/selected_user_provider.dart';
 import 'package:grid_frontend/models/map_icon.dart';
+import 'package:grid_frontend/models/user_location.dart';
+import 'package:grid_frontend/providers/selected_subscreen_provider.dart';
 import 'package:grid_frontend/repositories/map_icon_repository.dart';
+import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
+import 'package:grid_frontend/repositories/user_repository.dart';
+import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/services/app_lifecycle_channel.dart';
+import 'package:grid_frontend/services/avatar_cache_service.dart';
+import 'package:grid_frontend/services/contact_sheet_controller.dart';
 import 'package:grid_frontend/services/database_service.dart';
-import 'package:grid_frontend/widgets/map_icon_info_bubble.dart';
-import 'package:grid_frontend/widgets/app_review_prompt.dart';
-import 'package:uuid/uuid.dart';
+import 'package:grid_frontend/services/home_location_signals.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/map_camera_signals.dart';
 import 'package:grid_frontend/services/map_icon_sync_service.dart';
 import 'package:grid_frontend/services/passkey_service.dart';
-import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/subscription_service.dart';
+import 'package:grid_frontend/services/sync_manager.dart';
+import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/styles/grid_colors.dart';
+import 'package:grid_frontend/styles/tokens.dart';
+import 'package:grid_frontend/utilities/lat_lng_validation.dart';
+import 'package:grid_frontend/widgets/app_initializer.dart';
+import 'package:grid_frontend/widgets/app_review_prompt.dart';
+import 'package:grid_frontend/widgets/buttons/compass_button.dart';
+import 'package:grid_frontend/widgets/contact_profile_modal.dart';
+import 'package:grid_frontend/widgets/grid/grid_mono.dart';
+import 'package:grid_frontend/widgets/icon_action_wheel.dart';
+import 'package:grid_frontend/widgets/icon_selection_wheel.dart';
+import 'package:grid_frontend/widgets/map_icon_info_bubble.dart';
+import 'package:grid_frontend/widgets/map_scroll_window.dart';
+import 'package:grid_frontend/widgets/onboarding_modal.dart';
+import 'package:grid_frontend/widgets/sharing_recipient_pill.dart';
+import 'package:grid_frontend/widgets/user_map_marker.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+import 'package:matrix/matrix.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../services/backwards_compatibility_service.dart';
+import '../../widgets/layout/gap.dart';
+import 'grid_map_style.dart';
+import 'maplibre_camera_facade.dart';
+import 'marker_projection.dart';
 
 // Helper class to return both zoom and center point
 class MapZoomResult {
@@ -940,7 +926,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     await backwardsService.runBackfillIfNeeded();
   }
 
-
   void _handleIconSelection(IconType iconType) async {
     if (_longPressLocation == null || _selectedGroupId == null) return;
 
@@ -1078,110 +1063,21 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     _currentMapStyle = 'base';
   }
 
-  void _showMapErrorDialog() {
+  Future<void> _showMapErrorDialog() async {
     if (!mounted) return;
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Error icon with animation
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.wifi_off_rounded,
-                  size: 48,
-                  color: Colors.orange,
-                ),
-              ),
+    bool retry = await showMapErrorDialog(context);
 
-              const SizedBox(height: 24),
-
-              // Title
-              Text(
-                'Connection Error',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Content
-              Text(
-                'Failed to connect and load Grid. Please check your internet connection.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface.withOpacity(0.7),
-                  height: 1.4,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Single retry button that restarts the app
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Navigate to splash screen to restart the app flow
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      '/',
-                      (Route<dynamic> route) => false,
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Retry',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    // dialog can still be dismissed by pressing the systems back button
+    if (retry && mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/',
+        (Route<dynamic> route) => false,
+      );
+    }
   }
 
   void _resetToInitialZoom() {
@@ -2425,6 +2321,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         setState(() {
           _currentMapRotation = 0.0;
         });
+
+        _showMapErrorDialog();
       },
     );
   }
