@@ -85,7 +85,8 @@ class MapTab extends StatefulWidget {
   State<MapTab> createState() => _MapTabState();
 }
 
-class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _MapTabState extends State<MapTab>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static bool _hasInitialized = false;
   static DateTime? _lastInitTime;
   bool _servicesInitialized = false;
@@ -103,14 +104,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   SelectedSubscreenProvider? _subscreenProvider;
 
   bool _isMapReady = false;
-  bool _followUser = false; // Changed default to false to prevent initial movement
+  bool _followUser =
+      false; // Changed default to false to prevent initial movement
   String? _followedContactId;
   StreamSubscription<MapState>? _mapStateSub;
   String? _lastFollowedPositionKey;
   double _zoom = 3.5; // Default to full country view for faster tile loading
   bool _initialZoomCalculated = false;
   LatLng? _initialCenter; // Store the calculated center point
-  int _lastKnownUserLocationsCount = 0; // Track when contacts first load from sync
+  int _lastKnownUserLocationsCount =
+      0; // Track when contacts first load from sync
 
   // Track if we're at the reset view for FAB highlighting
   bool _isAtResetView = true;
@@ -274,7 +277,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       final lastDismissed = prefs.getString('passkey_warning_dismissed');
       if (lastDismissed != null) {
         final dismissed = DateTime.tryParse(lastDismissed);
-        if (dismissed != null && DateTime.now().difference(dismissed).inHours < 24) {
+        if (dismissed != null &&
+            DateTime.now().difference(dismissed).inHours < 24) {
           return;
         }
       }
@@ -333,7 +337,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     // This happens when background location updates wake the app
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     final wasLaunchedFromBackground =
-        lifecycleState == AppLifecycleState.resumed || lifecycleState == AppLifecycleState.inactive;
+        lifecycleState == AppLifecycleState.resumed ||
+            lifecycleState == AppLifecycleState.inactive;
 
     if (wasLaunchedFromBackground) {
       print('[MapTab] App launched from background/terminated state');
@@ -493,10 +498,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       _locationManager?.startTracking();
       // Immediately try to get current location to avoid showing default location
       _locationManager?.grabLocationAndPing().then((_) {
-        if (mounted && _locationManager?.currentLatLng != null && _isMapReady && !_initialZoomCalculated) {
+        if (mounted &&
+            _locationManager?.currentLatLng != null &&
+            _isMapReady &&
+            !_initialZoomCalculated) {
           // If map is ready and we haven't zoomed yet, do it now
           _zoom = 3.5; // Full country view for faster loading
-          _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+          _mapController.moveAndRotate(
+              _locationManager!.currentLatLng!, _zoom, 0);
           // Don't setState here - let _onLocationUpdate handle it to avoid double setState
           _initialZoomCalculated = true;
         }
@@ -539,7 +548,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
   void _onLocationUpdate() {
     // Check if we can calculate zoom now
-    if (!_initialZoomCalculated && _isMapReady && _locationManager?.currentLatLng != null) {
+    if (!_initialZoomCalculated &&
+        _isMapReady &&
+        _locationManager?.currentLatLng != null) {
       // Mark as calculated immediately to prevent multiple calls
       _initialZoomCalculated = true;
 
@@ -549,7 +560,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
       if (userLocations.isNotEmpty) {
         // Calculate optimal view including contacts
-        final result = _calculateOptimalZoomAndCenter(_locationManager!.currentLatLng!, userLocations);
+        final result = _calculateOptimalZoomAndCenter(
+            _locationManager!.currentLatLng!, userLocations);
         _zoom = result.zoom;
         _resetCenter = result.center;
         _resetZoom = result.zoom;
@@ -559,7 +571,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         _zoom = 3.5; // Full country view for faster loading
         _resetCenter = _locationManager!.currentLatLng!;
         _resetZoom = 3.5;
-        _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+        _mapController.moveAndRotate(
+            _locationManager!.currentLatLng!, _zoom, 0);
       }
 
       // Single setState at the end
@@ -578,7 +591,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       // Clear the flag so we don't repeatedly navigate
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
+          Navigator.of(context)
+              .pushNamedAndRemoveUntil('/welcome', (route) => false);
         }
       });
     }
@@ -666,13 +680,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       if (lastFg != null) {
         final pauseDuration = DateTime.now().difference(lastFg);
         if (pauseDuration.inSeconds > _longPauseThresholdSeconds) {
-          print('[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
+          print(
+              '[MapTab] Long pause detected (${pauseDuration.inSeconds}s) - restarting');
           // Mark handled so the stale ts can't re-trigger another restart.
           unawaited(_persistLastForegroundTs(DateTime.now()));
           if (mounted) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
-                builder: (context) => AppInitializer(client: context.read<Client>()),
+                builder: (context) =>
+                    AppInitializer(client: context.read<Client>()),
               ),
               (route) => false,
             );
@@ -716,7 +732,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         DateTime.fromMillisecondsSinceEpoch(ms),
       );
       if (gap.inSeconds <= _longPauseThresholdSeconds) return;
-      print('[MapTab] Cold-launch long pause detected (${gap.inSeconds}s) - recovering');
+      print(
+          '[MapTab] Cold-launch long pause detected (${gap.inSeconds}s) - recovering');
       // Mark handled so the resumed-path restart doesn't fire on the same gap.
       unawaited(_persistLastForegroundTs(DateTime.now()));
       // Refresh avatar cache from disk.
@@ -773,7 +790,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       longitude: _longPressLocation!.longitude,
       iconType: 'icon',
       iconData: iconType.name,
-      name: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)}',
+      name:
+          '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)}',
       description: null,
       createdAt: DateTime.now(),
       expiresAt: null,
@@ -789,7 +807,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     // Show confirmation immediately with shorter duration
     InAppNotifier.instance.show(
-      title: '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed',
+      title:
+          '${iconType.name.substring(0, 1).toUpperCase()}${iconType.name.substring(1)} icon placed',
       message: 'Group members will see it on the map.',
       variant: InAppNotificationVariant.success,
       duration: const Duration(milliseconds: 1800),
@@ -801,7 +820,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       await _mapIconSyncService?.sendIconCreate(newIcon.roomId, newIcon);
     } catch (e) {
       // If save fails, remove from BLoC
-      context.read<MapIconsBloc>().add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
+      context
+          .read<MapIconsBloc>()
+          .add(MapIconDeleted(iconId: newIcon.id, roomId: newIcon.roomId));
 
       InAppNotifier.instance.show(
         title: 'Failed to save icon',
@@ -815,7 +836,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   Future<void> _loadMapIcons() async {
     try {
       // Get the currently selected subscreen
-      final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+      final selectedSubscreen =
+          context.read<SelectedSubscreenProvider>().selectedSubscreen;
       final mapIconsBloc = context.read<MapIconsBloc>();
 
       // Only load icons if a group is selected
@@ -918,7 +940,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
       if (userLocations.isNotEmpty) {
         // Calculate optimal view including contacts
-        final result = _calculateOptimalZoomAndCenter(_locationManager!.currentLatLng!, userLocations);
+        final result = _calculateOptimalZoomAndCenter(
+            _locationManager!.currentLatLng!, userLocations);
         center = result.center;
         zoom = result.zoom;
       } else {
@@ -945,11 +968,16 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   // Returns both optimal zoom and center point
-  MapZoomResult _calculateOptimalZoomAndCenter(LatLng userPosition, List<UserLocation> userLocations) {
-    print('[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
+  MapZoomResult _calculateOptimalZoomAndCenter(
+      LatLng userPosition, List<UserLocation> userLocations) {
+    print(
+        '[SmartZoom] Calculating optimal view for ${userLocations.length} contacts');
 
-    final userValid = isFiniteLatLng(userPosition.latitude, userPosition.longitude);
-    userLocations = userLocations.where((l) => isFiniteLatLng(l.position.latitude, l.position.longitude)).toList();
+    final userValid =
+        isFiniteLatLng(userPosition.latitude, userPosition.longitude);
+    userLocations = userLocations
+        .where((l) => isFiniteLatLng(l.position.latitude, l.position.longitude))
+        .toList();
 
     if (userLocations.isEmpty) {
       if (userValid) return MapZoomResult(zoom: 4.5, center: userPosition);
@@ -966,10 +994,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     // Find the bounding box of all users
     for (final location in userLocations) {
-      minLat = minLat < location.position.latitude ? minLat : location.position.latitude;
-      maxLat = maxLat > location.position.latitude ? maxLat : location.position.latitude;
-      minLng = minLng < location.position.longitude ? minLng : location.position.longitude;
-      maxLng = maxLng > location.position.longitude ? maxLng : location.position.longitude;
+      minLat = minLat < location.position.latitude
+          ? minLat
+          : location.position.latitude;
+      maxLat = maxLat > location.position.latitude
+          ? maxLat
+          : location.position.latitude;
+      minLng = minLng < location.position.longitude
+          ? minLng
+          : location.position.longitude;
+      maxLng = maxLng > location.position.longitude
+          ? maxLng
+          : location.position.longitude;
     }
 
     // Calculate center of all positions (midpoint)
@@ -1026,20 +1062,25 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
 
     // Check if current user would be visible from the midpoint center
-    final distanceFromCenter = ((seed.latitude - centerLat).abs() + (seed.longitude - centerLng).abs()) / 2;
+    final distanceFromCenter = ((seed.latitude - centerLat).abs() +
+            (seed.longitude - centerLng).abs()) /
+        2;
 
     // If current user is too far from midpoint, adjust center to keep them visible
     if (distanceFromCenter > viewportRadius) {
       // Shift center toward current user to ensure they're at the edge of viewport
-      final shiftFactor = (distanceFromCenter - viewportRadius) / distanceFromCenter;
+      final shiftFactor =
+          (distanceFromCenter - viewportRadius) / distanceFromCenter;
       final adjustedLat = centerLat + (seed.latitude - centerLat) * shiftFactor;
-      final adjustedLng = centerLng + (seed.longitude - centerLng) * shiftFactor;
+      final adjustedLng =
+          centerLng + (seed.longitude - centerLng) * shiftFactor;
 
       print('[SmartZoom] Adjusted center to keep current user visible');
       if (!isFiniteLatLng(adjustedLat, adjustedLng)) {
         return MapZoomResult(zoom: 2.0, center: const LatLng(0, 0));
       }
-      return MapZoomResult(zoom: zoomLevel, center: LatLng(adjustedLat, adjustedLng));
+      return MapZoomResult(
+          zoom: zoomLevel, center: LatLng(adjustedLat, adjustedLng));
     }
 
     print('[SmartZoom] Calculated zoom: $zoomLevel for span: $maxDiff degrees');
@@ -1110,7 +1151,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
       );
       for (var idx = 0; idx < keys.length && idx < screenPoints.length; idx++) {
         final p = screenPoints[idx];
-        _markerScreenPositions[keys[idx]] = logicalMarkerOffset(p.x.toDouble(), p.y.toDouble(), divisor);
+        _markerScreenPositions[keys[idx]] =
+            logicalMarkerOffset(p.x.toDouble(), p.y.toDouble(), divisor);
       }
       setState(() {});
     } catch (_) {
@@ -1119,7 +1161,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   }
 
   Offset _screenPosFor(LatLng p) =>
-      _markerScreenPositions[_latLngKey(p)] ?? _mapController.camera.latLngToScreenPoint(p);
+      _markerScreenPositions[_latLngKey(p)] ??
+      _mapController.camera.latLngToScreenPoint(p);
 
   /// Reload the "home" location + geofence radius from SharedPreferences
   /// (keys: `home_location` = "lat,lng", `home_radius` = double meters).
@@ -1178,7 +1221,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
     return NotificationListener<DraggableScrollableNotification>(
       onNotification: (n) {
-        if (n.extent < 0.20 && ContactSheetController.instance.contact != null) {
+        if (n.extent < 0.20 &&
+            ContactSheetController.instance.contact != null) {
           ContactSheetController.instance.close();
           MapCameraSignals.requestReset();
         }
@@ -1231,8 +1275,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         break;
       }
     }
-    _lastFollowedPositionKey =
-        seed == null ? null : '${seed.position.latitude},${seed.position.longitude},${seed.timestamp}';
+    _lastFollowedPositionKey = seed == null
+        ? null
+        : '${seed.position.latitude},${seed.position.longitude},${seed.timestamp}';
     _ensureMapStateSubscription();
   }
 
@@ -1343,13 +1388,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         // Handle map movement
         if (state.center != null && _isMapReady) {
           setState(() {
-            _followUser = false; // Turn off following when moving to new location
+            _followUser =
+                false; // Turn off following when moving to new location
             _isAtResetView = false; // Turn off reset view when moving to a user
             _targetUserId = state.selectedUserId;
           });
 
           // Use provided zoom or default to street level
-          final double targetZoom = state.zoom ?? 3.5; // Default to full country view
+          final double targetZoom =
+              state.zoom ?? 3.5; // Default to full country view
 
           _mapController.moveAndRotate(state.center!, targetZoom, 0);
 
@@ -1375,9 +1422,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
           if (previousEmpty) {
             // Smoothly adjust to include contacts
-            final result = _calculateOptimalZoomAndCenter(_locationManager!.currentLatLng!, state.userLocations);
+            final result = _calculateOptimalZoomAndCenter(
+                _locationManager!.currentLatLng!, state.userLocations);
             _zoom = result.zoom;
-            print('[SMART ZOOM] Contacts loaded from sync, smoothly adjusting view');
+            print(
+                '[SMART ZOOM] Contacts loaded from sync, smoothly adjusting view');
             _mapController.moveAndRotate(result.center, _zoom, 0);
           }
         } else if (!_initialZoomCalculated) {}
@@ -1405,7 +1454,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               SizedBox(
                   height: MediaQuery.sizeOf(context).height * 3 / 4,
                   child: LayoutBuilder(builder: (context, constraints) {
-                    _mapController.setMapSize(Size(constraints.maxWidth, constraints.maxHeight));
+                    _mapController.setMapSize(
+                        Size(constraints.maxWidth, constraints.maxHeight));
                     return Stack(children: [
                       Listener(
                         behavior: HitTestBehavior.translucent,
@@ -1421,22 +1471,30 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                         },
                         child: ml.MapLibreMap(
                           key: _mapKey,
-                          styleString: _styleJson ?? buildGridMapStyle(dark: isDarkMode),
+                          styleString:
+                              _styleJson ?? buildGridMapStyle(dark: isDarkMode),
                           initialCameraPosition: ml.CameraPosition(
                             target: ml.LatLng(
-                              (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).latitude,
-                              (_locationManager?.currentLatLng ?? LatLng(37.7749, -122.4194)).longitude,
+                              (_locationManager?.currentLatLng ??
+                                      LatLng(37.7749, -122.4194))
+                                  .latitude,
+                              (_locationManager?.currentLatLng ??
+                                      LatLng(37.7749, -122.4194))
+                                  .longitude,
                             ),
                             zoom: _zoom,
                           ),
                           myLocationEnabled: _hasCompletedOnboarding,
-                          myLocationTrackingMode:
-                              _followUser ? ml.MyLocationTrackingMode.tracking : ml.MyLocationTrackingMode.none,
+                          myLocationTrackingMode: _followUser
+                              ? ml.MyLocationTrackingMode.tracking
+                              : ml.MyLocationTrackingMode.none,
                           trackCameraPosition: true,
-                          minMaxZoomPreference: const ml.MinMaxZoomPreference(1.0, 17),
+                          minMaxZoomPreference:
+                              const ml.MinMaxZoomPreference(1.0, 17),
                           rotateGesturesEnabled: true,
                           tiltGesturesEnabled: false,
-                          attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+                          attributionButtonPosition:
+                              ml.AttributionButtonPosition.bottomLeft,
                           onMapCreated: (controller) {
                             _mlController = controller;
                             _mapController.attach(controller);
@@ -1449,47 +1507,65 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
                             if (!_initialZoomCalculated) {
                               if (_locationManager?.currentLatLng == null) {
-                                _locationManager?.grabLocationAndPing().then((_) {
-                                  if (_locationManager?.currentLatLng != null && mounted) {
+                                _locationManager
+                                    ?.grabLocationAndPing()
+                                    .then((_) {
+                                  if (_locationManager?.currentLatLng != null &&
+                                      mounted) {
                                     _zoom = 3.5;
-                                    _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+                                    _mapController.moveAndRotate(
+                                        _locationManager!.currentLatLng!,
+                                        _zoom,
+                                        0);
 
-                                    final userLocations = context.read<MapBloc>().state.userLocations;
+                                    final userLocations = context
+                                        .read<MapBloc>()
+                                        .state
+                                        .userLocations;
                                     if (userLocations.isNotEmpty) {
-                                      final result = _calculateOptimalZoomAndCenter(
+                                      final result =
+                                          _calculateOptimalZoomAndCenter(
                                         _locationManager!.currentLatLng!,
                                         userLocations,
                                       );
                                       _zoom = result.zoom;
-                                      _mapController.moveAndRotate(result.center, _zoom, 0);
+                                      _mapController.moveAndRotate(
+                                          result.center, _zoom, 0);
                                     }
-                                    setState(() => _initialZoomCalculated = true);
+                                    setState(
+                                        () => _initialZoomCalculated = true);
                                   }
                                 });
                               } else {
                                 _zoom = 3.5;
-                                _mapController.moveAndRotate(_locationManager!.currentLatLng!, _zoom, 0);
+                                _mapController.moveAndRotate(
+                                    _locationManager!.currentLatLng!, _zoom, 0);
 
-                                final userLocations = context.read<MapBloc>().state.userLocations;
+                                final userLocations =
+                                    context.read<MapBloc>().state.userLocations;
                                 if (userLocations.isNotEmpty) {
                                   final result = _calculateOptimalZoomAndCenter(
                                     _locationManager!.currentLatLng!,
                                     userLocations,
                                   );
                                   _zoom = result.zoom;
-                                  _mapController.moveAndRotate(result.center, _zoom, 0);
+                                  _mapController.moveAndRotate(
+                                      result.center, _zoom, 0);
                                 }
                                 setState(() => _initialZoomCalculated = true);
                               }
                             }
                           },
                           onMapClick: (point, latLng) async {
-                            final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
+                            final dartLatLng =
+                                LatLng(latLng.latitude, latLng.longitude);
                             if (_isMovingIcon && _movingIcon != null) {
-                              if (_movingIcon!.creatorId != context.read<Client>().userID) {
+                              if (_movingIcon!.creatorId !=
+                                  context.read<Client>().userID) {
                                 InAppNotifier.instance.show(
                                   title: 'You can only move icons you created',
-                                  message: 'Ask the creator to move it instead.',
+                                  message:
+                                      'Ask the creator to move it instead.',
                                   variant: InAppNotificationVariant.warning,
                                   duration: const Duration(seconds: 2),
                                 );
@@ -1517,9 +1593,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 metadata: _movingIcon!.metadata,
                               );
 
-                              await _mapIconRepository?.updateMapIcon(updatedIcon);
-                              await _mapIconSyncService?.sendIconUpdate(_movingIcon!.roomId, updatedIcon);
-                              context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
+                              await _mapIconRepository
+                                  ?.updateMapIcon(updatedIcon);
+                              await _mapIconSyncService?.sendIconUpdate(
+                                  _movingIcon!.roomId, updatedIcon);
+                              context
+                                  .read<MapIconsBloc>()
+                                  .add(MapIconUpdated(updatedIcon));
 
                               setState(() {
                                 _isMovingIcon = false;
@@ -1530,7 +1610,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
                               InAppNotifier.instance.show(
                                 title: 'Icon moved',
-                                message: 'Group members will see the new location.',
+                                message:
+                                    'Group members will see the new location.',
                                 variant: InAppNotificationVariant.success,
                                 duration: const Duration(seconds: 2),
                               );
@@ -1548,13 +1629,17 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             }
                           },
                           onMapLongClick: (point, latLng) {
-                            final dartLatLng = LatLng(latLng.latitude, latLng.longitude);
-                            final selectedSubscreen = context.read<SelectedSubscreenProvider>().selectedSubscreen;
+                            final dartLatLng =
+                                LatLng(latLng.latitude, latLng.longitude);
+                            final selectedSubscreen = context
+                                .read<SelectedSubscreenProvider>()
+                                .selectedSubscreen;
                             if (selectedSubscreen.startsWith('group:')) {
                               final groupId = selectedSubscreen.substring(6);
                               setState(() {
                                 _showIconWheel = true;
-                                _iconWheelPosition = Offset(point.x.toDouble(), point.y.toDouble());
+                                _iconWheelPosition = Offset(
+                                    point.x.toDouble(), point.y.toDouble());
                                 _longPressLocation = dartLatLng;
                                 _selectedGroupId = groupId;
                               });
@@ -1574,7 +1659,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 cam.center!,
                               );
                               final zoomDiff = (cam.zoom - _resetZoom!).abs();
-                              if (_isAtResetView && (distance > 100 || zoomDiff > 0.5)) {
+                              if (_isAtResetView &&
+                                  (distance > 100 || zoomDiff > 0.5)) {
                                 setState(() => _isAtResetView = false);
                               }
                             }
@@ -1582,7 +1668,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             if (mounted) setState(() {});
                           },
                           onCameraTrackingDismissed: () {
-                            if (_followUser) setState(() => _followUser = false);
+                            if (_followUser)
+                              setState(() => _followUser = false);
                           },
                         ),
                       ),
@@ -1602,7 +1689,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                   ) <=
                                   _homeRadiusMeters;
                           final pt = _screenPosFor(home);
-                          final accent = inside ? context.gridColors.mint : context.gridColors.amber;
+                          final accent = inside
+                              ? context.gridColors.mint
+                              : context.gridColors.amber;
                           final label = inside ? 'AT HOME' : 'HOME';
 
                           // Geofence radius circle in screen pixels — Web Mercator
@@ -1610,8 +1699,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           // internal convention used elsewhere in this file).
                           final zoom = _mapController.camera.zoom;
                           final lat = home.latitude * math.pi / 180.0;
-                          final metersPerPixel = 78271.516 * math.cos(lat) / math.pow(2, zoom);
-                          final radiusPx = metersPerPixel <= 0 ? 0.0 : _homeRadiusMeters / metersPerPixel;
+                          final metersPerPixel =
+                              78271.516 * math.cos(lat) / math.pow(2, zoom);
+                          final radiusPx = metersPerPixel <= 0
+                              ? 0.0
+                              : _homeRadiusMeters / metersPerPixel;
                           final diameter = radiusPx * 2;
 
                           return IgnorePointer(
@@ -1657,8 +1749,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                           ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: (inside ? context.gridColors.mint : Colors.white)
-                                                  .withOpacity(inside ? 0.55 : 0.85),
+                                              color: (inside
+                                                      ? context.gridColors.mint
+                                                      : Colors.white)
+                                                  .withOpacity(
+                                                      inside ? 0.55 : 0.85),
                                               blurRadius: inside ? 12 : 6,
                                               spreadRadius: inside ? 1 : 0,
                                             ),
@@ -1709,10 +1804,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                   height: 110,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.translucent,
-                                    onTap: () => _onMarkerTap(userLocation.userId, userLocation.position),
+                                    onTap: () => _onMarkerTap(
+                                        userLocation.userId,
+                                        userLocation.position),
                                     child: UserMapMarker(
                                       userId: userLocation.userId,
-                                      isSelected: state.selectedUserId == userLocation.userId,
+                                      isSelected: state.selectedUserId ==
+                                          userLocation.userId,
                                       timestamp: userLocation.timestamp,
                                     ),
                                   ),
@@ -1743,7 +1841,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                         _selectedMapIcon = icon;
                                         _selectedIconPosition = icon.position;
                                         _showIconActionWheel = true;
-                                        _iconActionWheelPosition = Offset(pt.dx, pt.dy);
+                                        _iconActionWheelPosition =
+                                            Offset(pt.dx, pt.dy);
                                         _bubblePosition = null;
                                         _selectedUserId = null;
                                         _selectedUserName = null;
@@ -1751,15 +1850,24 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                     },
                                     child: Container(
                                       decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withOpacity(0.1),
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .withOpacity(0.3),
                                           width: 2,
                                         ),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Theme.of(context).colorScheme.shadow.withOpacity(0.15),
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .shadow
+                                                .withOpacity(0.15),
                                             blurRadius: 8,
                                             offset: const Offset(0, 2),
                                           ),
@@ -1767,14 +1875,18 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                       ),
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.surface,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .surface,
                                           shape: BoxShape.circle,
                                         ),
                                         padding: const EdgeInsets.all(8),
                                         child: Icon(
                                           _getIconDataForType(icon.iconData),
                                           size: 24,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ),
@@ -1792,7 +1904,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               // ContactProfileModal directly via `_onMarkerTap`.
 
               // Icon action wheel
-              if (_showIconActionWheel && _iconActionWheelPosition != null && _selectedMapIcon != null)
+              if (_showIconActionWheel &&
+                  _iconActionWheelPosition != null &&
+                  _selectedMapIcon != null)
                 IconActionWheel(
                   position: _iconActionWheelPosition!,
                   onDetails: () {
@@ -1812,7 +1926,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   },
                   onDelete: () async {
                     // Only allow delete if user created it
-                    if (_selectedMapIcon!.creatorId != context.read<Client>().userID) {
+                    if (_selectedMapIcon!.creatorId !=
+                        context.read<Client>().userID) {
                       InAppNotifier.instance.show(
                         title: 'You can only delete icons you created',
                         message: 'Ask the creator to remove it instead.',
@@ -1840,10 +1955,12 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       await _mapIconRepository?.deleteMapIcon(iconIdToDelete);
 
                       // Send delete event to other users
-                      await _mapIconSyncService?.sendIconDelete(iconRoomId, iconIdToDelete, iconCreatorId);
+                      await _mapIconSyncService?.sendIconDelete(
+                          iconRoomId, iconIdToDelete, iconCreatorId);
 
                       // Notify the BLoC about the deletion
-                      context.read<MapIconsBloc>().add(MapIconDeleted(iconId: iconIdToDelete, roomId: iconRoomId));
+                      context.read<MapIconsBloc>().add(MapIconDeleted(
+                          iconId: iconIdToDelete, roomId: iconRoomId));
 
                       setState(() {
                         _showIconActionWheel = false;
@@ -1869,7 +1986,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   onZoom: () {
                     // Zoom to the icon
                     if (_selectedMapIcon != null) {
-                      _mapController.moveAndRotate(_selectedMapIcon!.position, 16, 0);
+                      _mapController.moveAndRotate(
+                          _selectedMapIcon!.position, 16, 0);
                     }
                     setState(() {
                       _showIconActionWheel = false;
@@ -1901,11 +2019,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 ),
 
               // Map icon info bubble (shown when details is pressed)
-              if (_selectedMapIcon != null && _selectedIconPosition != null && !_showIconActionWheel)
+              if (_selectedMapIcon != null &&
+                  _selectedIconPosition != null &&
+                  !_showIconActionWheel)
                 MapIconInfoBubble(
                   icon: _selectedMapIcon!,
                   position: _selectedIconPosition!,
-                  creatorName: _selectedMapIcon!.creatorId == context.read<Client>().userID
+                  creatorName: _selectedMapIcon!.creatorId ==
+                          context.read<Client>().userID
                       ? 'You'
                       : null, // We can fetch the actual name later
                   onClose: () {
@@ -1920,7 +2041,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       _isEditingIconDescription = isEditing;
                     });
                   },
-                  onUpdate: _selectedMapIcon!.creatorId == context.read<Client>().userID
+                  onUpdate: _selectedMapIcon!.creatorId ==
+                          context.read<Client>().userID
                       ? (name, description) async {
                           // Update the icon if it's created by the current user
                           final updatedIcon = MapIcon(
@@ -1941,10 +2063,13 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           await _mapIconRepository?.updateMapIcon(updatedIcon);
 
                           // Send update to other users
-                          await _mapIconSyncService?.sendIconUpdate(updatedIcon.roomId, updatedIcon);
+                          await _mapIconSyncService?.sendIconUpdate(
+                              updatedIcon.roomId, updatedIcon);
 
                           // Notify the BLoC about the update
-                          context.read<MapIconsBloc>().add(MapIconUpdated(updatedIcon));
+                          context
+                              .read<MapIconsBloc>()
+                              .add(MapIconUpdated(updatedIcon));
 
                           setState(() {
                             // Update the selected icon
@@ -1962,13 +2087,17 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   left: 20,
                   right: 20,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.primary,
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: Theme.of(context).colorScheme.shadow.withOpacity(0.2),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .shadow
+                              .withOpacity(0.2),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -2002,7 +2131,10 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.2),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onPrimary
+                                  .withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -2019,7 +2151,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
               // Top-center "SHARING WITH N" pill. Hidden while a map-icon
               // detail bubble is open so it doesn't obscure the bubble.
-              if (!(_selectedMapIcon != null && _selectedIconPosition != null && !_showIconActionWheel))
+              if (!(_selectedMapIcon != null &&
+                  _selectedIconPosition != null &&
+                  !_showIconActionWheel))
                 Positioned(
                   top: 60,
                   left: 0,
@@ -2053,7 +2187,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                       active: _followUser,
                       tooltip: 'Center on me',
                       onPressed: () {
-                        final target = _locationManager?.currentLatLng ?? _mapController.camera.center;
+                        final target = _locationManager?.currentLatLng ??
+                            _mapController.camera.center;
                         if (target != null) {
                           _mapController.move(target, 16.0);
                         }
@@ -2083,7 +2218,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
               // sheet is rendered with IgnorePointer:false so it gets
               // its own gestures; the area above the sheet falls
               // through to the map.
-              if (ContactSheetController.instance.contact != null) _buildInlineContactSheet(),
+              if (ContactSheetController.instance.contact != null)
+                _buildInlineContactSheet(),
 
               // Icon selection wheel overlay
               if (_showIconWheel && _iconWheelPosition != null)
