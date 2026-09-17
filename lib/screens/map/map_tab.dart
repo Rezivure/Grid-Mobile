@@ -46,6 +46,7 @@ import 'package:grid_frontend/utilities/lat_lng_validation.dart';
 import 'package:grid_frontend/widgets/app_initializer.dart';
 import 'package:grid_frontend/widgets/app_review_prompt.dart';
 import 'package:grid_frontend/widgets/buttons/compass_button.dart';
+import 'package:grid_frontend/widgets/buttons/map_overlay_icon_button.dart';
 import 'package:grid_frontend/widgets/contact_profile_modal.dart';
 import 'package:grid_frontend/widgets/grid/grid_mono.dart';
 import 'package:grid_frontend/widgets/icon_action_wheel.dart';
@@ -2215,14 +2216,14 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   children: [
                     _buildCompassButton(),
                     Gap.normal,
-                    _MapOverlayIconButton(
+                    MapOverlayIconButton(
                       icon: Icons.public_rounded,
                       active: _isAtResetView,
                       onPressed: _resetToInitialZoom,
                       tooltip: 'Reset view',
                     ),
                     Gap.normal,
-                    _MapOverlayIconButton(
+                    MapOverlayIconButton(
                       icon: Icons.my_location_rounded,
                       active: _followUser,
                       tooltip: 'Center on me',
@@ -2321,8 +2322,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         setState(() {
           _currentMapRotation = 0.0;
         });
-
-        _showMapErrorDialog();
       },
     );
   }
@@ -2362,62 +2361,5 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
         ),
       ),
     );
-  }
-}
-
-/// Floating map-overlay icon button styled to match the bottom sheet's
-/// `GridNavIconButton`. Used for the globe/center buttons in the right
-/// FAB column — the compass keeps its own builder because it carries the
-/// rotating compass rose inside the same chrome.
-class _MapOverlayIconButton extends StatelessWidget {
-  const _MapOverlayIconButton({
-    required this.icon,
-    required this.active,
-    required this.onPressed,
-    this.tooltip,
-  });
-
-  final IconData icon;
-  final bool active;
-  final VoidCallback onPressed;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final btn = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(GridTokens.rMd),
-        child: Ink(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: active ? context.gridColors.mintFaint : context.gridColors.surface.withOpacity(0.92),
-            borderRadius: BorderRadius.circular(GridTokens.rMd),
-            border: active
-                ? Border.all(color: context.gridColors.mint, width: 1.5)
-                : (isDark ? Border.all(color: context.gridColors.hairline, width: 1) : null),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.28 : 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            color: active ? context.gridColors.mint : context.gridColors.text,
-            size: 20,
-          ),
-        ),
-      ),
-    );
-    if (tooltip != null) {
-      return Tooltip(message: tooltip!, child: btn);
-    }
-    return btn;
   }
 }
