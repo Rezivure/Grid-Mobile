@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:grid_frontend/dialogs/delete_icon_dialog.dart';
 import 'package:grid_frontend/widgets/buttons/compass_button.dart';
 import 'package:matrix/matrix.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1663,6 +1664,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           }
         } else if (!_initialZoomCalculated) {}
       },
+      // TODO(Yuki): From Android 13 upward (maybe earlier), this isn't enough to prevent closing.
       child: PopScope(
         // On Android, MapTab is the root route: a system-back here would
         // finish the Activity and stop the location foreground service
@@ -2109,129 +2111,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                     }
 
                     // Show delete confirmation
-                    final shouldDelete = await showDialog<bool>(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return Dialog(
-                          backgroundColor: Colors.transparent,
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.9,
-                            ),
-                            decoration: BoxDecoration(
-                              color: context.gridColors.surface,
-                              borderRadius: BorderRadius.circular(GridTokens.rXl),
-                              border: Border.all(color: context.gridColors.hairline),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.4),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 12),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: context.gridColors.dangerSoft,
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(GridTokens.rXl),
-                                      topRight: Radius.circular(GridTokens.rXl),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: context.gridColors.danger.withOpacity(0.18),
-                                          borderRadius: BorderRadius.circular(GridTokens.rMd),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Icon(
-                                          Icons.delete_outline,
-                                          color: context.gridColors.danger,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Delete icon',
-                                              style: GoogleFonts.getFont(
-                                                'Geist',
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: -0.015,
-                                                color: context.gridColors.text,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              "This can't be undone.",
-                                              style: GoogleFonts.getFont(
-                                                'Geist',
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w400,
-                                                color: context.gridColors.text2,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                                  child: Text(
-                                    'This icon will be permanently removed from the map.',
-                                    style: GoogleFonts.getFont(
-                                      'Geist',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w400,
-                                      color: context.gridColors.text2,
-                                      height: 1.45,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: GridButton(
-                                          label: 'Cancel',
-                                          style: GridButtonStyle.secondary,
-                                          onPressed: () => Navigator.of(context).pop(false),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: GridButton(
-                                          label: 'Delete',
-                                          style: GridButtonStyle.danger,
-                                          onPressed: () => Navigator.of(context).pop(true),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
+                    bool shouldDelete = await showDeleteIconDialog(context);
 
-                    if (shouldDelete == true) {
+                    if (shouldDelete) {
                       final iconIdToDelete = _selectedMapIcon!.id;
                       final iconRoomId = _selectedMapIcon!.roomId;
                       final iconCreatorId = _selectedMapIcon!.creatorId;
