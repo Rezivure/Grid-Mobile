@@ -1327,10 +1327,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     return MapZoomResult(zoom: zoomLevel, center: centerPoint);
   }
 
-  /// Top-of-map "SHARING WITH N" pill — delegates to [SharingRecipientPill]
-  /// which owns the recipient-count math and reactivity.
-  Widget _buildSharingPill() => const SharingRecipientPill();
-
   int _invitesBadgeCount(BuildContext context) {
     try {
       final state = context.read<InvitationsBloc>().state;
@@ -2307,7 +2303,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   left: 0,
                   right: 0,
                   child: SafeArea(
-                    child: Center(child: _buildSharingPill()),
+                    child: Center(child: const SharingRecipientPill()),
                   ),
                 ),
 
