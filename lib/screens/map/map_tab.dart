@@ -17,6 +17,7 @@ import 'package:grid_frontend/blocs/map_icons/map_icons_event.dart';
 import 'package:grid_frontend/blocs/map_icons/map_icons_state.dart';
 import 'package:grid_frontend/dialogs/delete_icon_dialog.dart';
 import 'package:grid_frontend/dialogs/map_error_dialog.dart';
+import 'package:grid_frontend/dialogs/passkey_warning_dialog.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/models/map_icon.dart';
 import 'package:grid_frontend/models/user_location.dart';
@@ -288,206 +289,29 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
 
       if (!mounted) return;
 
-      final colorScheme = Theme.of(context).colorScheme;
-      showDialog(
-        context: context,
-        builder: (context) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.9,
-              ),
-              decoration: BoxDecoration(
-                color: colorScheme.background,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.shadow.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.05),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: colorScheme.outline.withOpacity(0.1),
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.orange,
-                            size: 24,
-                          ),
-                        ),
-                        Gap.big,
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Add a Passkey',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onBackground,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Action required to keep access',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colorScheme.onBackground.withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceVariant.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: colorScheme.outline.withOpacity(0.2),
-                        ),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: colorScheme.onSurfaceVariant,
-                            size: 20,
-                          ),
-                          Gap.small,
-                          Expanded(
-                            child: Text(
-                              'SMS login has been removed. Your account has no passkey yet, so add one now — otherwise you won\'t be able to sign in again on a new device.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colorScheme.onSurfaceVariant,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: context.gridColors.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: context.gridColors.mint,
-                                width: 2,
-                              ),
-                            ),
-                            child: TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const PasskeyManagementScreen(),
-                                  ),
-                                );
-                              },
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.fingerprint, color: context.gridColors.mint, size: 20),
-                                  Gap.small,
-                                  Text(
-                                    'Add Passkey Now',
-                                    style: TextStyle(
-                                      color: context.gridColors.mint,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: TextButton(
-                            onPressed: () async {
-                              final prefs = await SharedPreferences.getInstance();
-                              await prefs.setString(
-                                'passkey_warning_dismissed',
-                                DateTime.now().toIso8601String(),
-                              );
-                              Navigator.pop(context);
-                            },
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              'Remind Me Later',
-                              style: TextStyle(
-                                color: colorScheme.onSurface.withOpacity(0.6),
-                                fontWeight: FontWeight.w500,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
+      bool? addPasskey = await showPasskeyWarningDialog(context);
+
+      if (mounted) {
+        switch (addPasskey) {
+          case true:
+            {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const PasskeyManagementScreen(),
+                ),
+              );
+            }
+          case false:
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(
+              'passkey_warning_dismissed',
+              DateTime.now().toIso8601String(),
+            );
+          case null:
+          // Do nothing, user closed the dialog by tapping on the background or by pressing the system back button.
+        }
+      }
     } catch (e) {
       // Silently fail — don't block the app for a warning
       debugPrint('Passkey warning check failed: $e');
@@ -1011,6 +835,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     } catch (e) {}
   }
 
+  // TODO(Chandler): remove if unused
   void _sendPing() {
     _locationManager?.grabLocationAndPing();
     InAppNotifier.instance.show(
@@ -2310,7 +2135,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
   Widget _buildCompassButton() {
     return CompassButton(
       rotation: _currentMapRotation,
-      onPressed: () {
+      onPressed: () async {
         final center = _mapController.camera.center;
         if (center != null) {
           _mapController.moveAndRotate(
