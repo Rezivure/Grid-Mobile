@@ -20,6 +20,7 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../widgets/layout/gap.dart';
 import 'grid_map_style.dart';
 import 'marker_projection.dart';
 import 'maplibre_camera_facade.dart';
@@ -351,7 +352,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             size: 24,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        Gap.big,
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,7 +398,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             color: colorScheme.onSurfaceVariant,
                             size: 20,
                           ),
-                          const SizedBox(width: 8),
+                          Gap.small,
                           Expanded(
                             child: Text(
                               'SMS login has been removed. Your account has no passkey yet, so add one now — otherwise you won\'t be able to sign in again on a new device.',
@@ -448,7 +449,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.fingerprint, color: context.gridColors.mint, size: 20),
-                                  const SizedBox(width: 8),
+                                  Gap.small,
                                   Text(
                                     'Add Passkey Now',
                                     style: TextStyle(
@@ -535,6 +536,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
   }
 
+  // TODO(Chandler): remove if unused
   // Keeping this function for potential future use, but no longer needed after avatar fix
   Future<void> _forceFullInitialization() async {
     print('[MapTab] Starting forced reinitialization');
@@ -923,6 +925,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
   }
 
+  // TODO(Chandler): remove if unused
   void _backwardsCompatibilityUpdate() async {
     if (userRepository == null || sharingPreferencesRepository == null) {
       return; // Services not yet initialized
@@ -936,9 +939,6 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     await backwardsService.runBackfillIfNeeded();
   }
 
-  // Satellite mode was deprecated when map style switched to system brightness.
-  // Kept as a no-op stub so any remaining callers compile.
-  Future<void> _refreshSatelliteTokenIfNeeded() async {}
 
   void _handleIconSelection(IconType iconType) async {
     if (_longPressLocation == null || _selectedGroupId == null) return;
@@ -1683,7 +1683,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
           body: Stack(
             children: [
               SizedBox(
-                  height: MediaQuery.of(context).size.height * 3 / 4,
+                  height: MediaQuery.sizeOf(context).height * 3 / 4,
                   child: LayoutBuilder(builder: (context, constraints) {
                     _mapController.setMapSize(Size(constraints.maxWidth, constraints.maxHeight));
                     return Stack(children: [
@@ -2382,7 +2382,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                           color: Theme.of(context).colorScheme.onPrimary,
                           size: 20,
                         ),
-                        const SizedBox(width: 8),
+                        Gap.small,
                         Text(
                           'Tap anywhere to move the icon',
                           style: TextStyle(
@@ -2391,7 +2391,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                             fontSize: 14,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        Gap.normal,
                         GestureDetector(
                           onTap: () {
                             setState(() {
@@ -2439,15 +2439,15 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildCompassButton(isDarkMode, colorScheme),
-                    const SizedBox(height: 10),
+                    _buildCompassButton(),
+                    Gap.normal,
                     _MapOverlayIconButton(
                       icon: Icons.public_rounded,
                       active: _isAtResetView,
                       onPressed: _resetToInitialZoom,
                       tooltip: 'Reset view',
                     ),
-                    const SizedBox(height: 10),
+                    Gap.normal,
                     _MapOverlayIconButton(
                       icon: Icons.my_location_rounded,
                       active: _followUser,
@@ -2532,7 +2532,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     }
   }
 
-  Widget _buildCompassButton(bool isDarkMode, ColorScheme colorScheme) {
+  Widget _buildCompassButton() {
     return CompassButton(
       rotation: _currentMapRotation,
       onPressed: () {
