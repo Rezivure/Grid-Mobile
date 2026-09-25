@@ -360,7 +360,7 @@ class _GroupSharingWindowsModalState extends State<GroupSharingWindowsModal> {
           ),
           Switch.adaptive(
             value: _activeSharing,
-            activeColor: context.gridColors.mint,
+            activeTrackColor: context.gridColors.mint,
             onChanged: _toggleActiveSharing,
           ),
         ],
@@ -496,7 +496,7 @@ class _WindowTile extends StatelessWidget {
               ),
               Switch.adaptive(
                 value: window.isActive,
-                activeColor: context.gridColors.mint,
+                activeTrackColor: context.gridColors.mint,
                 onChanged: enabled ? onToggle : null,
               ),
               IconButton(

@@ -895,7 +895,7 @@ class _GroupProfileModalState extends State<GroupProfileModal> with TickerProvid
                     });
                     await _saveToDatabase();
                   },
-                  activeColor: colorScheme.primary,
+                  activeTrackColor: colorScheme.primary,
                 ),
               ),
             ],
