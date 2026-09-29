@@ -77,8 +77,8 @@ flutter_native_splash:
   image: "assets/brand/01-logos/grid-symbol-color-512.png"
   image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
   android_12:
-    image: "assets/brand/01-logos/grid-symbol-color-512.png"
-    image_dark: "assets/brand/01-logos/grid-symbol-color-dark-512.png"
+    image: "assets/brand/01-logos/grid-symbol-color-splash12-704.png"
+    image_dark: "assets/brand/01-logos/grid-symbol-color-dark-splash12-704.png"
     color: "#F8F8F7"
     color_dark: "#0B0D0F"
   ios: true
