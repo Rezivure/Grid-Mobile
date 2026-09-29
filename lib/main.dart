@@ -77,19 +77,37 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // Start the in-app log stream so Developer Tools → Synapse Logs can
+  // tail matrix-sdk events. Matrix logs are pulled via a ticker; raw
+  // `print()` calls land in here via the Zone hook below.
+  LogStreamService.instance.start();
 
-  // Every boot await is bounded: a wedged call must surface as a retryable
-  // error screen, never an eternal native splash (bg-resume hang).
-  while (true) {
-    try {
-      await _boot();
-      return;
-    } catch (e, s) {
-      debugPrint('[Boot] FATAL: $e\n$s');
-      await _runBootErrorFlow(e);
-    }
-  }
+  return runZonedGuarded(
+        () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      // Every boot await is bounded: a wedged call must surface as a retryable
+      // error screen, never an eternal native splash (bg-resume hang).
+      while (true) {
+        try {
+          await _boot();
+          return;
+        } catch (e, s) {
+          debugPrint('[Boot] FATAL: $e\n$s');
+          await _runBootErrorFlow(e);
+        }
+      }
+    },
+        (error, stack) {
+      LogStreamService.instance.capturePrint('UNCAUGHT: $error\n$stack');
+    },
+    zoneSpecification: ZoneSpecification(
+      print: (self, parent, zone, line) {
+        LogStreamService.instance.capturePrint(line);
+        parent.print(zone, line);
+      },
+    ),
+  );
 }
 
 /// Non-fatal boot step: log + continue on error/timeout.
@@ -129,7 +147,7 @@ Future<void> _boot() async {
   bool encryptionKeyMissing = false;
   try {
     encryptionKeyMissing =
-        !await databaseService.hasEncryptionKey().timeout(const Duration(seconds: 5));
+    !await databaseService.hasEncryptionKey().timeout(const Duration(seconds: 5));
   } catch (e) {
     // Keychain unreachable (locked device, transient error) — the key is not
     // proven missing, so boot on instead of offering destructive recovery.
@@ -278,13 +296,7 @@ Future<void> _boot() async {
 
   final messageParser = MessageParser();
 
-  // Start the in-app log stream so Developer Tools → Synapse Logs can
-  // tail matrix-sdk events. Matrix logs are pulled via a ticker; raw
-  // `print()` calls land in here via the Zone hook below.
-  LogStreamService.instance.start();
-
-  runZonedGuarded(
-    () => runApp(
+  runApp(
     MultiProvider(
       providers: [
         Provider<Client>.value(value: client),
@@ -406,7 +418,7 @@ Future<void> _boot() async {
                 mapIconRepository: mapIconRepository,
                 mapIconsBloc: context.read<MapIconsBloc>(),
               );
-              
+
               final messageProcessor = MessageProcessor(
                 locationRepository,
                 locationHistoryRepository,
@@ -514,17 +526,6 @@ Future<void> _boot() async {
           ),
         ),
       ),
-    ),
-  ),
-    (error, stack) {
-      LogStreamService.instance
-          .capturePrint('UNCAUGHT: $error\n$stack');
-    },
-    zoneSpecification: ZoneSpecification(
-      print: (self, parent, zone, line) {
-        LogStreamService.instance.capturePrint(line);
-        parent.print(zone, line);
-      },
     ),
   );
 }
@@ -715,12 +716,12 @@ ThemeData _buildTheme(ColorScheme scheme) {
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
+            (states) => states.contains(WidgetState.selected)
             ? Colors.white
             : scheme.onSurface.withOpacity(0.5),
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
+            (states) => states.contains(WidgetState.selected)
             ? scheme.primary
             : scheme.surfaceContainerHighest,
       ),
