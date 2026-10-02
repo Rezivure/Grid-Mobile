@@ -12,11 +12,14 @@ on:
       - Dockerfile
       - pubspec.lock
       - pubspec.yaml
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
     name: Build Docker image and push to ghcr.io
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     
     steps:
