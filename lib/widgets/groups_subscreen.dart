@@ -241,93 +241,101 @@ class _GroupsSubscreenState extends State<GroupsSubscreen> {
   }
 
   Widget _emptyState() {
-    return Padding(
+    return ListView.builder(
+      controller: widget.scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: context.gridColors.mintFaint,
-              borderRadius: BorderRadius.circular(24),
+      itemCount: 1,
+      itemBuilder: (context, index) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: context.gridColors.mintFaint,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                Icons.group_outlined,
+                color: context.gridColors.mint,
+                size: 40,
+              ),
             ),
-            child: Icon(
-              Icons.group_outlined,
-              color: context.gridColors.mint,
-              size: 40,
+            const SizedBox(height: 18),
+            Text(
+              'No groups yet.',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.02,
+                color: context.gridColors.text,
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'No groups yet.',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.02,
-              color: context.gridColors.text,
+            const SizedBox(height: 6),
+            Text(
+              'Create a group to share location with several people at once — perfect for trips, families, or close friends.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 13.5,
+                fontWeight: FontWeight.w400,
+                color: context.gridColors.text2,
+                height: 1.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Create a group to share location with several people at once — perfect for trips, families, or close friends.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: context.gridColors.text2,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
   Widget _errorState(String message) {
-    return Padding(
+    return ListView.builder(
+      controller: widget.scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.error_outline_rounded,
-            color: context.gridColors.danger,
-            size: 36,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Couldn\'t load groups.',
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: context.gridColors.text,
+      itemCount: 1,
+      itemBuilder: (context, index) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: context.gridColors.danger,
+              size: 36,
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.getFont(
-              'Geist',
-              fontSize: 12.5,
-              color: context.gridColors.text2,
-              height: 1.5,
+            const SizedBox(height: 12),
+            Text(
+              'Couldn\'t load groups.',
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: context.gridColors.text,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          GridButton(
-            label: 'Try again',
-            expand: false,
-            style: GridButtonStyle.secondary,
-            onPressed: () => context.read<GroupsBloc>().add(LoadGroups()),
-          ),
-        ],
-      ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.getFont(
+                'Geist',
+                fontSize: 12.5,
+                color: context.gridColors.text2,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 14),
+            GridButton(
+              label: 'Try again',
+              expand: false,
+              style: GridButtonStyle.secondary,
+              onPressed: () => context.read<GroupsBloc>().add(LoadGroups()),
+            ),
+          ],
+        );
+      }
     );
   }
 }
