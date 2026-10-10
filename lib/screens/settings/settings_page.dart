@@ -1,72 +1,69 @@
-import 'package:flutter/material.dart';
-import 'package:grid_frontend/services/room_service.dart';
-import 'package:provider/provider.dart';
-import 'package:matrix/matrix.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../dialogs/account_deletion_support_dialog.dart';
-import '../../services/sync_manager.dart';
-import '/services/database_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:grid_frontend/services/location_manager.dart';
-import 'package:grid_frontend/services/in_app_notifier.dart';
-import 'package:grid_frontend/services/sharing_state_notifier.dart';
-import 'package:grid_frontend/services/theme_controller.dart';
-import 'package:grid_frontend/services/location/home_geofence_service.dart';
-import 'package:grid_frontend/services/location/location_dispatch.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/services.dart';
-import 'package:grid_frontend/utilities/error_report.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart' as http_parser;
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:grid_frontend/utilities/utils.dart' as utils;
-import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
+
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:grid_frontend/services/secure_storage_provider.dart';
-import 'package:grid_frontend/widgets/user_avatar.dart';
-import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
-import 'package:grid_frontend/services/avatar_announcement_service.dart';
-import 'package:grid_frontend/services/avatar_cache_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_bloc.dart';
 import 'package:grid_frontend/blocs/avatar/avatar_event.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
-import 'package:grid_frontend/blocs/contacts/contacts_event.dart';
 import 'package:grid_frontend/blocs/groups/groups_bloc.dart';
-import 'package:grid_frontend/blocs/groups/groups_event.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_bloc.dart';
 import 'package:grid_frontend/blocs/invitations/invitations_event.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:grid_frontend/screens/settings/subscription_screen.dart';
-import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
-import 'package:grid_frontend/screens/settings/password_setup_screen.dart';
-import 'package:grid_frontend/services/password_auth_service.dart';
+import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
 import 'package:grid_frontend/screens/settings/developer_tools_screen.dart';
 import 'package:grid_frontend/screens/settings/encryption_keys_screen.dart';
 import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart';
-import 'package:grid_frontend/services/home_location_signals.dart';
+import 'package:grid_frontend/screens/settings/passkey_management_screen.dart';
+import 'package:grid_frontend/screens/settings/password_setup_screen.dart';
 import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
-import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
 import 'package:grid_frontend/screens/settings/sharing_mode_screen.dart';
-import 'dart:io' show Platform;
+import 'package:grid_frontend/screens/settings/subscription_screen.dart';
+import 'package:grid_frontend/services/avatar_announcement_service.dart';
+import 'package:grid_frontend/services/home_location_signals.dart';
+import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/location/home_geofence_service.dart';
+import 'package:grid_frontend/services/location/location_dispatch.dart';
+import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/password_auth_service.dart';
+import 'package:grid_frontend/services/room_service.dart';
+import 'package:grid_frontend/services/secure_storage_provider.dart';
+import 'package:grid_frontend/services/sharing_state_notifier.dart';
+import 'package:grid_frontend/services/theme_controller.dart';
+import 'package:grid_frontend/utilities/error_report.dart';
+import 'package:grid_frontend/utilities/utils.dart' as utils;
+import 'package:grid_frontend/widgets/user_avatar.dart';
+import 'package:grid_frontend/widgets/user_avatar_bloc.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:matrix/matrix.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../styles/tokens.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../dialogs/account_deletion_support_dialog.dart';
+import '/services/database_service.dart';
+import '../../dialogs/sign_out_dialog.dart';
+import '../../services/sync_manager.dart';
 import '../../styles/grid_colors.dart';
+import '../../styles/tokens.dart';
 import '../../widgets/grid/grid_avatar.dart';
 import '../../widgets/grid/grid_button.dart';
 import '../../widgets/grid/grid_mono.dart';
 import '../../widgets/grid/grid_segmented.dart';
 
 class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -815,9 +812,12 @@ class _SettingsPageState extends State<SettingsPage> {
   // In SettingsPage, update the _logout method:
 
   Future<void> _logout() async {
+    NavigatorState navigator = Navigator.of(context);
+
     final client = Provider.of<Client>(context, listen: false);
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     final sharedPreferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final locationManager = Provider.of<LocationManager>(context, listen: false);
     final syncManager = Provider.of<SyncManager>(context, listen: false);
     final avatarBloc = context.read<AvatarBloc>();
@@ -825,13 +825,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final groupsBloc = context.read<GroupsBloc>();
     final invitationsBloc = context.read<InvitationsBloc>();
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => _buildSignOutDialog(),
-    );
+    final confirmed = await showSignOutDialog(context);
 
-    if (confirmed ?? false) {
+    if (confirmed) {
+      // TODO(Yuki): Implement declarative handling of sign out to prevent service failing on logout or user escaping
       try {
         print("[Logout] Starting logout process...");
 
@@ -889,7 +886,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         print("[Logout] Logout complete, navigating to welcome screen");
         // Navigate to welcome screen
-        Navigator.pushNamedAndRemoveUntil(context, '/welcome', (route) => false);
+        navigator.pushNamedAndRemoveUntil('/welcome', (route) => false);
       } catch (e) {
         InAppNotifier.instance.show(
           title: 'Failed to sign out',
@@ -2968,6 +2965,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // TODO(Chandler): remove if not used
   Widget _buildSettingsOption({
     required IconData icon,
     required String title,
@@ -3383,181 +3381,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: 'Delete',
                       style: GridButtonStyle.danger,
                       onPressed: () => Navigator.pop(context, passwordController.text),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignOutDialog() {
-    final bullets = <_DangerBullet>[
-      const _DangerBullet(Icons.location_off, 'Location sharing will be stopped'),
-      const _DangerBullet(Icons.sync_disabled, "You'll need to sign in again to access your account"),
-    ];
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.9,
-        ),
-        decoration: BoxDecoration(
-          color: context.gridColors.surface,
-          borderRadius: BorderRadius.circular(GridTokens.rXl),
-          border: Border.all(color: context.gridColors.hairline),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: context.gridColors.mintFaint,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(GridTokens.rXl),
-                  topRight: Radius.circular(GridTokens.rXl),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.gridColors.mintSoft,
-                      borderRadius: BorderRadius.circular(GridTokens.rMd),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.logout,
-                      color: context.gridColors.mint,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sign out',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.015,
-                            color: context.gridColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'You can always sign back in',
-                          style: GoogleFonts.getFont(
-                            'Geist',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: context.gridColors.text2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Body
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Are you sure you want to sign out?',
-                    style: GoogleFonts.getFont(
-                      'Geist',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                      color: context.gridColors.text2,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: context.gridColors.surface2,
-                      borderRadius: BorderRadius.circular(GridTokens.rMd),
-                      border: Border.all(color: context.gridColors.hairline),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (int i = 0; i < bullets.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                bullets[i].icon,
-                                color: context.gridColors.text2,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  bullets[i].text,
-                                  style: GoogleFonts.getFont(
-                                    'Geist',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                    color: context.gridColors.text2,
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GridButton(
-                      label: 'Cancel',
-                      style: GridButtonStyle.secondary,
-                      onPressed: () => Navigator.pop(context, false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GridButton(
-                      label: 'Sign out',
-                      icon: Icons.logout,
-                      style: GridButtonStyle.danger,
-                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],
