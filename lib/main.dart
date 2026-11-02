@@ -50,6 +50,7 @@ import 'screens/onboarding/server_select_screen.dart';
 import 'widgets/app_initializer.dart';
 import 'screens/onboarding/login_screen.dart';
 import 'screens/onboarding/signup_screen.dart';
+import 'screens/map/grid_map_style.dart';
 import 'screens/map/map_tab.dart';
 
 import 'package:grid_frontend/blocs/map/map_bloc.dart';
@@ -227,6 +228,7 @@ Future<void> _boot() async {
   // (client.init() restored creds from the Matrix DB; we just need pushers refreshed.)
   final prefs = await _tryBootStep(
       'prefs', SharedPreferences.getInstance(), const Duration(seconds: 5));
+  if (prefs != null) applySavedMapsUrl(prefs);
   String? token = prefs?.getString('token');
 
   if (token != null && token.isNotEmpty) {

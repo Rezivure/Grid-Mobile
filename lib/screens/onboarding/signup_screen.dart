@@ -8,6 +8,7 @@ import 'package:matrix/matrix.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:grid_frontend/screens/map/grid_map_style.dart';
 import 'package:grid_frontend/services/user_service.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
@@ -25,6 +26,7 @@ enum _HandleState { idle, checking, available, taken, invalid }
 class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMixin {
   late String _homeserver;
   late String _mapsUrl;
+  String? _mapsUrlType;
 
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -68,6 +70,7 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>? ?? {};
     _homeserver = args['homeserver'] ?? 'matrix-dev.mygrid.app';
     _mapsUrl = args['mapsUrl'] ?? 'https://example.com/tiles.pmtiles';
+    _mapsUrlType = args['mapsUrlType'];
   }
 
   // ── Username field plumbing ───────────────────────────────────────────────
@@ -703,6 +706,10 @@ class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMix
     // Store the custom homeserver URL for restoration
     await prefs.setString('custom_homeserver', _homeserver);
     await prefs.setString('maps_url', _mapsUrl); // Save the map tile URL
+    if (_mapsUrlType != null) {
+      await prefs.setString('maps_url_type', _mapsUrlType!);
+    }
+    applySavedMapsUrl(prefs);
   }
 
   @override

@@ -53,6 +53,7 @@ import 'package:grid_frontend/screens/settings/home_location_picker_screen.dart'
 import 'package:grid_frontend/services/home_location_signals.dart';
 import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
 import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
+import 'package:grid_frontend/screens/map/grid_map_style.dart';
 import 'package:grid_frontend/screens/settings/sharing_mode_screen.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -886,6 +887,7 @@ class _SettingsPageState extends State<SettingsPage> {
         for (final key in keysToRemove) {
           await sharedPreferences.remove(key);
         }
+        applySavedMapsUrl(sharedPreferences);
 
         print("[Logout] Logout complete, navigating to welcome screen");
         // Navigate to welcome screen
@@ -2155,6 +2157,7 @@ class _SettingsPageState extends State<SettingsPage> {
         syncManager.stopSync();
         databaseService.deleteAndReinitialize();
         await sharedPreferences.clear();
+        applySavedMapsUrl(sharedPreferences);
 
         try {
           if (client.isLogged()) {

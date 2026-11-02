@@ -1,19 +1,54 @@
 import 'dart:convert';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'protomaps_v4_light_layers.dart';
 import 'protomaps_v4_dark_layers.dart';
+
+const String defaultPmtilesUrl =
+    'pmtiles://https://map.mygrid.app/v2/v2_protomaps_20260512.pmtiles';
+
+/// Tile source used by [buildGridMapStyle]. Kept in memory because every
+/// map builds its style synchronously; refreshed by [applySavedMapsUrl].
+String _activePmtilesUrl = defaultPmtilesUrl;
+
+/// Points every map at the self-hosted tiles saved at login/signup
+/// (`maps_url`), or back at Grid's basemap when none is saved. Call it
+/// whenever `maps_url` changes, before the next map is built.
+void applySavedMapsUrl(SharedPreferences prefs) {
+  _activePmtilesUrl = customPmtilesUrl(
+        prefs.getString('maps_url'),
+        mapsUrlType: prefs.getString('maps_url_type'),
+      ) ??
+      defaultPmtilesUrl;
+}
+
+/// The `pmtiles://` source for a user-entered maps URL, or null when it
+/// isn't a custom one. Signup and older builds store Grid's own default
+/// URL in `maps_url` too, so anything on map.mygrid.app counts as default.
+String? customPmtilesUrl(String? mapsUrl, {String? mapsUrlType}) {
+  if (mapsUrlType == 'default') return null;
+  var url = mapsUrl?.trim() ?? '';
+  if (url.startsWith('pmtiles://')) url = url.substring('pmtiles://'.length);
+  if (url.isEmpty) return null;
+
+  final host = Uri.tryParse(url)?.host ?? '';
+  if (host.isEmpty || host == 'map.mygrid.app') return null;
+  return 'pmtiles://$url';
+}
 
 /// Build a MapLibre style JSON for Grid's basemap.
 ///
 /// Renders the V2 protomaps pmtiles via maplibre-native with the full
 /// protomaps basemap v4 style (light or dark), plus extra POI layers
 /// tuned for a location-sharing app (restaurants, gas stations,
-/// hospitals, etc.).
+/// hospitals, etc.). Uses the self-hosted tiles from [applySavedMapsUrl]
+/// unless [pmtilesUrl] is given.
 String buildGridMapStyle({
   required bool dark,
-  String pmtilesUrl =
-      'pmtiles://https://map.mygrid.app/v2/v2_protomaps_20260512.pmtiles',
+  String? pmtilesUrl,
 }) {
+  pmtilesUrl ??= _activePmtilesUrl;
   final spriteFlavor = dark ? 'dark' : 'light';
   final style = <String, dynamic>{
     'version': 8,

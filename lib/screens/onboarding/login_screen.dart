@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:grid_frontend/screens/map/grid_map_style.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
 import 'package:grid_frontend/widgets/grid/grid_button.dart';
 import 'package:matrix/matrix.dart';
@@ -115,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       // Store the custom homeserver URL for restoration
       await prefs.setString('custom_homeserver', homeserver);
       await prefs.setString('maps_url_type', _useDefaultMapsUrl ? 'default' : 'custom');
+      applySavedMapsUrl(prefs);
       Navigator.pushReplacementNamed(context, '/main');
     } catch (e) {
       setState(() {
@@ -766,6 +768,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         arguments: {
                           'homeserver': _homeserverController.text.trim(),
                           'mapsUrl': mapsUrl,
+                          'mapsUrlType': _useDefaultMapsUrl ? 'default' : 'custom',
                         },
                       );
                     },
