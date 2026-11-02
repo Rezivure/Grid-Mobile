@@ -272,7 +272,7 @@ class UserInfoBubble extends StatelessWidget {
 
         if (mapChoice == null) return;
       } else {
-        // Android - use Google Maps directly
+        // Android - geo: below opens the user's default map app
         mapChoice = 'google';
       }
 

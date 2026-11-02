@@ -87,5 +87,10 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="http" />
         </intent>
+        <!-- Lets canLaunchUrl see the user's map apps (OsmAnd, CoMaps, ...) for geo: links -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
     </queries>
 </manifest>

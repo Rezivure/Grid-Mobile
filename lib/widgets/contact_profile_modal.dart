@@ -1210,6 +1210,7 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     required double lng,
   }) async {
     final iosUri = Uri.parse('maps://?q=$lat,$lng');
+    final androidUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
     final fallbackUri = Uri.parse(
         'https://www.google.com/maps/search/?api=1&query=$lat,$lng');
     try {
@@ -1218,6 +1219,10 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
           await launchUrl(iosUri);
           return;
         }
+      } else if (await canLaunchUrl(androidUri)) {
+        // geo: opens the user's default map app, not just Google Maps
+        await launchUrl(androidUri);
+        return;
       }
       await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
     } catch (_) {}
