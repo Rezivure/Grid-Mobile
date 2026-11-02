@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:grid_frontend/services/in_app_notifier.dart';
 import 'package:grid_frontend/services/location_manager.dart';
+import 'package:grid_frontend/services/units_controller.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/styles/tokens.dart';
 import 'package:grid_frontend/styles/grid_colors.dart';
@@ -351,14 +352,6 @@ class UserInfoBubble extends StatelessWidget {
     return 'DRIVING';
   }
 
-  /// Speed as "12 mph". Null when no useful motion or speed isn't
-  /// known.
-  String? _formatSpeed(double? speedMps) {
-    if (speedMps == null || speedMps < 1.4) return null;
-    final mph = speedMps * 2.236936;
-    return '${mph.round()} mph';
-  }
-
   String _formatCoordinates(LatLng p) {
     final lat = p.latitude;
     final lng = p.longitude;
@@ -391,7 +384,8 @@ class UserInfoBubble extends StatelessWidget {
     final status =
         context.watch<UserDeviceStatusCache>().statusFor(userId);
     final motionLabel = _formatMotion(status?.speed);
-    final speedLabel = _formatSpeed(status?.speed);
+    final speedLabel =
+        formatSpeed(status?.speed, UnitsController.instance.speedUnit);
 
     return Positioned(
       top: topOffset,

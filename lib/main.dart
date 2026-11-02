@@ -43,6 +43,7 @@ import 'package:grid_frontend/services/location/home_geofence_service.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/services/log_stream_service.dart';
 import 'package:grid_frontend/services/theme_controller.dart';
+import 'package:grid_frontend/services/units_controller.dart';
 
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/welcome_screen.dart';
@@ -123,6 +124,7 @@ Future<T?> _tryBootStep<T>(String step, Future<T> future, Duration limit) async 
 
 Future<void> _boot() async {
   await _tryBootStep('theme', ThemeController.instance.load(), const Duration(seconds: 5));
+  await _tryBootStep('units', UnitsController.instance.load(), const Duration(seconds: 5));
 
   LibreLocation.registerHeadlessDispatcher(headlessDispatcher, onHeadlessLocation);
 

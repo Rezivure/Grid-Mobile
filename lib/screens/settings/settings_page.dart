@@ -55,6 +55,8 @@ import 'package:grid_frontend/screens/settings/profile_photo_screen.dart';
 import 'package:grid_frontend/screens/settings/appearance_settings_screen.dart';
 import 'package:grid_frontend/screens/map/grid_map_style.dart';
 import 'package:grid_frontend/screens/settings/sharing_mode_screen.dart';
+import 'package:grid_frontend/screens/settings/speed_units_screen.dart';
+import 'package:grid_frontend/services/units_controller.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -882,7 +884,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         // 6. Clear shared preferences (but preserve some app settings if needed)
         print("[Logout] Clearing preferences...");
-        final preserveKeys = ['app_theme', 'onboarding_complete']; // Add keys you want to preserve
+        final preserveKeys = ['app_theme', 'onboarding_complete', 'speed_unit']; // Add keys you want to preserve
         final keysToRemove = sharedPreferences.getKeys().where((key) => !preserveKeys.contains(key)).toList();
         for (final key in keysToRemove) {
           await sharedPreferences.remove(key);
@@ -2293,6 +2295,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     colorScheme: colorScheme,
                   ),
                 ),
+                _buildSettingsDivider(),
+                AnimatedBuilder(
+                  animation: UnitsController.instance,
+                  builder: (context, _) => _buildInfoRow(
+                    icon: Icons.speed_rounded,
+                    title: 'Speed units',
+                    value: UnitsController.instance.speedUnit.label,
+                    onTap: _openSpeedUnits,
+                    colorScheme: colorScheme,
+                  ),
+                ),
               ],
             ),
 
@@ -2529,6 +2542,13 @@ class _SettingsPageState extends State<SettingsPage> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()),
+    );
+  }
+
+  void _openSpeedUnits() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SpeedUnitsScreen()),
     );
   }
 

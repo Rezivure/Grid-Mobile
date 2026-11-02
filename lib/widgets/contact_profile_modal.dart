@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:grid_frontend/models/contact_display.dart';
 import 'package:grid_frontend/providers/user_location_provider.dart';
 import 'package:grid_frontend/services/in_app_notifier.dart';
+import 'package:grid_frontend/services/units_controller.dart';
 import 'package:grid_frontend/services/user_device_status_cache.dart';
 import 'package:grid_frontend/utilities/time_ago_formatter.dart';
 import 'package:grid_frontend/blocs/contacts/contacts_bloc.dart';
@@ -821,7 +822,8 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     final status =
         context.watch<UserDeviceStatusCache>().statusFor(widget.contact.userId);
     final motionLabel = _formatMotion(status?.speed);
-    final speedLabel = _formatSpeed(status?.speed);
+    final speedLabel =
+        formatSpeed(status?.speed, UnitsController.instance.speedUnit);
 
     // SHARING/PAUSED pill removed — it was bound to the local user's
     // outgoing toggle, duplicating the mutual-sharing card below.
@@ -852,11 +854,6 @@ class _ContactProfileModalState extends State<ContactProfileModal> {
     if (speedMps == null || speedMps < 1.4) return null;
     if (speedMps < 5) return 'WALKING';
     return 'DRIVING';
-  }
-
-  String? _formatSpeed(double? speedMps) {
-    if (speedMps == null || speedMps < 1.4) return null;
-    return '${(speedMps * 2.236936).round()} mph';
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -2015,7 +2012,7 @@ class _SharedGroupRef {
   const _SharedGroupRef(this.roomId, this.name);
 }
 
-/// Mint pill showing DRIVING / WALKING / STILL + mph next to it.
+/// Mint pill showing DRIVING / WALKING / STILL + speed next to it.
 /// Falls back to a muted STILL pill when speed is unknown / sub-walking
 /// so the slot is always visible. Distinct from freshness "idle".
 class _MotionStatusPill extends StatelessWidget {
