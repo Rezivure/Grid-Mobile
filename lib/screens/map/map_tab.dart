@@ -1364,8 +1364,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
     if (!mounted) return;
     _mapController.syncFromController();
     // Re-position the marker overlay widgets to stay glued to the map
-    // during pan/zoom gestures (not just on idle).
-    setState(() {});
+    // during pan/zoom gestures (not just on idle), and turn the compass
+    // rose with the map while it rotates (#304).
+    setState(() => _currentMapRotation = _mapController.camera.bearing);
     _refreshMarkerScreenPositions();
   }
 
@@ -1736,6 +1737,9 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin, WidgetsB
                   trackCameraPosition: true,
                   minMaxZoomPreference: const ml.MinMaxZoomPreference(1.0, 17),
                   rotateGesturesEnabled: true,
+                  // Grid draws its own compass button; MapLibre's built-in one
+                  // shows up under the status bar when rotated (#304).
+                  compassEnabled: false,
                   tiltGesturesEnabled: false,
                   attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
                   onMapCreated: (controller) {
