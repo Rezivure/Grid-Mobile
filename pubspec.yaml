@@ -107,10 +107,11 @@ dependency_overrides:
       url: https://github.com/Rezivure/flutter-maplibre-gl.git
       ref: fix/grid-defer-camera-on-zero-frame
       path: maplibre_gl
+  # Temporary until Rezivure/libre-location#16 lands and is tagged.
   libre_location:
     git:
-      url: https://github.com/Rezivure/libre-location.git
-      ref: v0.4.3
+      url: https://github.com/Sekyntosh/libre-location.git
+      ref: fix/android-background-fresh-fixes
 
 flutter:
   uses-material-design: true

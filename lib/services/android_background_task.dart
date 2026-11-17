@@ -19,6 +19,10 @@ import 'package:grid_frontend/services/user_service.dart';
 Client? _cachedClient;
 DatabaseService? _cachedDatabaseService;
 DatabaseApi? _cachedDatabase;
+bool _vodInitialized = false;
+
+// Single-flight chain so concurrent headless ticks share one init / send path.
+Future<void> _processChain = Future.value();
 
 // Channel the native HeadlessCallbackDispatcher (libre_location) uses to talk
 // to this isolate. Name MUST match Kotlin's CHANNEL_NAME exactly.
@@ -135,13 +139,63 @@ Future<void> processBackgroundLocation(
   double? heading,
   double? batteryLevel,
   bool? isCharging,
+}) {
+  // Serialize concurrent ticks so they share one init and cannot double vod.init().
+  final run = _processChain.then(
+    (_) => _processBackgroundLocationBody(
+      latitude,
+      longitude,
+      accuracy,
+      timestamp,
+      isMoving,
+      speed: speed,
+      heading: heading,
+      batteryLevel: batteryLevel,
+      isCharging: isCharging,
+    ),
+  );
+  _processChain = run.catchError((_) {});
+  return run;
+}
+
+Future<void> _ensureVodInitialized() async {
+  if (_vodInitialized) return;
+  try {
+    await vod.init();
+    _vodInitialized = true;
+  } catch (e) {
+    final message = e.toString();
+    // A second init in the same isolate is safe to treat as success.
+    if (message.contains('flutter_rust_bridge') ||
+        message.contains('already') ||
+        message.contains('twice')) {
+      print('[HeadlessTask] vod.init already done: $e');
+      _vodInitialized = true;
+      return;
+    }
+    rethrow;
+  }
+}
+
+Future<void> _processBackgroundLocationBody(
+  double latitude,
+  double longitude,
+  double accuracy,
+  DateTime timestamp,
+  bool isMoving, {
+  double? speed,
+  double? heading,
+  double? batteryLevel,
+  bool? isCharging,
 }) async {
+  var initFailed = false;
   try {
     // Reuse cached instances if available
     if (_cachedClient == null) {
       print('[HeadlessTask] 🔄 Initializing Matrix client (first run)');
+      initFailed = true;
 
-      await vod.init();
+      await _ensureVodInitialized();
 
       _cachedDatabaseService = DatabaseService();
       await _cachedDatabaseService!.initDatabase();
@@ -152,7 +206,7 @@ Future<void> processBackgroundLocation(
         database: _cachedDatabase!,
         nativeImplementations: NativeImplementationsIsolate(
           compute,
-          vodozemacInit: () => vod.init(),
+          vodozemacInit: () => _ensureVodInitialized(),
         ),
         shareKeysWith: ShareKeysWith.all,
       );
@@ -169,6 +223,7 @@ Future<void> processBackgroundLocation(
         return;
       }
 
+      initFailed = false;
       print('[HeadlessTask] ✓ Matrix client initialized and cached (encryption on)');
     } else {
       print('[HeadlessTask] ⚡ Reusing cached Matrix client (fast path)');
@@ -176,10 +231,7 @@ Future<void> processBackgroundLocation(
 
     // Initialize repositories (these are lightweight, not cached)
     final locationRepository = LocationRepository(_cachedDatabaseService!);
-    final userRepository = UserRepository(_cachedDatabaseService!);
     final sharingPreferencesRepository = SharingPreferencesRepository(_cachedDatabaseService!);
-    final userKeysRepository = UserKeysRepository(_cachedDatabaseService!);
-    final roomRepository = RoomRepository(_cachedDatabaseService!);
 
     // Initialize services
     final userService = UserService(
@@ -193,6 +245,7 @@ Future<void> processBackgroundLocation(
     print("Grid: Found ${rooms.length} total rooms to process");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var sentAny = false;
 
     for (Room room in rooms) {
       try {
@@ -215,7 +268,7 @@ Future<void> processBackgroundLocation(
         if (joinedMembers.length > 1) {
           if (!await _checkSharingWindow(room, joinedMembers, _cachedClient!, userService)) continue;
 
-          await _sendLocationUpdate(
+          final sent = await _sendLocationUpdate(
             room,
             latitude,
             longitude,
@@ -225,6 +278,7 @@ Future<void> processBackgroundLocation(
             batteryLevel: batteryLevel,
             isCharging: isCharging,
           );
+          if (sent) sentAny = true;
         } else {
           print("Grid: Skipping room ${room.id} - insufficient members");
         }
@@ -234,16 +288,47 @@ Future<void> processBackgroundLocation(
       }
     }
 
+    if (sentAny) {
+      await _shortPeerSync(_cachedClient!);
+    }
+
     // Note: We DON'T dispose the client here since we're caching it for reuse!
     print('[HeadlessTask] ✓ Location processing complete');
   } catch (e) {
     print('[Background Task Error]: $e');
 
-    // Clear cache on error so it reinitializes fresh next time
-    print('[HeadlessTask] ⚠️  Error occurred, clearing cache for next run');
-    _cachedClient = null;
-    _cachedDatabase = null;
-    _cachedDatabaseService = null;
+    // Only clear cache on init/corruption failures. Send/sync errors must leave
+    // a usable client in place for the next tick.
+    if (initFailed || _cachedClient == null || !_cachedClient!.encryptionEnabled) {
+      print('[HeadlessTask] ⚠️  Init/corruption error, clearing cache for next run');
+      _cachedClient = null;
+      _cachedDatabase = null;
+      _cachedDatabaseService = null;
+    } else {
+      print('[HeadlessTask] ⚠️  Send/sync error; keeping cached client');
+    }
+  }
+}
+
+/// One short Matrix sync so peers can download/decrypt the event we just sent.
+/// Never leaves backgroundSync on or a long-lived sync running.
+Future<void> _shortPeerSync(Client client) async {
+  client.backgroundSync = false;
+  try {
+    print('[HeadlessTask] Starting short peer sync (10s)');
+    await client.sync(timeout: 10000);
+    print('[HeadlessTask] Short peer sync complete');
+  } catch (e) {
+    print('[HeadlessTask] Short peer sync failed (keeping client): $e');
+  } finally {
+    try {
+      if (client.syncPending) {
+        client.abortSync();
+      }
+    } catch (e) {
+      print('[HeadlessTask] abortSync after short sync: $e');
+    }
+    client.backgroundSync = false;
   }
 }
 
@@ -301,7 +386,7 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
   return true;
 }
 
-Future<void> _sendLocationUpdate(
+Future<bool> _sendLocationUpdate(
   Room room,
   double latitude,
   double longitude,
@@ -314,7 +399,7 @@ Future<void> _sendLocationUpdate(
   // Filter out low-accuracy locations to save battery and improve quality
   if (accuracy > 100) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
-    return;
+    return false;
   }
 
   // gridv 2 payload so background updates carry battery/speed too.
@@ -340,7 +425,7 @@ Future<void> _sendLocationUpdate(
     DebugLogService.instance.log('error', {
       'message': 'Skipped send to ${room.id}',
     });
-    return;
+    return false;
   }
 
   await room.sendEvent(eventContent);
@@ -348,7 +433,9 @@ Future<void> _sendLocationUpdate(
     'roomId': room.id,
     'encrypted': room.encrypted,
     'accuracy': accuracy,
+    'battery': batteryLevel,
     'source': 'headless_isolate',
   });
   print("Grid: Location event sent to room ${room.id} / ${room.name} (accuracy: ${accuracy.toStringAsFixed(1)}m)");
+  return true;
 }

@@ -1075,9 +1075,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "v0.4.3"
-      resolved-ref: "4d296a2d4f90aa85daeb94df7be10d52299b2646"
-      url: "https://github.com/Rezivure/libre-location.git"
+      ref: "fix/android-background-fresh-fixes"
+      resolved-ref: e188f456fa2f142809d23dc7efc048d53df29218
+      url: "https://github.com/Sekyntosh/libre-location.git"
     source: git
     version: "0.4.3"
   lints:
