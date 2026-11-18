@@ -10,6 +10,7 @@
 
 
     <application
+        android:allowBackup="false"
         android:label="Grid"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
