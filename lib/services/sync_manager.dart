@@ -567,7 +567,10 @@ class SyncManager with ChangeNotifier {
           for (final p in participants) {
             if (p.id == myId) continue;
             if (p.membership != Membership.join) continue;
-            if (await _cooldown.shouldRequestAvatar(p.id)) {
+            final haveAvatar =
+                messageProcessor.avatarBloc?.state.getAvatar(p.id) != null;
+            if (await _cooldown.shouldRequestAvatar(p.id,
+                haveAvatar: haveAvatar)) {
               avatarTargets.add(p.id);
             }
             if (await _cooldown.shouldRequestLocation(p.id)) {
