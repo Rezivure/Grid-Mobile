@@ -11,6 +11,12 @@ class RequestCooldownService {
   static const Duration _locationRequestCooldown = Duration(hours: 6);
   // Longer cooldown when responder explicitly told us they have no avatar set.
   static const Duration _avatarAbsentCooldown = Duration(days: 7);
+  // While we have no picture of the contact at all, asking again soon is
+  // worth it: one unanswered request at startup used to leave the contact
+  // without a picture for a day, a "no picture set" answer (which a
+  // contact who just reinstalled gives until they restore theirs) for a week.
+  static const Duration _avatarRetryCooldown = Duration(minutes: 30);
+  static const Duration _avatarAbsentRetryCooldown = Duration(hours: 6);
 
   // Incoming-response throttles (we just answered someone, don't re-answer).
   static const Duration _avatarRespondCooldown = Duration(hours: 1);
@@ -36,15 +42,20 @@ class RequestCooldownService {
     await prefs.setInt(key, _now());
   }
 
-  /// True if we may request the avatar from [userId] now.
-  Future<bool> shouldRequestAvatar(String userId) async {
+  /// True if we may request the avatar from [userId] now. [haveAvatar] tells
+  /// whether we already show a picture of them; without one we retry sooner.
+  Future<bool> shouldRequestAvatar(String userId, {bool haveAvatar = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final absentAt = prefs.getInt(_avAbsentKey(userId));
-    if (absentAt != null &&
-        _now() - absentAt < _avatarAbsentCooldown.inMilliseconds) {
+    final absentCooldown =
+        haveAvatar ? _avatarAbsentCooldown : _avatarAbsentRetryCooldown;
+    if (absentAt != null && _now() - absentAt < absentCooldown.inMilliseconds) {
       return false;
     }
-    return _isPastCooldown(_avReqKey(userId), _avatarRequestCooldown);
+    return _isPastCooldown(
+      _avReqKey(userId),
+      haveAvatar ? _avatarRequestCooldown : _avatarRetryCooldown,
+    );
   }
 
   /// True if we may request the location from [userId] now.
