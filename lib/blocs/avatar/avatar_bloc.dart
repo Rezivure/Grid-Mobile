@@ -59,6 +59,12 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
 
   Future<void> _onAvatarUpdateReceived(AvatarUpdateReceived event, Emitter<AvatarState> emit) async {
     try {
+      // An mxc:// URI is Matrix media, whatever the caller flagged. The own
+      // avatar keeps its flag under avatar_is_matrix (no user id), so loading
+      // it back handed the mxc URI to the HTTP client: "Unsupported scheme".
+      final isMatrixUrl =
+          event.isMatrixUrl || event.avatarUrl.startsWith('mxc://');
+
       print('[Avatar] Processing update for ${event.userId}');
       
       // Update loading state
@@ -80,21 +86,21 @@ class AvatarBloc extends Bloc<AvatarEvent, AvatarState> {
       
       // Store whether it's a Matrix avatar
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('avatar_is_matrix_${event.userId}', event.isMatrixUrl);
+      await prefs.setBool('avatar_is_matrix_${event.userId}', isMatrixUrl);
       
       // Also store a fallback copy in SharedPreferences for background access
       final fallbackData = {
         'uri': event.avatarUrl,
         'key': event.encryptionKey,
         'iv': event.encryptionIv,
-        'isMatrix': event.isMatrixUrl,
+        'isMatrix': isMatrixUrl,
       };
       await prefs.setString('avatar_fallback_${event.userId}', json.encode(fallbackData));
       
       // Download and decrypt the avatar
       Uint8List encryptedData;
       
-      if (event.isMatrixUrl) {
+      if (isMatrixUrl) {
         // Download from Matrix
         final mxcUri = Uri.parse(event.avatarUrl);
         final serverName = mxcUri.host;
