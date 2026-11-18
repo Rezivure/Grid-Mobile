@@ -118,16 +118,18 @@ class LocationManager with ChangeNotifier {
   }
 
   // Apply the appropriate config based on battery-saver mode
+  /// The service configuration for the current mode, restart after boot
+  /// included.
+  LocationServiceConfig get _trackingConfig => LocationServiceConfig(
+        mode: _trackingMode,
+        enableHeadless: true,
+        startOnBoot: true,
+      );
+
   void _updateTrackingConfig() {
     if (!_isTracking) return;
 
-    final config = LocationServiceConfig(
-      mode: _trackingMode,
-      enableHeadless: true,
-      startOnBoot: true,
-    );
-    
-    _locationService.setConfig(config);
+    _locationService.setConfig(_trackingConfig);
   }
 
   // Stream for listening to location updates in your UI
@@ -171,6 +173,11 @@ class LocationManager with ChangeNotifier {
       return;
     }
 
+    // The plugin keeps the options passed to start() for its boot receiver;
+    // setConfig() later only changes the preset. Starting with the defaults
+    // (startOnBoot: false) meant sharing never resumed after a reboot until
+    // the app was opened.
+    await _locationService.setConfig(_trackingConfig);
     // Start the location service
     await _locationService.start();
     _isTracking = true;
