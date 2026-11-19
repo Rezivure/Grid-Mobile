@@ -245,7 +245,6 @@ Future<void> _processBackgroundLocationBody(
     print("Grid: Found ${rooms.length} total rooms to process");
 
     final currentTimestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    var sentAny = false;
 
     for (Room room in rooms) {
       try {
@@ -268,7 +267,7 @@ Future<void> _processBackgroundLocationBody(
         if (joinedMembers.length > 1) {
           if (!await _checkSharingWindow(room, joinedMembers, _cachedClient!, userService)) continue;
 
-          final sent = await _sendLocationUpdate(
+          await _sendLocationUpdate(
             room,
             latitude,
             longitude,
@@ -278,7 +277,6 @@ Future<void> _processBackgroundLocationBody(
             batteryLevel: batteryLevel,
             isCharging: isCharging,
           );
-          if (sent) sentAny = true;
         } else {
           print("Grid: Skipping room ${room.id} - insufficient members");
         }
@@ -288,11 +286,10 @@ Future<void> _processBackgroundLocationBody(
       }
     }
 
-    if (sentAny) {
-      await _shortPeerSync(_cachedClient!);
-    }
-
     // Note: We DON'T dispose the client here since we're caching it for reuse!
+    // Headless stays send-only. client.sync() without `since` is a full
+    // initial sync that does not advance client state, and peers already
+    // receive the room key as to-device messages during sendEvent.
     print('[HeadlessTask] ✓ Location processing complete');
   } catch (e) {
     print('[Background Task Error]: $e');
@@ -307,28 +304,6 @@ Future<void> _processBackgroundLocationBody(
     } else {
       print('[HeadlessTask] ⚠️  Send/sync error; keeping cached client');
     }
-  }
-}
-
-/// One short Matrix sync so peers can download/decrypt the event we just sent.
-/// Never leaves backgroundSync on or a long-lived sync running.
-Future<void> _shortPeerSync(Client client) async {
-  client.backgroundSync = false;
-  try {
-    print('[HeadlessTask] Starting short peer sync (10s)');
-    await client.sync(timeout: 10000);
-    print('[HeadlessTask] Short peer sync complete');
-  } catch (e) {
-    print('[HeadlessTask] Short peer sync failed (keeping client): $e');
-  } finally {
-    try {
-      if (client.syncPending) {
-        client.abortSync();
-      }
-    } catch (e) {
-      print('[HeadlessTask] abortSync after short sync: $e');
-    }
-    client.backgroundSync = false;
   }
 }
 
