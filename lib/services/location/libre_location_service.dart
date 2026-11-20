@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:libre_location/libre_location.dart' as libre;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'location_service.dart';
 import 'location_update.dart';
 import 'location_service_config.dart';
@@ -203,6 +205,30 @@ class LibreLocationService implements LocationService {
     }
   }
 
+  static const String _notificationAskedKey = 'notification_permission_asked';
+
+  /// Android 13+ hides the foreground service notification until the app
+  /// holds POST_NOTIFICATIONS, so nothing shows that location sharing is on.
+  /// Asked right after location access was granted, until one request has
+  /// gone through. A denial counts (Android decides whether to ask again);
+  /// a request that failed, for example with NO_ACTIVITY, is retried on the
+  /// next start. [isAndroid] and [request] exist for tests.
+  @visibleForTesting
+  static Future<void> requestNotificationPermissionOnce({
+    bool? isAndroid,
+    Future<bool> Function()? request,
+  }) async {
+    if (!(isAndroid ?? Platform.isAndroid)) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_notificationAskedKey) ?? false) return;
+      await (request ?? libre.LibreLocation.requestNotificationPermission)();
+      await prefs.setBool(_notificationAskedKey, true);
+    } catch (e) {
+      print("Error requesting notification permission: $e");
+    }
+  }
+
   @override
   Future<bool> requestPermission() async {
     try {
@@ -214,6 +240,7 @@ class LibreLocationService implements LocationService {
       switch (permission) {
         case libre.LocationPermission.always:
         case libre.LocationPermission.whileInUse:
+          await requestNotificationPermissionOnce();
           return true;
         case libre.LocationPermission.denied:
         case libre.LocationPermission.deniedForever:
