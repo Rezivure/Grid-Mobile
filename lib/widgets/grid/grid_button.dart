@@ -6,6 +6,7 @@ import '../../styles/grid_colors.dart';
 
 enum GridButtonStyle { primary, secondary, ghost, danger }
 
+// TODO(Yuki): change buttons style when it is actually disabled, instead of always having the defined style
 /// Primary button atom used across the redesigned screens. Wraps Material
 /// buttons with the Grid colors, heights, and radii.
 class GridButton extends StatelessWidget {
