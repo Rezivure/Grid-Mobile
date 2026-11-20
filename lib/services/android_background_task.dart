@@ -13,12 +13,17 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/vod_init_error.dart';
 
 // Static cache to reuse Matrix client across headless task invocations
 // This prevents expensive reinitialization on every location update
 Client? _cachedClient;
 DatabaseService? _cachedDatabaseService;
 DatabaseApi? _cachedDatabase;
+bool _vodInitialized = false;
+
+// Single-flight chain so concurrent headless ticks share one init / send path.
+Future<void> _processChain = Future.value();
 
 // Channel the native HeadlessCallbackDispatcher (libre_location) uses to talk
 // to this isolate. Name MUST match Kotlin's CHANNEL_NAME exactly.
@@ -135,13 +140,62 @@ Future<void> processBackgroundLocation(
   double? heading,
   double? batteryLevel,
   bool? isCharging,
+}) {
+  // Serialize concurrent ticks so they share one init and cannot double vod.init().
+  final run = _processChain.then(
+    (_) => _processBackgroundLocationBody(
+      latitude,
+      longitude,
+      accuracy,
+      timestamp,
+      isMoving,
+      speed: speed,
+      heading: heading,
+      batteryLevel: batteryLevel,
+      isCharging: isCharging,
+    ),
+  );
+  _processChain = run.catchError((_) {});
+  return run;
+}
+
+Future<void> _ensureVodInitialized() async {
+  if (_vodInitialized) return;
+  try {
+    await vod.init();
+    _vodInitialized = true;
+  } catch (e) {
+    // Only the bridge's duplicate-init error means a previous init succeeded.
+    // Version mismatches mention flutter_rust_bridge in a docs URL and must
+    // propagate so later ticks retry instead of skipping a failed init.
+    if (isDuplicateVodInitError(e)) {
+      print('[HeadlessTask] vod.init already done: $e');
+      _vodInitialized = true;
+      return;
+    }
+    rethrow;
+  }
+}
+
+Future<void> _processBackgroundLocationBody(
+  double latitude,
+  double longitude,
+  double accuracy,
+  DateTime timestamp,
+  bool isMoving, {
+  double? speed,
+  double? heading,
+  double? batteryLevel,
+  bool? isCharging,
 }) async {
+  var initFailed = false;
   try {
     // Reuse cached instances if available
     if (_cachedClient == null) {
       print('[HeadlessTask] 🔄 Initializing Matrix client (first run)');
+      initFailed = true;
 
-      await vod.init();
+      await _ensureVodInitialized();
 
       _cachedDatabaseService = DatabaseService();
       await _cachedDatabaseService!.initDatabase();
@@ -152,7 +206,7 @@ Future<void> processBackgroundLocation(
         database: _cachedDatabase!,
         nativeImplementations: NativeImplementationsIsolate(
           compute,
-          vodozemacInit: () => vod.init(),
+          vodozemacInit: () => _ensureVodInitialized(),
         ),
         shareKeysWith: ShareKeysWith.all,
       );
@@ -169,6 +223,7 @@ Future<void> processBackgroundLocation(
         return;
       }
 
+      initFailed = false;
       print('[HeadlessTask] ✓ Matrix client initialized and cached (encryption on)');
     } else {
       print('[HeadlessTask] ⚡ Reusing cached Matrix client (fast path)');
@@ -176,10 +231,7 @@ Future<void> processBackgroundLocation(
 
     // Initialize repositories (these are lightweight, not cached)
     final locationRepository = LocationRepository(_cachedDatabaseService!);
-    final userRepository = UserRepository(_cachedDatabaseService!);
     final sharingPreferencesRepository = SharingPreferencesRepository(_cachedDatabaseService!);
-    final userKeysRepository = UserKeysRepository(_cachedDatabaseService!);
-    final roomRepository = RoomRepository(_cachedDatabaseService!);
 
     // Initialize services
     final userService = UserService(
@@ -235,15 +287,23 @@ Future<void> processBackgroundLocation(
     }
 
     // Note: We DON'T dispose the client here since we're caching it for reuse!
+    // Headless stays send-only. client.sync() without `since` is a full
+    // initial sync that does not advance client state, and peers already
+    // receive the room key as to-device messages during sendEvent.
     print('[HeadlessTask] ✓ Location processing complete');
   } catch (e) {
     print('[Background Task Error]: $e');
 
-    // Clear cache on error so it reinitializes fresh next time
-    print('[HeadlessTask] ⚠️  Error occurred, clearing cache for next run');
-    _cachedClient = null;
-    _cachedDatabase = null;
-    _cachedDatabaseService = null;
+    // Only clear cache on init/corruption failures. Send/sync errors must leave
+    // a usable client in place for the next tick.
+    if (initFailed || _cachedClient == null || !_cachedClient!.encryptionEnabled) {
+      print('[HeadlessTask] ⚠️  Init/corruption error, clearing cache for next run');
+      _cachedClient = null;
+      _cachedDatabase = null;
+      _cachedDatabaseService = null;
+    } else {
+      print('[HeadlessTask] ⚠️  Send/sync error; keeping cached client');
+    }
   }
 }
 
@@ -301,7 +361,7 @@ Future<bool> _checkSharingWindow(Room room, List<User> joinedMembers, Client cli
   return true;
 }
 
-Future<void> _sendLocationUpdate(
+Future<bool> _sendLocationUpdate(
   Room room,
   double latitude,
   double longitude,
@@ -314,7 +374,7 @@ Future<void> _sendLocationUpdate(
   // Filter out low-accuracy locations to save battery and improve quality
   if (accuracy > 100) {
     print("Grid: ⚠️  Skipping low-accuracy location for ${room.name}: ${accuracy.toStringAsFixed(1)}m error");
-    return;
+    return false;
   }
 
   // gridv 2 payload so background updates carry battery/speed too.
@@ -340,7 +400,7 @@ Future<void> _sendLocationUpdate(
     DebugLogService.instance.log('error', {
       'message': 'Skipped send to ${room.id}',
     });
-    return;
+    return false;
   }
 
   await room.sendEvent(eventContent);
@@ -348,7 +408,9 @@ Future<void> _sendLocationUpdate(
     'roomId': room.id,
     'encrypted': room.encrypted,
     'accuracy': accuracy,
+    'battery': batteryLevel,
     'source': 'headless_isolate',
   });
   print("Grid: Location event sent to room ${room.id} / ${room.name} (accuracy: ${accuracy.toStringAsFixed(1)}m)");
+  return true;
 }
