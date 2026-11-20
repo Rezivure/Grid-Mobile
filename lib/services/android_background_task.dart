@@ -13,6 +13,7 @@ import 'package:grid_frontend/repositories/room_repository.dart';
 import 'package:grid_frontend/repositories/sharing_preferences_repository.dart';
 import 'package:grid_frontend/repositories/user_keys_repository.dart';
 import 'package:grid_frontend/services/user_service.dart';
+import 'package:grid_frontend/services/vod_init_error.dart';
 
 // Static cache to reuse Matrix client across headless task invocations
 // This prevents expensive reinitialization on every location update
@@ -164,11 +165,10 @@ Future<void> _ensureVodInitialized() async {
     await vod.init();
     _vodInitialized = true;
   } catch (e) {
-    final message = e.toString();
-    // A second init in the same isolate is safe to treat as success.
-    if (message.contains('flutter_rust_bridge') ||
-        message.contains('already') ||
-        message.contains('twice')) {
+    // Only the bridge's duplicate-init error means a previous init succeeded.
+    // Version mismatches mention flutter_rust_bridge in a docs URL and must
+    // propagate so later ticks retry instead of skipping a failed init.
+    if (isDuplicateVodInitError(e)) {
       print('[HeadlessTask] vod.init already done: $e');
       _vodInitialized = true;
       return;
