@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// TODO(Chandler): remove if unused
 class NoticeContinueModal extends StatelessWidget {
   final String message;
   final VoidCallback? onContinue;
