@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,9 +33,15 @@ class HomeLocationPickerScreen extends StatefulWidget {
   const HomeLocationPickerScreen({
     super.key,
     this.initialRadiusMeters = 25,
+    this.initialCenter,
   });
 
   final double initialRadiusMeters;
+
+  /// The saved home when it is being changed. The picker then opens there,
+  /// so the radius can be adjusted without hunting for the old spot; the
+  /// my-location button still jumps to where the user is.
+  final ll.LatLng? initialCenter;
 
   @override
   State<HomeLocationPickerScreen> createState() =>
@@ -82,7 +89,9 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
       parent: _tick,
       curve: Curves.easeInOut,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAndCenter());
+    if (widget.initialCenter == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAndCenter());
+    }
   }
 
   /// Phase 2 of the two-phase center: fetch the real device location and
@@ -96,34 +105,45 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
       _moveCameraTo(cached);
       return;
     }
+    // Right after the app started there may be no fix yet. The phone's last
+    // known position comes at once; a fresh one follows with a time limit, as a
+    // high-accuracy fix indoors may never arrive.
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null && isFiniteLatLng(last.latitude, last.longitude)) {
+        _moveCameraTo(ll.LatLng(last.latitude, last.longitude));
+      }
+    } catch (_) {}
     try {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
         ),
       );
       if (!isFiniteLatLng(pos.latitude, pos.longitude)) return;
       _moveCameraTo(ll.LatLng(pos.latitude, pos.longitude));
     } catch (_) {
-      // Stay on the SF fallback silently.
+      // No fix in time: the map stays where it is.
     }
   }
 
   void _moveCameraTo(ll.LatLng target) {
     if (!mounted || _isInteracting) return;
-    final controller = _mlController;
-    if (controller == null) return;
     if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
       return;
     }
-    if (!_nativeReady) {
+    final controller = _mlController;
+    // The first frame comes before onMapCreated: keep the jump until the map
+    // is ready.
+    if (controller == null || !_nativeReady) {
       _pendingTarget = target;
       return;
     }
     controller.animateCamera(ml.CameraUpdate.newCameraPosition(
       ml.CameraPosition(
         target: ml.LatLng(target.latitude, target.longitude),
-        zoom: 16,
+        zoom: _zoomForRadius(target.latitude),
       ),
     ));
   }
@@ -147,6 +167,8 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   }
 
   ll.LatLng _resolveInitialCenter() {
+    final home = widget.initialCenter;
+    if (home != null && _finite(home.latitude, home.longitude)) return home;
     final locationManager =
         Provider.of<LocationManager>(context, listen: false);
     final c = locationManager.currentLatLng;
@@ -183,6 +205,27 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
   /// Web Mercator resolution at the current camera target — meters covered
   /// by a single screen pixel. Used to draw the geofence circle at the
   /// correct on-screen size for the current zoom.
+  double _zoomForRadius(double latitude) => homePickerZoomForRadius(
+        radiusMeters: _radiusMeters,
+        latitude: latitude,
+        screenWidth: MediaQuery.of(context).size.width,
+      );
+
+  /// Keeps the circle readable while the slider moves: between 35 % and
+  /// 70 % of the screen width, zooming around the pin.
+  void _fitZoomToRadius() {
+    final controller = _mlController;
+    final cam = controller?.cameraPosition;
+    if (controller == null || cam == null || !_nativeReady) return;
+    final width = MediaQuery.of(context).size.width;
+    final mpp = _metersPerPixel();
+    if (mpp <= 0 || width <= 0) return;
+    final diameterPx = 2 * _radiusMeters / mpp;
+    if (diameterPx >= width * 0.35 && diameterPx <= width * 0.7) return;
+    controller.moveCamera(
+        ml.CameraUpdate.zoomTo(_zoomForRadius(cam.target.latitude)));
+  }
+
   double _metersPerPixel() {
     final cam = _mlController?.cameraPosition;
     if (cam == null) return 0;
@@ -243,7 +286,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                   initialCenter.latitude,
                   initialCenter.longitude,
                 ),
-                zoom: 16,
+                zoom: _zoomForRadius(initialCenter.latitude),
               ),
               myLocationEnabled: false,
               trackCameraPosition: true,
@@ -314,7 +357,10 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                   final diameter = radiusPx * 2;
                   if (diameter < 4) return const SizedBox.shrink();
                   return Center(
-                    child: SizedBox(
+                    child: OverflowBox(
+                      maxWidth: double.infinity,
+                      maxHeight: double.infinity,
+                      child: SizedBox(
                       width: diameter,
                       height: diameter,
                       child: DecoratedBox(
@@ -327,6 +373,7 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                           ),
                         ),
                       ),
+                    ),
                     ),
                   );
                 },
@@ -378,6 +425,26 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
+
+          // Back to the own position, for when the automatic jump found none.
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 132,
+            right: 16,
+            child: Material(
+              color: context.gridColors.surface.withOpacity(0.92),
+              shape: CircleBorder(
+                side: BorderSide(color: context.gridColors.hairlineStrong),
+              ),
+              child: IconButton(
+                tooltip: 'My location',
+                icon: Icon(Icons.my_location, color: context.gridColors.text),
+                onPressed: () {
+                  setState(() => _isInteracting = false);
+                  _fetchAndCenter();
+                },
               ),
             ),
           ),
@@ -451,8 +518,10 @@ class _HomeLocationPickerScreenState extends State<HomeLocationPickerScreen>
                           min: _minRadius,
                           max: _maxRadius,
                           divisions: ((_maxRadius - _minRadius) / 5).round(),
-                          onChanged: (v) =>
-                              setState(() => _radiusMeters = v),
+                          onChanged: (v) {
+                            setState(() => _radiusMeters = v);
+                            _fitZoomToRadius();
+                          },
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -565,4 +634,22 @@ class _CenterPin extends StatelessWidget {
       },
     );
   }
+}
+
+/// Web Mercator zoom at which a circle of [radiusMeters] around [latitude]
+/// fills [fill] of [screenWidth] logical pixels, within the picker's zoom
+/// limits.
+@visibleForTesting
+double homePickerZoomForRadius({
+  required double radiusMeters,
+  required double latitude,
+  required double screenWidth,
+  double fill = 0.55,
+}) {
+  if (screenWidth <= 0 || radiusMeters <= 0) return 16;
+  final metersPerPixel = 2 * radiusMeters / (screenWidth * fill);
+  final z = math.log(
+          78271.516 * math.cos(latitude * math.pi / 180.0) / metersPerPixel) /
+      math.ln2;
+  return z.isFinite ? z.clamp(3.5, 19.0).toDouble() : 16;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:grid_frontend/services/room_service.dart';
 import 'package:provider/provider.dart';
 import 'package:matrix/matrix.dart';
@@ -362,9 +363,17 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _changeHomeLocation() async {
     final prefs = await SharedPreferences.getInstance();
     final initialRadius = prefs.getDouble('home_radius') ?? 25;
+    final saved = prefs.getString('home_location')?.split(',');
+    final initialCenter = saved != null && saved.length == 2
+        ? ll.LatLng(double.tryParse(saved[0]) ?? double.nan,
+            double.tryParse(saved[1]) ?? double.nan)
+        : null;
     final picked = await Navigator.of(context).push<HomeLocationResult>(
       MaterialPageRoute(
-        builder: (_) => HomeLocationPickerScreen(initialRadiusMeters: initialRadius),
+        builder: (_) => HomeLocationPickerScreen(
+          initialRadiusMeters: initialRadius,
+          initialCenter: initialCenter,
+        ),
       ),
     );
     if (picked == null || !mounted) return;
