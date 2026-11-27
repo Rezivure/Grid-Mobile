@@ -1076,7 +1076,7 @@ packages:
     description:
       path: "."
       ref: "fix/android-background-fresh-fixes"
-      resolved-ref: e188f456fa2f142809d23dc7efc048d53df29218
+      resolved-ref: c3b76fae575f97ba56ead1f3431c50f5de23766b
       url: "https://github.com/Sekyntosh/libre-location.git"
     source: git
     version: "0.4.3"
